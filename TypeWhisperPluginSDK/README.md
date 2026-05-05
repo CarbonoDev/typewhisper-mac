@@ -508,7 +508,9 @@ To distribute via the TypeWhisper plugin marketplace:
 1. Build your plugin in Release configuration
 2. ZIP the `.bundle`: `ditto -ck --sequesterRsrc MyPlugin.bundle MyPlugin.zip`
 3. Host the ZIP (GitHub Releases, your own server, etc.)
-4. Submit a PR to add your plugin to the appropriate gh-pages registry feed
+4. Submit a PR adding `PluginRegistry/community-v1/com.yourname.myplugin.json`
+   on `main`. The registry workflow validates the PR and publishes the merged
+   feed to `gh-pages/plugins-community-v1.json` after merge.
 
 Registry feeds:
 
@@ -522,10 +524,6 @@ Registry entry format:
 {
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
-  "version": "1.0.0",
-  "minHostVersion": "1.0.0",
-  "sdkCompatibilityVersion": "v1",
-  "minOSVersion": "14.0",
   "author": "Your Name",
   "description": "What your plugin does.",
   "source": "community",
@@ -533,9 +531,18 @@ Registry entry format:
   "categories": ["transcription", "llm"],
   "hosting": "local|cloud",
   "requiresAPIKey": false,
-  "size": 12345678,
-  "downloadURL": "https://example.com/MyPlugin.zip",
-  "iconSystemName": "star.fill"
+  "iconSystemName": "star.fill",
+  "releases": [
+    {
+      "version": "1.0.0",
+      "minHostVersion": "1.4.0",
+      "sdkCompatibilityVersion": "v1",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": ["arm64"],
+      "size": 12345678,
+      "downloadURL": "https://example.com/MyPlugin.zip"
+    }
+  ]
 }
 ```
 

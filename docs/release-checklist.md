@@ -17,7 +17,7 @@
 
 - Confirm `1.3.x` builds continue to use `plugins-v1.json`
 - Confirm `1.4.0-rc*`, `1.4.0` daily, and `1.4.0` stable builds use `plugins-community-v1.json`
-- Confirm community registry entries set `source` to `community`; omitted `source` values must remain official marketplace entries
+- Confirm community registry entries under `PluginRegistry/community-v1/` set `source` to `community`; omitted `source` values in published feeds must remain official marketplace entries
 - Keep community plugin submissions out of the `1.3` release scope unless they are already bundled or first-party
 - Smoke-test the Integrations hub grouped lists for Built-in, Marketplace, Community, and Manual plugin paths
 - Smoke-test the Installed, Discover, and Manual tabs at desktop and compact window sizes

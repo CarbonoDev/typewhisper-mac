@@ -403,6 +403,7 @@ See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README
 ```
 TypeWhisper/
 ├── typewhisper-cli/           # Command-line tool (status, models, transcribe)
+├── PluginRegistry/            # Source registry entries for community plugin feeds
 ├── Plugins/                # Redirect docs and legacy entrypoint for moved first-party plugin sources
 ├── TypeWhisperPluginSDK/   # Plugin SDK (Swift package)
 │   ├── Plugins/            # First-party plugin sources and manifests
