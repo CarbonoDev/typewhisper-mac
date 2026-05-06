@@ -316,7 +316,7 @@ final class ModelManagerService: ObservableObject {
             duration: bufferedDuration,
             processingTime: processingTime,
             engineUsed: handle.providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -383,7 +383,7 @@ final class ModelManagerService: ObservableObject {
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -454,7 +454,7 @@ final class ModelManagerService: ObservableObject {
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -535,7 +535,9 @@ final class ModelManagerService: ObservableObject {
     }
 
     private func pluginSupportsLanguageHints(_ plugin: TranscriptionEnginePlugin) -> Bool {
-        plugin is LanguageHintTranscriptionEnginePlugin || plugin is LiveLanguageHintTranscriptionCapablePlugin
+        plugin is LanguageHintTranscriptionEnginePlugin
+            || plugin is StructuredLanguageHintTranscriptionEnginePlugin
+            || plugin is LiveLanguageHintTranscriptionCapablePlugin
     }
 
     private func transcribeWithResolvedLanguageSelection(
@@ -544,10 +546,10 @@ final class ModelManagerService: ObservableObject {
         languageSelection: PluginLanguageSelection,
         task: TranscriptionTask,
         prompt: String?
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
         if !languageSelection.languageHints.isEmpty,
-           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
-            return try await hintPlugin.transcribe(
+           let structuredHintPlugin = plugin as? StructuredLanguageHintTranscriptionEnginePlugin {
+            return try await structuredHintPlugin.transcribeStructured(
                 audio: audio,
                 languageSelection: languageSelection,
                 translate: task == .translate,
@@ -555,12 +557,31 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
-        return try await plugin.transcribe(
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            ))
+        }
+
+        if let structuredPlugin = plugin as? StructuredTranscriptionEnginePlugin {
+            return try await structuredPlugin.transcribeStructured(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt
+            )
+        }
+
+        return Self.structuredResult(from: try await plugin.transcribe(
             audio: audio,
             language: languageSelection.requestedLanguage,
             translate: task == .translate,
             prompt: prompt
-        )
+        ))
     }
 
     private func transcribeWithResolvedLanguageSelection(
@@ -570,26 +591,50 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let structuredHintPlugin = plugin as? StructuredLanguageHintTranscriptionEnginePlugin,
+           !plugin.supportsStreaming {
+            let result = try await structuredHintPlugin.transcribeStructured(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            )
+            let _ = onProgress(result.text)
+            return result
+        }
+
         if !languageSelection.languageHints.isEmpty,
            let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
-            return try await hintPlugin.transcribe(
+            return Self.structuredResult(from: try await hintPlugin.transcribe(
                 audio: audio,
                 languageSelection: languageSelection,
                 translate: task == .translate,
                 prompt: prompt,
                 onProgress: onProgress
-            )
+            ))
         }
 
         if plugin.supportsStreaming {
-            return try await plugin.transcribe(
+            return Self.structuredResult(from: try await plugin.transcribe(
                 audio: audio,
                 language: languageSelection.requestedLanguage,
                 translate: task == .translate,
                 prompt: prompt,
                 onProgress: onProgress
+            ))
+        }
+
+        if let structuredPlugin = plugin as? StructuredTranscriptionEnginePlugin {
+            let result = try await structuredPlugin.transcribeStructured(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt
             )
+            let _ = onProgress(result.text)
+            return result
         }
 
         let result = try await plugin.transcribe(
@@ -599,7 +644,39 @@ final class ModelManagerService: ObservableObject {
             prompt: prompt
         )
         let _ = onProgress(result.text)
-        return result
+        return Self.structuredResult(from: result)
+    }
+
+    nonisolated private static func structuredResult(
+        from result: PluginTranscriptionResult
+    ) -> PluginStructuredTranscriptionResult {
+        PluginStructuredTranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments.map {
+                PluginStructuredTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+        )
+    }
+
+    nonisolated private static func transcriptionSegments(
+        from segments: [PluginStructuredTranscriptionSegment]
+    ) -> [TranscriptionSegment] {
+        segments.map {
+            TranscriptionSegment(
+                text: $0.text,
+                start: $0.start,
+                end: $0.end,
+                speakerLabel: $0.speakerLabel,
+                speakerConfidence: $0.speakerConfidence
+            )
+        }
+    }
+
+    nonisolated private static func transcriptionSegments(
+        from segments: [PluginTranscriptionSegment]
+    ) -> [TranscriptionSegment] {
+        segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
     }
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues

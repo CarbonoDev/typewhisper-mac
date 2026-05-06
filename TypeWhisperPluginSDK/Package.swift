@@ -72,6 +72,16 @@ let package = Package(
                 .process("manifest.json"),
             ]
         ),
+        .target(
+            name: "AssemblyAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/AssemblyAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
         .testTarget(
             name: "TypeWhisperPluginSDKTests",
             dependencies: ["TypeWhisperPluginSDK"]
@@ -129,6 +139,15 @@ let package = Package(
                 "LiveTranscriptPlugin",
             ],
             path: "Plugins/LiveTranscriptPlugin/Tests"
+        ),
+        .testTarget(
+            name: "AssemblyAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "AssemblyAIPlugin",
+            ],
+            path: "Plugins/AssemblyAIPlugin/Tests"
         ),
     ]
 )

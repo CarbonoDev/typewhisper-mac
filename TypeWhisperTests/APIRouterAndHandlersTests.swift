@@ -226,6 +226,87 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterStructuredTranscriptionPlugin)
+    private final class StructuredTranscriptionPlugin: NSObject, StructuredTranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.structured-transcription" }
+        static var pluginName: String { "Structured Mock Transcription" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "structured-mock" }
+        var providerDisplayName: String { "Structured Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "structured", displayName: "Structured")] }
+        var selectedModelId: String? { "structured" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(
+                text: "legacy text",
+                detectedLanguage: language,
+                segments: [
+                    PluginTranscriptionSegment(text: "legacy text", start: 0, end: 1)
+                ]
+            )
+        }
+
+        func transcribeStructured(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginStructuredTranscriptionResult {
+            PluginStructuredTranscriptionResult(
+                text: "Speaker A: Hello\nSpeaker B: Hi",
+                detectedLanguage: language,
+                segments: [
+                    PluginStructuredTranscriptionSegment(
+                        text: "Hello",
+                        start: 0.0,
+                        end: 1.0,
+                        speakerLabel: "Speaker A",
+                        speakerConfidence: 0.9
+                    ),
+                    PluginStructuredTranscriptionSegment(
+                        text: "Hi",
+                        start: 1.0,
+                        end: 2.0,
+                        speakerLabel: "Speaker B",
+                        speakerConfidence: 0.82
+                    )
+                ]
+            )
+        }
+    }
+
+    @objc(APIRouterLegacySegmentTranscriptionPlugin)
+    private final class LegacySegmentTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.legacy-segment-transcription" }
+        static var pluginName: String { "Legacy Segment Mock Transcription" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "legacy-segment-mock" }
+        var providerDisplayName: String { "Legacy Segment Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "legacy", displayName: "Legacy")] }
+        var selectedModelId: String? { "legacy" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(
+                text: "legacy segment",
+                detectedLanguage: language,
+                segments: [
+                    PluginTranscriptionSegment(text: "legacy segment", start: 0.0, end: 1.0)
+                ]
+            )
+        }
+    }
+
     @objc(APIRouterBudgetedTranscriptionPlugin)
     private final class BudgetedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.budgeted-transcription" }
@@ -902,6 +983,55 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, ["de", "en"])
         XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    @MainActor
+    func testTranscribeEndpointVerboseJSONIncludesSpeakerWhenStructuredSegmentsAreReturned() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+        let plugin = StructuredTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.structured-transcription",
+                    name: "Structured Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterStructuredTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+        context?.modelManager.selectProvider(plugin.providerId)
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-response-format": "verbose_json",
+                ],
+                body: wavData
+            )
+        ))
+
+        let segments = try XCTUnwrap(response["segments"] as? [[String: Any]])
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0]["text"] as? String, "Hello")
+        XCTAssertEqual(segments[0]["speaker"] as? String, "Speaker A")
+        XCTAssertEqual(segments[1]["speaker"] as? String, "Speaker B")
     }
 
     func testTranscribeLocalFileEndpointTranscribesTemporaryWavFile() async throws {
@@ -3462,6 +3592,88 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(plugin.selectedModelId, "alpha", "cloudModelOverride must not persist the plugin's default model")
+    }
+
+    @MainActor
+    func testModelManagerPreservesStructuredSpeakerSegmentsWhenPluginOptsIn() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = StructuredTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.structured-transcription",
+                    name: "Structured Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterStructuredTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: nil,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Speaker A: Hello\nSpeaker B: Hi")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker A", "Speaker B"])
+        XCTAssertEqual(result.segments.first?.speakerConfidence, 0.9)
+    }
+
+    @MainActor
+    func testModelManagerKeepsLegacyTranscriptionSegmentsSpeakerless() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = LegacySegmentTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.legacy-segment-transcription",
+                    name: "Legacy Segment Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterLegacySegmentTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: nil,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.segments.map(\.text), ["legacy segment"])
+        XCTAssertNil(result.segments.first?.speakerLabel)
+        XCTAssertNil(result.segments.first?.speakerConfidence)
     }
 
     @MainActor

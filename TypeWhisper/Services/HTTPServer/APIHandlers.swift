@@ -346,6 +346,25 @@ final class APIHandlers: @unchecked Sendable {
                     let start: Double
                     let end: Double
                     let text: String
+                    let speaker: String?
+                    let speakerConfidence: Double?
+
+                    enum CodingKeys: String, CodingKey {
+                        case start
+                        case end
+                        case text
+                        case speaker
+                        case speakerConfidence = "speaker_confidence"
+                    }
+
+                    func encode(to encoder: Encoder) throws {
+                        var container = encoder.container(keyedBy: CodingKeys.self)
+                        try container.encode(start, forKey: .start)
+                        try container.encode(end, forKey: .end)
+                        try container.encode(text, forKey: .text)
+                        try container.encodeIfPresent(speaker, forKey: .speaker)
+                        try container.encodeIfPresent(speakerConfidence, forKey: .speakerConfidence)
+                    }
                 }
 
                 struct VerboseResponse: Encodable {
@@ -359,7 +378,13 @@ final class APIHandlers: @unchecked Sendable {
                 }
 
                 let segments = result.segments.map {
-                    SegmentEntry(start: $0.start, end: $0.end, text: $0.text)
+                    SegmentEntry(
+                        start: $0.start,
+                        end: $0.end,
+                        text: $0.text,
+                        speaker: $0.speakerLabel,
+                        speakerConfidence: $0.speakerConfidence
+                    )
                 }
 
                 return .json(VerboseResponse(

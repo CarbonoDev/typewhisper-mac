@@ -175,6 +175,45 @@ private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEngin
     }
 }
 
+@objc(MockStructuredTranscriptionPlugin)
+private final class MockStructuredTranscriptionPlugin: NSObject, StructuredTranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.structured"
+    static let pluginName = "Mock Structured"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-structured" }
+    var providerDisplayName: String { "Mock Structured" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "legacy", detectedLanguage: language)
+    }
+
+    func transcribeStructured(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginStructuredTranscriptionResult {
+        PluginStructuredTranscriptionResult(
+            text: "Speaker A: Hello",
+            detectedLanguage: language,
+            segments: [
+                PluginStructuredTranscriptionSegment(
+                    text: "Hello",
+                    start: 0.25,
+                    end: 1.5,
+                    speakerLabel: "Speaker A",
+                    speakerConfidence: 0.91
+                )
+            ]
+        )
+    }
+}
+
 private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
     var isActive = true
     var onFinish: (@Sendable () -> Void)?
@@ -347,6 +386,28 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
         XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
         XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
+    }
+
+    func testStructuredTranscriptionProtocolIsOptionalAndCarriesSpeakerMetadata() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let structuredPlugin = MockStructuredTranscriptionPlugin()
+        let erasedStructuredPlugin: Any = structuredPlugin
+
+        XCTAssertFalse(legacyPlugin is any StructuredTranscriptionEnginePlugin)
+        XCTAssertTrue(erasedStructuredPlugin is any StructuredTranscriptionEnginePlugin)
+
+        let result = try await structuredPlugin.transcribeStructured(
+            audio: AudioData(samples: [0.1], wavData: Data([0x00]), duration: 1),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Speaker A: Hello")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.segments.first?.text, "Hello")
+        XCTAssertEqual(result.segments.first?.speakerLabel, "Speaker A")
+        XCTAssertEqual(result.segments.first?.speakerConfidence, 0.91)
     }
 
     func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {

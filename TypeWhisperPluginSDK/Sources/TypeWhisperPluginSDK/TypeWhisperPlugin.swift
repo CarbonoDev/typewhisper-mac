@@ -228,6 +228,44 @@ public struct PluginTranscriptionResult: Sendable {
     }
 }
 
+public struct PluginStructuredTranscriptionSegment: Sendable {
+    public let text: String
+    public let start: Double
+    public let end: Double
+    public let speakerLabel: String?
+    public let speakerConfidence: Double?
+
+    public init(
+        text: String,
+        start: Double,
+        end: Double,
+        speakerLabel: String? = nil,
+        speakerConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerLabel = speakerLabel
+        self.speakerConfidence = speakerConfidence
+    }
+}
+
+public struct PluginStructuredTranscriptionResult: Sendable {
+    public let text: String
+    public let detectedLanguage: String?
+    public let segments: [PluginStructuredTranscriptionSegment]
+
+    public init(
+        text: String,
+        detectedLanguage: String? = nil,
+        segments: [PluginStructuredTranscriptionSegment] = []
+    ) {
+        self.text = text
+        self.detectedLanguage = detectedLanguage
+        self.segments = segments
+    }
+}
+
 public struct PluginLanguageSelection: Sendable, Equatable {
     public let requestedLanguage: String?
     public let languageHints: [String]
@@ -375,6 +413,24 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public protocol StructuredTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult
+}
+
+public protocol StructuredLanguageHintTranscriptionEnginePlugin: StructuredTranscriptionEnginePlugin {
+    func transcribeStructured(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult
 }
 
 public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {

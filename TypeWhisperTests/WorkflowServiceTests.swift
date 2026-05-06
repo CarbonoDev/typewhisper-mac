@@ -1193,6 +1193,50 @@ final class WatchFolderExportTests: XCTestCase {
         )
     }
 
+    func testWatchFolderSubtitleExportsPrefixSpeakerLabelsWhenPresent() throws {
+        let result = TranscriptionResult(
+            text: "Speaker A: Hello\nSpeaker B: Hi",
+            detectedLanguage: "en",
+            duration: 2,
+            processingTime: 0.3,
+            engineUsed: "assemblyai",
+            segments: [
+                TranscriptionSegment(text: "Hello", start: 0, end: 1, speakerLabel: "Speaker A"),
+                TranscriptionSegment(text: "Hi", start: 1, end: 2, speakerLabel: "Speaker B")
+            ]
+        )
+
+        let srt = try WatchFolderExportBuilder.build(
+            format: .srt,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "AssemblyAI",
+            date: .distantPast
+        )
+        XCTAssertEqual(
+            srt.content,
+            """
+            1
+            00:00:00,000 --> 00:00:01,000
+            Speaker A: Hello
+
+            2
+            00:00:01,000 --> 00:00:02,000
+            Speaker B: Hi
+            """
+        )
+
+        let vtt = try WatchFolderExportBuilder.build(
+            format: .vtt,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "AssemblyAI",
+            date: .distantPast
+        )
+        XCTAssertTrue(vtt.content.contains("Speaker A: Hello"))
+        XCTAssertTrue(vtt.content.contains("Speaker B: Hi"))
+    }
+
     func testWatchFolderExportBuilderRejectsSubtitleFormatsWithoutSegments() {
         let result = TranscriptionResult(
             text: "Hello world",
