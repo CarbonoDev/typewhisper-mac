@@ -182,7 +182,7 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
         guard let data = try? Data(contentsOf: configURL),
               let config = try? JSONDecoder().decode([ExampleWebhookConfig].self, from: data) else { return }
         webhooks = config.map(resolveSecretHeaders)
-        if config.contains(where: containsPlaintextSecretHeader) {
+        if config.contains(where: containsPlaintextSecretHeader) || config.contains(where: containsEmptySensitiveHeader) {
             saveConfig()
         }
     }
@@ -194,7 +194,7 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
     }
 
     func addWebhook(_ webhook: ExampleWebhookConfig) {
-        webhooks.append(webhook)
+        webhooks.append(configRemovingEmptySensitiveHeaders(from: webhook))
         saveConfig()
     }
 
@@ -208,8 +208,9 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
     func updateWebhook(_ webhook: ExampleWebhookConfig) {
         guard let index = webhooks.firstIndex(where: { $0.id == webhook.id }) else { return }
-        clearSecretsRemoved(from: webhooks[index], next: webhook)
-        webhooks[index] = webhook
+        let nextWebhook = configRemovingEmptySensitiveHeaders(from: webhook)
+        clearSecretsRemoved(from: webhooks[index], next: nextWebhook)
+        webhooks[index] = nextWebhook
         saveConfig()
     }
 
@@ -242,9 +243,16 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func containsEmptySensitiveHeader(_ webhook: ExampleWebhookConfig) -> Bool {
+        webhook.headers.contains { headerName, value in
+            Self.isSensitiveHeader(headerName) && value.isEmpty
+        }
+    }
+
     private func resolveSecretHeaders(_ webhook: ExampleWebhookConfig) -> ExampleWebhookConfig {
-        var resolved = webhook
-        let secretHeaderNames = persistedSecretHeaderNames(for: webhook)
+        clearEmptySensitiveHeaderSecrets(in: webhook)
+        var resolved = configRemovingEmptySensitiveHeaders(from: webhook)
+        let secretHeaderNames = persistedSecretHeaderNames(for: resolved)
 
         for headerName in secretHeaderNames {
             let storageKey = Self.secretStorageKey(webhookID: webhook.id, headerName: headerName)
@@ -260,8 +268,9 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
     }
 
     private func configForPersistence(_ webhook: ExampleWebhookConfig) -> ExampleWebhookConfig {
-        var persisted = webhook
-        let secretHeaderNames = persistedSecretHeaderNames(for: webhook)
+        clearEmptySensitiveHeaderSecrets(in: webhook)
+        var persisted = configRemovingEmptySensitiveHeaders(from: webhook)
+        let secretHeaderNames = persistedSecretHeaderNames(for: persisted)
 
         for headerName in secretHeaderNames {
             guard let value = webhook.headers[headerName], !value.isEmpty else { continue }
@@ -274,6 +283,31 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
         persisted.secretHeaderNames = secretHeaderNames
         return persisted
+    }
+
+    private func configRemovingEmptySensitiveHeaders(from webhook: ExampleWebhookConfig) -> ExampleWebhookConfig {
+        let emptySensitiveHeaderNames = Set(webhook.headers.compactMap { headerName, value in
+            Self.isSensitiveHeader(headerName) && value.isEmpty ? Self.normalizeHeaderName(headerName) : nil
+        })
+        guard !emptySensitiveHeaderNames.isEmpty else { return webhook }
+
+        var sanitized = webhook
+        sanitized.headers = webhook.headers.filter { headerName, _ in
+            !emptySensitiveHeaderNames.contains(Self.normalizeHeaderName(headerName))
+        }
+        sanitized.secretHeaderNames = webhook.secretHeaderNames.filter { headerName in
+            !emptySensitiveHeaderNames.contains(Self.normalizeHeaderName(headerName))
+        }
+        return sanitized
+    }
+
+    private func clearEmptySensitiveHeaderSecrets(in webhook: ExampleWebhookConfig) {
+        for (headerName, value) in webhook.headers where Self.isSensitiveHeader(headerName) && value.isEmpty {
+            try? host.storeSecret(
+                key: Self.secretStorageKey(webhookID: webhook.id, headerName: headerName),
+                value: ""
+            )
+        }
     }
 
     private func persistedSecretHeaderNames(for webhook: ExampleWebhookConfig) -> [String] {

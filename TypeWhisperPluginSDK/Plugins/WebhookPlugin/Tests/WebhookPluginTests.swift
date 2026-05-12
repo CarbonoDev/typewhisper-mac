@@ -84,6 +84,66 @@ final class WebhookPluginTests: XCTestCase {
         XCTAssertEqual(persisted.secretHeaderNames, ["Authorization"])
     }
 
+    func testBlankSensitiveHeaderClearsSecretAndDoesNotReloadOrSend() async throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        let webhook = ExampleWebhookConfig(
+            name: "Rotated Hook",
+            url: "https://example.com/hook",
+            headers: [
+                "Authorization": "Bearer old-token",
+                "Content-Type": "application/json",
+            ]
+        )
+        let storageKey = ExampleWebhookService.secretStorageKey(
+            webhookID: webhook.id,
+            headerName: "Authorization"
+        )
+
+        service.addWebhook(webhook)
+        XCTAssertEqual(host.loadSecret(key: storageKey), "Bearer old-token")
+
+        var updated = try XCTUnwrap(service.webhooks.first)
+        updated.headers["Authorization"] = ""
+        service.updateWebhook(updated)
+
+        XCTAssertEqual(host.loadSecret(key: storageKey), "")
+
+        let storedData = try Data(contentsOf: configURL(for: host))
+        let storedRaw = String(decoding: storedData, as: UTF8.self)
+        XCTAssertFalse(storedRaw.contains("Bearer old-token"))
+
+        let persisted = try XCTUnwrap(try JSONDecoder().decode([ExampleWebhookConfig].self, from: storedData).first)
+        XCTAssertNil(persisted.headers["Authorization"])
+        XCTAssertFalse(persisted.secretHeaderNames.contains("Authorization"))
+
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.com/hook")!,
+            statusCode: 204,
+            httpVersion: nil,
+            headerFields: nil
+        ))
+        let sessionStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            sessionStore.makeSession(outcomes: [.success(Data(), response)])
+        }
+
+        let reloadedService = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        XCTAssertNil(reloadedService.webhooks.first?.headers["Authorization"])
+
+        await reloadedService.sendWebhooks(for: TranscriptionCompletedPayload(
+            rawText: "raw",
+            finalText: "final",
+            engineUsed: "test",
+            durationSeconds: 1,
+            ruleName: nil
+        ))
+
+        let request = try XCTUnwrap(sessionStore.sessions.first?.requestedRequests.first)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+    }
+
     func testSendUsesRestoredSensitiveHeaders() async throws {
         let host = try PluginTestHostServices()
         let webhook = ExampleWebhookConfig(
