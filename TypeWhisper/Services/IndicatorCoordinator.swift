@@ -160,26 +160,7 @@ enum IndicatorWindowFrameLookup {
     }
 
     nonisolated static func focusedWindowFrame() -> CGRect? {
-        let systemWide = AXUIElementCreateSystemWide()
-
-        var focusedApplication: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedApplicationAttribute as CFString,
-            &focusedApplication
-        ) == .success,
-              let focusedApplication else {
-            return nil
-        }
-        let applicationElement = focusedApplication as! AXUIElement
-
-        var focusedWindow: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            applicationElement,
-            kAXFocusedWindowAttribute as CFString,
-            &focusedWindow
-        ) == .success,
-              let focusedWindow else {
+        guard let focusedWindow = focusedWindowElement() else {
             return nil
         }
         let windowElement = focusedWindow as! AXUIElement
@@ -218,11 +199,66 @@ enum IndicatorWindowFrameLookup {
 
         return CGRect(origin: position, size: size)
     }
+
+    nonisolated static func focusedWindowIsFullscreen() -> Bool? {
+        guard let focusedWindow = focusedWindowElement() else {
+            return nil
+        }
+        let windowElement = focusedWindow as! AXUIElement
+
+        var fullScreenValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            "AXFullScreen" as CFString,
+            &fullScreenValue
+        ) == .success,
+              let fullScreenValue else {
+            return nil
+        }
+
+        if let isFullscreen = fullScreenValue as? Bool {
+            return isFullscreen
+        }
+
+        return (fullScreenValue as? NSNumber)?.boolValue
+    }
+
+    private nonisolated static func focusedWindowElement() -> AnyObject? {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedApplication: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplication
+        ) == .success,
+              let focusedApplication else {
+            return nil
+        }
+        let applicationElement = focusedApplication as! AXUIElement
+
+        var focusedWindow: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        ) == .success,
+              let focusedWindow else {
+            return nil
+        }
+        return focusedWindow
+    }
 }
 
 enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
+    @MainActor private static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
+
+    @MainActor
+    static func lastSuppressionDiagnostics() -> IndicatorFullscreenSuppressionDiagnostics? {
+        lastSuppression
+    }
 
     @MainActor
     static func shouldSuppressIndicator(
@@ -231,6 +267,7 @@ enum IndicatorFullscreenSuppressionPolicy {
             ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
         },
         focusedWindowFrameProvider: () -> CGRect? = IndicatorWindowFrameLookup.focusedWindowFrame,
+        focusedWindowFullscreenProvider: () -> Bool? = IndicatorWindowFrameLookup.focusedWindowIsFullscreen,
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
@@ -244,20 +281,35 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         let windowFrame = focusedWindowFrameProvider()
             ?? windowFrameProvider(application.processIdentifier)
+        let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
 
-        return shouldSuppressIndicator(
+        let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
             safeAreaTopInset: screen.safeAreaInsets.top,
             windowFrame: windowFrame,
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
             frontmostBundleIdentifier: application.bundleIdentifier,
             appBundleIdentifier: appBundleIdentifier
         )
+
+        if shouldSuppress {
+            recordSuppression(
+                screenFrame: screen.frame,
+                safeAreaTopInset: screen.safeAreaInsets.top,
+                windowFrame: windowFrame,
+                focusedWindowIsFullscreen: focusedWindowIsFullscreen,
+                frontmostApplication: application
+            )
+        }
+
+        return shouldSuppress
     }
 
     static func shouldSuppressIndicator(
         screenFrame: CGRect,
         safeAreaTopInset: CGFloat,
         windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool? = nil,
         frontmostBundleIdentifier: String?,
         appBundleIdentifier: String?
     ) -> Bool {
@@ -271,6 +323,11 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         let screenFrame = screenFrame.standardized
         let windowFrame = candidateWindowFrame.standardized
+
+        if let focusedWindowIsFullscreen, !focusedWindowIsFullscreen {
+            return false
+        }
+
         let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
         let notchStrip = CGRect(
             x: screenFrame.minX,
@@ -302,6 +359,70 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         return bundleIdentifier == "com.typewhisper.mac"
             || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+
+    @MainActor
+    private static func recordSuppression(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool?,
+        frontmostApplication: NSRunningApplication
+    ) {
+        guard let windowFrame else { return }
+
+        let screenFrame = screenFrame.standardized
+        let standardizedWindowFrame = windowFrame.standardized
+        let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
+        let notchStrip = CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.maxY - notchStripHeight,
+            width: screenFrame.width,
+            height: notchStripHeight
+        )
+        let intersection = standardizedWindowFrame.intersection(notchStrip)
+        let horizontalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.width / notchStrip.width
+        let verticalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.height / notchStrip.height
+
+        lastSuppression = IndicatorFullscreenSuppressionDiagnostics(
+            timestamp: Date(),
+            frontmostBundleIdentifier: frontmostApplication.bundleIdentifier,
+            frontmostLocalizedName: frontmostApplication.localizedName,
+            frontmostProcessIdentifier: frontmostApplication.processIdentifier,
+            screenFrame: .init(screenFrame),
+            safeAreaTopInset: Double(safeAreaTopInset),
+            windowFrame: .init(standardizedWindowFrame),
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
+            horizontalCoverage: Double(horizontalCoverage),
+            verticalCoverage: Double(verticalCoverage)
+        )
+    }
+}
+
+struct IndicatorFullscreenSuppressionDiagnostics: Encodable, Equatable, Sendable {
+    let timestamp: Date
+    let frontmostBundleIdentifier: String?
+    let frontmostLocalizedName: String?
+    let frontmostProcessIdentifier: pid_t
+    let screenFrame: IndicatorRectDiagnostics
+    let safeAreaTopInset: Double
+    let windowFrame: IndicatorRectDiagnostics
+    let focusedWindowIsFullscreen: Bool?
+    let horizontalCoverage: Double
+    let verticalCoverage: Double
+}
+
+struct IndicatorRectDiagnostics: Encodable, Equatable, Sendable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+
+    init(_ rect: CGRect) {
+        x = Double(rect.origin.x)
+        y = Double(rect.origin.y)
+        width = Double(rect.size.width)
+        height = Double(rect.size.height)
     }
 }
 
