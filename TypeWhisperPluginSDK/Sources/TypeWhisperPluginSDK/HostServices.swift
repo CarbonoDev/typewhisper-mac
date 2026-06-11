@@ -726,13 +726,7 @@ public struct PluginOpenAIChatHelper: Sendable {
         case 429:
             throw PluginChatError.rateLimited
         default:
-            var displayMessage = "HTTP \(httpResponse.statusCode)"
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let error = json["error"] as? [String: Any],
-               let message = error["message"] as? String {
-                displayMessage = message
-            }
-            throw PluginChatError.apiError(displayMessage)
+            throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -808,6 +802,49 @@ public struct PluginOpenAIChatHelper: Sendable {
             temperature: temperature,
             requestTimeout: requestTimeout
         )
+    }
+
+    /// Extracts a human-readable error message from an OpenAI-compatible error body,
+    /// falling back to `HTTP <status>` when no message can be found.
+    ///
+    /// Most providers return `{"error": {"message": ...}}`, but some (notably
+    /// Google's Gemini OpenAI-compat endpoint) wrap the error in a top-level JSON
+    /// array: `[{"error": {"message": ...}}]`. Both shapes are handled here so the
+    /// descriptive message survives instead of being collapsed to `HTTP 404`.
+    static func errorMessage(from data: Data, statusCode: Int) -> String {
+        let json = try? JSONSerialization.jsonObject(with: data)
+
+        let object: [String: Any]?
+        if let dictionary = json as? [String: Any] {
+            object = dictionary
+        } else if let array = json as? [Any],
+                  let first = array.first as? [String: Any] {
+            object = first
+        } else {
+            object = nil
+        }
+
+        if let object, let message = message(fromErrorObject: object) {
+            return message
+        }
+        return "HTTP \(statusCode)"
+    }
+
+    /// Extracts a message from a single error object following the precedence used
+    /// across providers: top-level `detail`, then nested `error.message`, then a
+    /// top-level `message`.
+    private static func message(fromErrorObject object: [String: Any]) -> String? {
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     func requestBody(
