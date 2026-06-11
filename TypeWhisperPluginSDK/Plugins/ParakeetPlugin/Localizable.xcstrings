@@ -113,6 +113,38 @@
         }
       }
     },
+    "Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン"
+          }
+        }
+      }
+    },
+    "Invalid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHugging Faceトークン"
+          }
+        }
+      }
+    },
     "Model Version": {
       "localizations": {
         "de": {
@@ -161,6 +193,22 @@
         }
       }
     },
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Erhöht die Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意です。ダウンロードのレート制限を緩和できます。huggingface.co/settings/tokens で無料作成できます"
+          }
+        }
+      }
+    },
     "Ready - %lld terms loaded": {
       "localizations": {
         "de": {
@@ -193,6 +241,22 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
     "Retry": {
       "localizations": {
         "de": {
@@ -209,6 +273,22 @@
         }
       }
     },
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
     "Unload": {
       "localizations": {
         "de": {
@@ -221,6 +301,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効化"
+          }
+        }
+      }
+    },
+    "Valid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHugging Faceトークン"
+          }
+        }
+      }
+    },
+    "Validating token...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token wird geprüft..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークンを検証中..."
           }
         }
       }
