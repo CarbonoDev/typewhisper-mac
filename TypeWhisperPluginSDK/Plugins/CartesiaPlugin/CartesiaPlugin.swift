@@ -399,8 +399,10 @@ final class CartesiaPlugin: NSObject,
             languageHints: languageHints,
             configuredLanguage: _transcriptionLanguage
         )
+        let uploadFile = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
         let request = try Self.makeTranscriptionRequest(
-            wavData: audio.wavData,
+            uploadFile: uploadFile,
             apiKey: apiKey,
             modelId: Self.sttModelId,
             language: resolvedLanguage
@@ -620,7 +622,7 @@ extension CartesiaPlugin {
     }
 
     static func makeTranscriptionRequest(
-        wavData: Data,
+        uploadFile: PluginAudioUploadFile,
         apiKey: String,
         modelId: String,
         language: String?
@@ -641,9 +643,9 @@ extension CartesiaPlugin {
         body.appendMultipartFile(
             boundary: boundary,
             name: "file",
-            filename: "audio.wav",
-            contentType: "audio/wav",
-            data: wavData
+            filename: uploadFile.filename,
+            contentType: uploadFile.contentType,
+            data: uploadFile.data
         )
         body.appendMultipartField(boundary: boundary, name: "model", value: modelId)
         if let language, !language.isEmpty {
