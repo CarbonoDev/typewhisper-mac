@@ -457,7 +457,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         func unsubscribe(id: UUID) {}
     }
 
-    private final class MockHostServices: HostServices, @unchecked Sendable {
+    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
         private var defaults: [String: Any]
         private var secrets: [String: String]
 
@@ -466,17 +466,20 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         var activeAppBundleId: String?
         var activeAppName: String?
         var availableRuleNames: [String] = []
+        var shouldRestoreLoadedModelsPassively: Bool
         private(set) var capabilitiesChangedCount = 0
         private(set) var streamingDisplayActiveValues: [Bool] = []
 
         init(
             pluginDataDirectory: URL,
             defaults: [String: Any] = [:],
-            secrets: [String: String] = [:]
+            secrets: [String: String] = [:],
+            shouldRestoreLoadedModelsPassively: Bool = true
         ) {
             self.pluginDataDirectory = pluginDataDirectory
             self.defaults = defaults
             self.secrets = secrets
+            self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
         }
 
         func storeSecret(key: String, value: String) throws { secrets[key] = value }
@@ -536,6 +539,29 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "gemma-4-26b-a4b-it-4bit")
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
+    func testGemma4ActivationSkipsPassiveRestoreWhenHostDisallowsIt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "selectedLLMModel": "gemma-4-e2b-it-4bit",
+                "loadedModel": "retired-or-unavailable-model"
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = Gemma4Plugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertFalse(plugin.shouldRestoreLoadedModelsPassively)
+        XCTAssertEqual(plugin.selectedLLMModelId, "gemma-4-e2b-it-4bit")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemma-4-e2b-it-4bit")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "retired-or-unavailable-model")
         XCTAssertEqual(plugin.modelState, .notLoaded)
     }
 
@@ -1620,6 +1646,14 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         }
     }
 
+    private final class MockLifecyclePolicyAwarePlugin: NSObject, TypeWhisperPlugin, HostModelLifecyclePolicyAwarePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.lifecycle-aware" }
+        static var pluginName: String { "Mock Lifecycle Aware" }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+    }
+
     override func tearDown() {
         RuntimeArchitecture.overrideCurrent = nil
         super.tearDown()
@@ -1675,6 +1709,61 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertFalse(manager.isManifestSDKCompatible(missingManifest, isBundled: false))
         XCTAssertFalse(manager.isManifestSDKCompatible(mismatchedManifest, isBundled: false))
         XCTAssertTrue(manager.isManifestSDKCompatible(missingManifest, isBundled: true))
+    }
+
+    func testPassiveRestoreCompatibilityMaskOnlyAppliesToLegacyExternalPlugins() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let externalURL = appSupportDirectory
+            .appendingPathComponent("Plugins", isDirectory: true)
+            .appendingPathComponent("External.bundle", isDirectory: true)
+        let bundledURL = (Bundle.main.builtInPlugInsURL ?? URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns"))
+            .appendingPathComponent("Bundled.bundle", isDirectory: true)
+
+        let legacyExternalPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.legacy-external",
+                name: "Legacy External",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "MockTranscriptionPlugin"
+            ),
+            instance: MockTranscriptionPlugin(),
+            bundle: Bundle.main,
+            sourceURL: externalURL,
+            isEnabled: true
+        )
+        let lifecycleAwareExternalPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.lifecycle-aware",
+                name: "Lifecycle Aware",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "MockLifecyclePolicyAwarePlugin"
+            ),
+            instance: MockLifecyclePolicyAwarePlugin(),
+            bundle: Bundle.main,
+            sourceURL: externalURL,
+            isEnabled: true
+        )
+        let bundledPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.bundled",
+                name: "Bundled",
+                version: "1.0.0",
+                principalClass: "MockTranscriptionPlugin"
+            ),
+            instance: MockTranscriptionPlugin(),
+            bundle: Bundle.main,
+            sourceURL: bundledURL,
+            isEnabled: true
+        )
+
+        XCTAssertTrue(manager.shouldSuppressPassiveLoadedModelRestore(for: legacyExternalPlugin))
+        XCTAssertFalse(manager.shouldSuppressPassiveLoadedModelRestore(for: lifecycleAwareExternalPlugin))
+        XCTAssertFalse(manager.shouldSuppressPassiveLoadedModelRestore(for: bundledPlugin))
     }
 
     func testExternalBundleNoticeShowsBundledFallbackWhenLegacyBundleIsSkipped() throws {

@@ -2,7 +2,32 @@ import AppKit
 import Foundation
 import TypeWhisperPluginSDK
 
-final class HostServicesImpl: HostServices, @unchecked Sendable {
+private enum PassiveLoadedModelRestoreContext {
+    @TaskLocal static var suppressLoadedModelDefault = false
+
+    private static let synchronousActivationAccessKey = "com.typewhisper.host.loadedModel.synchronousActivationAccess"
+
+    static var allowsLoadedModelDefaultInCurrentCallStack: Bool {
+        Thread.current.threadDictionary[synchronousActivationAccessKey] as? Bool == true
+    }
+
+    static func withSynchronousLoadedModelDefaultAccess(_ body: () -> Void) {
+        let threadDictionary = Thread.current.threadDictionary
+        let previousValue = threadDictionary[synchronousActivationAccessKey]
+        threadDictionary[synchronousActivationAccessKey] = true
+        defer {
+            if let previousValue {
+                threadDictionary[synchronousActivationAccessKey] = previousValue
+            } else {
+                threadDictionary.removeObject(forKey: synchronousActivationAccessKey)
+            }
+        }
+
+        body()
+    }
+}
+
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     let eventBus: EventBusProtocol
@@ -47,11 +72,42 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     // MARK: - UserDefaults (plugin-scoped)
 
     func userDefault(forKey key: String) -> Any? {
-        UserDefaults.standard.object(forKey: "plugin.\(pluginId).\(key)")
+        if key == "loadedModel",
+           PassiveLoadedModelRestoreContext.suppressLoadedModelDefault,
+           !PassiveLoadedModelRestoreContext.allowsLoadedModelDefaultInCurrentCallStack,
+           !shouldRestoreLoadedModelsPassively {
+            return nil
+        }
+
+        return UserDefaults.standard.object(forKey: "plugin.\(pluginId).\(key)")
     }
 
     func setUserDefault(_ value: Any?, forKey key: String) {
         UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
+    }
+
+    // MARK: - Model Lifecycle Policy
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively()
+    }
+
+    func performPluginActivation(
+        suppressPassiveLoadedModelRestore: Bool,
+        _ body: @escaping () -> Void
+    ) {
+        let activation = {
+            PassiveLoadedModelRestoreContext.withSynchronousLoadedModelDefaultAccess(body)
+        }
+
+        guard suppressPassiveLoadedModelRestore else {
+            activation()
+            return
+        }
+
+        PassiveLoadedModelRestoreContext.$suppressLoadedModelDefault.withValue(true) {
+            activation()
+        }
     }
 
     // MARK: - App Context
