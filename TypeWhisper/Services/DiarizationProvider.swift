@@ -6,7 +6,7 @@ struct SpeakerSegment {
     let speaker: String
 }
 
-protocol DiarizationProvider {
+protocol DiarizationProvider: Sendable {
     var isAvailable: Bool { get async }
     func diarize(wavData: Data, numSpeakers: Int?) async throws -> [SpeakerSegment]
 }
