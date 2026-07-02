@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
+    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, diarization, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -70,6 +70,7 @@ struct SettingsView: View {
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
+            SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
@@ -169,6 +170,8 @@ struct SettingsView: View {
             PremiumSettingsView()
         case .integrations:
             PluginSettingsView()
+        case .diarization:
+            DiarizationSettingsView()
         case .advanced:
             AdvancedSettingsView()
         case .license:
@@ -289,6 +292,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         SettingsDestinationSection(
             id: "system",
             destinations: [
+                settingsDestination(destinations, .diarization),
                 settingsDestination(destinations, .advanced),
                 settingsDestination(destinations, .license),
                 settingsDestination(destinations, .about)

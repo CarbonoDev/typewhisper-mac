@@ -575,7 +575,7 @@ final class ModelManagerService: ObservableObject {
             plugin: plugin
         )
 
-        let result = try await transcribeWithResolvedLanguageSelection(
+        let transcription = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
             audio: audio,
             languageSelection: runtimeSelection,
@@ -583,6 +583,9 @@ final class ModelManagerService: ObservableObject {
             prompt: prompt,
             dictionaryTermHints: dictionaryTermHints
         )
+
+        // Local speaker diarization (no-op if disabled or plugin already labeled speakers)
+        let result = await LocalDiarizationService.shared.enrich(result: transcription, audio: audio)
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
@@ -727,7 +730,7 @@ final class ModelManagerService: ObservableObject {
             plugin: plugin
         )
 
-        let result = try await transcribeWithResolvedLanguageSelection(
+        let transcription = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
             audio: audio,
             languageSelection: runtimeSelection,
@@ -737,6 +740,9 @@ final class ModelManagerService: ObservableObject {
             onProgress: onProgress,
             onSourceProgress: onSourceProgress
         )
+
+        // Local speaker diarization (no-op if disabled or plugin already labeled speakers)
+        let result = await LocalDiarizationService.shared.enrich(result: transcription, audio: audio)
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
