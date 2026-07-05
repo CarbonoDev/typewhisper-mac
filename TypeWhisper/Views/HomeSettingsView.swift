@@ -52,6 +52,7 @@ struct HomeSettingsView: View {
                         Button("Seed Demo Data") {
                             let historyService = ServiceContainer.shared.historyService
                             historyService.seedDemoData()
+                            ServiceContainer.shared.usageStatisticsService.replaceWithHistoryRecords(historyService.records)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.orange)
@@ -59,6 +60,7 @@ struct HomeSettingsView: View {
                         Button("Clear All Data") {
                             let historyService = ServiceContainer.shared.historyService
                             historyService.clearAll()
+                            ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.red)
