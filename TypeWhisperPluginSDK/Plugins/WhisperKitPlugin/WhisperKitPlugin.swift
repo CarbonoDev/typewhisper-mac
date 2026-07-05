@@ -644,6 +644,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         modelState = .loading(phase: "compiling")
         startModelLoadTimeout(generation: generation, modelName: modelName)
     }
+
+    func restoreTargetModelIdForTesting(allowDownloads: Bool = true) -> String? {
+        modelDefinitionForRestore(allowDownloads: allowDownloads)?.id
+    }
     #endif
 
     fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) throws {
@@ -658,12 +662,27 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         restoreLoadedModelInvocationCountForTesting += 1
         #endif
 
-        guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
-              let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
-            return
-        }
-        guard allowDownloads || isModelDownloaded(modelDef) else { return }
+        guard let modelDef = modelDefinitionForRestore(allowDownloads: allowDownloads) else { return }
         await loadModel(modelDef)
+    }
+
+    private func modelDefinitionForRestore(allowDownloads: Bool) -> WhisperModelDef? {
+        let persistedLoadedId = host?.userDefault(forKey: "loadedModel") as? String
+        let candidateIds = [persistedLoadedId, _selectedModelId]
+
+        var seen = Set<String>()
+        for candidateId in candidateIds {
+            guard let modelId = candidateId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !modelId.isEmpty,
+                  seen.insert(modelId).inserted,
+                  let modelDef = Self.availableModels.first(where: { $0.id == modelId }),
+                  allowDownloads || isModelDownloaded(modelDef) else {
+                continue
+            }
+            return modelDef
+        }
+
+        return nil
     }
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
