@@ -161,4 +161,12 @@ final class MenuBarItemsTests: XCTestCase {
             [1, 3, 2]
         )
     }
+
+    /// The slim menu removed `.errorLog`, so Settings › Application › Advanced is now the only
+    /// opener of the standalone `Window(id: AppWindowID.errors)` error-log scene. Guard that surface
+    /// so the error log can't become unreachable again (owner-veto item 2 / D8 follow-up).
+    func testAdvancedSettingsExposesTheErrorLogWindow() {
+        XCTAssertEqual(AdvancedSettingsView.errorLogWindowID, AppWindowID.errors)
+        XCTAssertEqual(AppWindowID.errors, "errors")
+    }
 }

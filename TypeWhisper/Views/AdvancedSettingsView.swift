@@ -2,6 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct AdvancedSettingsView: View {
+    /// The managed window the "Open Error Log" button opens. Declared as a testable constant so the
+    /// error-log scene (hosted only in `Window(id: AppWindowID.errors)`) can never again become
+    /// unreachable after the D8 menu-bar slim removed the menu's `.errorLog` opener. Covered by
+    /// `SettingsRegroupTests` so reachability can't silently regress.
+    static let errorLogWindowID = AppWindowID.errors
+
     @ObservedObject private var viewModel = APIServerViewModel.shared
     @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
@@ -39,6 +45,22 @@ struct AdvancedSettingsView: View {
 
             // MARK: - Support Diagnostics
             Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
+                HStack {
+                    Button {
+                        ManagedAppWindowOpener.shared.open(id: Self.errorLogWindowID)
+                    } label: {
+                        Label(
+                            String(localized: "Error Log"),
+                            systemImage: "exclamationmark.triangle"
+                        )
+                    }
+
+                    SettingsInfoButton(text: localizedAppText(
+                        "Opens the app's error log window with recent recording, transcription and plugin errors.",
+                        de: "Öffnet das Fehlerprotokoll-Fenster mit den letzten Aufnahme-, Transkriptions- und Plugin-Fehlern."
+                    ))
+                }
+
                 HStack {
                     Button {
                         exportDiagnostics()
