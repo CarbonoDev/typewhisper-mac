@@ -20,6 +20,13 @@ final class PromptAction {
     var targetActionPluginId: String?
     var createdAt: Date
     var updatedAt: Date
+    /// Which surface this row belongs to (plan AD6). Defaulted/optional so a pre-v1.1
+    /// `prompt-actions.store` opens additively without a destructive reset. Existing rows read back
+    /// as `"dictation"`, preserving the dictation quick-action palette exactly.
+    var surfaceRaw: String = PromptSurface.dictation.rawValue
+    /// The meeting output kind for `.meeting` rows (`summary`/`extended`/`brief`); `nil` for
+    /// dictation rows.
+    var meetingKindRaw: String?
 
     init(
         id: UUID = UUID(),
@@ -36,6 +43,8 @@ final class PromptAction {
         temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
         temperatureValue: Double? = nil,
         targetActionPluginId: String? = nil,
+        surfaceRaw: String = PromptSurface.dictation.rawValue,
+        meetingKindRaw: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -53,6 +62,8 @@ final class PromptAction {
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
         self.targetActionPluginId = targetActionPluginId
+        self.surfaceRaw = surfaceRaw
+        self.meetingKindRaw = meetingKindRaw
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
     }
@@ -60,6 +71,19 @@ final class PromptAction {
     var temperatureMode: PluginLLMTemperatureMode {
         get { PluginLLMTemperatureMode(rawValue: temperatureModeRaw) ?? .inheritProviderSetting }
         set { temperatureModeRaw = newValue.rawValue }
+    }
+
+    /// The surface this row belongs to (plan AD6). Unknown raw values degrade to `.dictation` so a
+    /// corrupt column can never leak a row into the meeting library.
+    var surface: PromptSurface {
+        get { PromptSurface(rawValue: surfaceRaw) ?? .dictation }
+        set { surfaceRaw = newValue.rawValue }
+    }
+
+    /// The meeting output kind for a `.meeting` row, or `nil` for dictation rows / unset.
+    var meetingKind: MeetingOutputKind? {
+        get { meetingKindRaw.flatMap { MeetingOutputKind(rawValue: $0) } }
+        set { meetingKindRaw = newValue?.rawValue }
     }
 
     var temperatureDirective: PluginLLMTemperatureDirective {

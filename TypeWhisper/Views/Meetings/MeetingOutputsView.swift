@@ -74,7 +74,7 @@ struct MeetingOutputsView: View {
     }
 
     @ViewBuilder
-    private func generateMenu(kind: MeetingOutputKind, templates: [MeetingTemplate], hasExisting: Bool) -> some View {
+    private func generateMenu(kind: MeetingOutputKind, templates: [PromptAction], hasExisting: Bool) -> some View {
         let label = hasExisting
             ? String(localized: "meetings.output.regenerate")
             : String(localized: "meetings.output.generate")

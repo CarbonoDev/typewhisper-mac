@@ -52,43 +52,7 @@ final class MeetingTemplatePresetsTests: XCTestCase {
         }
     }
 
-    // MARK: - Idempotent seeding
-
-    func testSeedTemplatesIfNeededIsIdempotent() throws {
-        let dir = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(dir) }
-
-        let service = MeetingService(appSupportDirectory: dir)
-        XCTAssertTrue(service.templates.isEmpty)
-
-        service.seedTemplatesIfNeeded()
-        XCTAssertEqual(service.templates.count, 6)
-
-        // Re-running seeds nothing new.
-        service.seedTemplatesIfNeeded()
-        XCTAssertEqual(service.templates.count, 6)
-
-        // Persisted: a fresh service on the same directory sees the same six, no duplicates.
-        let reopened = MeetingService(appSupportDirectory: dir)
-        XCTAssertEqual(reopened.templates.count, 6)
-        reopened.seedTemplatesIfNeeded()
-        XCTAssertEqual(reopened.templates.count, 6)
-    }
-
-    func testSeedingIsAdditiveForMissingPresetsOnly() throws {
-        let dir = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(dir) }
-
-        let service = MeetingService(appSupportDirectory: dir)
-        service.seedTemplatesIfNeeded()
-        // Remove one preset, then re-seed: only the missing one is restored.
-        let removed = try XCTUnwrap(service.templates.first)
-        let removedName = removed.name
-        service.deleteTemplate(removed)
-        XCTAssertEqual(service.templates.count, 5)
-
-        service.seedTemplatesIfNeeded()
-        XCTAssertEqual(service.templates.count, 6)
-        XCTAssertTrue(service.templates.contains { $0.name == removedName })
-    }
+    // Seeding/migration of presets now lives in the unified `promptActions.store` and is covered by
+    // `MeetingTemplateMigrationTests` (plan AD6). `MeetingTemplatePresets.all` remains the single
+    // source of preset copy, exercised by the invariants + localization tests above.
 }

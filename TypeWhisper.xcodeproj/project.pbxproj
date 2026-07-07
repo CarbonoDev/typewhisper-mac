@@ -176,6 +176,13 @@
 		AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000398 /* MeetingTemplatePresets.swift */; };
 		AA00000000000000000399 /* MeetingOutputsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000399 /* MeetingOutputsView.swift */; };
 		AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000400 /* MeetingTemplateEditorView.swift */; };
+		AAB0000000000000000B01 /* PromptSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B01 /* PromptSurface.swift */; };
+		AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B02 /* MeetingTemplateMigration.swift */; };
+		AAB0000000000000000B03 /* PromptTemplateEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B03 /* PromptTemplateEditor.swift */; };
+		AAB0000000000000000B04 /* PromptLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B04 /* PromptLibraryView.swift */; };
+		AAB0000000000000000B05 /* PromptSurfaceScopingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */; };
+		AAB0000000000000000B06 /* MeetingTemplateMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */; };
+		AAB0000000000000000B07 /* PromptTemplateEditorModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */; };
 		AA00000000000000000401 /* LexicalRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000401 /* LexicalRetriever.swift */; };
 		AA00000000000000000402 /* ObsidianVaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000402 /* ObsidianVaultService.swift */; };
 		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
@@ -686,6 +693,13 @@
 		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
 		BB00000000000000000392 /* MeetingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsWindowView.swift; sourceTree = "<group>"; };
 		BB00000000000000000393 /* MeetingLiveCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLiveCaptureView.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B01 /* PromptSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptSurface.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B02 /* MeetingTemplateMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigration.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B03 /* PromptTemplateEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptTemplateEditor.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B04 /* PromptLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLibraryView.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptSurfaceScopingTests.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigrationTests.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptTemplateEditorModelTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000394 /* MeetingNotesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotesPane.swift; sourceTree = "<group>"; };
 		BB00000000000000000395 /* MeetingDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetailView.swift; sourceTree = "<group>"; };
 		BB00000000000000000396 /* TranscriptContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilder.swift; sourceTree = "<group>"; };
@@ -1603,6 +1617,7 @@
 				BB00000000000000000378 /* MeetingOutput.swift */,
 				BB00000000000000000379 /* MeetingQATurn.swift */,
 				BB00000000000000000380 /* MeetingTemplate.swift */,
+				BBB0000000000000000B01 /* PromptSurface.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1645,6 +1660,7 @@
 				BB00000000000000000102 /* AudioDeviceService.swift */,
 				BB00000000000000000320 /* AudioEngineRecoverySupport.swift */,
 				BB00000000000000000111 /* PromptActionService.swift */,
+				BBB0000000000000000B02 /* MeetingTemplateMigration.swift */,
 				BB00000000000000000115 /* PromptProcessingService.swift */,
 				BB00000000000000000123 /* EventBus.swift */,
 				BB00000000000000000124 /* PluginManager.swift */,
@@ -1778,6 +1794,7 @@
 				BB00000000000000000289 /* SupporterBadgeView.swift */,
 				BB00000000000000000373 /* DiarizationSettingsView.swift */,
 				CC00000000000000000047 /* Meetings */,
+				CCB0000000000000000B01 /* PromptLibrary */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1835,6 +1852,15 @@
 				BB00000000000000000412 /* MeetingDiarizationEnricher.swift */,
 			);
 			path = Meetings;
+			sourceTree = "<group>";
+		};
+		CCB0000000000000000B01 /* PromptLibrary */ = {
+			isa = PBXGroup;
+			children = (
+				BBB0000000000000000B03 /* PromptTemplateEditor.swift */,
+				BBB0000000000000000B04 /* PromptLibraryView.swift */,
+			);
+			path = PromptLibrary;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000047 /* Meetings */ = {
@@ -2499,6 +2525,9 @@
 				MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */,
 				MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */,
 				MEF0000000000000000006 /* MeetingLLMServiceTests.swift */,
+				BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */,
+				BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */,
+				BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */,
 				MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */,
 				MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */,
 				MEF0000000000000000009 /* LexicalRetrieverTests.swift */,
@@ -4007,6 +4036,9 @@
 				MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */,
 				MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */,
 				MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */,
+				AAB0000000000000000B05 /* PromptSurfaceScopingTests.swift in Sources */,
+				AAB0000000000000000B06 /* MeetingTemplateMigrationTests.swift in Sources */,
+				AAB0000000000000000B07 /* PromptTemplateEditorModelTests.swift in Sources */,
 				MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */,
 				MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */,
 				MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */,
@@ -4143,6 +4175,10 @@
 				AA00000000000000000413 /* SpeakerMappingView.swift in Sources */,
 				AA00000000000000000399 /* MeetingOutputsView.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
+				AAB0000000000000000B01 /* PromptSurface.swift in Sources */,
+				AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */,
+				AAB0000000000000000B03 /* PromptTemplateEditor.swift in Sources */,
+				AAB0000000000000000B04 /* PromptLibraryView.swift in Sources */,
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,

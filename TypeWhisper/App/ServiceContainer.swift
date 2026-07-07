@@ -150,7 +150,12 @@ final class ServiceContainer: ObservableObject {
         let meetingEventBus = MeetingEventBus()
         self.meetingEventBus = meetingEventBus
         let meetingEventEmitter = MeetingEventBusEmitter(bus: meetingEventBus)
-        meetingService = MeetingService(eventEmitter: meetingEventEmitter)
+        // [Track B] Meeting output templates are unified into `promptActions.store` (plan AD6);
+        // MeetingService delegates `templates(ofKind:)` to the injected prompt-action service.
+        meetingService = MeetingService(
+            eventEmitter: meetingEventEmitter,
+            promptActionService: promptActionService
+        )
         calendarService = CalendarService()
         meetingCaptureService = MeetingCaptureService(
             meetingService: meetingService,
@@ -293,6 +298,7 @@ final class ServiceContainer: ObservableObject {
         )
         meetingsViewModel = MeetingsViewModel(
             meetingService: meetingService,
+            promptActionService: promptActionService, // [Track B]
             calendarService: calendarService,
             captureService: meetingCaptureService,
             startNotificationService: meetingStartNotificationService,
@@ -349,8 +355,11 @@ final class ServiceContainer: ObservableObject {
         // while keeping its persisted transcript segments visible (plan D2).
         meetingService.recoverInterruptedMeetings()
 
-        // Seed the curated meeting output templates (plan M4 §3); idempotent and additive.
-        meetingService.seedTemplatesIfNeeded()
+        // [Track B] Migrate legacy `MeetingTemplate` rows into unified `.meeting` PromptAction rows
+        // and seed the curated presets (plan AD6). One-time + idempotent; preserves template UUIDs.
+        promptActionService.migrateMeetingTemplatesIfNeeded(
+            legacyTemplates: meetingService.legacyMeetingTemplateSnapshots()
+        )
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()

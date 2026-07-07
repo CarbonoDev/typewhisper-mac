@@ -83,15 +83,19 @@ final class MeetingLLMServiceTests: XCTestCase {
         providerType: String? = nil,
         cloudModel: String? = nil,
         temperatureValue: Double? = nil
-    ) -> MeetingTemplate {
-        MeetingTemplate(
+    ) -> PromptAction {
+        // Meeting templates are now `.meeting`-surface `PromptAction` rows (plan AD6).
+        PromptAction(
             name: "T",
-            kind: kind,
             prompt: prompt,
             providerType: providerType,
             cloudModel: cloudModel,
-            temperatureModeRaw: temperatureValue == nil ? nil : PluginLLMTemperatureMode.custom.rawValue,
-            temperatureValue: temperatureValue
+            temperatureModeRaw: temperatureValue == nil
+                ? PluginLLMTemperatureMode.inheritProviderSetting.rawValue
+                : PluginLLMTemperatureMode.custom.rawValue,
+            temperatureValue: temperatureValue,
+            surfaceRaw: PromptSurface.meeting.rawValue,
+            meetingKindRaw: kind.rawValue
         )
     }
 

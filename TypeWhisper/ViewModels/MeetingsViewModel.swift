@@ -13,8 +13,8 @@ final class MeetingsViewModel: ObservableObject {
 
     @Published private(set) var meetings: [Meeting] = []
 
-    // Outputs / templates (M4)
-    @Published private(set) var templates: [MeetingTemplate] = []
+    // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
+    @Published private(set) var templates: [PromptAction] = []
     @Published private(set) var isGeneratingOutput = false
     @Published var outputErrorMessage: String?
 
@@ -56,6 +56,9 @@ final class MeetingsViewModel: ObservableObject {
     @Published var diarizationStatusMessage: String?
 
     private let meetingService: MeetingService
+    // [Track B] Unified prompt/template library — meeting output templates are `.meeting`-surface
+    // PromptAction rows owned by PromptActionService (plan AD6).
+    private let promptActionService: PromptActionService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
@@ -70,6 +73,7 @@ final class MeetingsViewModel: ObservableObject {
 
     init(
         meetingService: MeetingService,
+        promptActionService: PromptActionService,
         calendarService: CalendarService,
         captureService: MeetingCaptureService,
         startNotificationService: MeetingStartNotificationService,
@@ -81,6 +85,7 @@ final class MeetingsViewModel: ObservableObject {
         diarizationEnricher: MeetingDiarizationEnricher
     ) {
         self.meetingService = meetingService
+        self.promptActionService = promptActionService
         self.calendarService = calendarService
         self.captureService = captureService
         self.startNotificationService = startNotificationService
@@ -91,7 +96,7 @@ final class MeetingsViewModel: ObservableObject {
         self.importService = importService
         self.diarizationEnricher = diarizationEnricher
         self.meetings = meetingService.meetings
-        self.templates = meetingService.templates
+        self.templates = promptActionService.meetingActions
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
         self.upcomingEvents = calendarService.upcomingEvents
         self.calendarErrorMessage = calendarService.errorMessage
@@ -105,7 +110,7 @@ final class MeetingsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        meetingService.$templates
+        promptActionService.$meetingActions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] templates in
                 self?.templates = templates
@@ -326,7 +331,7 @@ final class MeetingsViewModel: ObservableObject {
     // MARK: - Outputs & templates (M4)
 
     /// Templates of a given output kind, in sort order (drives the generate menus).
-    func templates(ofKind kind: MeetingOutputKind) -> [MeetingTemplate] {
+    func templates(ofKind kind: MeetingOutputKind) -> [PromptAction] {
         meetingService.templates(ofKind: kind)
     }
 
@@ -338,7 +343,7 @@ final class MeetingsViewModel: ObservableObject {
     /// Generate (or regenerate) an output for a meeting from a template. Regeneration inserts a
     /// new row; the detail view shows the newest per kind. Surfaces failures via
     /// `outputErrorMessage`.
-    func generateOutput(for meeting: Meeting, using template: MeetingTemplate) async {
+    func generateOutput(for meeting: Meeting, using template: PromptAction) async {
         outputErrorMessage = nil
         do {
             try await llmService.generateOutput(for: meeting, using: template)
@@ -553,23 +558,24 @@ final class MeetingsViewModel: ObservableObject {
             .filter { !$0.isEmpty }
     }
 
-    // MARK: - Template CRUD (editor)
+    // MARK: - Template CRUD (editor — plan AD6 unified library)
 
     @discardableResult
-    func addTemplate(
-        name: String,
-        kind: MeetingOutputKind,
-        prompt: String
-    ) -> MeetingTemplate {
-        meetingService.addTemplate(name: name, kind: kind, prompt: prompt)
+    func addMeetingTemplate(_ spec: PromptTemplateSpec) -> PromptAction? {
+        promptActionService.addMeetingTemplate(spec)
     }
 
-    func updateTemplate(_ template: MeetingTemplate) {
-        meetingService.updateTemplate(template)
+    func updateMeetingTemplate(_ template: PromptAction, with spec: PromptTemplateSpec) {
+        promptActionService.updateMeetingTemplate(template, with: spec)
     }
 
-    func deleteTemplate(_ template: MeetingTemplate) {
-        meetingService.deleteTemplate(template)
+    func deleteMeetingTemplate(_ template: PromptAction) {
+        promptActionService.deleteMeetingTemplate(template)
+    }
+
+    /// Dictation-surface prompt actions (read-only) for the unified library's Dictation section.
+    var dictationActions: [PromptAction] {
+        promptActionService.promptActions
     }
 
     /// Poll the calendar roughly once a minute while the meetings UI is visible (plan D10).

@@ -32,7 +32,8 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
-                MeetingTemplateEditorView()
+                // [Track B] Unified prompt/template library (plan AD6).
+                PromptLibraryView()
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .topLeading)
