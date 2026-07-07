@@ -441,8 +441,8 @@ final class MeetingDiarizationEnricherTests: XCTestCase {
 
         // Rendering resolves the mapped name; an unmapped label falls back to itself.
         let segment = try XCTUnwrap(refetched.segments.first)
-        XCTAssertEqual(MeetingDetailView.speakerName(for: segment, speakerMap: refetched.speakerMap), "Marco")
-        XCTAssertEqual(MeetingDetailView.speakerName(for: segment, speakerMap: [:]), "SPEAKER_00")
+        XCTAssertEqual(MeetingTranscriptPanel.speakerName(for: segment, speakerMap: refetched.speakerMap), "Marco")
+        XCTAssertEqual(MeetingTranscriptPanel.speakerName(for: segment, speakerMap: [:]), "SPEAKER_00")
     }
 
     // MARK: - Guards
