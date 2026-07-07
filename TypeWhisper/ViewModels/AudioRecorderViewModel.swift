@@ -210,6 +210,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private let recorderService: AudioRecorderService
+    private let audioDeviceService: AudioDeviceService
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
     private let defaults: UserDefaults
@@ -226,10 +227,12 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderService: AudioRecorderService,
         modelManager: ModelManagerService,
         dictionaryService: DictionaryService,
+        audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         defaults: UserDefaults = .standard,
         livePreviewStartObserver: (() -> Void)? = nil
     ) {
         self.recorderService = recorderService
+        self.audioDeviceService = audioDeviceService
         self.modelManager = modelManager
         self.dictionaryService = dictionaryService
         self.defaults = defaults
@@ -469,16 +472,27 @@ final class AudioRecorderViewModel: ObservableObject {
         partialText = ""
         reconcileSelectionWithAvailablePlugins()
         state = .recording
+        let microphoneSelection = requestedMicEnabled
+            ? audioDeviceService.resolvedRecordingInputSelection()
+            : .systemDefault
 
         let url: URL
         do {
             url = try await recorderService.startRecording(
                 micEnabled: requestedMicEnabled,
                 systemAudioEnabled: requestedSystemAudioEnabled,
-                format: outputFormat
+                format: outputFormat,
+                microphoneSelection: microphoneSelection
             )
         } catch {
             recorderService.releaseCaptureOwnership(.recorder)
+            if let selectionError = error as? SelectedInputDeviceError,
+               case .incompatible(let issue) = selectionError {
+                audioDeviceService.markRecordingInputSelectionCompatibility(
+                    .incompatible(issue),
+                    selection: microphoneSelection
+                )
+            }
             state = .idle
             currentOutputURL = nil
             if let apiSessionID {
