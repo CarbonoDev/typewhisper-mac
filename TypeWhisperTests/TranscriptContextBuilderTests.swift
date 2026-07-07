@@ -81,4 +81,45 @@ final class TranscriptContextBuilderTests: XCTestCase {
         let assembled = TranscriptContextBuilder.assemble(transcript: "Transcript body.", notes: "")
         XCTAssertEqual(assembled, "Transcript body.")
     }
+
+    // MARK: - Bounded reduce input (M4 review finding 3)
+
+    func testBoundedAssembleEqualsPlainAssembleWhenWithinBudget() {
+        let bounded = TranscriptContextBuilder.boundedAssemble(
+            transcript: "Body.", notes: "Note.", charBudget: 16_000
+        )
+        XCTAssertEqual(bounded, TranscriptContextBuilder.assemble(transcript: "Body.", notes: "Note."))
+    }
+
+    func testBoundedAssembleTruncatesOversizeReduceInputToBudget() {
+        // Joined partial summaries that overflow the budget (the exact case the map/reduce reduce
+        // step can hit once there are enough chunks).
+        let partials = (0..<200)
+            .map { "Partial summary number \($0) covering the meeting discussion in detail." }
+            .joined(separator: "\n\n")
+        let budget = 500
+        let bounded = TranscriptContextBuilder.boundedAssemble(
+            transcript: partials, notes: "A NOTE_MARKER here.", charBudget: budget
+        )
+        XCTAssertLessThanOrEqual(bounded.count, budget, "the reduce input must be bounded to the budget")
+        // Higher-signal notes survive the transcript truncation.
+        XCTAssertTrue(bounded.contains("A NOTE_MARKER here."))
+    }
+
+    func testBoundedAssembleWithoutNotesStaysWithinBudget() {
+        let partials = String(repeating: "word ", count: 5_000)
+        let budget = 400
+        let bounded = TranscriptContextBuilder.boundedAssemble(
+            transcript: partials, notes: "", charBudget: budget
+        )
+        XCTAssertLessThanOrEqual(bounded.count, budget)
+    }
+
+    func testTruncateWordsNeverSplitsAWord() {
+        let text = "alpha beta gamma delta"
+        let truncated = TranscriptContextBuilder.truncateWords(text, to: 12)
+        XCTAssertLessThanOrEqual(truncated.count, 12)
+        XCTAssertTrue(text.hasPrefix(truncated))
+        XCTAssertEqual(truncated, "alpha beta")
+    }
 }

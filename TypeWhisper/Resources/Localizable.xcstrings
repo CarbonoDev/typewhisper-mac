@@ -23146,6 +23146,342 @@
           }
         }
       }
+    },
+    "meetings.output.error.alreadyGenerating": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An output is already being generated."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wird bereits eine Ausgabe generiert."
+          }
+        }
+      }
+    },
+    "meetings.output.truncationNotice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Transcript truncated to fit the model context.]"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Transkript gekürzt, um in den Modellkontext zu passen.]"
+          }
+        }
+      }
+    },
+    "meetings.brief.systemPrompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are a meeting-preparation assistant. Using the prior-meeting summaries and knowledge-base notes below, write a concise pre-meeting brief for the upcoming meeting: relevant background, open items and decisions from previous meetings, and 3-5 suggested talking points or questions. Be factual and cite only what the context supports; do not invent details."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du bist ein Assistent zur Besprechungsvorbereitung. Erstelle anhand der folgenden Zusammenfassungen früherer Besprechungen und Notizen aus der Wissensdatenbank ein knappes Briefing für die anstehende Besprechung: relevanter Hintergrund, offene Punkte und Entscheidungen aus früheren Besprechungen sowie 3-5 vorgeschlagene Gesprächspunkte oder Fragen. Bleibe sachlich und beziehe dich nur auf das, was der Kontext hergibt; erfinde keine Details."
+          }
+        }
+      }
+    },
+    "meetings.brief.context.meetingLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechung:"
+          }
+        }
+      }
+    },
+    "meetings.brief.context.dateLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datum:"
+          }
+        }
+      }
+    },
+    "meetings.brief.context.attendeesLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendees:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer:"
+          }
+        }
+      }
+    },
+    "meetings.brief.context.priorHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Prior related meetings"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Frühere zugehörige Besprechungen"
+          }
+        }
+      }
+    },
+    "meetings.brief.context.knowledgeHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Knowledge base"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Wissensdatenbank"
+          }
+        }
+      }
+    },
+    "meetings.brief.error.insufficientContext": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not enough context to build a brief: no prior related meetings and no connected knowledge base."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht genügend Kontext für ein Briefing: keine früheren zugehörigen Besprechungen und keine verbundene Wissensdatenbank."
+          }
+        }
+      }
+    },
+    "meetings.brief.error.alreadyGenerating": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A brief is already being generated."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wird bereits ein Briefing generiert."
+          }
+        }
+      }
+    },
+    "meetings.brief.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pre-meeting brief"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing vor der Besprechung"
+          }
+        }
+      }
+    },
+    "meetings.brief.noVaultHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect an Obsidian vault in Settings to enrich briefs with your notes."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde in den Einstellungen einen Obsidian-Tresor, um Briefings mit deinen Notizen anzureichern."
+          }
+        }
+      }
+    },
+    "meetings.brief.none": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No brief generated yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Briefing generiert."
+          }
+        }
+      }
+    },
+    "meetings.brief.generate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate brief"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing generieren"
+          }
+        }
+      }
+    },
+    "meetings.brief.regenerate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate brief"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing neu generieren"
+          }
+        }
+      }
+    },
+    "meetings.vault.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knowledge base (Obsidian)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wissensdatenbank (Obsidian)"
+          }
+        }
+      }
+    },
+    "meetings.vault.connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden: %@"
+          }
+        }
+      }
+    },
+    "meetings.vault.disconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trennen"
+          }
+        }
+      }
+    },
+    "meetings.vault.notConnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No vault connected."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Tresor verbunden."
+          }
+        }
+      }
+    },
+    "meetings.vault.autoDetect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-detect"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch erkennen"
+          }
+        }
+      }
+    },
+    "meetings.vault.chooseButton": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose vault…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tresor auswählen …"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

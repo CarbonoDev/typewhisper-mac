@@ -163,4 +163,8 @@ enum UserDefaultsKeys {
     static let lastSupporterValidation = "lastSupporterValidation"
     static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
     static let supporterDiscordSessionId = "supporterDiscordSessionId"
+
+    // MARK: - Meetings
+    /// Absolute path of the Obsidian vault connected as a knowledge base (plan M5, D9).
+    static let meetingsObsidianVaultPath = "meetings.obsidianVaultPath"
 }

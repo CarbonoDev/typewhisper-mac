@@ -55,6 +55,15 @@ final class MeetingLLMService: ObservableObject {
     /// newest per kind — plan D15). Throws if the meeting has no transcript, or the LLM call fails.
     @discardableResult
     func generateOutput(for meeting: Meeting, using template: MeetingTemplate) async throws -> MeetingOutput {
+        // Synchronous re-entrancy guard on the service itself (M4 review finding 1). The VM mirrors
+        // `isGenerating` through `DispatchQueue.main` into `isGeneratingOutput`, an async hop behind,
+        // so a rapid double-click on a generate menu would otherwise slip two concurrent generations
+        // past the UI's disabled state. Claim the flag here — before the first `await` — mirroring
+        // `MeetingCaptureService.start()`'s `isCapturing` placement.
+        guard !isGenerating else { throw MeetingLLMError.alreadyGenerating }
+        isGenerating = true
+        defer { isGenerating = false }
+
         let segments = meeting.segments
             .sorted { $0.order < $1.order }
             .map { segment in
@@ -77,9 +86,6 @@ final class MeetingLLMService: ObservableObject {
         } else {
             notesBlock = ""
         }
-
-        isGenerating = true
-        defer { isGenerating = false }
 
         let content = try await runMapReduce(template: template, transcript: transcript, notes: notesBlock)
 
@@ -123,10 +129,14 @@ final class MeetingLLMService: ObservableObject {
             }
         }
 
-        // Reduce: apply the template's own prompt to the joined partial summaries + notes.
-        let reduceInput = TranscriptContextBuilder.assemble(
+        // Reduce: apply the template's own prompt to the joined partial summaries + notes. The
+        // joined partials (plus notes) can themselves exceed the char budget once there are enough
+        // chunks, so use the *bounded* assembly (M4 review finding 3) to keep the single reduce call
+        // within budget instead of sending an unbounded payload.
+        let reduceInput = TranscriptContextBuilder.boundedAssemble(
             transcript: partials.joined(separator: "\n\n"),
-            notes: notes
+            notes: notes,
+            charBudget: charBudget
         )
         return try await run(template: template, prompt: template.prompt, text: reduceInput)
     }
@@ -177,11 +187,15 @@ final class MeetingLLMService: ObservableObject {
 enum MeetingLLMError: LocalizedError, Equatable {
     /// The meeting has no transcript text to generate an output from.
     case emptyTranscript
+    /// A generation is already in progress on this service (re-entrancy guard, finding 1).
+    case alreadyGenerating
 
     var errorDescription: String? {
         switch self {
         case .emptyTranscript:
             return String(localized: "meetings.output.error.emptyTranscript")
+        case .alreadyGenerating:
+            return String(localized: "meetings.output.error.alreadyGenerating")
         }
     }
 }

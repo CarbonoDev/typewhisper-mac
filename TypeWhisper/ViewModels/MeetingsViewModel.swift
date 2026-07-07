@@ -31,11 +31,19 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var isDegradedLiveMode = false
     @Published private(set) var captureErrorMessage: String?
 
+    // Knowledge base + brief (M5)
+    @Published private(set) var isVaultConnected = false
+    @Published private(set) var vaultName: String?
+    @Published private(set) var isGeneratingBrief = false
+    @Published var briefErrorMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
     private let llmService: MeetingLLMService
+    private let vaultService: ObsidianVaultService
+    private let briefService: MeetingBriefService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -44,18 +52,24 @@ final class MeetingsViewModel: ObservableObject {
         calendarService: CalendarService,
         captureService: MeetingCaptureService,
         startNotificationService: MeetingStartNotificationService,
-        llmService: MeetingLLMService
+        llmService: MeetingLLMService,
+        vaultService: ObsidianVaultService,
+        briefService: MeetingBriefService
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
         self.captureService = captureService
         self.startNotificationService = startNotificationService
         self.llmService = llmService
+        self.vaultService = vaultService
+        self.briefService = briefService
         self.meetings = meetingService.meetings
         self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
         self.upcomingEvents = calendarService.upcomingEvents
         self.calendarErrorMessage = calendarService.errorMessage
+        self.isVaultConnected = vaultService.isConnected
+        self.vaultName = vaultService.vaultName
 
         meetingService.$meetings
             .receive(on: DispatchQueue.main)
@@ -121,6 +135,19 @@ final class MeetingsViewModel: ObservableObject {
         captureService.$errorMessage
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.captureErrorMessage = value }
+            .store(in: &cancellables)
+
+        vaultService.$vaultPath
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.isVaultConnected = self.vaultService.isConnected
+                self.vaultName = self.vaultService.vaultName
+            }
+            .store(in: &cancellables)
+        briefService.$isGenerating
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isGeneratingBrief = value }
             .store(in: &cancellables)
     }
 
@@ -273,6 +300,44 @@ final class MeetingsViewModel: ObservableObject {
 
     func deleteOutput(_ output: MeetingOutput) {
         meetingService.deleteOutput(output)
+    }
+
+    // MARK: - Knowledge base & brief (M5)
+
+    /// Auto-detect and connect the most-recently-opened Obsidian vault, if any.
+    @discardableResult
+    func autoConnectVault() -> Bool {
+        vaultService.autoConnect()
+    }
+
+    /// Present a folder picker to choose a vault manually.
+    func chooseVault() {
+        vaultService.chooseVault()
+    }
+
+    /// Forget the connected vault.
+    func disconnectVault() {
+        vaultService.disconnect()
+    }
+
+    /// Detected Obsidian vaults (most-recent first) for a manual connect menu.
+    func detectedVaults() -> [ObsidianVaultService.VaultInfo] {
+        ObsidianVaultService.detectVaults()
+    }
+
+    func connectVault(to path: String) {
+        vaultService.connect(to: path)
+    }
+
+    /// Generate (or regenerate) a pre-meeting brief for a meeting from prior related meetings and
+    /// the connected knowledge base. Surfaces failures via `briefErrorMessage`.
+    func generateBrief(for meeting: Meeting) async {
+        briefErrorMessage = nil
+        do {
+            try await briefService.generateBrief(for: meeting)
+        } catch {
+            briefErrorMessage = error.localizedDescription
+        }
     }
 
     // MARK: - Template CRUD (editor)

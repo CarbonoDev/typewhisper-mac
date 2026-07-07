@@ -50,6 +50,8 @@ final class ServiceContainer: ObservableObject {
     let meetingCaptureService: MeetingCaptureService
     let meetingStartNotificationService: MeetingStartNotificationService
     let meetingLLMService: MeetingLLMService
+    let obsidianVaultService: ObsidianVaultService
+    let meetingBriefService: MeetingBriefService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -148,6 +150,15 @@ final class ServiceContainer: ObservableObject {
         // `meetingService` (plan M4 dependency order).
         meetingLLMService = MeetingLLMService(
             meetingService: meetingService,
+            processor: promptProcessingService
+        )
+        // Obsidian vault knowledge base + pre-meeting brief (plan M5). The brief service depends on
+        // `meetingService` (prior meetings), `obsidianVaultService` (KB passages), and the
+        // `promptProcessingService` single-turn seam.
+        obsidianVaultService = ObsidianVaultService()
+        meetingBriefService = MeetingBriefService(
+            meetingService: meetingService,
+            vaultService: obsidianVaultService,
             processor: promptProcessingService
         )
 
@@ -254,7 +265,9 @@ final class ServiceContainer: ObservableObject {
             calendarService: calendarService,
             captureService: meetingCaptureService,
             startNotificationService: meetingStartNotificationService,
-            llmService: meetingLLMService
+            llmService: meetingLLMService,
+            vaultService: obsidianVaultService,
+            briefService: meetingBriefService
         )
 
         // Set shared references

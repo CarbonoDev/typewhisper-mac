@@ -15,6 +15,11 @@ struct MeetingDetailView: View {
                     interruptedBanner
                 }
 
+                // Pre-meeting brief (M5): available regardless of whether a transcript exists yet,
+                // since it draws on prior meetings and the knowledge base, not this meeting's audio.
+                Divider()
+                MeetingBriefView(meeting: meeting)
+
                 if !meeting.segments.isEmpty {
                     Divider()
                     MeetingOutputsView(meeting: meeting)

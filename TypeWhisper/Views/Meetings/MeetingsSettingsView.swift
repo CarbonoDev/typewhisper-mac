@@ -13,6 +13,10 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                vaultSection
+
+                Divider()
+
                 if viewModel.hasMeetings {
                     meetingsList
                 } else {
@@ -29,6 +33,43 @@ struct MeetingsSettingsView: View {
         .navigationTitle(String(localized: "settings.tab.meetings"))
         .onAppear { viewModel.startCalendarPolling() }
         .onDisappear { viewModel.stopCalendarPolling() }
+    }
+
+    /// Obsidian knowledge-base connection (M5): connection state plus auto-detect / pick / forget.
+    private var vaultSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.vault.sectionTitle"))
+                .font(.headline)
+
+            if viewModel.isVaultConnected {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(String(
+                        format: String(localized: "meetings.vault.connected"),
+                        viewModel.vaultName ?? ""
+                    ))
+                    Spacer()
+                    Button(String(localized: "meetings.vault.disconnect")) {
+                        viewModel.disconnectVault()
+                    }
+                }
+                .font(.callout)
+            } else {
+                Text(String(localized: "meetings.vault.notConnected"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button(String(localized: "meetings.vault.autoDetect")) {
+                        _ = viewModel.autoConnectVault()
+                    }
+                    Button(String(localized: "meetings.vault.chooseButton")) {
+                        viewModel.chooseVault()
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyState: some View {

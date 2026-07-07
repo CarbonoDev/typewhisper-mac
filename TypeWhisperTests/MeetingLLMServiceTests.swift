@@ -145,6 +145,42 @@ final class MeetingLLMServiceTests: XCTestCase {
         XCTAssertEqual(output.kind, .extended)
     }
 
+    // MARK: - Regeneration & kind filtering (M4 review finding 2)
+
+    func testRegenerateAddsSecondOutputAndKindFilteringIsRespected() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let service = MeetingService(appSupportDirectory: dir)
+        let stub = StubProcessor()
+        let llm = MeetingLLMService(meetingService: service, processor: stub)
+
+        let meeting = makeMeeting(on: service, segmentTexts: ["Short transcript."])
+        let summaryTemplate = makeTemplate(prompt: "Summarize.", kind: .summary)
+
+        let first = try await llm.generateOutput(for: meeting, using: summaryTemplate)
+        // Ensure a distinct createdAt so the "newest" tiebreak is unambiguous.
+        try await Task.sleep(nanoseconds: 3_000_000)
+        let second = try await llm.generateOutput(for: meeting, using: summaryTemplate)
+
+        // Regeneration inserts a new row; both are retained.
+        XCTAssertEqual(meeting.outputs.count, 2)
+        XCTAssertNotEqual(first.id, second.id)
+        // The newest summary is the second generation.
+        XCTAssertEqual(service.latestOutput(ofKind: .summary, for: meeting)?.id, second.id)
+
+        // An output of a different kind must be surfaced under its own kind and must not shadow the
+        // summary's latest (kind filtering).
+        try await Task.sleep(nanoseconds: 3_000_000)
+        let extended = try await llm.generateOutput(
+            for: meeting,
+            using: makeTemplate(prompt: "Analyze.", kind: .extended)
+        )
+        XCTAssertEqual(meeting.outputs.count, 3)
+        XCTAssertEqual(service.latestOutput(ofKind: .summary, for: meeting)?.id, second.id)
+        XCTAssertEqual(service.latestOutput(ofKind: .extended, for: meeting)?.id, extended.id)
+    }
+
     // MARK: - Template overrides flow into the call
 
     func testTemplateOverridesFlowIntoTheCall() async throws {

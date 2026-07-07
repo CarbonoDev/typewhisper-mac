@@ -83,6 +83,51 @@ enum TranscriptContextBuilder {
         return "\(transcript)\n\n\(header)\n\(notes)"
     }
 
+    /// Assemble a reduce-stage payload that is *guaranteed* to fit `charBudget`.
+    ///
+    /// Map/reduce keeps each individual partial small, but with enough chunks the joined partials
+    /// (plus notes) can themselves exceed the budget — leaving the single reduce call with an
+    /// unbounded payload (M4 review finding 3). When the assembled input overflows, the
+    /// higher-signal notes block is preserved and the transcript portion is truncated at a word
+    /// boundary, with a localized truncation notice appended so the model knows content was cut.
+    /// When the input already fits, this is exactly `assemble`.
+    static func boundedAssemble(transcript: String, notes: String, charBudget: Int = defaultCharBudget) -> String {
+        let assembled = assemble(transcript: transcript, notes: notes)
+        guard charBudget > 0, assembled.count > charBudget else { return assembled }
+
+        let notice = String(localized: "meetings.output.truncationNotice")
+        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmedNotes.isEmpty {
+            let header = String(localized: "meetings.output.notesHeader")
+            let notesBlock = "\n\n\(header)\n\(trimmedNotes)"
+            // Reserve room for the (preserved) notes block and the notice so the total stays within
+            // budget; the transcript absorbs the overflow.
+            let reserve = notesBlock.count + notice.count + 2
+            let transcriptBudget = max(0, charBudget - reserve)
+            let bounded = truncateWords(trimmedTranscript, to: transcriptBudget)
+            return "\(bounded) \(notice)\(notesBlock)"
+        }
+
+        let bounded = truncateWords(trimmedTranscript, to: max(0, charBudget - notice.count - 1))
+        return "\(bounded) \(notice)"
+    }
+
+    /// Truncate `text` to at most `charBudget` characters, backing off to the last whitespace so a
+    /// word is never split. A single word longer than the budget is returned as its (over-budget)
+    /// prefix rather than an empty string.
+    static func truncateWords(_ text: String, to charBudget: Int) -> String {
+        guard charBudget > 0 else { return "" }
+        guard text.count > charBudget else { return text }
+        let prefix = String(text.prefix(charBudget))
+        if let lastSpace = prefix.lastIndex(where: { $0 == " " || $0 == "\n" || $0 == "\t" }) {
+            let trimmed = prefix[..<lastSpace].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return prefix
+    }
+
     // MARK: - Chunking
 
     /// Split `text` into chunks each no longer than `charBudget`, never breaking a word.
