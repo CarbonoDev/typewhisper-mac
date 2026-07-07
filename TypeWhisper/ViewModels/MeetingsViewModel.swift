@@ -41,6 +41,9 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var isAnswering = false
     @Published var qaErrorMessage: String?
 
+    // Obsidian export (M7)
+    @Published var exportErrorMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
@@ -48,6 +51,7 @@ final class MeetingsViewModel: ObservableObject {
     private let llmService: MeetingLLMService
     private let vaultService: ObsidianVaultService
     private let briefService: MeetingBriefService
+    private let exporter: MeetingObsidianExporter
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -58,7 +62,8 @@ final class MeetingsViewModel: ObservableObject {
         startNotificationService: MeetingStartNotificationService,
         llmService: MeetingLLMService,
         vaultService: ObsidianVaultService,
-        briefService: MeetingBriefService
+        briefService: MeetingBriefService,
+        exporter: MeetingObsidianExporter
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
@@ -67,6 +72,7 @@ final class MeetingsViewModel: ObservableObject {
         self.llmService = llmService
         self.vaultService = vaultService
         self.briefService = briefService
+        self.exporter = exporter
         self.meetings = meetingService.meetings
         self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
@@ -365,6 +371,35 @@ final class MeetingsViewModel: ObservableObject {
         } catch {
             qaErrorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    // MARK: - Obsidian export (M7)
+
+    /// Persist the meeting's per-meeting export folder (a vault-relative path).
+    func setObsidianFolder(_ folder: String, for meeting: Meeting) {
+        meetingService.setObsidianFolder(folder, for: meeting)
+    }
+
+    /// Persist the meeting's export tags from a comma/space-separated string.
+    func setObsidianTags(_ tagsText: String, for meeting: Meeting) {
+        let tags = tagsText
+            .split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { String($0) }
+        meetingService.setObsidianTags(tags, for: meeting)
+    }
+
+    /// Export the selected sections of `meeting` to the connected vault. Returns the number of files
+    /// written on success, or `nil` on failure (surfaced via `exportErrorMessage`).
+    @discardableResult
+    func export(_ meeting: Meeting, sections: [MeetingExportSection], combined: Bool) -> Int? {
+        exportErrorMessage = nil
+        do {
+            let urls = try exporter.export(meeting, sections: sections, combined: combined)
+            return urls.count
+        } catch {
+            exportErrorMessage = error.localizedDescription
+            return nil
         }
     }
 

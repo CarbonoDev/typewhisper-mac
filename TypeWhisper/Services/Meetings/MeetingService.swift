@@ -244,6 +244,34 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Obsidian export metadata (M7)
+
+    /// Persist the per-meeting Obsidian export folder (a vault-relative path). Empty/whitespace
+    /// clears it (export then writes to the vault root).
+    func setObsidianFolder(_ folder: String?, for meeting: Meeting) {
+        let trimmed = folder?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (trimmed?.isEmpty == false) ? trimmed : nil
+        guard meeting.obsidianFolder != value else { return }
+        meeting.obsidianFolder = value
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Persist the per-meeting Obsidian frontmatter tags, trimming blanks and de-duplicating while
+    /// preserving order.
+    func setObsidianTags(_ tags: [String], for meeting: Meeting) {
+        var seen = Set<String>()
+        let cleaned = tags
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+        guard meeting.obsidianTags != cleaned else { return }
+        meeting.obsidianTags = cleaned
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     // MARK: - Templates
 
     /// Idempotently seed the curated starter templates (plan M4 §3). Mirrors

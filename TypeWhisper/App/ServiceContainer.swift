@@ -52,6 +52,7 @@ final class ServiceContainer: ObservableObject {
     let meetingLLMService: MeetingLLMService
     let obsidianVaultService: ObsidianVaultService
     let meetingBriefService: MeetingBriefService
+    let meetingObsidianExporter: MeetingObsidianExporter
 
     // HTTP API
     let httpServer: HTTPServer
@@ -164,6 +165,9 @@ final class ServiceContainer: ObservableObject {
             vaultService: obsidianVaultService,
             processor: promptProcessingService
         )
+        // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
+        // from `obsidianVaultService` (no second vault picker).
+        meetingObsidianExporter = MeetingObsidianExporter(vaultService: obsidianVaultService)
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -270,7 +274,8 @@ final class ServiceContainer: ObservableObject {
             startNotificationService: meetingStartNotificationService,
             llmService: meetingLLMService,
             vaultService: obsidianVaultService,
-            briefService: meetingBriefService
+            briefService: meetingBriefService,
+            exporter: meetingObsidianExporter
         )
 
         // Set shared references

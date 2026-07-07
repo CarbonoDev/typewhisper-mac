@@ -23690,6 +23690,326 @@
           }
         }
       }
+    },
+    "meetings.export.section.brief": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing"
+          }
+        }
+      }
+    },
+    "meetings.export.section.summary": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenfassung"
+          }
+        }
+      }
+    },
+    "meetings.export.section.extended": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extended Analysis"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweiterte Analyse"
+          }
+        }
+      }
+    },
+    "meetings.export.section.transcript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcript"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript"
+          }
+        }
+      }
+    },
+    "meetings.export.section.notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen"
+          }
+        }
+      }
+    },
+    "meetings.export.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export to Obsidian"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Obsidian exportieren"
+          }
+        }
+      }
+    },
+    "meetings.export.noVaultHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect an Obsidian vault in Meetings settings to export."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde in den Besprechungseinstellungen einen Obsidian-Tresor, um zu exportieren."
+          }
+        }
+      }
+    },
+    "meetings.export.folderLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner"
+          }
+        }
+      }
+    },
+    "meetings.export.folderPlaceholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings/Acme"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechungen/Acme"
+          }
+        }
+      }
+    },
+    "meetings.export.tagsLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlagwörter"
+          }
+        }
+      }
+    },
+    "meetings.export.tagsPlaceholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "meeting, acme"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "besprechung, acme"
+          }
+        }
+      }
+    },
+    "meetings.export.layoutLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layout"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layout"
+          }
+        }
+      }
+    },
+    "meetings.export.layoutCombined": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Single note"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einzelne Notiz"
+          }
+        }
+      }
+    },
+    "meetings.export.layoutSeparate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separate notes"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getrennte Notizen"
+          }
+        }
+      }
+    },
+    "meetings.export.button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportieren"
+          }
+        }
+      }
+    },
+    "meetings.export.success": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exported %d file(s)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Datei(en) exportiert"
+          }
+        }
+      }
+    },
+    "meetings.export.error.noVault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Obsidian vault is connected."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es ist kein Obsidian-Tresor verbunden."
+          }
+        }
+      }
+    },
+    "meetings.export.error.noSections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select at least one section to export."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle mindestens einen Abschnitt zum Exportieren aus."
+          }
+        }
+      }
+    },
+    "meetings.export.error.noContent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected sections have no content yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ausgewählten Abschnitte enthalten noch keine Inhalte."
+          }
+        }
+      }
+    },
+    "meetings.export.error.writeFailed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not write to the vault: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konnte nicht in den Tresor schreiben: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

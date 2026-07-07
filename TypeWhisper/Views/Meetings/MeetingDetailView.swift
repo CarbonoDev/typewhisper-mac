@@ -36,6 +36,13 @@ struct MeetingDetailView: View {
                 if !meeting.notes.isEmpty {
                     notesSection
                 }
+
+                // Obsidian export (M7): available once the meeting has anything worth exporting.
+                if hasExportableContent {
+                    Divider()
+                    MeetingExportView(meeting: meeting)
+                        .id(meeting.id)
+                }
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -121,6 +128,10 @@ struct MeetingDetailView: View {
                 }
             }
         }
+    }
+
+    private var hasExportableContent: Bool {
+        !meeting.segments.isEmpty || !meeting.outputs.isEmpty || !meeting.notes.isEmpty
     }
 
     static func timestamp(_ seconds: Double) -> String {

@@ -178,10 +178,13 @@
 		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
 		AA00000000000000000404 /* MeetingBriefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000404 /* MeetingBriefView.swift */; };
 		AA00000000000000000405 /* MeetingQAView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000405 /* MeetingQAView.swift */; };
+		AA00000000000000000406 /* MeetingObsidianExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000406 /* MeetingObsidianExporter.swift */; };
+		AA00000000000000000407 /* MeetingExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000407 /* MeetingExportView.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
 		MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000011 /* MeetingQAComposerTests.swift */; };
+		MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */; };
 		MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */; };
 		MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000006 /* MeetingLLMServiceTests.swift */; };
 		MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */; };
@@ -677,10 +680,13 @@
 		BB00000000000000000403 /* MeetingBriefService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefService.swift; sourceTree = "<group>"; };
 		BB00000000000000000404 /* MeetingBriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefView.swift; sourceTree = "<group>"; };
 		BB00000000000000000405 /* MeetingQAView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingQAView.swift; sourceTree = "<group>"; };
+		BB00000000000000000406 /* MeetingObsidianExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporter.swift; sourceTree = "<group>"; };
+		BB00000000000000000407 /* MeetingExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingExportView.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000011 /* MeetingQAComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporterTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilderTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000006 /* MeetingLLMServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresetsTests.swift; sourceTree = "<group>"; };
@@ -1789,6 +1795,7 @@
 				BB00000000000000000401 /* LexicalRetriever.swift */,
 				BB00000000000000000402 /* ObsidianVaultService.swift */,
 				BB00000000000000000403 /* MeetingBriefService.swift */,
+				BB00000000000000000406 /* MeetingObsidianExporter.swift */,
 			);
 			path = Meetings;
 			sourceTree = "<group>";
@@ -1806,6 +1813,7 @@
 				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
 				BB00000000000000000404 /* MeetingBriefView.swift */,
 				BB00000000000000000405 /* MeetingQAView.swift */,
+				BB00000000000000000407 /* MeetingExportView.swift */,
 			);
 			path = Meetings;
 			sourceTree = "<group>";
@@ -2454,6 +2462,7 @@
 				MEF0000000000000000009 /* LexicalRetrieverTests.swift */,
 				MEF0000000000000000010 /* MeetingBriefServiceTests.swift */,
 				MEF0000000000000000011 /* MeetingQAComposerTests.swift */,
+				MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */,
 			);
 			name = TypeWhisperTests;
 			path = TypeWhisperTests;
@@ -3955,6 +3964,7 @@
 				MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */,
 				MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */,
 				MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */,
+				MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
@@ -4068,6 +4078,8 @@
 				AA00000000000000000403 /* MeetingBriefService.swift in Sources */,
 				AA00000000000000000404 /* MeetingBriefView.swift in Sources */,
 				AA00000000000000000405 /* MeetingQAView.swift in Sources */,
+				AA00000000000000000406 /* MeetingObsidianExporter.swift in Sources */,
+				AA00000000000000000407 /* MeetingExportView.swift in Sources */,
 				AA00000000000000000399 /* MeetingOutputsView.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
