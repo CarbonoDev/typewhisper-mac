@@ -23,7 +23,7 @@ struct HomeSettingsView: View {
 
             // Header: Title + picker (outside scroll, always clickable)
             HStack {
-                Text(String(localized: "Dashboard"))
+                Text(String(localized: "settings.tab.overview"))
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()

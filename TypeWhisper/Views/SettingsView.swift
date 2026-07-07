@@ -2,9 +2,50 @@ import SwiftUI
 import AppKit
 import TypeWhisperPluginSDK
 
-enum SettingsTab: Hashable {
+enum SettingsTab: Hashable, CaseIterable {
     case home, general, recording, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, meetings, diarization, advanced, license, about
+}
+
+/// Named settings groups (D7). Single source of truth for the meetings-first regroup of the 20
+/// settings tabs into five sidebar sections. The regroup is purely presentational: it never adds,
+/// removes, or renames a `SettingsTab` case or a `settingsDetail(for:)` arm, so every deep-link
+/// caller keeps landing on its tab.
+enum SettingsGroup: String, CaseIterable, Hashable {
+    case dictation, meetings, library, tools, application
+
+    var title: String {
+        switch self {
+        case .dictation: return String(localized: "settings.group.dictation")
+        case .meetings: return String(localized: "settings.group.meetings")
+        case .library: return String(localized: "settings.group.library")
+        case .tools: return String(localized: "settings.group.tools")
+        case .application: return String(localized: "settings.group.application")
+        }
+    }
+}
+
+/// Ordered membership of each settings group (D7). Exposed at internal access so the grouping is
+/// unit-testable (`SettingsGroupingTests`) without instantiating any SwiftUI view.
+enum SettingsGrouping {
+    /// Deep-link alias tabs that collapse into `.workflows` (see `SettingsView.resolvedTab`) and
+    /// therefore have no sidebar row of their own.
+    static let aliasTabs: Set<SettingsTab> = [.profiles, .prompts]
+
+    /// Canonical (group, tabs) layout in display order. Availability filtering (e.g. the
+    /// conditional Recovery row) is applied when destinations are materialized.
+    static let orderedGroups: [(group: SettingsGroup, tabs: [SettingsTab])] = [
+        (.dictation, [.home, .general, .recording, .hotkeys, .dictionary, .snippets, .dictationRecovery]),
+        (.meetings, [.meetings, .diarization]),
+        (.library, [.workflows]),
+        (.tools, [.recorder, .fileTranscription, .history]),
+        (.application, [.integrations, .premium, .license, .advanced, .about])
+    ]
+
+    /// Every non-alias tab, in group order. Used to assert each tab is placed exactly once.
+    static var allGroupedTabs: [SettingsTab] {
+        orderedGroups.flatMap(\.tabs)
+    }
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -18,6 +59,7 @@ private struct SettingsDestination: Identifiable, Hashable {
 
 private struct SettingsDestinationSection: Identifiable {
     let id: String
+    let title: String?
     let destinations: [SettingsDestination]
 }
 
@@ -32,7 +74,7 @@ struct SettingsView: View {
 
     private var destinations: [SettingsDestination] {
         [
-            SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
+            SettingsDestination(tab: .home, title: String(localized: "settings.tab.overview"), systemImage: "chart.bar.doc.horizontal", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
             SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
@@ -123,13 +165,26 @@ struct SettingsView: View {
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
-                selectedTab = Self.availableTab(request.tab)
+                selectedTab = Self.resolvedTab(for: request.tab)
             }
         }
     }
 
     static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
+    }
+
+    /// Pure deep-link resolution (D7): maps a `SettingsNavigationCoordinator` request tab to the
+    /// tab that is actually selected. `.profiles`/`.prompts`/`.workflows` collapse onto the unified
+    /// `.workflows` library row; every other tab resolves to itself. Kept pure/static so the
+    /// deep-link contract is unit-testable (`SettingsDeepLinkTests`).
+    static func resolvedTab(for requestTab: SettingsTab) -> SettingsTab {
+        switch requestTab {
+        case .profiles, .prompts, .workflows:
+            return .workflows
+        default:
+            return availableTab(requestTab)
+        }
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
@@ -201,6 +256,7 @@ private struct SettingsModernShell: View {
             .map { section in
                 SettingsDestinationSection(
                     id: section.id,
+                    title: section.title,
                     destinations: section.destinations.filter { destination in
                         destination.title.localizedCaseInsensitiveContains(query)
                     }
@@ -217,6 +273,10 @@ private struct SettingsModernShell: View {
                         ForEach(section.destinations) { destination in
                             SettingsSidebarRow(destination: destination)
                                 .tag(destination.tab)
+                        }
+                    } header: {
+                        if let title = section.title {
+                            Text(title)
                         }
                     }
                 }
@@ -235,74 +295,23 @@ private struct SettingsModernShell: View {
     }
 }
 
-private func settingsDestination(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination {
-    destinations.first(where: { $0.tab == tab })!
-}
-
 private func settingsDestinationIfAvailable(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination? {
     destinations.first(where: { $0.tab == tab })
 }
 
-private func settingsTitle(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
-    settingsDestination(destinations, tab).title
-}
-
-private func settingsSystemImage(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
-    settingsDestination(destinations, tab).systemImage
-}
-
-private func settingsBadge(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> Int? {
-    settingsDestination(destinations, tab).badge
-}
-
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
-    var coreDestinations = [
-        settingsDestination(destinations, .general),
-        settingsDestination(destinations, .recording)
-    ]
-    if let recoveryDestination = settingsDestinationIfAvailable(destinations, .dictationRecovery) {
-        coreDestinations.append(recoveryDestination)
-    }
-    coreDestinations.append(contentsOf: [
-        settingsDestination(destinations, .hotkeys),
-        settingsDestination(destinations, .fileTranscription),
-        settingsDestination(destinations, .recorder)
-    ])
-
-    var workspaceDestinations = [
-        settingsDestination(destinations, .history),
-        settingsDestination(destinations, .dictionary),
-        settingsDestination(destinations, .snippets),
-        settingsDestination(destinations, .workflows),
-        settingsDestination(destinations, .premium)
-    ]
-
-    workspaceDestinations.append(settingsDestination(destinations, .meetings))
-    workspaceDestinations.append(settingsDestination(destinations, .integrations))
-
-    return [
-        SettingsDestinationSection(
-            id: "home",
-            destinations: [settingsDestination(destinations, .home)]
-        ),
-        SettingsDestinationSection(
-            id: "core",
-            destinations: coreDestinations
-        ),
-        SettingsDestinationSection(
-            id: "workspace",
-            destinations: workspaceDestinations
-        ),
-        SettingsDestinationSection(
-            id: "system",
-            destinations: [
-                settingsDestination(destinations, .diarization),
-                settingsDestination(destinations, .advanced),
-                settingsDestination(destinations, .license),
-                settingsDestination(destinations, .about)
-            ]
+    // Meetings-first regroup (D7): five titled groups built from the single-source
+    // `SettingsGrouping.orderedGroups`. Rows are filtered by availability (so the conditional
+    // Recovery row only appears when present) but never reordered or dropped otherwise.
+    SettingsGrouping.orderedGroups.compactMap { group, tabs in
+        let rows = tabs.compactMap { settingsDestinationIfAvailable(destinations, $0) }
+        guard !rows.isEmpty else { return nil }
+        return SettingsDestinationSection(
+            id: group.rawValue,
+            title: group.title,
+            destinations: rows
         )
-    ]
+    }
 }
 
 private struct SettingsSidebarShell<DetailContent: View>: View {
@@ -321,6 +330,10 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
                             ForEach(section.destinations) { destination in
                                 SettingsSidebarRow(destination: destination)
                                     .tag(destination.tab)
+                            }
+                        } header: {
+                            if let title = section.title {
+                                Text(title)
                             }
                         }
                     }
