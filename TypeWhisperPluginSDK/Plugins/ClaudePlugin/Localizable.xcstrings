@@ -49,6 +49,22 @@
         }
       }
     },
+    "Last updated %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt aktualisiert: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最終更新: %@"
+          }
+        }
+      }
+    },
     "LLM Model": {
       "localizations": {
         "de": {
@@ -61,6 +77,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMモデル"
+          }
+        }
+      }
+    },
+    "Refresh models": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle aktualisieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを更新"
           }
         }
       }
@@ -109,6 +141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "有効なAPIキー"
+          }
+        }
+      }
+    },
+    "Using default models. Refresh to fetch the full list.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardmodelle werden verwendet. Aktualisieren, um die vollständige Liste zu laden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルトのモデルを使用しています。完全なリストを取得するには更新してください。"
           }
         }
       }
