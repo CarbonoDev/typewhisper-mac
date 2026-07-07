@@ -18,6 +18,10 @@ struct MeetingsSettingsView: View {
                 } else {
                     emptyState
                 }
+
+                Divider()
+
+                MeetingTemplateEditorView()
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .topLeading)

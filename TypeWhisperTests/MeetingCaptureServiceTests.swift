@@ -215,6 +215,95 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertTrue(recorder.acquireCaptureOwnership(.recorder))
     }
 
+    // MARK: - Restart preserves prior session's segments and audio (M3 review finding 1)
+
+    func testRestartCapturePreservesPriorSegmentsAndAudio() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        // A meeting with a prior finalized live-capture session ending at t=10.
+        let meeting = meetingService.createMeeting(title: "Restart", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [
+                TranscriptionSegment(text: "prior one", start: 0, end: 5),
+                TranscriptionSegment(text: "prior two", start: 5, end: 10)
+            ],
+            to: meeting
+        )
+        let priorIDs = Set(meeting.segments.map(\.id))
+
+        // A pre-existing `<uuid>.wav` from that prior session must not be overwritten on restart.
+        let audioDir = dir.appendingPathComponent("meetings-audio", isDirectory: true)
+        let existingAudio = audioDir.appendingPathComponent("\(meeting.id.uuidString).wav")
+        try Data("OLD_AUDIO".utf8).write(to: existingAudio)
+
+        // Restart capture, add new content, stop.
+        try await capture.start(meeting: meeting)
+        capture.ingestLiveTranscript("New content.", elapsed: 2)
+        await capture.stop()
+
+        // Prior segments survive verbatim.
+        let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
+        XCTAssertTrue(texts.contains("prior one"))
+        XCTAssertTrue(texts.contains("prior two"))
+        XCTAssertTrue(texts.contains("New content."))
+        XCTAssertEqual(meeting.segments.filter { priorIDs.contains($0.id) }.count, 2)
+
+        // Orders are contiguous and monotonic across the whole meeting.
+        let orders = meeting.segments.map(\.order).sorted()
+        XCTAssertEqual(orders, Array(0..<meeting.segments.count))
+
+        // New segment(s) start at/after the prior session's end (t=10).
+        let newSegments = meeting.segments.filter { !priorIDs.contains($0.id) }
+        XCTAssertFalse(newSegments.isEmpty)
+        for segment in newSegments {
+            XCTAssertGreaterThanOrEqual(segment.start, 10)
+        }
+
+        // The pre-existing audio file is untouched; the new session's audio got a -2 suffix.
+        XCTAssertEqual(try String(contentsOf: existingAudio, encoding: .utf8), "OLD_AUDIO")
+        let audioFiles = try FileManager.default.contentsOfDirectory(atPath: audioDir.path)
+            .filter { $0.hasPrefix(meeting.id.uuidString) }
+        XCTAssertTrue(audioFiles.contains("\(meeting.id.uuidString).wav"))
+        XCTAssertTrue(
+            audioFiles.contains { $0.hasPrefix("\(meeting.id.uuidString)-2") },
+            "restarted session audio must be versioned, got \(audioFiles)"
+        )
+        XCTAssertEqual(meeting.audioFileName, audioFiles.first { $0.hasPrefix("\(meeting.id.uuidString)-2") })
+    }
+
+    // MARK: - Concurrent start is rejected without side effects (M3 review finding 2)
+
+    func testSecondConcurrentStartIsRejectedAndCreatesNoSideEffects() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        let first = meetingService.createMeeting(title: "First", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: first)
+
+        // The synchronous `isCapturing` guard rejects a second start before it can take effect —
+        // the underpinning of the window's stray-empty-meeting fix.
+        let second = meetingService.createMeeting(title: "Second", source: .adHoc, state: .scheduled)
+        do {
+            try await capture.start(meeting: second)
+            XCTFail("Expected alreadyCapturing")
+        } catch {
+            XCTAssertEqual(error as? MeetingCaptureService.CaptureError, .alreadyCapturing)
+        }
+        XCTAssertEqual(capture.activeMeeting?.id, first.id)
+        XCTAssertEqual(second.state, .scheduled)
+
+        await capture.stop()
+    }
+
     // MARK: - Notes persist with offsets
 
     func testNotesPersistWithElapsedOffsets() async throws {

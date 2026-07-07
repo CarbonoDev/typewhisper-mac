@@ -15,6 +15,13 @@ struct MeetingDetailView: View {
                     interruptedBanner
                 }
 
+                if !meeting.segments.isEmpty {
+                    Divider()
+                    MeetingOutputsView(meeting: meeting)
+                }
+
+                Divider()
+
                 transcriptSection
 
                 if !meeting.notes.isEmpty {

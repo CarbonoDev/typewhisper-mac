@@ -52,9 +52,11 @@ struct MeetingsWindowView: View {
             ToolbarItem {
                 Button {
                     Task {
-                        let meeting = viewModel.createAdHocMeeting()
-                        selectedMeetingID = meeting.id
-                        await viewModel.startCapture(for: meeting)
+                        // Guarded create+start so a rapid double-click can't leave a stray empty
+                        // meeting (M3 review finding 2).
+                        if let meeting = await viewModel.createAndStartAdHocCapture() {
+                            selectedMeetingID = meeting.id
+                        }
                     }
                 } label: {
                     Label(String(localized: "meetings.newMeeting"), systemImage: "plus")

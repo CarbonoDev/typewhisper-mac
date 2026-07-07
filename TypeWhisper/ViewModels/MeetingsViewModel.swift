@@ -13,6 +13,11 @@ final class MeetingsViewModel: ObservableObject {
 
     @Published private(set) var meetings: [Meeting] = []
 
+    // Outputs / templates (M4)
+    @Published private(set) var templates: [MeetingTemplate] = []
+    @Published private(set) var isGeneratingOutput = false
+    @Published var outputErrorMessage: String?
+
     // Calendar (M2)
     @Published private(set) var calendarAuthorizationStatus: CalendarAuthorizationStatus = .notDetermined
     @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
@@ -30,6 +35,7 @@ final class MeetingsViewModel: ObservableObject {
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
+    private let llmService: MeetingLLMService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -37,13 +43,16 @@ final class MeetingsViewModel: ObservableObject {
         meetingService: MeetingService,
         calendarService: CalendarService,
         captureService: MeetingCaptureService,
-        startNotificationService: MeetingStartNotificationService
+        startNotificationService: MeetingStartNotificationService,
+        llmService: MeetingLLMService
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
         self.captureService = captureService
         self.startNotificationService = startNotificationService
+        self.llmService = llmService
         self.meetings = meetingService.meetings
+        self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
         self.upcomingEvents = calendarService.upcomingEvents
         self.calendarErrorMessage = calendarService.errorMessage
@@ -53,6 +62,18 @@ final class MeetingsViewModel: ObservableObject {
             .sink { [weak self] meetings in
                 self?.meetings = meetings
             }
+            .store(in: &cancellables)
+
+        meetingService.$templates
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] templates in
+                self?.templates = templates
+            }
+            .store(in: &cancellables)
+
+        llmService.$isGenerating
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isGeneratingOutput = value }
             .store(in: &cancellables)
 
         calendarService.$authorizationStatus
@@ -183,6 +204,29 @@ final class MeetingsViewModel: ObservableObject {
         await startCapture(for: meeting)
     }
 
+    /// Create an ad-hoc meeting and begin capturing, guarding synchronously against a concurrent
+    /// capture so a rapid double-click on "New Meeting" cannot persist a stray empty meeting
+    /// (M3 review finding 2). Returns the created meeting, or `nil` if capture was already in
+    /// progress (nothing is created) or start failed (the just-created meeting is removed).
+    @discardableResult
+    func createAndStartAdHocCapture(title: String? = nil) async -> Meeting? {
+        // Authoritative *synchronous* flag on the capture service, not the Combine-mirrored
+        // `self.isCapturing` (a main-queue hop behind). A second click arriving during the first
+        // `start()`'s suspension is rejected here before it can create a second meeting.
+        guard !captureService.isCapturing else { return nil }
+        let meeting = createAdHocMeeting(title: title)
+        do {
+            try await captureService.start(meeting: meeting)
+            return meeting
+        } catch {
+            captureErrorMessage = error.localizedDescription
+            // start() never took ownership (recorderBusy / alreadyCapturing); the just-created
+            // empty meeting would otherwise linger as a stray row. Remove it.
+            meetingService.deleteMeeting(meeting)
+            return nil
+        }
+    }
+
     /// Create (or reuse) the meeting backing a calendar event, then begin capture.
     func startCapture(from event: CalendarEventDTO) async {
         let meeting = createMeeting(from: event)
@@ -196,6 +240,58 @@ final class MeetingsViewModel: ObservableObject {
     /// Add an in-meeting note to the active capture, timestamped with elapsed seconds.
     func addNote(_ text: String) {
         captureService.addNote(text)
+    }
+
+    // MARK: - Outputs & templates (M4)
+
+    /// Templates of a given output kind, in sort order (drives the generate menus).
+    func templates(ofKind kind: MeetingOutputKind) -> [MeetingTemplate] {
+        meetingService.templates(ofKind: kind)
+    }
+
+    /// The newest output of a kind for a meeting (what the detail view surfaces).
+    func latestOutput(ofKind kind: MeetingOutputKind, for meeting: Meeting) -> MeetingOutput? {
+        meetingService.latestOutput(ofKind: kind, for: meeting)
+    }
+
+    /// Generate (or regenerate) an output for a meeting from a template. Regeneration inserts a
+    /// new row; the detail view shows the newest per kind. Surfaces failures via
+    /// `outputErrorMessage`.
+    func generateOutput(for meeting: Meeting, using template: MeetingTemplate) async {
+        outputErrorMessage = nil
+        do {
+            try await llmService.generateOutput(for: meeting, using: template)
+        } catch {
+            outputErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Toggle whether in-meeting notes are folded into generated outputs.
+    func setNotesIncluded(_ included: Bool, for meeting: Meeting) {
+        meetingService.setNotesIncludedInOutputs(included, for: meeting)
+    }
+
+    func deleteOutput(_ output: MeetingOutput) {
+        meetingService.deleteOutput(output)
+    }
+
+    // MARK: - Template CRUD (editor)
+
+    @discardableResult
+    func addTemplate(
+        name: String,
+        kind: MeetingOutputKind,
+        prompt: String
+    ) -> MeetingTemplate {
+        meetingService.addTemplate(name: name, kind: kind, prompt: prompt)
+    }
+
+    func updateTemplate(_ template: MeetingTemplate) {
+        meetingService.updateTemplate(template)
+    }
+
+    func deleteTemplate(_ template: MeetingTemplate) {
+        meetingService.deleteTemplate(template)
     }
 
     /// Poll the calendar roughly once a minute while the meetings UI is visible (plan D10).

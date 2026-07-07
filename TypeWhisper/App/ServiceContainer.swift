@@ -49,6 +49,7 @@ final class ServiceContainer: ObservableObject {
     let calendarService: CalendarService
     let meetingCaptureService: MeetingCaptureService
     let meetingStartNotificationService: MeetingStartNotificationService
+    let meetingLLMService: MeetingLLMService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -143,6 +144,12 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService
         )
         meetingStartNotificationService = MeetingStartNotificationService()
+        // Constructed after `promptProcessingService` (its single-turn `process` seam) and
+        // `meetingService` (plan M4 dependency order).
+        meetingLLMService = MeetingLLMService(
+            meetingService: meetingService,
+            processor: promptProcessingService
+        )
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -246,7 +253,8 @@ final class ServiceContainer: ObservableObject {
             meetingService: meetingService,
             calendarService: calendarService,
             captureService: meetingCaptureService,
-            startNotificationService: meetingStartNotificationService
+            startNotificationService: meetingStartNotificationService,
+            llmService: meetingLLMService
         )
 
         // Set shared references
@@ -290,6 +298,9 @@ final class ServiceContainer: ObservableObject {
         // Crash recovery: mark any meeting left `.live` by a crash/force-quit as `.interrupted`
         // while keeping its persisted transcript segments visible (plan D2).
         meetingService.recoverInterruptedMeetings()
+
+        // Seed the curated meeting output templates (plan M4 §3); idempotent and additive.
+        meetingService.seedTemplatesIfNeeded()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()

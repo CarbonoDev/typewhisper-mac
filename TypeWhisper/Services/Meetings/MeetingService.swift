@@ -11,6 +11,7 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 @MainActor
 final class MeetingService: ObservableObject {
     @Published private(set) var meetings: [Meeting] = []
+    @Published private(set) var templates: [MeetingTemplate] = []
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
@@ -41,6 +42,7 @@ final class MeetingService: ObservableObject {
         }
 
         fetchMeetings()
+        fetchTemplates()
     }
 
     // MARK: - Meeting CRUD
@@ -213,6 +215,118 @@ final class MeetingService: ObservableObject {
         save()
         fetchMeetings()
         return turn
+    }
+
+    /// Remove a generated output (e.g. discarding a stale regeneration). History is otherwise
+    /// retained — regeneration inserts a new row rather than mutating an existing one (plan D15).
+    func deleteOutput(_ output: MeetingOutput) {
+        let meeting = output.meeting
+        modelContext.delete(output)
+        meeting?.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// The newest output of a given kind for a meeting (what the UI surfaces; older rows are kept).
+    func latestOutput(ofKind kind: MeetingOutputKind, for meeting: Meeting) -> MeetingOutput? {
+        meeting.outputs
+            .filter { $0.kind == kind }
+            .max { $0.createdAt < $1.createdAt }
+    }
+
+    /// Toggle whether in-meeting notes are folded into generated outputs (plan M4; written here,
+    /// read by `MeetingLLMService`).
+    func setNotesIncludedInOutputs(_ included: Bool, for meeting: Meeting) {
+        guard meeting.notesIncludedInOutputs != included else { return }
+        meeting.notesIncludedInOutputs = included
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    // MARK: - Templates
+
+    /// Idempotently seed the curated starter templates (plan M4 §3). Mirrors
+    /// `PromptActionService.seedPresetsIfNeeded`: presets missing by name are inserted, existing
+    /// user/preset rows are never overwritten, so re-running is safe and additive.
+    func seedTemplatesIfNeeded() {
+        let existingNames = Set(templates.map(\.name))
+        let missing = MeetingTemplatePresets.all.filter { !existingNames.contains($0.name) }
+        guard !missing.isEmpty else { return }
+
+        let nextSortOrder = (templates.map(\.sortOrder).max() ?? -1) + 1
+        for (offset, preset) in missing.enumerated() {
+            let template = MeetingTemplate(
+                name: preset.name,
+                kind: preset.kind,
+                prompt: preset.prompt,
+                providerType: preset.providerType,
+                cloudModel: preset.cloudModel,
+                temperatureModeRaw: preset.temperatureModeRaw,
+                temperatureValue: preset.temperatureValue,
+                isPreset: true,
+                sortOrder: templates.isEmpty ? preset.sortOrder : nextSortOrder + offset
+            )
+            modelContext.insert(template)
+        }
+        save()
+        fetchTemplates()
+    }
+
+    /// Templates of a given output kind, in sort order (drives the generate menu).
+    func templates(ofKind kind: MeetingOutputKind) -> [MeetingTemplate] {
+        templates.filter { $0.kind == kind }
+    }
+
+    @discardableResult
+    func addTemplate(
+        name: String,
+        kind: MeetingOutputKind,
+        prompt: String,
+        providerType: String? = nil,
+        cloudModel: String? = nil,
+        temperatureModeRaw: String? = nil,
+        temperatureValue: Double? = nil
+    ) -> MeetingTemplate {
+        let template = MeetingTemplate(
+            name: name,
+            kind: kind,
+            prompt: prompt,
+            providerType: providerType,
+            cloudModel: cloudModel,
+            temperatureModeRaw: temperatureModeRaw,
+            temperatureValue: temperatureValue,
+            isPreset: false,
+            sortOrder: (templates.map(\.sortOrder).max() ?? -1) + 1
+        )
+        modelContext.insert(template)
+        save()
+        fetchTemplates()
+        return template
+    }
+
+    /// Persist edits to a fetched template.
+    func updateTemplate(_ template: MeetingTemplate) {
+        save()
+        fetchTemplates()
+    }
+
+    func deleteTemplate(_ template: MeetingTemplate) {
+        modelContext.delete(template)
+        save()
+        fetchTemplates()
+    }
+
+    private func fetchTemplates() {
+        let descriptor = FetchDescriptor<MeetingTemplate>(
+            sortBy: [SortDescriptor(\.sortOrder, order: .forward)]
+        )
+        do {
+            templates = try modelContext.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch meeting templates: \(error.localizedDescription)")
+            templates = []
+        }
     }
 
     // MARK: - Queries

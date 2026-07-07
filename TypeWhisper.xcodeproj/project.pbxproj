@@ -168,6 +168,14 @@
 		AA00000000000000000393 /* MeetingLiveCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000393 /* MeetingLiveCaptureView.swift */; };
 		AA00000000000000000394 /* MeetingNotesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000394 /* MeetingNotesPane.swift */; };
 		AA00000000000000000395 /* MeetingDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000395 /* MeetingDetailView.swift */; };
+		AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000396 /* TranscriptContextBuilder.swift */; };
+		AA00000000000000000397 /* MeetingLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000397 /* MeetingLLMService.swift */; };
+		AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000398 /* MeetingTemplatePresets.swift */; };
+		AA00000000000000000399 /* MeetingOutputsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000399 /* MeetingOutputsView.swift */; };
+		AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000400 /* MeetingTemplateEditorView.swift */; };
+		MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */; };
+		MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000006 /* MeetingLLMServiceTests.swift */; };
+		MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */; };
 		MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */; };
 		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
 		MEB0000000000000000002 /* MeetingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000002 /* MeetingModelTests.swift */; };
@@ -650,6 +658,14 @@
 		BB00000000000000000393 /* MeetingLiveCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLiveCaptureView.swift; sourceTree = "<group>"; };
 		BB00000000000000000394 /* MeetingNotesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotesPane.swift; sourceTree = "<group>"; };
 		BB00000000000000000395 /* MeetingDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetailView.swift; sourceTree = "<group>"; };
+		BB00000000000000000396 /* TranscriptContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilder.swift; sourceTree = "<group>"; };
+		BB00000000000000000397 /* MeetingLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLLMService.swift; sourceTree = "<group>"; };
+		BB00000000000000000398 /* MeetingTemplatePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresets.swift; sourceTree = "<group>"; };
+		BB00000000000000000399 /* MeetingOutputsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOutputsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000400 /* MeetingTemplateEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateEditorView.swift; sourceTree = "<group>"; };
+		MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilderTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000006 /* MeetingLLMServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresetsTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000002 /* MeetingModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelTests.swift; sourceTree = "<group>"; };
@@ -1749,6 +1765,9 @@
 				BB00000000000000000388 /* CalendarService.swift */,
 				BB00000000000000000390 /* MeetingCaptureService.swift */,
 				BB00000000000000000391 /* MeetingStartNotificationService.swift */,
+				BB00000000000000000396 /* TranscriptContextBuilder.swift */,
+				BB00000000000000000397 /* MeetingLLMService.swift */,
+				BB00000000000000000398 /* MeetingTemplatePresets.swift */,
 			);
 			path = Meetings;
 			sourceTree = "<group>";
@@ -1762,6 +1781,8 @@
 				BB00000000000000000393 /* MeetingLiveCaptureView.swift */,
 				BB00000000000000000394 /* MeetingNotesPane.swift */,
 				BB00000000000000000395 /* MeetingDetailView.swift */,
+				BB00000000000000000399 /* MeetingOutputsView.swift */,
+				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
 			);
 			path = Meetings;
 			sourceTree = "<group>";
@@ -2403,6 +2424,9 @@
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
+				MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */,
+				MEF0000000000000000006 /* MeetingLLMServiceTests.swift */,
+				MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */,
 			);
 			name = TypeWhisperTests;
 			path = TypeWhisperTests;
@@ -3897,6 +3921,9 @@
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
+				MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */,
+				MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */,
+				MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
@@ -4002,6 +4029,11 @@
 				AA00000000000000000393 /* MeetingLiveCaptureView.swift in Sources */,
 				AA00000000000000000394 /* MeetingNotesPane.swift in Sources */,
 				AA00000000000000000395 /* MeetingDetailView.swift in Sources */,
+				AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */,
+				AA00000000000000000397 /* MeetingLLMService.swift in Sources */,
+				AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */,
+				AA00000000000000000399 /* MeetingOutputsView.swift in Sources */,
+				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,

@@ -22586,6 +22586,566 @@
           }
         }
       }
+    },
+    "meetings.output.notesHeader": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen aus der Besprechung:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-meeting notes:"
+          }
+        }
+      }
+    },
+    "meetings.output.mapPrompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie fassen einen Ausschnitt eines längeren Besprechungstranskripts zusammen. Extrahieren Sie die wichtigsten Punkte, Entscheidungen, Aufgaben und bemerkenswerten Zitate aus diesem Ausschnitt getreu und knapp. Fügen Sie keine nicht vorhandenen Informationen hinzu. Dies ist eine Teilzusammenfassung, die später mit anderen kombiniert wird."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are condensing one portion of a longer meeting transcript. Faithfully and concisely extract the key points, decisions, action items, and notable quotes from this portion. Do not add information that is not present. This is a partial summary that will later be combined with others."
+          }
+        }
+      }
+    },
+    "meetings.output.partLabel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teil %1$d von %2$d:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part %1$d of %2$d:"
+          }
+        }
+      }
+    },
+    "meetings.output.error.emptyTranscript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Besprechung hat kein Transkript, aus dem ein Ergebnis erstellt werden kann."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no transcript to generate an output from."
+          }
+        }
+      }
+    },
+    "meetings.output.sectionTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnisse"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outputs"
+          }
+        }
+      }
+    },
+    "meetings.output.includeNotes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen einbeziehen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include notes"
+          }
+        }
+      }
+    },
+    "meetings.output.kind.summary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenfassung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary"
+          }
+        }
+      }
+    },
+    "meetings.output.kind.extended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausführliche Analyse"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extended analysis"
+          }
+        }
+      }
+    },
+    "meetings.output.kind.brief": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief"
+          }
+        }
+      }
+    },
+    "meetings.output.none": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht erstellt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not generated yet."
+          }
+        }
+      }
+    },
+    "meetings.output.generate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate"
+          }
+        }
+      }
+    },
+    "meetings.output.regenerate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu erstellen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate"
+          }
+        }
+      }
+    },
+    "meetings.output.noTemplates": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Vorlagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No templates"
+          }
+        }
+      }
+    },
+    "meetings.templates.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnisvorlagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output templates"
+          }
+        }
+      }
+    },
+    "meetings.templates.add": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorlage hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add template"
+          }
+        }
+      }
+    },
+    "meetings.templates.empty": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Vorlagen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No templates yet."
+          }
+        }
+      }
+    },
+    "meetings.templates.presetBadge": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voreinstellung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset"
+          }
+        }
+      }
+    },
+    "meetings.templates.edit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bearbeiten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
+    "meetings.templates.cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "meetings.templates.save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "meetings.templates.field.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
+      }
+    },
+    "meetings.templates.field.kind": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Art"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kind"
+          }
+        }
+      }
+    },
+    "meetings.templates.field.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.generalSync.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allgemeines Sync — Zusammenfassung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General Sync — Summary"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.generalSync.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie sind ein Besprechungsassistent. Fassen Sie diese Besprechung in unter 300 Wörtern zusammen: eine Übersicht in zwei Sätzen, wichtige Diskussionspunkte (Aufzählung), getroffene Entscheidungen sowie Aufgaben mit Verantwortlichen und Fälligkeitsdaten, falls genannt. Bleiben Sie sachlich; erfinden Sie keine Inhalte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are a meeting assistant. Summarize this meeting in under 300 words: a 2-sentence overview, key discussion points (bullets), decisions made, and action items with owners and due dates if mentioned. Be factual; do not invent content."
+          }
+        }
+      }
+    },
+    "meetings.template.preset.oneOnOne.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1:1 — Zusammenfassung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1:1 — Summary"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.oneOnOne.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fassen Sie dieses 1:1-Gespräch zusammen: von jeder Person angesprochene Themen, ausgetauschtes Feedback, Vereinbarungen und Zusagen sowie offene Punkte für das nächste Mal. Wahren Sie einen neutralen, vertraulichen Ton."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize this 1:1 conversation: topics raised by each person, feedback exchanged, agreements and commitments, and follow-ups for next time. Keep a neutral, confidential tone."
+          }
+        }
+      }
+    },
+    "meetings.template.preset.decisionLog.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entscheidungsprotokoll — Ausführlich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decision Log — Extended"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.decisionLog.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extrahieren Sie jede Entscheidung aus dieser Besprechung. Erfassen Sie für jede: die Entscheidung, die besprochenen Alternativen, wer was befürwortet hat, die Begründung, offene Abhängigkeiten und Bedingungen für eine erneute Prüfung. Listen Sie anschließend vertagte oder unentschiedene Punkte auf."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract every decision from this meeting. For each one, capture: the decision, the alternatives discussed, who advocated what, the rationale, open dependencies, and revisit conditions. Then list any deferred or undecided items."
+          }
+        }
+      }
+    },
+    "meetings.template.preset.salesDiscovery.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertrieb / Discovery-Call — Ausführlich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sales / Discovery Call — Extended"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.salesDiscovery.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analysieren Sie diesen Discovery-Call: Unternehmen und Rolle des Interessenten, Schmerzpunkte (nach Möglichkeit wörtliche Zitate), aktuelle Lösung, Signale zu Budget und Zeitplan, Einwände, Hinweise auf das Buying-Committee, nächste Schritte sowie eine Lückenliste im MEDDICC-Stil."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyze this discovery call: the prospect's company and role, pain points (verbatim quotes where possible), current solution, budget and timeline signals, objections, buying-committee hints, next steps, and a MEDDICC-style gap list."
+          }
+        }
+      }
+    },
+    "meetings.template.preset.interviewDebrief.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interview-Nachbesprechung — Ausführlich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interview Debrief — Extended"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.interviewDebrief.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellen Sie eine Interview-Nachbesprechung: eine Zusammenfassung des Kandidatenhintergrunds, Belege je besprochener Kompetenz (mit Zitaten), Stärken, Bedenken, Widersprüche und Anschlussfragen für spätere Runden. Geben Sie kein Einstellungs- bzw. Ablehnungsurteil ab."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Produce an interview debrief: a candidate background summary, evidence per competency discussed (quote-backed), strengths, concerns, inconsistencies, and follow-up questions for later rounds. Do not output a hire or no-hire verdict."
+          }
+        }
+      }
+    },
+    "meetings.template.preset.actionItems.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action-Items-Extraktor — Zusammenfassung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action-Items Extractor — Summary"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.actionItems.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extrahieren Sie ausschließlich Aufgaben: Aufgabe, Verantwortlicher (Sprechernamen zuordnen, falls verfügbar), Fälligkeitsdatum falls genannt und ein Quellenzitat. Geben Sie eine nach Verantwortlichen gruppierte Markdown-Checkliste aus. Falls keine vorhanden sind, weisen Sie ausdrücklich darauf hin."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract only action items: task, owner (map speaker names if available), due date if stated, and a source quote. Output a Markdown checklist grouped by owner. If there are none, say so explicitly."
+          }
+        }
+      }
     }
   },
   "version": "1.1"
