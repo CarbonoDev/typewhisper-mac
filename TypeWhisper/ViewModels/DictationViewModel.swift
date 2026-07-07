@@ -2086,7 +2086,7 @@ final class DictationViewModel: ObservableObject {
             navigationCoordinator.navigate(to: .dictationRecovery)
         }
         if openSettingsWindow {
-            ManagedAppWindowOpener.shared.open(id: "settings")
+            ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
         }
     }
 

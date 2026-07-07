@@ -116,6 +116,6 @@ struct AboutSettingsView: View {
     private func openSetupWizard() {
         UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
         NotificationCenter.default.post(name: .resetSetupWizardWindow, object: nil)
-        ManagedAppWindowOpener.shared.open(id: "setup")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.setup)
     }
 }

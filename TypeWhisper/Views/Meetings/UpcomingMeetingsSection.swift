@@ -228,6 +228,6 @@ struct UpcomingMeetingsSection: View {
     private func openEarlierEvent(_ event: CalendarEventDTO) {
         let meeting = viewModel.createMeeting(from: event)
         viewModel.requestFocus(on: meeting)
-        ManagedAppWindowOpener.shared.open(id: "meetings")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.meetings)
     }
 }

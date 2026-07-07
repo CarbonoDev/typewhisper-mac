@@ -286,7 +286,7 @@ struct MenuBarView: View {
         switch item {
         case .settings:
             Button {
-                openManagedWindow("settings")
+                openManagedWindow(AppWindowID.settings)
             } label: {
                 Label(String(localized: "Settings..."), systemImage: "gear")
             }
@@ -294,7 +294,7 @@ struct MenuBarView: View {
 
         case .meetings:
             Button {
-                openManagedWindow("meetings")
+                openManagedWindow(AppWindowID.meetings)
             } label: {
                 Label(String(localized: "meetings.window.title"), systemImage: "person.2.wave.2")
             }
@@ -308,7 +308,7 @@ struct MenuBarView: View {
                     if let meeting = await MeetingsViewModel.shared.startMeetingRecordingFromMenu() {
                         MeetingsViewModel.shared.requestFocus(on: meeting)
                     }
-                    openManagedWindow("meetings")
+                    openManagedWindow(AppWindowID.meetings)
                 }
             } label: {
                 Label(String(localized: "meetings.menu.startRecording"), systemImage: "record.circle")
@@ -316,14 +316,14 @@ struct MenuBarView: View {
 
         case .history:
             Button {
-                openManagedWindow("history")
+                openManagedWindow(AppWindowID.history)
             } label: {
                 Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
             }
 
         case .errorLog:
             Button {
-                openManagedWindow("errors")
+                openManagedWindow(AppWindowID.errors)
             } label: {
                 Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
             }
@@ -346,7 +346,7 @@ struct MenuBarView: View {
 
         case .transcribeFile:
             Button {
-                openManagedWindow("settings")
+                openManagedWindow(AppWindowID.settings)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
                 }

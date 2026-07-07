@@ -313,7 +313,7 @@ struct SetupWizardView: View {
         dismiss()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            ManagedAppWindowOpener.shared.open(id: "settings")
+            ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
         }
     }
 

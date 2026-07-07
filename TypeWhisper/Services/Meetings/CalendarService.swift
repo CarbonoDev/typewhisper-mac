@@ -349,7 +349,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
             seriesID: event.hasRecurrenceRules ? event.calendarItemExternalIdentifier : nil,
             calendarName: event.calendar?.title,
             calendarID: event.calendar?.calendarIdentifier,
-            calendarColor: event.calendar.map { CalendarColor(nsColor: $0.color) },
+            calendarColor: event.calendar.map { ($0.color as NSColor?).map(CalendarColor.init(nsColor:)) ?? .fallback },
             attendees: attendees(from: event)
         )
     }

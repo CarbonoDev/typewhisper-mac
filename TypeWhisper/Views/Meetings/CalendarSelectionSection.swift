@@ -40,7 +40,7 @@ struct CalendarSelectionSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear(perform: reload)
-        .onChange(of: viewModel.calendarAuthorizationStatus) { _ in reload() }
+        .onChange(of: viewModel.calendarAuthorizationStatus) { _, _ in reload() }
     }
 
     private func calendarRow(_ row: CalendarSelectionRow) -> some View {

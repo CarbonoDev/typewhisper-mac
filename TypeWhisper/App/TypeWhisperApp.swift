@@ -41,6 +41,62 @@ enum DockIconVisibility {
     }
 }
 
+/// Pure launch-window precedence (UI Step 0, D2). Decides which window (if any) opens on
+/// `applicationDidFinishLaunching`: first-run setup wins, then a pending post-update license prompt
+/// (which lands in Settings with its startup sheet and suppresses `main` for that launch), then the
+/// "show window at launch" toggle — but only while the main window is enabled.
+enum LaunchWindowDecision {
+    enum Window: Equatable {
+        case setup
+        case settings
+        case main
+        case none
+    }
+
+    static func decide(
+        isFirstRunSetupIncomplete: Bool,
+        postUpdatePromptPending: Bool,
+        mainWindowEnabled: Bool,
+        showMainWindowAtLaunch: Bool
+    ) -> Window {
+        if isFirstRunSetupIncomplete { return .setup }
+        if postUpdatePromptPending { return .settings }
+        if mainWindowEnabled && showMainWindowAtLaunch { return .main }
+        return .none
+    }
+}
+
+/// Pure matching for the app's managed windows (UI Step 0, D1). Centralizes the substring-hazard
+/// fix: the new `"main"` scene is matched by **prefix** (SwiftUI produces identifiers like
+/// `main-AppWindow-1`), while the pre-existing scenes keep case-insensitive substring matching.
+enum ManagedWindowMatching {
+    /// Scene ids matched by case-insensitive substring (the pre-existing behavior).
+    static let substringIDs = [
+        AppWindowID.settings,
+        AppWindowID.setup,
+        AppWindowID.history,
+        AppWindowID.errors,
+        AppWindowID.meetings
+    ]
+
+    /// Whether a window identifier belongs to a managed scene (identifier check only; callers also
+    /// match localized titles as a fallback).
+    static func isManaged(identifier: String) -> Bool {
+        let lower = identifier.lowercased()
+        if lower.hasPrefix(AppWindowID.main) { return true }
+        return substringIDs.contains { lower.contains($0) }
+    }
+
+    /// Whether an existing window identifier satisfies an `open(id:)` request. `main` is prefix-
+    /// matched; every other id keeps case-insensitive substring matching.
+    static func matches(windowIdentifier: String, requestedID: String) -> Bool {
+        if requestedID == AppWindowID.main {
+            return windowIdentifier.lowercased().hasPrefix(AppWindowID.main)
+        }
+        return windowIdentifier.range(of: requestedID, options: .caseInsensitive) != nil
+    }
+}
+
 enum MenuBarIconState {
     static func isRecordingActive(
         dictationState: DictationViewModel.State,
@@ -200,11 +256,20 @@ struct TypeWhisperApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: 500, height: 400)
 
-        Window(String(localized: "meetings.window.title"), id: "meetings") {
+        Window(String(localized: "meetings.window.title"), id: AppWindowID.meetings) {
             meetingsContent
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1000, height: 640)
+
+        // New meetings-first main window (UI Step 0, D1/D10). The scene always exists so
+        // `open(id: AppWindowID.main)` works, but its content is gated on `mainWindowEnabled`
+        // (default OFF through Steps 0–1) — so app behavior is unchanged until the flag flips.
+        Window(String(localized: "mainwindow.title"), id: AppWindowID.main) {
+            mainWindowContent
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1100, height: 720)
     }
 
     private var settingsScene: some Scene {
@@ -286,6 +351,17 @@ struct TypeWhisperApp: App {
         }
     }
 
+    @ViewBuilder
+    private var mainWindowContent: some View {
+        if AppConstants.isRunningTests {
+            EmptyView()
+        } else if UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled) {
+            MainWindowView()
+        } else {
+            EmptyView()
+        }
+    }
+
     init() {
         guard !AppConstants.isRunningTests else { return }
 
@@ -293,6 +369,7 @@ struct TypeWhisperApp: App {
         _ = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
+        MainWindowCoordinator.shared = MainWindowCoordinator()
         PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         Task { @MainActor in
@@ -440,8 +517,9 @@ final class ManagedAppWindowOpener {
     }
 
     private func managedWindow(id: String) -> NSWindow? {
-        NSApp.windows.first(where: {
-            $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
+        NSApp.windows.first(where: { window in
+            guard let identifier = window.identifier?.rawValue else { return false }
+            return ManagedWindowMatching.matches(windowIdentifier: identifier, requestedID: id)
         })
     }
 
@@ -513,6 +591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     static func registerDefaultUserDefaults(_ defaults: UserDefaults = .standard) {
         defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
+            UserDefaultsKeys.showMainWindowAtLaunch: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
@@ -561,18 +640,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        // Auto-open the standalone setup assistant while first-run setup is incomplete.
-        if HomeViewModel.shared.showSetupWizard {
+        // Launch-window precedence (D2): first-run setup > post-update license prompt > main window.
+        let launchDecision = LaunchWindowDecision.decide(
+            isFirstRunSetupIncomplete: HomeViewModel.shared.showSetupWizard,
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch,
+            mainWindowEnabled: UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled),
+            showMainWindowAtLaunch: UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMainWindowAtLaunch)
+        )
+        switch launchDecision {
+        case .setup:
+            // Auto-open the standalone setup assistant while first-run setup is incomplete.
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.openSetupWindow()
             }
-        } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
+        case .settings:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.openSettingsWindow()
             }
+        case .main:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.openMainWindow()
+            }
+        case .none:
+            break
         }
 
         // Observe appearance preference changes
@@ -625,6 +718,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         if !hasVisibleManagedWindow {
             if HomeViewModel.shared.showSetupWizard {
                 openSetupWindow()
+            } else if UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled) {
+                // Reopen (Dock click) opens the main window once the flag is live (D2); until then
+                // behavior is unchanged and Settings opens as before.
+                openMainWindow()
             } else {
                 openSettingsWindow()
             }
@@ -639,11 +736,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func openSettingsWindow() {
-        ManagedAppWindowOpener.shared.open(id: "settings")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
     }
 
     private func openSetupWindow() {
-        ManagedAppWindowOpener.shared.open(id: "setup")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.setup)
+    }
+
+    private func openMainWindow() {
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.main)
     }
 
     private func handleIncomingURL(_ url: URL) {
@@ -657,14 +758,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
-        if let identifier = window.identifier?.rawValue.lowercased() {
-            if identifier.contains("settings")
-                || identifier.contains("setup")
-                || identifier.contains("history")
-                || identifier.contains("errors")
-                || identifier.contains("meetings") {
-                return true
-            }
+        if let identifier = window.identifier?.rawValue,
+           ManagedWindowMatching.isManaged(identifier: identifier) {
+            return true
         }
 
         let title = window.title
@@ -673,6 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
             || title == String(localized: "meetings.window.title")
+            || title == String(localized: "mainwindow.title")
     }
 
     private var hasVisibleManagedWindow: Bool {

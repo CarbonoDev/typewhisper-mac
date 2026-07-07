@@ -166,6 +166,16 @@
 		CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000002 /* CalendarSelectionStore.swift */; };
 		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
 		CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000004 /* CalendarSelectionTests.swift */; };
+		MWB0000000000000000001 /* AppWindowID.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000001 /* AppWindowID.swift */; };
+		MWB0000000000000000002 /* MainWindowRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000002 /* MainWindowRoute.swift */; };
+		MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000003 /* MainWindowCoordinator.swift */; };
+		MWB0000000000000000004 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000004 /* MainWindowView.swift */; };
+		MWB0000000000000000005 /* MainWindowSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000005 /* MainWindowSidebar.swift */; };
+		MWB0000000000000000006 /* LiveRecordingBand.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000006 /* LiveRecordingBand.swift */; };
+		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
+		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
+		MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000009 /* MeetingDocumentView.swift */; };
+		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
 		AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000389 /* UpcomingMeetingsSection.swift */; };
 		AA00000000000000000390 /* MeetingCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000390 /* MeetingCaptureService.swift */; };
 		CCA000000000000000000001 /* MeetingContextRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000001 /* MeetingContextRule.swift */; };
@@ -711,6 +721,16 @@
 		CA11F00000000000000002 /* CalendarSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionStore.swift; sourceTree = "<group>"; };
 		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
 		CA11F00000000000000004 /* CalendarSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSelectionTests.swift; sourceTree = "<group>"; };
+		MWF0000000000000000001 /* AppWindowID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWindowID.swift; sourceTree = "<group>"; };
+		MWF0000000000000000002 /* MainWindowRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowRoute.swift; sourceTree = "<group>"; };
+		MWF0000000000000000003 /* MainWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowCoordinator.swift; sourceTree = "<group>"; };
+		MWF0000000000000000004 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000005 /* MainWindowSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSidebar.swift; sourceTree = "<group>"; };
+		MWF0000000000000000006 /* LiveRecordingBand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRecordingBand.swift; sourceTree = "<group>"; };
+		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000009 /* MeetingDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000389 /* UpcomingMeetingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingMeetingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000390 /* MeetingCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCaptureService.swift; sourceTree = "<group>"; };
 		CCB000000000000000000001 /* MeetingContextRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRule.swift; sourceTree = "<group>"; };
@@ -1625,6 +1645,7 @@
 			children = (
 				BB00000000000000000093 /* main.swift */,
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
+				MWF0000000000000000001 /* AppWindowID.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
 				BB00000000000000000070 /* UpdateChecker.swift */,
@@ -1840,9 +1861,24 @@
 				BB00000000000000000289 /* SupporterBadgeView.swift */,
 				BB00000000000000000373 /* DiarizationSettingsView.swift */,
 				CC00000000000000000047 /* Meetings */,
+				MWG0000000000000000001 /* MainWindow */,
 				CCB0000000000000000B01 /* PromptLibrary */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		MWG0000000000000000001 /* MainWindow */ = {
+			isa = PBXGroup;
+			children = (
+				MWF0000000000000000002 /* MainWindowRoute.swift */,
+				MWF0000000000000000003 /* MainWindowCoordinator.swift */,
+				MWF0000000000000000004 /* MainWindowView.swift */,
+				MWF0000000000000000005 /* MainWindowSidebar.swift */,
+				MWF0000000000000000006 /* LiveRecordingBand.swift */,
+				MWF0000000000000000007 /* MeetingsListView.swift */,
+				MWF0000000000000000008 /* HomeFeedView.swift */,
+			);
+			path = MainWindow;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000009 /* Resources */ = {
@@ -1927,6 +1963,7 @@
 				BB00000000000000000393 /* MeetingLiveCaptureView.swift */,
 				BB00000000000000000394 /* MeetingNotesPane.swift */,
 				BB00000000000000000395 /* MeetingDetailView.swift */,
+				MWF0000000000000000009 /* MeetingDocumentView.swift */,
 				BB00000000000000000399 /* MeetingOutputsView.swift */,
 				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
 				BB00000000000000000404 /* MeetingBriefView.swift */,
@@ -2576,6 +2613,7 @@
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
 				CA11F00000000000000004 /* CalendarSelectionTests.swift */,
+				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
 				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
 				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
@@ -4095,6 +4133,7 @@
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
 				CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */,
+				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
 				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
 				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
@@ -4188,6 +4227,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
+				MWB0000000000000000001 /* AppWindowID.swift in Sources */,
+				MWB0000000000000000002 /* MainWindowRoute.swift in Sources */,
+				MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */,
+				MWB0000000000000000004 /* MainWindowView.swift in Sources */,
+				MWB0000000000000000005 /* MainWindowSidebar.swift in Sources */,
+				MWB0000000000000000006 /* LiveRecordingBand.swift in Sources */,
+				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
+				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,
+				MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
