@@ -26123,6 +26123,22 @@
         }
       }
     },
+    "home.timeline.tomorrow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Morgen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tomorrow"
+          }
+        }
+      }
+    },
     "home.timeline.today": {
       "localizations": {
         "de": {

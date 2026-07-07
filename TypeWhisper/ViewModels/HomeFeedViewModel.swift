@@ -108,20 +108,44 @@ final class HomeFeedViewModel: ObservableObject {
         return MeetingsViewModel.homeBadges(for: facts)
     }
 
-    /// Localized section header for a day group (Today / Yesterday / weekday / date).
+    /// Localized section header for a day group (Tomorrow / weekday / Today / Yesterday / weekday /
+    /// date). All formatting flows through the injected `calendar` and its time zone so headers stay
+    /// correct under a non-system-zone calendar (e.g. in tests) and across DST boundaries.
     func groupTitle(for group: MeetingDayGroup, now: Date = Date()) -> String {
         switch MeetingsViewModel.homeDayBucket(for: group.date, now: now, calendar: calendar) {
+        case .future(let date):
+            let daysAhead = calendar.dateComponents(
+                [.day], from: calendar.startOfDay(for: now), to: date
+            ).day ?? 0
+            if daysAhead == 1 { return String(localized: "home.timeline.tomorrow") }
+            if daysAhead < 7 { return weekdayTitle(for: date) }
+            return dateTitle(for: date)
         case .today:
             return String(localized: "home.timeline.today")
         case .yesterday:
             return String(localized: "home.timeline.yesterday")
         case .earlierThisWeek(let date):
-            let formatter = DateFormatter()
-            formatter.calendar = calendar
-            formatter.setLocalizedDateFormatFromTemplate("EEEE")
-            return formatter.string(from: date)
+            return weekdayTitle(for: date)
         case .older(let date):
-            return date.formatted(.dateTime.month().day().year())
+            return dateTitle(for: date)
         }
+    }
+
+    /// Weekday name (e.g. "Monday") in the injected calendar/time zone.
+    private func weekdayTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("EEEE")
+        return formatter.string(from: date)
+    }
+
+    /// Localized month/day/year in the injected calendar/time zone.
+    private func dateTitle(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
+        return formatter.string(from: date)
     }
 }

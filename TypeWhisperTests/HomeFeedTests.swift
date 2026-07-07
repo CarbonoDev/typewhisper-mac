@@ -41,10 +41,43 @@ final class HomeFeedGroupingTests: XCTestCase {
         XCTAssertEqual(MeetingsViewModel.homeDayBucket(for: date(daysBefore: 30, hour: 9), now: now, calendar: calendar), .older(thirtyDays))
     }
 
-    /// A future-dated day is clamped to `.today` (never crashes / produces a negative bucket).
-    func testFutureDayClampsToToday() {
+    /// A future-dated day lands in its own `.future` bucket (not folded into `.today`), so an
+    /// engaged/scheduled meeting dated ahead of now gets a distinct header rather than a second
+    /// duplicate "Today".
+    func testFutureDayGetsFutureBucket() {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)!
-        XCTAssertEqual(MeetingsViewModel.homeDayBucket(for: tomorrow, now: now, calendar: calendar), .today)
+        let tomorrowStart = calendar.startOfDay(for: tomorrow)
+        XCTAssertEqual(
+            MeetingsViewModel.homeDayBucket(for: tomorrow, now: now, calendar: calendar),
+            .future(tomorrowStart)
+        )
+
+        let nextWeek = calendar.date(byAdding: .day, value: 9, to: now)!
+        let nextWeekStart = calendar.startOfDay(for: nextWeek)
+        XCTAssertEqual(
+            MeetingsViewModel.homeDayBucket(for: nextWeek, now: now, calendar: calendar),
+            .future(nextWeekStart)
+        )
+    }
+
+    /// A future meeting and a today meeting produce two distinct, correctly-labeled headers — the
+    /// future group sorts first (newest day first) and reads "Tomorrow", not a second "Today".
+    func testFutureAndTodayGetDistinctHeaders() {
+        let tomorrow = calendar.date(byAdding: .hour, value: 10, to: calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: now)!))!
+        let future = meeting(title: "Future", at: tomorrow)
+        let todayMeeting = meeting(title: "Today", at: date(daysBefore: 0, hour: 9))
+
+        let groups = MeetingsViewModel.homeDayGroups(from: [todayMeeting, future], calendar: calendar)
+        XCTAssertEqual(groups.count, 2)
+        // Future day sorts first (newest day first).
+        XCTAssertEqual(groups.map { $0.meetings.map(\.title) }, [["Future"], ["Today"]])
+
+        let hfvm = HomeFeedViewModel(calendar: calendar)
+        let futureTitle = hfvm.groupTitle(for: groups[0], now: now)
+        let todayTitle = hfvm.groupTitle(for: groups[1], now: now)
+        XCTAssertEqual(futureTitle, String(localized: "home.timeline.tomorrow"))
+        XCTAssertEqual(todayTitle, String(localized: "home.timeline.today"))
+        XCTAssertNotEqual(futureTitle, todayTitle)
     }
 
     func testGroupingBucketsAndOrders() {

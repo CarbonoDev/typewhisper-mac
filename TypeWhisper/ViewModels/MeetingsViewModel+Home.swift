@@ -8,6 +8,10 @@ import SwiftUI
 /// grouping is unit-testable with fixed dates and the localized/formatted header title is derived
 /// separately in the view layer.
 enum MeetingDayBucket: Hashable {
+    /// A future day (e.g. a scheduled meeting the user engaged from "Coming up") — labeled
+    /// Tomorrow / weekday / date. Kept distinct from `.today` so future-dated rows never appear
+    /// under a second, duplicate "Today" header at the top of the timeline.
+    case future(Date)
     case today
     case yesterday
     /// Within the last week (excluding today/yesterday) — labeled by weekday name.
@@ -90,6 +94,7 @@ extension MeetingsViewModel {
     ) -> [MeetingDayGroup] {
         let keyFormatter = DateFormatter()
         keyFormatter.calendar = calendar
+        keyFormatter.timeZone = calendar.timeZone
         keyFormatter.locale = Locale(identifier: "en_US_POSIX")
         keyFormatter.dateFormat = "yyyy-MM-dd"
 
@@ -120,7 +125,8 @@ extension MeetingsViewModel {
         let startNow = calendar.startOfDay(for: now)
         let startDate = calendar.startOfDay(for: date)
         let days = calendar.dateComponents([.day], from: startDate, to: startNow).day ?? 0
-        if days <= 0 { return .today }
+        if days < 0 { return .future(startDate) }
+        if days == 0 { return .today }
         if days == 1 { return .yesterday }
         if days < 7 { return .earlierThisWeek(startDate) }
         return .older(startDate)
