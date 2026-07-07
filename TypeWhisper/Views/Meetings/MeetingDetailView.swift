@@ -107,10 +107,22 @@ struct MeetingDetailView: View {
                 let speakerMap = meeting.speakerMap
                 ForEach(segments, id: \.id) { segment in
                     HStack(alignment: .top, spacing: 8) {
-                        Text(Self.timestamp(segment.start))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 56, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Self.timestamp(segment.start))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                            // Distinguish merged-in imported content from live capture (M8: sources
+                            // must be distinguishable in the UI).
+                            if segment.source != .liveCapture {
+                                Text(String(localized: "meetings.detail.importedTag"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(.secondary.opacity(0.15), in: Capsule())
+                            }
+                        }
+                        .frame(width: 56, alignment: .leading)
                         VStack(alignment: .leading, spacing: 2) {
                             if let speaker = Self.speakerName(for: segment, speakerMap: speakerMap) {
                                 Text(speaker)

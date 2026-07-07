@@ -122,7 +122,14 @@ final class MeetingObsidianExporter: ObservableObject {
         guard !segments.isEmpty else { return "" }
         let speakerMap = meeting.speakerMap
         return segments
-            .map { "- **\(Self.timestamp($0.start))** \(Self.displayText(for: $0, speakerMap: speakerMap))" }
+            .map { segment in
+                // Tag merged-in imported content so exported transcripts keep live vs. imported
+                // sources distinguishable (M8), mirroring the detail view's badge.
+                let marker = segment.source != .liveCapture
+                    ? " _(\(String(localized: "meetings.export.importedTag")))_"
+                    : ""
+                return "- **\(Self.timestamp(segment.start))**\(marker) \(Self.displayText(for: segment, speakerMap: speakerMap))"
+            }
             .joined(separator: "\n")
     }
 

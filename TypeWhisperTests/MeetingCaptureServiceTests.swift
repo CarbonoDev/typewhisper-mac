@@ -328,4 +328,117 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertNil(capture.addNote("   "))
         XCTAssertEqual(meeting.notes.count, 1)
     }
+
+    // MARK: - Notes stamp on the meeting timeline across a restart (finding 5)
+
+    func testNotesDuringRestartedSessionStampOnMeetingTimeline() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        // A meeting with a prior finalized session ending at t=10.
+        let meeting = meetingService.createMeeting(title: "Restart Notes", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [TranscriptionSegment(text: "prior", start: 0, end: 10)],
+            to: meeting
+        )
+
+        try await capture.start(meeting: meeting)
+        let note = capture.addNote("restart note")
+        XCTAssertNotNil(note)
+
+        // The note offset sits on the meeting timeline (after the prior session), not at ~0 where it
+        // would collide with session 1's timeline in outputs/export.
+        let offset = try XCTUnwrap(meeting.notes.first?.timestampOffset)
+        XCTAssertGreaterThanOrEqual(offset, 10)
+
+        await capture.stop()
+    }
+
+    // MARK: - Start is refused during stop()'s finalize window (finding 2)
+
+    func testConcurrentStartRefusedWhileStopIsFinalizing() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        let first = meetingService.createMeeting(title: "First", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: first)
+
+        // Hold `stop()` open inside its `stopRecording` teardown so the test can probe the finalize
+        // window (isCapturing already false, but a new session must still be refused).
+        let gate = FinalizeGate()
+        recorder.stopRecordingOverride = { outputURL in
+            await gate.enter()
+            await gate.awaitReleased()
+            try Data("recorded".utf8).write(to: outputURL)
+            return outputURL
+        }
+
+        let second = meetingService.createMeeting(title: "Second", source: .adHoc, state: .scheduled)
+        let stopTask = Task { await capture.stop() }
+
+        await gate.awaitEntered()
+        XCTAssertFalse(capture.isCapturing)
+        XCTAssertTrue(capture.isFinalizing)
+
+        do {
+            try await capture.start(meeting: second)
+            XCTFail("Expected start to be refused during the finalize window")
+        } catch {
+            XCTAssertEqual(error as? MeetingCaptureService.CaptureError, .alreadyCapturing)
+        }
+        // No side effects: the second meeting was never touched.
+        XCTAssertEqual(second.state, .scheduled)
+        XCTAssertEqual(capture.activeMeeting?.id, first.id)
+
+        await gate.release()
+        await stopTask.value
+
+        XCTAssertFalse(capture.isFinalizing)
+        XCTAssertFalse(capture.isCapturing)
+        XCTAssertEqual(first.state, .completed)
+        XCTAssertEqual(second.state, .scheduled)
+    }
+}
+
+/// Two-way async gate that lets a test suspend `stop()`'s finalize at the `stopRecording` hook,
+/// probe the window, then release it.
+private actor FinalizeGate {
+    private var entered = false
+    private var released = false
+    private var enterWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Called from inside the finalize hook to announce it has entered the window.
+    func enter() {
+        entered = true
+        enterWaiters.forEach { $0.resume() }
+        enterWaiters.removeAll()
+    }
+
+    /// The test awaits this to know finalize is in progress.
+    func awaitEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enterWaiters.append($0) }
+    }
+
+    /// The test calls this to let finalize proceed.
+    func release() {
+        released = true
+        releaseWaiters.forEach { $0.resume() }
+        releaseWaiters.removeAll()
+    }
+
+    /// The finalize hook awaits this until the test releases it.
+    func awaitReleased() async {
+        if released { return }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
 }

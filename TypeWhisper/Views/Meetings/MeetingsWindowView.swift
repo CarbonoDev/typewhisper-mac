@@ -19,6 +19,11 @@ struct MeetingsWindowView: View {
         .onChange(of: viewModel.activeMeeting?.id) { _, newValue in
             if let newValue { selectedMeetingID = newValue }
         }
+        .onChange(of: selectedMeetingID) { _, _ in
+            // Per-meeting error/status banners are shared singleton state; clear them on switch so
+            // one meeting's transient message doesn't render under another (finding 7).
+            viewModel.clearTransientMessages()
+        }
         .sheet(isPresented: $isPresentingImport) {
             MeetingImportView(mergeTarget: selectedMeeting) { meeting in
                 selectedMeetingID = meeting.id

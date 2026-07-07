@@ -31,6 +31,13 @@ final class MeetingCaptureService: ObservableObject {
 
     @Published private(set) var activeMeeting: Meeting?
     @Published private(set) var isCapturing = false
+    /// True while `stop()` is finalizing — the multi-second span *after* `isCapturing` flips false
+    /// but before teardown (`streamingHandler.finish`, `stopRecording`, full-buffer finalize) has
+    /// completed. `start()` (and the window's synchronous `createAndStartAdHocCapture` guard) must
+    /// still refuse during this window, because the recorder, the (re-entrant-for-`.meeting`)
+    /// ownership lock, and the audio buffer are all being torn down; a new session slipping in would
+    /// reset the buffer, re-install taps on the running engine, and race the finalize (finding 2).
+    @Published private(set) var isFinalizing = false
     /// Whole accumulated stabilized transcript for the live-capture preview (never persisted per
     /// update; only stabilized suffixes are flushed to disk).
     @Published private(set) var liveTranscript: String = ""
@@ -100,7 +107,7 @@ final class MeetingCaptureService: ObservableObject {
         micEnabled: Bool = true,
         systemAudioEnabled: Bool = true
     ) async throws {
-        guard !isCapturing else { throw CaptureError.alreadyCapturing }
+        guard !isCapturing, !isFinalizing else { throw CaptureError.alreadyCapturing }
 
         // Claim `isCapturing` synchronously — before the first `await` — so a second `start()`
         // slipping in during `startRecording`'s suspension (double-click on "New Meeting" or the
@@ -160,6 +167,12 @@ final class MeetingCaptureService: ObservableObject {
         guard isCapturing, let meeting = activeMeeting else { return }
 
         isCapturing = false
+        // Keep `start()`'s guard closed across the multi-`await` finalize below: `isCapturing` is
+        // already false (so the UI stops showing "recording"), but a new session must not begin
+        // until teardown finishes (finding 2). A double-click on Stop is still handled by the
+        // `guard isCapturing` above — this only gates a concurrent *start*.
+        isFinalizing = true
+        defer { isFinalizing = false }
         stopElapsedTimer()
 
         meeting.state = .processing
@@ -222,7 +235,10 @@ final class MeetingCaptureService: ObservableObject {
         guard let meeting = activeMeeting else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let offset = isCapturing ? currentElapsed() : nil
+        // Stamp on the meeting timeline (shifted by `sessionTimeOffset`), matching persisted
+        // segment starts, so notes taken during a *restarted* session don't collide with session 1's
+        // timeline in outputs/export (finding 5).
+        let offset = isCapturing ? meetingTimelineElapsed : nil
         return meetingService.addNote(to: meeting, text: trimmed, timestampOffset: offset)
     }
 
@@ -375,6 +391,15 @@ final class MeetingCaptureService: ObservableObject {
     private func currentElapsed() -> TimeInterval {
         guard let captureStartTime else { return latestElapsed }
         return Date().timeIntervalSince(captureStartTime)
+    }
+
+    /// Elapsed seconds on the *meeting timeline*: the session-relative `currentElapsed()` shifted by
+    /// `sessionTimeOffset`, matching the shift `flushPendingSegments` applies to persisted segment
+    /// starts. Q&A `asOfOffset` scoping and note timestamps must use this (not the session-relative
+    /// `elapsedSeconds`), so a restarted session's offsets line up with persisted `segment.start`
+    /// values instead of dropping/colliding with the prior session's transcript (findings 1 & 5).
+    var meetingTimelineElapsed: TimeInterval {
+        currentElapsed() + sessionTimeOffset
     }
 
     private func startElapsedTimer() {

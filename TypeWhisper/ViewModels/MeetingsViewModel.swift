@@ -192,6 +192,19 @@ final class MeetingsViewModel: ObservableObject {
 
     var hasMeetings: Bool { !meetings.isEmpty }
 
+    /// Clear the per-meeting transient status/error banners. These are singleton `@Published` state
+    /// (each reset at the start of its own operation), so without this they persist across a meeting
+    /// switch and e.g. meeting A's "no speakers detected" status renders under meeting B (finding 7).
+    /// Called from the window when the selected meeting changes.
+    func clearTransientMessages() {
+        outputErrorMessage = nil
+        briefErrorMessage = nil
+        qaErrorMessage = nil
+        exportErrorMessage = nil
+        diarizationErrorMessage = nil
+        diarizationStatusMessage = nil
+    }
+
     // MARK: - Calendar
 
     var isCalendarAuthorized: Bool { calendarAuthorizationStatus == .authorized }
@@ -279,7 +292,9 @@ final class MeetingsViewModel: ObservableObject {
         // Authoritative *synchronous* flag on the capture service, not the Combine-mirrored
         // `self.isCapturing` (a main-queue hop behind). A second click arriving during the first
         // `start()`'s suspension is rejected here before it can create a second meeting.
-        guard !captureService.isCapturing else { return nil }
+        // Also refuse while a previous session is finalizing (its recorder/buffer are being torn
+        // down), matching `start()`'s guard (finding 2).
+        guard !captureService.isCapturing, !captureService.isFinalizing else { return nil }
         let meeting = createAdHocMeeting(title: title)
         do {
             try await captureService.start(meeting: meeting)
@@ -389,7 +404,10 @@ final class MeetingsViewModel: ObservableObject {
     @discardableResult
     func askQuestion(_ question: String, for meeting: Meeting) async -> Bool {
         qaErrorMessage = nil
-        let offset: Double? = (isCapturing && activeMeeting?.id == meeting.id) ? captureElapsedSeconds : nil
+        // Scope on the *meeting timeline* (session-relative elapsed + `sessionTimeOffset`), matching
+        // persisted `segment.start` values, so a restarted session's Q&A doesn't drop nearly the
+        // whole transcript through the composer's `segment.start <= offset` filter (finding 1).
+        let offset: Double? = (isCapturing && activeMeeting?.id == meeting.id) ? captureService.meetingTimelineElapsed : nil
         do {
             try await llmService.answerQuestion(for: meeting, question: question, asOfOffset: offset)
             return true

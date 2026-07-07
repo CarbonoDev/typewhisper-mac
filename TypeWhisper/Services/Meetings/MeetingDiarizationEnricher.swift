@@ -260,6 +260,12 @@ final class MeetingDiarizationEnricher: ObservableObject {
     @discardableResult
     func enrich(_ meeting: Meeting) async throws -> Outcome {
         guard !isEnriching else { throw EnrichError.alreadyEnriching }
+        // Claim the flag *synchronously*, before any `await`, so two user-triggered passes can't both
+        // slip past the guard (the availability/prefix probes below suspend) and run concurrent
+        // whole-file decodes + `applySpeakerLabels` (finding 3). The synchronous early returns below
+        // (.noTranscript/.noAudio) and the async .unavailable returns are all covered by the defer.
+        isEnriching = true
+        defer { isEnriching = false }
 
         let segments = meeting.segments.sorted { $0.order < $1.order }
         guard !segments.isEmpty else { return .noTranscript }
@@ -288,9 +294,6 @@ final class MeetingDiarizationEnricher: ObservableObject {
                 return .unavailable
             }
         }
-
-        isEnriching = true
-        defer { isEnriching = false }
 
         // Off-main: decode, timeline-check, decide track mode, and either compute separate-track
         // assignments or produce mono WAV data — none of this touches the main actor.

@@ -22533,6 +22533,38 @@
         }
       }
     },
+    "meetings.detail.importedTag": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importiert"
+          }
+        }
+      }
+    },
+    "meetings.export.importedTag": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "imported"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "importiert"
+          }
+        }
+      }
+    },
     "meetings.notes.placeholder": {
       "localizations": {
         "en": {

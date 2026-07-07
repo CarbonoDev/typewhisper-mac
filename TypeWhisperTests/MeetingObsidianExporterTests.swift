@@ -124,6 +124,32 @@ final class MeetingObsidianExporterTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(byName["Acme Sync - Notes.md"]).contains("Follow up next week."))
     }
 
+    // MARK: - Imported-source annotation (M8: sources distinguishable)
+
+    func testImportedSegmentsAreTaggedInExportedTranscript() throws {
+        let meeting = service.createMeeting(title: "Merged", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Live line.", start: 0, end: 2)],
+            source: .liveCapture,
+            to: meeting
+        )
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Imported line.", start: 2, end: 4)],
+            source: .importedTranscript,
+            to: meeting
+        )
+
+        let urls = try exporter.export(meeting, sections: [.transcript], combined: false)
+        let body = try contents(of: try XCTUnwrap(urls.first))
+
+        let importedTag = String(localized: "meetings.export.importedTag")
+        // The imported line carries the marker; the live line does not.
+        let importedRow = try XCTUnwrap(body.split(separator: "\n").first { $0.contains("Imported line.") })
+        XCTAssertTrue(importedRow.contains("_(\(importedTag))_"))
+        let liveRow = try XCTUnwrap(body.split(separator: "\n").first { $0.contains("Live line.") })
+        XCTAssertFalse(liveRow.contains(importedTag))
+    }
+
     // MARK: - Empty-section skipping / no content
 
     func testEmptySectionsAreSkipped() throws {
