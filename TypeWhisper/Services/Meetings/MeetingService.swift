@@ -415,6 +415,16 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    /// Record that `meeting` was just successfully exported to the connected vault. This timestamp
+    /// (not the mere presence of an `obsidianFolder` path) is the source of truth for the "In vault"
+    /// badge, so it only ever changes as a result of a real export.
+    func recordObsidianExport(for meeting: Meeting, at date: Date = Date()) {
+        meeting.lastObsidianExportAt = date
+        meeting.updatedAt = date
+        save()
+        fetchMeetings()
+    }
+
     /// Persist the per-meeting Obsidian frontmatter tags, trimming blanks and de-duplicating while
     /// preserving order.
     func setObsidianTags(_ tags: [String], for meeting: Meeting) {

@@ -91,9 +91,6 @@ enum UserDefaultsKeys {
     /// Whether the meetings-first main window opens automatically at launch (registered default ON).
     /// Launch precedence: first-run setup > post-update license prompt > this toggle (D2).
     static let showMainWindowAtLaunch = "mainwindow.showAtLaunch"
-    /// Internal rollout flag (default OFF through UI Steps 0–1) gating the `main` scene content and
-    /// the menu-bar retarget; the old `"meetings"` window keeps working untouched until Step 2 (D10).
-    static let mainWindowEnabled = "mainwindow.enabled"
 
     // MARK: - Memory
     static let memoryEnabled = "memoryEnabled"

@@ -92,37 +92,33 @@ final class ManagedWindowMatchingTests: XCTestCase {
 // MARK: - Launch-window precedence (pure)
 
 final class LaunchBehaviorTests: XCTestCase {
-    private func decide(setup: Bool, prompt: Bool, enabled: Bool, showAtLaunch: Bool) -> LaunchWindowDecision.Window {
+    private func decide(setup: Bool, prompt: Bool, showAtLaunch: Bool) -> LaunchWindowDecision.Window {
         LaunchWindowDecision.decide(
             isFirstRunSetupIncomplete: setup,
             postUpdatePromptPending: prompt,
-            mainWindowEnabled: enabled,
             showMainWindowAtLaunch: showAtLaunch
         )
     }
 
     func testSetupWinsOverEverything() {
-        // Setup is highest precedence regardless of the other three flags (4 combinations covered).
+        // Setup is highest precedence regardless of the other flags (4 combinations covered).
         for prompt in [false, true] {
             for showAtLaunch in [false, true] {
-                XCTAssertEqual(decide(setup: true, prompt: prompt, enabled: true, showAtLaunch: showAtLaunch), .setup)
+                XCTAssertEqual(decide(setup: true, prompt: prompt, showAtLaunch: showAtLaunch), .setup)
             }
         }
     }
 
     func testPostUpdatePromptWinsOverMain() {
-        XCTAssertEqual(decide(setup: false, prompt: true, enabled: true, showAtLaunch: true), .settings)
-        XCTAssertEqual(decide(setup: false, prompt: true, enabled: false, showAtLaunch: true), .settings)
+        XCTAssertEqual(decide(setup: false, prompt: true, showAtLaunch: true), .settings)
     }
 
-    func testMainOpensOnlyWhenEnabledAndToggledOn() {
-        XCTAssertEqual(decide(setup: false, prompt: false, enabled: true, showAtLaunch: true), .main)
+    func testMainOpensWhenToggledOn() {
+        XCTAssertEqual(decide(setup: false, prompt: false, showAtLaunch: true), .main)
     }
 
-    func testNoneWhenDisabledOrToggledOff() {
-        XCTAssertEqual(decide(setup: false, prompt: false, enabled: false, showAtLaunch: true), .none)
-        XCTAssertEqual(decide(setup: false, prompt: false, enabled: true, showAtLaunch: false), .none)
-        XCTAssertEqual(decide(setup: false, prompt: false, enabled: false, showAtLaunch: false), .none)
+    func testNoneWhenToggledOff() {
+        XCTAssertEqual(decide(setup: false, prompt: false, showAtLaunch: false), .none)
     }
 }
 

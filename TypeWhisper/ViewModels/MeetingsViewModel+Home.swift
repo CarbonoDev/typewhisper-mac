@@ -151,12 +151,13 @@ extension MeetingsViewModel {
     /// (`HomeFeedViewModel`) because it depends on "now" and, later, M10's real running-long API.
     static func homeBadgeFacts(for meeting: Meeting, isRunningLong: Bool) -> MeetingBadgeFacts {
         let kinds = Set(meeting.outputs.map(\.kind))
-        let folder = (meeting.obsidianFolder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return MeetingBadgeFacts(
             hasSummary: kinds.contains(.summary),
             hasExtended: kinds.contains(.extended),
             hasBrief: kinds.contains(.brief),
-            isInVault: !folder.isEmpty,
+            // Real export event, not the mere presence of an `obsidianFolder` path (which is also set
+            // by vault-root exports = empty folder, and dirtied by merely editing the folder field).
+            isInVault: meeting.lastObsidianExportAt != nil,
             isRunningLong: isRunningLong
         )
     }

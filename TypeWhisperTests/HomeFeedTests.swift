@@ -141,10 +141,10 @@ final class MeetingStateBadgeTests: XCTestCase {
         XCTAssertEqual(MeetingsViewModel.homeBadges(for: facts), [.briefReady, .inVault])
     }
 
-    /// Fact extraction from a live meeting: no outputs → no output badges; a set obsidian folder →
-    /// in-vault; running-long is passed through from the seam.
+    /// Fact extraction from a live meeting: no outputs → no output badges; a recorded export
+    /// timestamp → in-vault; running-long is passed through from the seam.
     func testFactExtractionFromMeeting() {
-        let meeting = Meeting(title: "M", obsidianFolder: "Meetings/2026")
+        let meeting = Meeting(title: "M", lastObsidianExportAt: Date())
         let facts = MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: true)
         XCTAssertFalse(facts.hasSummary)
         XCTAssertFalse(facts.hasExtended)
@@ -153,9 +153,12 @@ final class MeetingStateBadgeTests: XCTestCase {
         XCTAssertTrue(facts.isRunningLong)
     }
 
-    func testFactExtractionEmptyFolderIsNotInVault() {
-        let meeting = Meeting(title: "M", obsidianFolder: "   ")
+    /// A folder path (even a vault-root/blank one) is NOT an export: the badge derives from the real
+    /// `lastObsidianExportAt` event, so a never-exported meeting is never "in vault".
+    func testFactExtractionUnexportedMeetingIsNotInVault() {
+        let meeting = Meeting(title: "M", obsidianFolder: "Meetings/2026")
         let facts = MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false)
+        XCTAssertNil(meeting.lastObsidianExportAt)
         XCTAssertFalse(facts.isInVault)
     }
 

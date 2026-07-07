@@ -187,7 +187,6 @@ private final class MenuBarState: ObservableObject {
 
 enum MenuBarMenuItem: Hashable {
     case settings
-    case meetings
     case openMainWindow
     case startMeetingRecording
     case history
@@ -207,7 +206,6 @@ enum MenuBarMenuItem: Hashable {
     var managedWindowTarget: String? {
         switch self {
         case .settings, .transcribeFile: return AppWindowID.settings
-        case .meetings: return AppWindowID.meetings
         case .openMainWindow: return AppWindowID.main
         case .history: return AppWindowID.history
         case .errorLog: return AppWindowID.errors
@@ -221,31 +219,27 @@ enum MenuBarMenuItem: Hashable {
 /// Settings… · Quit (eight entries). History, Error Log, and Transcribe File are removed from the
 /// menu and reachable only in Settings (Tools › History / File Transcription, Application › Advanced).
 ///
-/// `mainWindowEnabled` swaps the meetings-first "Open TypeWhisper" (→ `AppWindowID.main`) item for
-/// the legacy "Meetings" item while the rollout flag is OFF (UI Steps 0–1); at Step 2 the flag
-/// flips ON and the old meetings window is retired (D10).
+/// "Open TypeWhisper" always targets the meetings-first `AppWindowID.main` window; the legacy
+/// `meetings` window scene was retired (D10), so there is no longer a rollout-flag alternative.
 enum MenuBarLayout {
     /// Divider-separated groups of the slim menu, in display order.
-    static func groups(mainWindowEnabled: Bool) -> [[MenuBarMenuItem]] {
+    static func groups() -> [[MenuBarMenuItem]] {
         [
             [.startMeetingRecording],
             [.toggleRecorder, .toggleDictationHotkeysPause, .recentTranscriptions],
-            [mainWindowEnabled ? .openMainWindow : .meetings, .settings]
+            [.openMainWindow, .settings]
         ]
     }
 
     /// Flat ordered item list (groups concatenated).
-    static func items(mainWindowEnabled: Bool) -> [MenuBarMenuItem] {
-        groups(mainWindowEnabled: mainWindowEnabled).flatMap { $0 }
+    static func items() -> [MenuBarMenuItem] {
+        groups().flatMap { $0 }
     }
 }
 
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
-    // Rollout flag (D10): OFF through UI Steps 0–1 keeps the legacy "Meetings" entry pointed at the
-    // old window; Step 2 flips it ON, switching to "Open TypeWhisper" → the new main window.
-    @AppStorage(UserDefaultsKeys.mainWindowEnabled) private var mainWindowEnabled = false
 
     var body: some View {
         Group {
@@ -255,7 +249,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            let groups = MenuBarLayout.groups(mainWindowEnabled: mainWindowEnabled)
+            let groups = MenuBarLayout.groups()
             ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
                 if index > 0 {
                     Divider()
@@ -278,12 +272,6 @@ struct MenuBarView: View {
         }
     }
 
-    /// The window opened by "Start Meeting Recording" / "Open TypeWhisper": the new `main` window
-    /// once the rollout flag is ON, else the legacy `meetings` window (D8/D10).
-    private var meetingsWindowID: String {
-        mainWindowEnabled ? AppWindowID.main : AppWindowID.meetings
-    }
-
     private func openManagedWindow(_ id: String) {
         ManagedAppWindowOpener.shared.open(id: id)
     }
@@ -299,24 +287,17 @@ struct MenuBarView: View {
             }
             .keyboardShortcut(",")
 
-        case .meetings:
-            Button {
-                openManagedWindow(AppWindowID.meetings)
-            } label: {
-                Label(String(localized: "meetings.window.title"), systemImage: "person.2.wave.2")
-            }
-
         case .startMeetingRecording:
             Button {
-                // [M10] Create an ad-hoc meeting, start capture, and open the meetings-first window
-                // focused on it. The mutual-exclusion guard surfaces a busy message (never crashes)
-                // when a capture is already active; the window still opens so the user sees state.
-                // Retargets to the new `main` window once the rollout flag is ON (D8/D10).
+                // [M10] Create an ad-hoc meeting, start capture, and open the meetings-first `main`
+                // window focused on it. The mutual-exclusion guard surfaces a busy message (never
+                // crashes) when a capture is already active; the window still opens so the user sees
+                // state.
                 Task {
                     if let meeting = await MeetingsViewModel.shared.startMeetingRecordingFromMenu() {
                         MeetingsViewModel.shared.requestFocus(on: meeting)
                     }
-                    openManagedWindow(meetingsWindowID)
+                    openManagedWindow(AppWindowID.main)
                 }
             } label: {
                 Label(String(localized: "meetings.menu.startRecording"), systemImage: "record.circle")

@@ -44,7 +44,7 @@ enum DockIconVisibility {
 /// Pure launch-window precedence (UI Step 0, D2). Decides which window (if any) opens on
 /// `applicationDidFinishLaunching`: first-run setup wins, then a pending post-update license prompt
 /// (which lands in Settings with its startup sheet and suppresses `main` for that launch), then the
-/// "show window at launch" toggle — but only while the main window is enabled.
+/// "show window at launch" toggle.
 enum LaunchWindowDecision {
     enum Window: Equatable {
         case setup
@@ -56,12 +56,11 @@ enum LaunchWindowDecision {
     static func decide(
         isFirstRunSetupIncomplete: Bool,
         postUpdatePromptPending: Bool,
-        mainWindowEnabled: Bool,
         showMainWindowAtLaunch: Bool
     ) -> Window {
         if isFirstRunSetupIncomplete { return .setup }
         if postUpdatePromptPending { return .settings }
-        if mainWindowEnabled && showMainWindowAtLaunch { return .main }
+        if showMainWindowAtLaunch { return .main }
         return .none
     }
 }
@@ -258,8 +257,7 @@ struct TypeWhisperApp: App {
 
         // Meetings-first main window (UI Step 2, D1/D10): now the app's primary window. The legacy
         // `Window(id: AppWindowID.meetings)` + `MeetingsWindowView` were deleted here; all meeting
-        // navigation goes through this scene via `MainWindowCoordinator`. Content stays gated on
-        // `mainWindowEnabled` (now registered default ON) for a clean rollback seam.
+        // navigation goes through this scene via `MainWindowCoordinator`.
         Window(String(localized: "mainwindow.title"), id: AppWindowID.main) {
             mainWindowContent
         }
@@ -341,10 +339,8 @@ struct TypeWhisperApp: App {
     private var mainWindowContent: some View {
         if AppConstants.isRunningTests {
             EmptyView()
-        } else if UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled) {
-            MainWindowView()
         } else {
-            EmptyView()
+            MainWindowView()
         }
     }
 
@@ -578,10 +574,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
             UserDefaultsKeys.showMainWindowAtLaunch: true,
-            // UI Step 2 (D10): the meetings-first main window is now the default. The legacy
-            // `"meetings"` window scene + `MeetingsWindowView` have been deleted; this flag stays as
-            // the gate for the `main` scene content and the menu-bar retarget, now defaulting ON.
-            UserDefaultsKeys.mainWindowEnabled: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
@@ -634,7 +626,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         let launchDecision = LaunchWindowDecision.decide(
             isFirstRunSetupIncomplete: HomeViewModel.shared.showSetupWizard,
             postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch,
-            mainWindowEnabled: UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled),
             showMainWindowAtLaunch: UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMainWindowAtLaunch)
         )
         switch launchDecision {
@@ -708,12 +699,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         if !hasVisibleManagedWindow {
             if HomeViewModel.shared.showSetupWizard {
                 openSetupWindow()
-            } else if UserDefaults.standard.bool(forKey: UserDefaultsKeys.mainWindowEnabled) {
-                // Reopen (Dock click) opens the main window once the flag is live (D2); until then
-                // behavior is unchanged and Settings opens as before.
-                openMainWindow()
             } else {
-                openSettingsWindow()
+                // Reopen (Dock click) opens the meetings-first main window (D2).
+                openMainWindow()
             }
         }
         return true

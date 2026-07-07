@@ -575,6 +575,11 @@ final class MeetingsViewModel: ObservableObject {
         exportErrorMessage = nil
         do {
             let urls = try exporter.export(meeting, sections: sections, combined: combined)
+            if !urls.isEmpty {
+                // Record the real export event so the "In vault" badge reflects an actual write,
+                // not merely a non-empty `obsidianFolder` field.
+                meetingService.recordObsidianExport(for: meeting)
+            }
             return urls.count
         } catch {
             exportErrorMessage = error.localizedDescription

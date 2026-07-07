@@ -108,41 +108,31 @@ final class SettingsDeepLinkTests: XCTestCase {
 // MARK: - Menu bar slim (Track D · D8)
 
 /// The slim menu-bar item set: History / Error Log / Transcribe File are removed; Start Meeting
-/// Recording and Open TypeWhisper are present; the meetings target follows the rollout flag.
+/// Recording and Open TypeWhisper are present. The legacy `meetings` window scene was retired
+/// (D10), so "Open TypeWhisper" unconditionally targets the meetings-first `main` window.
 final class MenuBarItemsTests: XCTestCase {
-    func testSlimItemSetWhileRolloutFlagOff() {
+    func testSlimItemSet() {
         XCTAssertEqual(
-            MenuBarLayout.items(mainWindowEnabled: false),
-            [.startMeetingRecording, .toggleRecorder, .toggleDictationHotkeysPause, .recentTranscriptions, .meetings, .settings]
-        )
-    }
-
-    func testSlimItemSetWhileRolloutFlagOn() {
-        XCTAssertEqual(
-            MenuBarLayout.items(mainWindowEnabled: true),
+            MenuBarLayout.items(),
             [.startMeetingRecording, .toggleRecorder, .toggleDictationHotkeysPause, .recentTranscriptions, .openMainWindow, .settings]
         )
     }
 
     func testSixVisibleMiddleEntries() {
         // Status line + Quit are rendered outside the layout → eight visible entries total (D8).
-        XCTAssertEqual(MenuBarLayout.items(mainWindowEnabled: false).count, 6)
-        XCTAssertEqual(MenuBarLayout.items(mainWindowEnabled: true).count, 6)
+        XCTAssertEqual(MenuBarLayout.items().count, 6)
     }
 
     func testRemovedItemsAreAbsent() {
-        for enabled in [true, false] {
-            let items = MenuBarLayout.items(mainWindowEnabled: enabled)
-            XCTAssertFalse(items.contains(.history))
-            XCTAssertFalse(items.contains(.errorLog))
-            XCTAssertFalse(items.contains(.transcribeFile))
-            XCTAssertFalse(items.contains(.checkForUpdates))
-        }
+        let items = MenuBarLayout.items()
+        XCTAssertFalse(items.contains(.history))
+        XCTAssertFalse(items.contains(.errorLog))
+        XCTAssertFalse(items.contains(.transcribeFile))
+        XCTAssertFalse(items.contains(.checkForUpdates))
     }
 
     func testStartMeetingRecordingIsPresent() {
-        XCTAssertTrue(MenuBarLayout.items(mainWindowEnabled: true).contains(.startMeetingRecording))
-        XCTAssertTrue(MenuBarLayout.items(mainWindowEnabled: false).contains(.startMeetingRecording))
+        XCTAssertTrue(MenuBarLayout.items().contains(.startMeetingRecording))
     }
 
     func testOpenTypeWhisperTargetsTheMainWindow() {
@@ -150,14 +140,17 @@ final class MenuBarItemsTests: XCTestCase {
         XCTAssertEqual(AppWindowID.main, "main")
     }
 
-    func testLegacyMeetingsEntryTargetsTheOldWindowWhileFlagOff() {
-        XCTAssertTrue(MenuBarLayout.items(mainWindowEnabled: false).contains(.meetings))
-        XCTAssertEqual(MenuBarMenuItem.meetings.managedWindowTarget, AppWindowID.meetings)
+    /// The legacy `meetings` window scene is gone: the slim menu carries `.openMainWindow` (→ the
+    /// `main` window) and never a separate meetings entry that would target a deleted scene.
+    func testMenuAlwaysTargetsTheMainWindow() {
+        let items = MenuBarLayout.items()
+        XCTAssertTrue(items.contains(.openMainWindow))
+        XCTAssertEqual(MenuBarMenuItem.openMainWindow.managedWindowTarget, AppWindowID.main)
     }
 
     func testDividerGroupingIsStable() {
         XCTAssertEqual(
-            MenuBarLayout.groups(mainWindowEnabled: true).map(\.count),
+            MenuBarLayout.groups().map(\.count),
             [1, 3, 2]
         )
     }

@@ -30,6 +30,10 @@ final class Meeting {
     var obsidianFolder: String?
     /// JSON-encoded `[String]` (see `obsidianTags`).
     var obsidianTagsJSON: String?
+    /// Timestamp of the most recent successful Obsidian vault export (additive, AD/M-review).
+    /// `nil` until the meeting has actually been exported at least once; this is the source of truth
+    /// for the "In vault" badge (never the mere presence of an `obsidianFolder` path).
+    var lastObsidianExportAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -61,6 +65,7 @@ final class Meeting {
         notesIncludedInOutputs: Bool = true,
         obsidianFolder: String? = nil,
         obsidianTagsJSON: String? = nil,
+        lastObsidianExportAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -79,6 +84,7 @@ final class Meeting {
         self.notesIncludedInOutputs = notesIncludedInOutputs
         self.obsidianFolder = obsidianFolder
         self.obsidianTagsJSON = obsidianTagsJSON
+        self.lastObsidianExportAt = lastObsidianExportAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.segments = []
