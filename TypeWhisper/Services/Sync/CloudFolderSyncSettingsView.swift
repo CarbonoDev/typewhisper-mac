@@ -247,9 +247,6 @@ struct CloudFolderSyncSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            if !controller.canUseSync {
-                lockedPanel
-            }
 
             VStack(alignment: .leading, spacing: 10) {
                 statusRow(title: String(localized: "Provider"), value: controller.provider.displayName, systemImage: "cloud")
@@ -317,32 +314,6 @@ struct CloudFolderSyncSettingsView: View {
         }
     }
 
-    private var lockedPanel: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(.yellow)
-                .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 8).fill(.yellow.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "Commercial license required"))
-                    .font(.subheadline.weight(.semibold))
-                Text(String(localized: "Activate or buy a license to start writing sync files."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-
-            Button {
-                SettingsNavigationCoordinator.shared.navigateToLicense(target: .activationKey)
-            } label: {
-                Label(String(localized: "Open License"), systemImage: "key")
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.yellow.opacity(0.08)))
-    }
 
     private func statusRow(title: String, value: String, systemImage: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {

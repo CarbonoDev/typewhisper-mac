@@ -32,6 +32,11 @@ enum SettingsGrouping {
     /// therefore have no sidebar row of their own.
     static let aliasTabs: Set<SettingsTab> = [.profiles, .prompts]
 
+    /// Deep-link-only tabs that resolve to themselves but have no sidebar row. TypeWhisper is free
+    /// and open source (GPLv3), so the License page is retained as an informational "Free & Open
+    /// Source" panel reachable via `navigateToLicense`, but is no longer pinned in the sidebar.
+    static let deepLinkOnlyTabs: Set<SettingsTab> = [.license]
+
     /// Canonical (group, tabs) layout in display order. Availability filtering (e.g. the
     /// conditional Recovery row) is applied when destinations are materialized.
     static let orderedGroups: [(group: SettingsGroup, tabs: [SettingsTab])] = [
@@ -39,7 +44,7 @@ enum SettingsGrouping {
         (.meetings, [.meetings, .diarization]),
         (.library, [.workflows]),
         (.tools, [.recorder, .fileTranscription, .history]),
-        (.application, [.integrations, .premium, .license, .advanced, .about])
+        (.application, [.integrations, .premium, .advanced, .about])
     ]
 
     /// Every non-alias tab, in group order. Used to assert each tab is placed exactly once.
@@ -102,7 +107,7 @@ struct SettingsView: View {
             ),
             SettingsDestination(
                 tab: .premium,
-                title: localizedAppText("Premium", de: "Premium"),
+                title: localizedAppText("Correction & Sync", de: "Korrektur & Sync"),
                 systemImage: "sparkles",
                 badge: nil
             ),
@@ -115,7 +120,6 @@ struct SettingsView: View {
             SettingsDestination(tab: .meetings, title: String(localized: "settings.tab.meetings"), systemImage: "calendar.badge.clock", badge: nil),
             SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
     }

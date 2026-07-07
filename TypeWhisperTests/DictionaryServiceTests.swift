@@ -636,7 +636,9 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testCommercialIndustryPacksAreHiddenWithoutCommercialLicense() throws {
+    func testCommercialIndustryPacksAreAvailableToEveryone() throws {
+        // TypeWhisper is free and open source: formerly commercial-only industry
+        // term packs are now available to all users.
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -654,12 +656,9 @@ final class DictionaryServiceTests: XCTestCase {
             termPackRegistryService: registry
         )
 
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "real-estate" })
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "architecture" })
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "legal" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "real-estate" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "architecture" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "legal" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "real-estate" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "architecture" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "legal" })
     }
 
     @MainActor
@@ -669,9 +668,9 @@ final class DictionaryServiceTests: XCTestCase {
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
         let defaults = UserDefaults(suiteName: #function)!
+        // TypeWhisper is free and open source; all features (including commercial
+        // industry term packs) are unlocked for everyone.
         let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .team
         let registry = TermPackRegistryService()
         let realEstatePack = makeCommercialIndustryPack(id: "real-estate", terms: ["Exposé", "Grundbuch"])
         registry.communityPacks = [realEstatePack]
@@ -689,7 +688,9 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testIndustryPresetStoresSelectionWithoutActivatingPackWhenUnlicensed() throws {
+    func testIndustryPresetActivatesPackForEveryone() throws {
+        // Formerly this preset only stored a selection for unlicensed users; now the
+        // matching pack activates for everyone.
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -706,8 +707,8 @@ final class DictionaryServiceTests: XCTestCase {
         viewModel.applyIndustryPreset(.architecture)
 
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedIndustryPreset), IndustryPreset.architecture.rawValue)
-        XCTAssertFalse(viewModel.activatedPackStates.keys.contains("architecture"))
-        XCTAssertFalse(service.entries.contains { $0.original == "HOAI" })
+        XCTAssertTrue(viewModel.activatedPackStates.keys.contains("architecture"))
+        XCTAssertTrue(service.entries.contains { $0.original == "HOAI" })
     }
 
     private func makeCommercialIndustryPack(id: String, terms: [String]) -> TermPack {

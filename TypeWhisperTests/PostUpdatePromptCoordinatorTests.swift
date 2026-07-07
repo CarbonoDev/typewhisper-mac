@@ -3,7 +3,10 @@ import XCTest
 
 @MainActor
 final class PostUpdatePromptCoordinatorTests: XCTestCase {
-    func testMissingVersionMarkerAndPendingWelcomeSeedsCurrentReleaseWithoutPrompting() throws {
+    // TypeWhisper is free and open source: the post-update licensing prompt has been
+    // removed, so the coordinator must never ask to present it.
+
+    func testPromptIsNeverPresentedOnFreshInstall() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
@@ -15,104 +18,16 @@ final class PostUpdatePromptCoordinatorTests: XCTestCase {
         )
 
         XCTAssertFalse(coordinator.shouldPresentPrompt)
+        // The release marker is still seeded so update detection keeps working.
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.lastSeenReleaseFingerprint), "1.3.0+123@stable")
-        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease), "1.3.0+123@stable")
     }
 
-    func testMissingVersionMarkerAndCompletedWelcomePromptsImmediately() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-
-        let license = LicenseService(defaults: defaults)
-        let coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: "1.3.0+123@stable"
-        )
-
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.lastSeenReleaseFingerprint), "1.3.0+123@stable")
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease))
-    }
-
-    func testActiveCommercialLicenseSuppressesPrompt() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-
-        let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .individual
-
-        let coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: "1.3.0+123@stable"
-        )
-
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-    }
-
-    func testActiveSupporterSuppressesPrompt() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-
-        let license = LicenseService(defaults: defaults)
-        license.supporterStatus = .active
-        license.supporterTier = .gold
-
-        let coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: "1.3.0+123@stable"
-        )
-
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-    }
-
-    func testPersonalUseRequiresAcknowledgementForCurrentRelease() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-
-        let license = LicenseService(defaults: defaults)
-        let currentRelease = "1.3.0+123@stable"
-
-        var coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-
-        coordinator.handlePersonalOSSSelection()
-
-        XCTAssertEqual(license.usageIntent, .personalOSS)
-        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease), currentRelease)
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-
-        coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-    }
-
-    func testBusinessIntentPromptsEveryLaunchUntilLicensed() throws {
+    func testPromptIsNeverPresentedRegardlessOfUsageIntent() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
         defaults.set(UsageIntent.team.rawValue, forKey: UserDefaultsKeys.usageIntent)
-        defaults.set(LicenseUserType.business.rawValue, forKey: UserDefaultsKeys.userType)
-        defaults.set("1.3.0+123@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-        defaults.set("1.3.0+123@stable", forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease)
+        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
 
         let license = LicenseService(defaults: defaults)
         let coordinator = PostUpdatePromptCoordinator(
@@ -121,70 +36,8 @@ final class PostUpdatePromptCoordinatorTests: XCTestCase {
             currentReleaseFingerprint: "1.3.0+123@stable"
         )
 
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-    }
-
-    func testWorkSelectionSetsWorkSoloWithoutAcknowledgingCurrentRelease() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-
-        let license = LicenseService(defaults: defaults)
-        let currentRelease = "1.3.0+123@stable"
-        var coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-
-        coordinator.handleWorkUsageSelection()
-
-        XCTAssertEqual(license.usageIntent, .workSolo)
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease))
         XCTAssertFalse(coordinator.shouldPresentPrompt)
-
-        coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-    }
-
-    func testExistingKeyAndSupporterActionsDismissOnlyForCurrentSession() throws {
-        let (defaults, suiteName) = try makeIsolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
-        defaults.set(UsageIntent.workSolo.rawValue, forKey: UserDefaultsKeys.usageIntent)
-        defaults.set(LicenseUserType.business.rawValue, forKey: UserDefaultsKeys.userType)
-        defaults.set("1.3.0+123@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
-
-        let license = LicenseService(defaults: defaults)
-        let currentRelease = "1.3.0+123@stable"
-
-        var coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-
-        coordinator.handleExistingKeySelection()
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease))
-
-        coordinator = PostUpdatePromptCoordinator(
-            defaults: defaults,
-            licenseService: license,
-            currentReleaseFingerprint: currentRelease
-        )
-        XCTAssertTrue(coordinator.shouldPresentPrompt)
-
-        coordinator.handleSupporterSelection()
-        XCTAssertFalse(coordinator.shouldPresentPrompt)
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease))
+        XCTAssertNil(coordinator.activeSheetRoute)
     }
 
     func testSettingsNavigationCoordinatorPublishesLicenseTargets() throws {

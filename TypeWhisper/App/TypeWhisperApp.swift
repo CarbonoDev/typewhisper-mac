@@ -726,13 +726,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
-
-        openSettingsWindow()
-
-        Task { @MainActor in
-            await SupporterDiscordService.shared?.handleCallbackURL(url)
-        }
+        // TypeWhisper is free and open source; there are no supporter/Discord
+        // callback URLs to handle.
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {

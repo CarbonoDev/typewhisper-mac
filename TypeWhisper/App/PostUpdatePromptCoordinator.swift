@@ -31,17 +31,8 @@ final class PostUpdatePromptCoordinator {
         bootstrapCurrentReleaseIfNeeded()
     }
 
-    var shouldPresentPrompt: Bool {
-        guard !currentSessionDismissed else { return false }
-        guard !licenseService.needsWelcomeSheet else { return false }
-        guard !hasActiveEntitlement else { return false }
-
-        if licenseService.requiresCommercialLicense {
-            return true
-        }
-
-        return acknowledgedReleaseFingerprint != currentReleaseFingerprint
-    }
+    // TypeWhisper is free and open source; there is no licensing prompt to present.
+    var shouldPresentPrompt: Bool { false }
 
     var shouldAutoOpenSettingsOnLaunch: Bool {
         shouldPresentPrompt
@@ -82,10 +73,6 @@ final class PostUpdatePromptCoordinator {
 
         acknowledgeCurrentRelease()
         dismissForCurrentSession()
-    }
-
-    private var hasActiveEntitlement: Bool {
-        licenseService.licenseStatus == .active || licenseService.supporterStatus == .active
     }
 
     private var lastSeenReleaseFingerprint: String? {

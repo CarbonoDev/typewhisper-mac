@@ -17,14 +17,17 @@ final class SettingsGroupingTests: XCTestCase {
         // No tab appears in two groups.
         XCTAssertEqual(grouped.count, Set(grouped).count, "A tab is listed in more than one group")
 
-        // Grouped rows and alias tabs are disjoint (aliases never get their own row).
+        // Grouped rows, alias tabs, and deep-link-only tabs are mutually disjoint (neither aliases
+        // nor deep-link-only tabs ever get their own sidebar row).
         XCTAssertTrue(Set(grouped).isDisjoint(with: SettingsGrouping.aliasTabs))
+        XCTAssertTrue(Set(grouped).isDisjoint(with: SettingsGrouping.deepLinkOnlyTabs))
+        XCTAssertTrue(SettingsGrouping.aliasTabs.isDisjoint(with: SettingsGrouping.deepLinkOnlyTabs))
 
-        // Nothing is dropped: grouped rows ∪ aliases == every SettingsTab case.
+        // Nothing is dropped: grouped rows ∪ aliases ∪ deep-link-only == every SettingsTab case.
         XCTAssertEqual(
-            Set(grouped).union(SettingsGrouping.aliasTabs),
+            Set(grouped).union(SettingsGrouping.aliasTabs).union(SettingsGrouping.deepLinkOnlyTabs),
             Set(SettingsTab.allCases),
-            "Some SettingsTab case is neither grouped nor an alias"
+            "Some SettingsTab case is neither grouped, an alias, nor deep-link-only"
         )
     }
 
@@ -63,9 +66,12 @@ final class SettingsGroupingTests: XCTestCase {
 
         XCTAssertEqual(group(of: .integrations), .application)
         XCTAssertEqual(group(of: .premium), .application)
-        XCTAssertEqual(group(of: .license), .application)
         XCTAssertEqual(group(of: .advanced), .application)
         XCTAssertEqual(group(of: .about), .application)
+
+        // License is no longer a grouped sidebar row (free & open source): it is deep-link-only.
+        XCTAssertNil(group(of: .license))
+        XCTAssertTrue(SettingsGrouping.deepLinkOnlyTabs.contains(.license))
     }
 
     func testEveryGroupTitleIsNonEmpty() {
@@ -92,16 +98,24 @@ final class SettingsDeepLinkTests: XCTestCase {
     }
 
     func testDeepLinkDestinationsAreVisibleRows() {
-        // navigateToLicense (post-update / all three license targets), navigateToHistory,
-        // navigateToIntegrations, showFilePickerFromMenu, and the profiles/prompts/workflows
-        // collapse all resolve to one of these tabs — each must be a grouped sidebar row.
-        let destinations: [SettingsTab] = [.license, .history, .integrations, .fileTranscription, .workflows]
+        // navigateToHistory, navigateToIntegrations, showFilePickerFromMenu, and the
+        // profiles/prompts/workflows collapse all resolve to one of these tabs — each must be a
+        // grouped sidebar row.
+        let destinations: [SettingsTab] = [.history, .integrations, .fileTranscription, .workflows]
         for tab in destinations {
             XCTAssertTrue(
                 SettingsGrouping.allGroupedTabs.contains(tab),
                 "Deep-link destination \(tab) is not a visible grouped row"
             )
         }
+    }
+
+    func testLicenseDeepLinkResolvesToItselfWithoutASidebarRow() {
+        // navigateToLicense (all three targets) still lands on the informational License panel, but
+        // the tab is deep-link-only now — it has no grouped sidebar row.
+        XCTAssertEqual(SettingsView.resolvedTab(for: .license), .license)
+        XCTAssertFalse(SettingsGrouping.allGroupedTabs.contains(.license))
+        XCTAssertTrue(SettingsGrouping.deepLinkOnlyTabs.contains(.license))
     }
 }
 

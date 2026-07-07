@@ -44,7 +44,6 @@ final class ServiceContainer: ObservableObject {
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
-    let supporterDiscordService: SupporterDiscordService
     // [Track A] Meeting-event capability bus (addendum AD4).
     let meetingEventBus: MeetingEventBus
     let meetingService: MeetingService
@@ -142,7 +141,6 @@ final class ServiceContainer: ObservableObject {
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
-        supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
             licenseService: licenseService,
             syncStore: userDataSyncStore
@@ -355,7 +353,6 @@ final class ServiceContainer: ObservableObject {
 
         // License
         LicenseService.shared = licenseService
-        SupporterDiscordService.shared = supporterDiscordService
 
         // Plugin system
         EventBus.shared = EventBus()
@@ -417,11 +414,6 @@ final class ServiceContainer: ObservableObject {
 
         // Start memory service
         memoryService.startListening()
-
-        // Validate license if needed
-        await licenseService.validateIfNeeded()
-        await licenseService.validateSupporterIfNeeded()
-        await supporterDiscordService.refreshStatusIfNeeded()
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

@@ -177,15 +177,6 @@ class DictionaryViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        licenseService?.$licenseStatus
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.reconcileCommercialPackAccess()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
         if let registryService = termPackRegistryService ?? TermPackRegistryService.shared {
             registryService.$communityPacks
                 .dropFirst()

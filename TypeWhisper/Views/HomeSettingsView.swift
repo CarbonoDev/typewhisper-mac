@@ -5,8 +5,6 @@ import Charts
 struct HomeSettingsView: View {
     @ObservedObject private var viewModel = HomeViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var license = LicenseService.shared
-    @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
 
     var body: some View {
         dashboardView
@@ -35,10 +33,6 @@ struct HomeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed {
-                        workUsageCard
-                    }
-
                     // Row 1: Stats grid or Getting Started
                     if viewModel.hasAnyTranscriptions {
                         statsGrid
@@ -78,57 +72,6 @@ struct HomeSettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .frame(minWidth: 500, minHeight: 400)
-    }
-
-    private var workUsageCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
-                        .font(.headline)
-                    Text(localizedAppText(
-                        "Pricing, lifetime options, procurement, and support are clearer on the website.",
-                        de: "Preise, Lifetime-Optionen, Beschaffung und Support sind auf der Website klarer erklärt."
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button {
-                    workUsagePromptDismissed = true
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    NSWorkspace.shared.open(AppConstants.Website.pricingURL)
-                } label: {
-                    Label(localizedAppText("See licensing on the website", de: "Lizenzierung auf der Website ansehen"), systemImage: "globe")
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(localizedAppText("Not now", de: "Später")) {
-                    workUsagePromptDismissed = true
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
-        )
     }
 
     // MARK: - Time Period Picker

@@ -44,8 +44,6 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <p align="center">
   <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Integration Marketplace"></a>
-  <a href=".github/screenshots/premium.png"><img src=".github/screenshots/premium.png" width="270" alt="Premium"></a>
-  <a href=".github/screenshots/license.png"><img src=".github/screenshots/license.png" width="270" alt="License"></a>
 </p>
 
 <p align="center">
@@ -107,7 +105,6 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 - **Local model download controls** - Bundled Qwen3, Granite, Voxtral, and Supertonic plugins support an optional HuggingFace token for higher rate limits and clearer download errors. Supertonic requires explicit OpenRAIL-M model-license acceptance before model assets download.
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
-- **Discord claim service** - Optional external service for Polar supporter and GitHub Sponsors Discord role claims
 
 ### General
 
