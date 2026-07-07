@@ -30,6 +30,26 @@ final class MeetingContextRuleServiceTests: XCTestCase {
         XCTAssertNil(service.match(MeetingContext(title: "Sync", calendarName: "Team Acme")))
     }
 
+    func testWildcardWithRepeatedAnchorSegments() throws {
+        // Regression: the previous matcher searched for the FIRST occurrence of each
+        // segment, so an end-anchored (or middle) segment that repeats in the value was
+        // rejected even though the glob matches.
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("a*b", "aXbYb"))
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("*team", "sales team meets team"))
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("*x", "x y x"))
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("a*b*c", "aXbYbZc"))
+
+        // Still correctly rejects non-matches.
+        XCTAssertFalse(MeetingRuleTrigger.patternMatches("a*b", "aXbYc"))
+        XCTAssertFalse(MeetingRuleTrigger.patternMatches("*x", "x y z"))
+        XCTAssertFalse(MeetingRuleTrigger.patternMatches("a*b*b", "ab"))
+
+        // Prefix/suffix anchoring and case-insensitivity preserved.
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("Acme*", "Acme Team"))
+        XCTAssertFalse(MeetingRuleTrigger.patternMatches("Acme*", "Team Acme"))
+        XCTAssertTrue(MeetingRuleTrigger.patternMatches("acme*b", "AcmeXB"))
+    }
+
     func testAttendeeDomainDerivedFromEmails() throws {
         let (service, dir) = try makeService()
         defer { TestSupport.remove(dir) }

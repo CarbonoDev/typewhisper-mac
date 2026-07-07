@@ -282,16 +282,29 @@ extension MeetingRuleTrigger {
         guard p.contains("*") else { return v.contains(p) }
 
         // Convert the glob into anchored segments split on `*`.
+        // A leading/trailing `*` yields an empty first/last segment, which relaxes the
+        // corresponding anchor. Empty middle segments (from consecutive `*`) are no-ops.
         let segments = p.components(separatedBy: "*")
-        var searchRange = v.startIndex..<v.endIndex
+        let lastIndex = segments.count - 1
+        // `cursor` marks the earliest position the next segment may start at.
+        var cursor = v.startIndex
         for (index, segment) in segments.enumerated() where !segment.isEmpty {
-            guard let found = v.range(of: segment, range: searchRange) else { return false }
-            // First segment (no leading `*`) must anchor at the start.
-            if index == 0, !p.hasPrefix("*"), found.lowerBound != v.startIndex { return false }
-            searchRange = found.upperBound..<v.endIndex
-            // Last segment (no trailing `*`) must anchor at the end.
-            if index == segments.count - 1, !p.hasSuffix("*"), found.upperBound != v.endIndex {
-                return false
+            if index == 0 {
+                // First segment (no leading `*`) must anchor at the start.
+                guard v.hasPrefix(segment) else { return false }
+                cursor = v.index(cursor, offsetBy: segment.count)
+            } else if index == lastIndex {
+                // Last segment (no trailing `*`) must anchor at the end. Anchoring on the
+                // suffix (rather than the first occurrence) avoids false negatives when the
+                // segment also appears earlier in the value (e.g. `a*b` vs `aXbYb`).
+                guard v.hasSuffix(segment) else { return false }
+                let suffixStart = v.index(v.endIndex, offsetBy: -segment.count)
+                guard suffixStart >= cursor else { return false }
+                cursor = v.endIndex
+            } else {
+                // Middle segment: match the earliest occurrence at or after the cursor.
+                guard let found = v.range(of: segment, range: cursor..<v.endIndex) else { return false }
+                cursor = found.upperBound
             }
         }
         return true
