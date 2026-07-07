@@ -178,4 +178,14 @@ enum UserDefaultsKeys {
     static let meetingsFinalPassEngineId = "meetings.finalPass.engineId"
     /// Override cloud model id when the global mode is "engine".
     static let meetingsFinalPassModel = "meetings.finalPass.model"
+
+    // [Track D] Automatic pre-meeting briefs (plan AD9).
+    /// Whether pre-meeting briefs are generated automatically (default ON).
+    static let meetingsAutoBriefEnabled = "meetings.brief.auto.enabled"
+    /// How many minutes before a meeting's start the brief is generated (default 20, range 5–60).
+    static let meetingsAutoBriefLeadMinutes = "meetings.brief.auto.leadMinutes"
+    /// How recent an existing brief must be to skip regeneration (default 6 hours).
+    static let meetingsAutoBriefFreshnessHours = "meetings.brief.auto.freshnessHours"
+    /// Minimum attendee count for an event to auto-generate a brief (default 1).
+    static let meetingsAutoBriefMinAttendees = "meetings.brief.auto.minAttendees"
 }

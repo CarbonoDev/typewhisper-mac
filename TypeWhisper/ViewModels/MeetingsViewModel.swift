@@ -60,6 +60,9 @@ final class MeetingsViewModel: ObservableObject {
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
 
+    // [Track D] Automatic pre-meeting briefs (plan AD9). Mirrors the scheduler's coarse status.
+    @Published private(set) var briefSchedulerStatus: MeetingBriefSchedulerStatus = .idle
+
     // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
     // per-meeting final re-transcription override through it.
     let meetingService: MeetingService
@@ -81,6 +84,8 @@ final class MeetingsViewModel: ObservableObject {
     // [Track C] Capture-context rules service (addendum AD7). Rule CRUD, context building, and
     // resolution preview live in `MeetingsViewModel+Rules.swift`.
     let contextRuleService: MeetingContextRuleService
+    // [Track D] Auto pre-meeting briefs (plan AD9). Internal so `MeetingsViewModel+AutoBrief` reaches it.
+    let briefScheduler: MeetingBriefScheduler
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -97,7 +102,8 @@ final class MeetingsViewModel: ObservableObject {
         importService: MeetingImportService,
         diarizationEnricher: MeetingDiarizationEnricher,
         // [Track C]
-        contextRuleService: MeetingContextRuleService
+        contextRuleService: MeetingContextRuleService,
+        briefScheduler: MeetingBriefScheduler // [Track D]
     ) {
         self.contextRuleService = contextRuleService
         self.meetingService = meetingService
@@ -111,6 +117,7 @@ final class MeetingsViewModel: ObservableObject {
         self.exporter = exporter
         self.importService = importService
         self.diarizationEnricher = diarizationEnricher
+        self.briefScheduler = briefScheduler // [Track D]
         self.meetings = meetingService.meetings
         self.templates = promptActionService.meetingActions
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
@@ -155,6 +162,8 @@ final class MeetingsViewModel: ObservableObject {
                 self.upcomingEvents = events
                 // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
                 self.startNotificationService.notifyStartingMeetings(events)
+                // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
+                self.briefScheduler.tick(events: events, now: Date())
             }
             .store(in: &cancellables)
         calendarService.$errorMessage
@@ -216,6 +225,11 @@ final class MeetingsViewModel: ObservableObject {
         diarizationEnricher.$isEnriching
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isEnriching = value }
+            .store(in: &cancellables)
+        // [Track D] Mirror the auto-brief scheduler status for optional UI surfacing (AD9).
+        briefScheduler.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.briefSchedulerStatus = value }
             .store(in: &cancellables)
     }
 
@@ -624,8 +638,33 @@ final class MeetingsViewModel: ObservableObject {
     /// Derived from the service's synchronously-updated `meetings` (not the Combine-mirrored
     /// `self.meetings`) so `loadUpcoming()` called right after `createMeeting` sees the newly
     /// created event and excludes it immediately.
+    ///
+    /// [Track D] Auto-brief placeholder meetings (pre-created by the scheduler without any user
+    /// action, still `.scheduled`) are deliberately NOT excluded: excluding them would drop the
+    /// event from the Upcoming section ~lead-minutes before it starts, taking the "Brief ready"
+    /// affordance and the start-notification prompt with it (AD9/finding 1). Once the user engages
+    /// such a meeting (capture starts → state leaves `.scheduled`), it is excluded like any other.
     private var existingCalendarEventIDs: Set<String> {
-        Set(meetingService.meetings.compactMap { $0.calendarEventID })
+        Self.engagedCalendarEventIDs(
+            meetings: meetingService.meetings,
+            autoBriefPlaceholders: briefScheduler.placeholderEventIDs
+        )
+    }
+
+    /// The calendar-event ids to exclude from the Upcoming list: every stored meeting's
+    /// `calendarEventID` except auto-brief placeholders still in `.scheduled` state (finding 1).
+    /// Static + pure so the exclusion rule is unit-testable without constructing the full view model.
+    static func engagedCalendarEventIDs(
+        meetings: [Meeting],
+        autoBriefPlaceholders placeholders: Set<String>
+    ) -> Set<String> {
+        Set(
+            meetings.compactMap { meeting -> String? in
+                guard let id = meeting.calendarEventID else { return nil }
+                if meeting.state == .scheduled, placeholders.contains(id) { return nil }
+                return id
+            }
+        )
     }
 
     #if DEBUG
