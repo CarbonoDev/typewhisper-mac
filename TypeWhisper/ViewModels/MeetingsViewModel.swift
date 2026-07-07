@@ -55,6 +55,9 @@ final class MeetingsViewModel: ObservableObject {
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
 
+    // [Track D] Automatic pre-meeting briefs (plan AD9). Mirrors the scheduler's coarse status.
+    @Published private(set) var briefSchedulerStatus: MeetingBriefSchedulerStatus = .idle
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
@@ -65,6 +68,8 @@ final class MeetingsViewModel: ObservableObject {
     private let exporter: MeetingObsidianExporter
     private let importService: MeetingImportService
     private let diarizationEnricher: MeetingDiarizationEnricher
+    // [Track D] Auto pre-meeting briefs (plan AD9). Internal so `MeetingsViewModel+AutoBrief` reaches it.
+    let briefScheduler: MeetingBriefScheduler
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -78,7 +83,8 @@ final class MeetingsViewModel: ObservableObject {
         briefService: MeetingBriefService,
         exporter: MeetingObsidianExporter,
         importService: MeetingImportService,
-        diarizationEnricher: MeetingDiarizationEnricher
+        diarizationEnricher: MeetingDiarizationEnricher,
+        briefScheduler: MeetingBriefScheduler // [Track D]
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
@@ -90,6 +96,7 @@ final class MeetingsViewModel: ObservableObject {
         self.exporter = exporter
         self.importService = importService
         self.diarizationEnricher = diarizationEnricher
+        self.briefScheduler = briefScheduler // [Track D]
         self.meetings = meetingService.meetings
         self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
@@ -134,6 +141,8 @@ final class MeetingsViewModel: ObservableObject {
                 self.upcomingEvents = events
                 // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
                 self.startNotificationService.notifyStartingMeetings(events)
+                // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
+                self.briefScheduler.tick(events: events, now: Date())
             }
             .store(in: &cancellables)
         calendarService.$errorMessage
@@ -187,6 +196,11 @@ final class MeetingsViewModel: ObservableObject {
         diarizationEnricher.$isEnriching
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isEnriching = value }
+            .store(in: &cancellables)
+        // [Track D] Mirror the auto-brief scheduler status for optional UI surfacing (AD9).
+        briefScheduler.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.briefSchedulerStatus = value }
             .store(in: &cancellables)
     }
 

@@ -24240,6 +24240,166 @@
           }
         }
       }
+    },
+    "meetings.brief.auto.briefReadyBadge": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief ready"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing bereit"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.enabledToggle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate briefs automatically"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefings automatisch erstellen"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.explanation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before a scheduled meeting with attendees, TypeWhisper prepares a brief from related past meetings and your knowledge base."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vor einer geplanten Besprechung mit Teilnehmern erstellt TypeWhisper ein Briefing aus verwandten früheren Besprechungen und Ihrer Wissensdatenbank."
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.freshnessHoursLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reuse a brief for %d hours"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing %d Stunden wiederverwenden"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.leadMinutesLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare %d minutes before start"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Minuten vor Beginn vorbereiten"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.minAttendeesLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimum attendees: %d"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestteilnehmer: %d"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.notification.briefReady": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pre-meeting brief is ready."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Besprechungsbriefing ist bereit."
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic pre-meeting briefs"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatische Besprechungsbriefings"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.status.generating": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing a brief for %@…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing für %@ wird vorbereitet…"
+          }
+        }
+      }
+    },
+    "meetings.brief.auto.status.skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic brief skipped."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisches Briefing übersprungen."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

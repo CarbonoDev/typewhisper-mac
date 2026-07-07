@@ -17,6 +17,11 @@ final class MeetingStartNotificationService: ObservableObject {
     private var notifiedEventIDs = Set<String>()
     private var didRequestAuthorization = false
 
+    /// [Track D] Optional lookup (calendarEventID → has a fresh auto-brief). When set and it returns
+    /// true, the notification body gains a "brief ready" line (plan AD9). Injected by
+    /// `ServiceContainer` after the brief scheduler is constructed; nil in tests keeps behavior v1.
+    var freshBriefLookup: ((_ calendarEventID: String, _ now: Date) -> Bool)?
+
     init(center: UNUserNotificationCenter? = MeetingStartNotificationService.defaultCenter()) {
         self.center = center
     }
@@ -73,10 +78,15 @@ final class MeetingStartNotificationService: ObservableObject {
     private func deliverNotification(for event: CalendarEventDTO, via center: UNUserNotificationCenter) {
         let content = UNMutableNotificationContent()
         content.title = String(localized: "meetings.notification.starting.title")
-        content.body = String(
+        var body = String(
             format: String(localized: "meetings.notification.starting.body"),
             event.title
         )
+        // [Track D] Mention a ready pre-meeting brief so the user knows to open it (plan AD9).
+        if freshBriefLookup?(event.id, Date()) == true {
+            body += "\n" + String(localized: "meetings.brief.auto.notification.briefReady")
+        }
+        content.body = body
         content.sound = .default
 
         let request = UNNotificationRequest(

@@ -76,6 +76,15 @@ struct UpcomingMeetingsSection: View {
                 Text(event.startDate, format: .dateTime.weekday().hour().minute())
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // [Track D] Surface a ready auto-generated pre-meeting brief (plan AD9).
+                if viewModel.hasFreshBrief(for: event) {
+                    Label(
+                        String(localized: "meetings.brief.auto.briefReadyBadge"),
+                        systemImage: "doc.text.magnifyingglass"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+                }
             }
             Spacer()
             Button(String(localized: "meetings.calendar.createMeeting")) {

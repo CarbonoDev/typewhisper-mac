@@ -17,6 +17,11 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                // [Track D] Automatic pre-meeting brief settings (plan AD9).
+                AutoBriefSettingsView()
+
+                Divider()
+
                 if viewModel.hasMeetings {
                     meetingsList
                 } else {

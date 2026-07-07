@@ -55,6 +55,7 @@ final class ServiceContainer: ObservableObject {
     let meetingObsidianExporter: MeetingObsidianExporter
     let meetingImportService: MeetingImportService
     let meetingDiarizationEnricher: MeetingDiarizationEnricher
+    let meetingBriefScheduler: MeetingBriefScheduler // [Track D]
 
     // HTTP API
     let httpServer: HTTPServer
@@ -183,6 +184,19 @@ final class ServiceContainer: ObservableObject {
         // SPEAKER_xx → attendee-name map. Depends only on `meetingService`.
         meetingDiarizationEnricher = MeetingDiarizationEnricher(meetingService: meetingService)
 
+        // [Track D] Automatic pre-meeting briefs (plan AD9). Hooked into the calendar poll via the
+        // meetings view model; pre-creates backing meetings and generates briefs for events entering
+        // the lead window, deduped/freshness-gated and concurrency-capped, failing silently.
+        meetingBriefScheduler = MeetingBriefScheduler(
+            store: meetingService,
+            briefService: meetingBriefService
+        )
+        // Let the start-notification body mention a ready brief (plan AD9) without depending on the
+        // scheduler at construction time (it is created after the notification service).
+        meetingStartNotificationService.freshBriefLookup = { [weak meetingBriefScheduler] eventID, now in
+            meetingBriefScheduler?.hasFreshBrief(forCalendarEventID: eventID, now: now) ?? false
+        }
+
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
@@ -291,7 +305,8 @@ final class ServiceContainer: ObservableObject {
             briefService: meetingBriefService,
             exporter: meetingObsidianExporter,
             importService: meetingImportService,
-            diarizationEnricher: meetingDiarizationEnricher
+            diarizationEnricher: meetingDiarizationEnricher,
+            briefScheduler: meetingBriefScheduler // [Track D]
         )
 
         // Set shared references
