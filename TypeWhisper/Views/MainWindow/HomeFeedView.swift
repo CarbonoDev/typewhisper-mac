@@ -1,14 +1,37 @@
 import SwiftUI
 
-/// Step 0 stub for the meetings Home feed (UI Step 0, D3/D6). Track C replaces this file wholesale
-/// with the real serif "Coming up" card, live banner, and day-grouped timeline. Kept minimal here so
-/// the shell compiles and the `.home` route is whole from the first merge.
+/// The meetings Home feed (plan Track C / D6): a live-recording banner while capturing, a serif
+/// "Coming up" calendar card (M11 colors/labels), and a day-grouped meeting timeline with state
+/// badges (absorbing M10's Earlier/running-long data through the Home seams). No usage stats — the
+/// old dictation dashboard lives in Settings › Dictation › Overview. No "Ask across your meetings…"
+/// bar (omitted until Phase 3 per adjudication).
 struct HomeFeedView: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+
     var body: some View {
-        ContentUnavailableView {
-            Label(String(localized: "mainwindow.home.stub.title"), systemImage: "house")
-        } description: {
-            Text(String(localized: "mainwindow.home.stub.message"))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(String(localized: "home.title"))
+                    .font(.largeTitle)
+                    .fontDesign(.serif)
+                    .fontWeight(.bold)
+
+                HomeLiveBanner()
+
+                if let error = viewModel.calendarErrorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                ComingUpCard()
+
+                MeetingTimeline()
+            }
+            .padding(24)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .navigationTitle(String(localized: "mainwindow.sidebar.home"))
     }
 }
