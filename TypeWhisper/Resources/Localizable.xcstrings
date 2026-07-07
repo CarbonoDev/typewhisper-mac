@@ -21978,6 +21978,54 @@
           }
         }
       }
+    },
+    "settings.tab.meetings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechungen"
+          }
+        }
+      }
+    },
+    "meetings.emptyState.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meetings yet"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Besprechungen"
+          }
+        }
+      }
+    },
+    "meetings.emptyState.message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings you capture will appear here."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgezeichnete Besprechungen werden hier angezeigt."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

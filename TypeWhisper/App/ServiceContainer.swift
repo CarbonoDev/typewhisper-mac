@@ -45,6 +45,7 @@ final class ServiceContainer: ObservableObject {
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
     let supporterDiscordService: SupporterDiscordService
+    let meetingService: MeetingService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -63,6 +64,7 @@ final class ServiceContainer: ObservableObject {
     let promptActionsViewModel: PromptActionsViewModel
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
+    let meetingsViewModel: MeetingsViewModel
 
     private init() {
         // Services
@@ -130,6 +132,7 @@ final class ServiceContainer: ObservableObject {
             licenseService: licenseService,
             syncStore: userDataSyncStore
         )
+        meetingService = MeetingService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -229,6 +232,7 @@ final class ServiceContainer: ObservableObject {
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
         )
+        meetingsViewModel = MeetingsViewModel(meetingService: meetingService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -244,6 +248,7 @@ final class ServiceContainer: ObservableObject {
         PromptActionsViewModel._shared = promptActionsViewModel
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
+        MeetingsViewModel._shared = meetingsViewModel
 
         // License
         LicenseService.shared = licenseService

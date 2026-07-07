@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, diarization, advanced, license, about
+    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, meetings, diarization, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -70,6 +70,7 @@ struct SettingsView: View {
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
+            SettingsDestination(tab: .meetings, title: String(localized: "settings.tab.meetings"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
@@ -170,6 +171,8 @@ struct SettingsView: View {
             PremiumSettingsView()
         case .integrations:
             PluginSettingsView()
+        case .meetings:
+            MeetingsSettingsView()
         case .diarization:
             DiarizationSettingsView()
         case .advanced:
@@ -274,6 +277,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .premium)
     ]
 
+    workspaceDestinations.append(settingsDestination(destinations, .meetings))
     workspaceDestinations.append(settingsDestination(destinations, .integrations))
 
     return [
