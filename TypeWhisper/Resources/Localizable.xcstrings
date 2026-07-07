@@ -27002,6 +27002,118 @@
           }
         }
       }
+    },
+    "llm.error.notAvailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected LLM provider is not available on this device."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgewählte LLM-Anbieter ist auf diesem Gerät nicht verfügbar."
+          }
+        }
+      }
+    },
+    "llm.error.generic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM error: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM-Fehler: %@"
+          }
+        }
+      }
+    },
+    "llm.error.inputTooLong": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text is too long for the selected LLM provider."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Text ist für den ausgewählten LLM-Anbieter zu lang."
+          }
+        }
+      }
+    },
+    "llm.error.noProviderConfigured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No LLM provider is configured. Choose a default provider in Settings › Library › Prompts."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es ist kein LLM-Anbieter konfiguriert. Wähle in Einstellungen › Bibliothek › Prompts einen Standardanbieter."
+          }
+        }
+      }
+    },
+    "llm.error.noApiKey": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected LLM provider needs an API key. Add it in Settings › Integrations."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgewählte LLM-Anbieter benötigt einen API-Schlüssel. Füge ihn in Einstellungen › Integrationen hinzu."
+          }
+        }
+      }
+    },
+    "llm.error.providerNotReadyFallback": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This provider is not ready yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Anbieter ist noch nicht bereit."
+          }
+        }
+      }
+    },
+    "meetings.error.selectProvider": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an LLM provider"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM-Anbieter auswählen"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

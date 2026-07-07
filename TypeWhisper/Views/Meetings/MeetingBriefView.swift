@@ -23,9 +23,19 @@ struct MeetingBriefView: View {
             }
 
             if let error = viewModel.briefErrorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+
+                    if viewModel.briefErrorNeedsProvider {
+                        Button(String(localized: "meetings.error.selectProvider")) {
+                            viewModel.openProviderSettings()
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                    }
+                }
             }
 
             if let latest = viewModel.latestOutput(ofKind: .brief, for: meeting) {

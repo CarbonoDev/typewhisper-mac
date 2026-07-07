@@ -5,29 +5,47 @@ import XCTest
 
 /// The meetings-first settings regroup is non-destructive: all 20 `SettingsTab` cases survive and
 /// every one is placed in exactly one of the five groups (Dictation/Meetings/Library/Tools/
-/// Application), except the two deep-link alias tabs that collapse into the unified Library row.
+/// Application) or is retained as a deep-link-only tab (the License panel). Prompts and Rules are
+/// full Library rows again — they are no longer aliased onto Workflows.
 final class SettingsGroupingTests: XCTestCase {
     func testAllTwentySettingsTabsExist() {
         XCTAssertEqual(SettingsTab.allCases.count, 20)
     }
 
-    func testEveryTabIsPlacedExactlyOnceOrIsAnAlias() {
+    /// Completeness invariant (exhaustive over `SettingsTab.allCases`): every case is in *exactly
+    /// one* of `orderedGroups` or `deepLinkOnlyTabs`. This is the guard that would have caught the
+    /// regression where `.prompts`/`.profiles` were placed in neither bucket (they were hidden in a
+    /// now-removed `aliasTabs` set) and so became unreachable. Any future dropped case — grouped in
+    /// neither, or double-listed — fails here.
+    func testEveryTabIsPlacedInExactlyOneOfGroupsOrDeepLinkOnly() {
         let grouped = SettingsGrouping.allGroupedTabs
 
         // No tab appears in two groups.
         XCTAssertEqual(grouped.count, Set(grouped).count, "A tab is listed in more than one group")
 
-        // Grouped rows, alias tabs, and deep-link-only tabs are mutually disjoint (neither aliases
-        // nor deep-link-only tabs ever get their own sidebar row).
-        XCTAssertTrue(Set(grouped).isDisjoint(with: SettingsGrouping.aliasTabs))
-        XCTAssertTrue(Set(grouped).isDisjoint(with: SettingsGrouping.deepLinkOnlyTabs))
-        XCTAssertTrue(SettingsGrouping.aliasTabs.isDisjoint(with: SettingsGrouping.deepLinkOnlyTabs))
+        // Grouped rows and deep-link-only tabs are disjoint (a deep-link-only tab never has a row).
+        XCTAssertTrue(
+            Set(grouped).isDisjoint(with: SettingsGrouping.deepLinkOnlyTabs),
+            "A tab is both a grouped sidebar row and deep-link-only"
+        )
 
-        // Nothing is dropped: grouped rows ∪ aliases ∪ deep-link-only == every SettingsTab case.
+        // Exhaustive XOR over CaseIterable: each case is grouped or deep-link-only, never neither,
+        // never both.
+        for tab in SettingsTab.allCases {
+            let inGroup = grouped.contains(tab)
+            let isDeepLinkOnly = SettingsGrouping.deepLinkOnlyTabs.contains(tab)
+            XCTAssertTrue(
+                inGroup != isDeepLinkOnly,
+                "SettingsTab.\(tab) must be in exactly one of orderedGroups or deepLinkOnlyTabs "
+                    + "(grouped=\(inGroup), deepLinkOnly=\(isDeepLinkOnly))"
+            )
+        }
+
+        // Nothing is dropped and nothing is extra: grouped rows ∪ deep-link-only == every case.
         XCTAssertEqual(
-            Set(grouped).union(SettingsGrouping.aliasTabs).union(SettingsGrouping.deepLinkOnlyTabs),
+            Set(grouped).union(SettingsGrouping.deepLinkOnlyTabs),
             Set(SettingsTab.allCases),
-            "Some SettingsTab case is neither grouped, an alias, nor deep-link-only"
+            "Some SettingsTab case is neither grouped nor deep-link-only"
         )
     }
 
@@ -57,7 +75,17 @@ final class SettingsGroupingTests: XCTestCase {
         XCTAssertEqual(group(of: .meetings), .meetings)
         XCTAssertEqual(group(of: .diarization), .meetings)
 
+        // Library group carries the three prompt-authoring panes in historical adjacency:
+        // Workflows, then Prompts (the global default-LLM-provider picker lives here), then Rules.
         XCTAssertEqual(group(of: .workflows), .library)
+        XCTAssertEqual(group(of: .prompts), .library)
+        XCTAssertEqual(group(of: .profiles), .library)
+
+        // Order within Library matches the pre-regroup adjacency.
+        XCTAssertEqual(
+            SettingsGrouping.orderedGroups.first(where: { $0.group == .library })?.tabs,
+            [.workflows, .prompts, .profiles]
+        )
 
         // History → Tools; recorder + file transcription live there too.
         XCTAssertEqual(group(of: .recorder), .tools)
@@ -85,23 +113,28 @@ final class SettingsGroupingTests: XCTestCase {
 
 /// Every verified deep-link caller still lands on a real, grouped row after the regroup.
 final class SettingsDeepLinkTests: XCTestCase {
-    func testAliasTabsCollapseOntoTheUnifiedWorkflowsRow() {
-        XCTAssertEqual(SettingsView.resolvedTab(for: .profiles), .workflows)
-        XCTAssertEqual(SettingsView.resolvedTab(for: .prompts), .workflows)
-        XCTAssertEqual(SettingsView.resolvedTab(for: .workflows), .workflows)
-    }
-
-    func testNonAliasTabsResolveToThemselves() {
-        for tab in SettingsTab.allCases where !SettingsGrouping.aliasTabs.contains(tab) {
+    func testEveryTabResolvesToItself() {
+        // The regroup no longer aliases any tab onto another — Prompts and Rules each own their row
+        // and detail view, so deep links (e.g. ProfilesViewModel.editPrompt → .prompts,
+        // PromptActionsViewModel.showRules → .profiles) land on the intended pane.
+        for tab in SettingsTab.allCases {
             XCTAssertEqual(SettingsView.resolvedTab(for: tab), tab)
         }
     }
 
+    func testPromptsAndRulesAreTheirOwnGroupedRows() {
+        XCTAssertEqual(SettingsView.resolvedTab(for: .prompts), .prompts)
+        XCTAssertEqual(SettingsView.resolvedTab(for: .profiles), .profiles)
+        XCTAssertTrue(SettingsGrouping.allGroupedTabs.contains(.prompts))
+        XCTAssertTrue(SettingsGrouping.allGroupedTabs.contains(.profiles))
+    }
+
     func testDeepLinkDestinationsAreVisibleRows() {
-        // navigateToHistory, navigateToIntegrations, showFilePickerFromMenu, and the
-        // profiles/prompts/workflows collapse all resolve to one of these tabs — each must be a
-        // grouped sidebar row.
-        let destinations: [SettingsTab] = [.history, .integrations, .fileTranscription, .workflows]
+        // Verified deep-link callers: navigateToHistory (.history), navigateToIntegrations
+        // (.integrations), showFilePickerFromMenu (.fileTranscription), ProfilesViewModel.editPrompt
+        // (.prompts), PromptActionsViewModel.showRules/openRule/createRule (.profiles), and the
+        // Workflows row (.workflows) — each must be a grouped sidebar row.
+        let destinations: [SettingsTab] = [.history, .integrations, .fileTranscription, .workflows, .prompts, .profiles]
         for tab in destinations {
             XCTAssertTrue(
                 SettingsGrouping.allGroupedTabs.contains(tab),

@@ -17,6 +17,9 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var templates: [PromptAction] = []
     @Published private(set) var isGeneratingOutput = false
     @Published var outputErrorMessage: String?
+    /// Set alongside `outputErrorMessage` when the failure is specifically "no LLM provider
+    /// configured", so the document body can offer a deep link into Settings › Library › Prompts.
+    @Published var outputErrorNeedsProvider = false
 
     // Calendar (M2)
     @Published private(set) var calendarAuthorizationStatus: CalendarAuthorizationStatus = .notDetermined
@@ -49,10 +52,12 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var vaultName: String?
     @Published private(set) var isGeneratingBrief = false
     @Published var briefErrorMessage: String?
+    @Published var briefErrorNeedsProvider = false
 
     // In-meeting Q&A (M6)
     @Published private(set) var isAnswering = false
     @Published var qaErrorMessage: String?
+    @Published var qaErrorNeedsProvider = false
 
     // Obsidian export (M7)
     @Published var exportErrorMessage: String?
@@ -261,11 +266,27 @@ final class MeetingsViewModel: ObservableObject {
     /// Called from the window when the selected meeting changes.
     func clearTransientMessages() {
         outputErrorMessage = nil
+        outputErrorNeedsProvider = false
         briefErrorMessage = nil
+        briefErrorNeedsProvider = false
         qaErrorMessage = nil
+        qaErrorNeedsProvider = false
         exportErrorMessage = nil
         diarizationErrorMessage = nil
         diarizationStatusMessage = nil
+    }
+
+    /// True when a caught generation error is specifically "no LLM provider configured", so the
+    /// document UI can surface an actionable deep link instead of a dead-end message.
+    private func needsProviderSetup(_ error: Error) -> Bool {
+        (error as? LLMError)?.isNoProviderConfigured ?? false
+    }
+
+    /// Deep-link the user from the meeting document into Settings › Library › Prompts, where the
+    /// default LLM provider is chosen. Opens the Settings window if it isn't already visible.
+    func openProviderSettings() {
+        SettingsNavigationCoordinator.shared?.navigate(to: .prompts)
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
     }
 
     // MARK: - Calendar
@@ -481,10 +502,12 @@ final class MeetingsViewModel: ObservableObject {
     /// `outputErrorMessage`.
     func generateOutput(for meeting: Meeting, using template: PromptAction) async {
         outputErrorMessage = nil
+        outputErrorNeedsProvider = false
         do {
             try await llmService.generateOutput(for: meeting, using: template)
         } catch {
             outputErrorMessage = error.localizedDescription
+            outputErrorNeedsProvider = needsProviderSetup(error)
         }
     }
 
@@ -528,10 +551,12 @@ final class MeetingsViewModel: ObservableObject {
     /// the connected knowledge base. Surfaces failures via `briefErrorMessage`.
     func generateBrief(for meeting: Meeting) async {
         briefErrorMessage = nil
+        briefErrorNeedsProvider = false
         do {
             try await briefService.generateBrief(for: meeting)
         } catch {
             briefErrorMessage = error.localizedDescription
+            briefErrorNeedsProvider = needsProviderSetup(error)
         }
     }
 
@@ -545,6 +570,7 @@ final class MeetingsViewModel: ObservableObject {
     @discardableResult
     func askQuestion(_ question: String, for meeting: Meeting) async -> Bool {
         qaErrorMessage = nil
+        qaErrorNeedsProvider = false
         // Scope on the *meeting timeline* (session-relative elapsed + `sessionTimeOffset`), matching
         // persisted `segment.start` values, so a restarted session's Q&A doesn't drop nearly the
         // whole transcript through the composer's `segment.start <= offset` filter (finding 1).
@@ -554,6 +580,7 @@ final class MeetingsViewModel: ObservableObject {
             return true
         } catch {
             qaErrorMessage = error.localizedDescription
+            qaErrorNeedsProvider = needsProviderSetup(error)
             return false
         }
     }

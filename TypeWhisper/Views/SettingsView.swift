@@ -28,10 +28,6 @@ enum SettingsGroup: String, CaseIterable, Hashable {
 /// Ordered membership of each settings group (D7). Exposed at internal access so the grouping is
 /// unit-testable (`SettingsGroupingTests`) without instantiating any SwiftUI view.
 enum SettingsGrouping {
-    /// Deep-link alias tabs that collapse into `.workflows` (see `SettingsView.resolvedTab`) and
-    /// therefore have no sidebar row of their own.
-    static let aliasTabs: Set<SettingsTab> = [.profiles, .prompts]
-
     /// Deep-link-only tabs that resolve to themselves but have no sidebar row. TypeWhisper is free
     /// and open source (GPLv3), so the License page is retained as an informational "Free & Open
     /// Source" panel reachable via `navigateToLicense`, but is no longer pinned in the sidebar.
@@ -39,15 +35,21 @@ enum SettingsGrouping {
 
     /// Canonical (group, tabs) layout in display order. Availability filtering (e.g. the
     /// conditional Recovery row) is applied when destinations are materialized.
+    ///
+    /// The Library group carries the three prompt-authoring panes in their historical adjacency:
+    /// Workflows (`WorkflowsSettingsView`), Prompts (`PromptActionsSettingsView`, which owns the
+    /// global default-LLM-provider picker), and Rules (`ProfilesSettingsView`). Prompts and Rules
+    /// each have their own row and detail view — they are no longer aliased onto Workflows, which
+    /// previously left both panes (and their deep links) unreachable.
     static let orderedGroups: [(group: SettingsGroup, tabs: [SettingsTab])] = [
         (.dictation, [.home, .general, .recording, .hotkeys, .dictionary, .snippets, .dictationRecovery]),
         (.meetings, [.meetings, .diarization]),
-        (.library, [.workflows]),
+        (.library, [.workflows, .prompts, .profiles]),
         (.tools, [.recorder, .fileTranscription, .history]),
         (.application, [.integrations, .premium, .advanced, .about])
     ]
 
-    /// Every non-alias tab, in group order. Used to assert each tab is placed exactly once.
+    /// Every grouped tab, in group order. Used to assert each tab is placed exactly once.
     static var allGroupedTabs: [SettingsTab] {
         orderedGroups.flatMap(\.tabs)
     }
@@ -103,6 +105,18 @@ struct SettingsView: View {
                 tab: .workflows,
                 title: localizedAppText("Workflows", de: "Workflows"),
                 systemImage: "point.3.connected.trianglepath.dotted",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .prompts,
+                title: localizedAppText("Prompts", de: "Prompts"),
+                systemImage: "text.bubble",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .profiles,
+                title: localizedAppText("Rules", de: "Regeln"),
+                systemImage: "list.bullet.rectangle",
                 badge: nil
             ),
             SettingsDestination(
@@ -165,10 +179,14 @@ struct SettingsView: View {
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
             switch request.tab {
-            case .profiles, .prompts, .workflows:
+            case .workflows:
+                // Reset the Workflows pane to its list root when navigated to directly.
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
+                // Prompts (`PromptActionsSettingsView`) and Rules (`ProfilesSettingsView`) are now
+                // their own rows; deep links land on them directly rather than collapsing onto
+                // Workflows. Every other tab already resolves to itself.
                 selectedTab = Self.resolvedTab(for: request.tab)
             }
         }
@@ -179,16 +197,12 @@ struct SettingsView: View {
     }
 
     /// Pure deep-link resolution (D7): maps a `SettingsNavigationCoordinator` request tab to the
-    /// tab that is actually selected. `.profiles`/`.prompts`/`.workflows` collapse onto the unified
-    /// `.workflows` library row; every other tab resolves to itself. Kept pure/static so the
-    /// deep-link contract is unit-testable (`SettingsDeepLinkTests`).
+    /// tab that is actually selected. Every tab — including the Library group's `.workflows`,
+    /// `.prompts`, and `.profiles` rows — now resolves to itself and has its own sidebar row and
+    /// detail view. Kept pure/static so the deep-link contract is unit-testable
+    /// (`SettingsDeepLinkTests`).
     static func resolvedTab(for requestTab: SettingsTab) -> SettingsTab {
-        switch requestTab {
-        case .profiles, .prompts, .workflows:
-            return .workflows
-        default:
-            return availableTab(requestTab)
-        }
+        availableTab(requestTab)
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
@@ -223,9 +237,9 @@ struct SettingsView: View {
         case .workflows:
             WorkflowsSettingsView()
         case .profiles:
-            WorkflowsSettingsView()
+            ProfilesSettingsView()
         case .prompts:
-            WorkflowsSettingsView()
+            PromptActionsSettingsView()
         case .premium:
             PremiumSettingsView()
         case .integrations:

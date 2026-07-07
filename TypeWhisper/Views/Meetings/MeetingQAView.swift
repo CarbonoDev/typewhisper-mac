@@ -36,9 +36,19 @@ struct MeetingQAView: View {
             }
 
             if let error = viewModel.qaErrorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+
+                    if viewModel.qaErrorNeedsProvider {
+                        Button(String(localized: "meetings.error.selectProvider")) {
+                            viewModel.openProviderSettings()
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                    }
+                }
             }
 
             composer
