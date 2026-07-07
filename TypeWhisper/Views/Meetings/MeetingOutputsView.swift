@@ -78,6 +78,9 @@ struct MeetingOutputsView: View {
         let label = hasExisting
             ? String(localized: "meetings.output.regenerate")
             : String(localized: "meetings.output.generate")
+        // The template a matched capture-context rule pre-selected for this meeting (AD7), or the
+        // kind's default. Drives the split-button's primary action and a checkmark in the list.
+        let preselected = viewModel.defaultTemplate(ofKind: kind, for: meeting)
 
         if templates.isEmpty {
             Text(String(localized: "meetings.output.noTemplates"))
@@ -87,11 +90,24 @@ struct MeetingOutputsView: View {
             ProgressView()
                 .controlSize(.small)
         } else {
-            Menu(label) {
+            Menu {
                 ForEach(templates, id: \.id) { template in
-                    Button(template.name) {
+                    Button {
                         Task { await viewModel.generateOutput(for: meeting, using: template) }
+                    } label: {
+                        if template.id == preselected?.id {
+                            Label(template.name, systemImage: "checkmark")
+                        } else {
+                            Text(template.name)
+                        }
                     }
+                }
+            } label: {
+                Text(label)
+            } primaryAction: {
+                // A plain click generates with the pre-selected template; the menu offers the rest.
+                if let preselected {
+                    Task { await viewModel.generateOutput(for: meeting, using: preselected) }
                 }
             }
             .menuStyle(.borderlessButton)

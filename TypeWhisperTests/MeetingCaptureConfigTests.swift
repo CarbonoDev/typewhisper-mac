@@ -29,6 +29,23 @@ final class MeetingCaptureConfigTests: XCTestCase {
         func match(_ context: MeetingContext) -> MeetingRuleMatchResult? { result }
     }
 
+    /// Evaluates a real `MeetingRuleTrigger` against the context the capture service builds, so a
+    /// test can prove the calendar name actually reaches matching at capture time.
+    private final class TriggerMatcher: MeetingContextRuleMatching {
+        let trigger: MeetingRuleTrigger
+        let actions: MeetingRuleActions
+        init(trigger: MeetingRuleTrigger, actions: MeetingRuleActions) {
+            self.trigger = trigger
+            self.actions = actions
+        }
+        func match(_ context: MeetingContext) -> MeetingRuleMatchResult? {
+            guard trigger.matches(context) else { return nil }
+            return MeetingRuleMatchResult(
+                ruleID: UUID(), ruleName: "R", specificity: trigger.specificity, actions: actions
+            )
+        }
+    }
+
     private func makeRecorder(recordingsDirectory: URL, sampleCount: Int = 16_000) -> AudioRecorderService {
         let recorder = AudioRecorderService()
         recorder.recordingsDirectoryOverride = recordingsDirectory
@@ -93,6 +110,70 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
         await capture.stop()
+    }
+
+    /// Finding 1: a `calendarNamePatterns` rule can only fire if the calendar name reaches matching
+    /// at capture time. Starting a capture with `calendarName: "Work"` must satisfy a `["Work"]`
+    /// trigger (surfacing its default template); starting without it must not.
+    func testCalendarNameRuleMatchesCaptureStartedWithCalendarName() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let templateID = UUID()
+        let matcher = TriggerMatcher(
+            trigger: MeetingRuleTrigger(calendarNamePatterns: ["Work"]),
+            actions: MeetingRuleActions(defaultOutputTemplateID: templateID)
+        )
+
+        // With the calendar name threaded through, the calendar-name trigger fires.
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("rec"))
+        let capture = makeCapture(
+            meetingService: meetingService, recorder: recorder,
+            defaults: makeDefaults(), ruleMatcher: matcher
+        )
+        let meeting = meetingService.createMeeting(title: "Sync", source: .calendar, state: .scheduled)
+        try await capture.start(meeting: meeting, calendarName: "Work")
+        XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
+        XCTAssertEqual(capture.defaultTemplateMeetingID, meeting.id)
+        await capture.stop()
+
+        // Control: no calendar name → the calendar-name trigger cannot match.
+        let recorder2 = makeRecorder(recordingsDirectory: dir.appendingPathComponent("rec2"))
+        let capture2 = makeCapture(
+            meetingService: meetingService, recorder: recorder2,
+            defaults: makeDefaults(), ruleMatcher: matcher
+        )
+        let meeting2 = meetingService.createMeeting(title: "AdHoc", source: .adHoc, state: .scheduled)
+        try await capture2.start(meeting: meeting2) // no calendarName
+        XCTAssertNil(capture2.activeMeetingDefaultTemplateID)
+        XCTAssertNil(capture2.defaultTemplateMeetingID)
+        await capture2.stop()
+    }
+
+    // MARK: - Rule-selected default template pre-selection (finding 4)
+
+    func testPreselectedTemplateResolvesRuleTemplateElseFirst() {
+        let first = MeetingTemplate(name: "Default", kind: .summary, prompt: "a", sortOrder: 0)
+        let ruleTemplate = MeetingTemplate(name: "Decision Log", kind: .summary, prompt: "b", sortOrder: 1)
+        let templates = [first, ruleTemplate]
+
+        // Rule id present → that template is pre-selected.
+        XCTAssertEqual(
+            MeetingsViewModel.preselectedTemplate(from: templates, ruleTemplateID: ruleTemplate.id)?.id,
+            ruleTemplate.id
+        )
+        // Orphaned id (not in the set) → falls back to the first template.
+        XCTAssertEqual(
+            MeetingsViewModel.preselectedTemplate(from: templates, ruleTemplateID: UUID())?.id,
+            first.id
+        )
+        // No rule id → first template.
+        XCTAssertEqual(
+            MeetingsViewModel.preselectedTemplate(from: templates, ruleTemplateID: nil)?.id,
+            first.id
+        )
+        // Empty set → nil.
+        XCTAssertNil(MeetingsViewModel.preselectedTemplate(from: [], ruleTemplateID: ruleTemplate.id))
     }
 
     // MARK: - Live engine override reaches startStreaming

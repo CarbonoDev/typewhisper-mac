@@ -55,10 +55,19 @@ final class MeetingCaptureService: ObservableObject {
     /// as a status, never an error dialog. Persists after `stop()` so the UI can note the last
     /// capture finalized in a degraded mode.
     @Published private(set) var finalRetranscriptionDegraded = false
+    /// The meeting whose final re-transcription just finalized in a degraded mode, so the UI can
+    /// scope the degraded status to the correct completed meeting (and not show it on unrelated
+    /// meetings the user browses before the next capture). `nil` when the last finalize was not
+    /// degraded. Set at `stop()`; reset by `resetSessionState()` on the next `start()`.
+    @Published private(set) var finalRetranscriptionDegradedMeetingID: UUID?
     /// The default output template (opaque UUID) chosen by the matched capture-context rule for the
     /// active meeting (addendum AD7), so the generate flow can pre-select it. `nil` when no rule
-    /// matched or the rule set no default.
+    /// matched or the rule set no default. Persists after `stop()` (generation happens post-stop);
+    /// reset by `resetSessionState()` on the next `start()`.
     @Published private(set) var activeMeetingDefaultTemplateID: UUID?
+    /// The meeting `activeMeetingDefaultTemplateID` was chosen for, so the generate flow applies the
+    /// rule-selected template only to that meeting and not to unrelated meetings browsed afterward.
+    @Published private(set) var defaultTemplateMeetingID: UUID?
     @Published private(set) var errorMessage: String?
 
     // MARK: - Dependencies
@@ -157,7 +166,8 @@ final class MeetingCaptureService: ObservableObject {
     func start(
         meeting: Meeting,
         micEnabled: Bool = true,
-        systemAudioEnabled: Bool = true
+        systemAudioEnabled: Bool = true,
+        calendarName: String? = nil
     ) async throws {
         guard !isCapturing, !isFinalizing else { throw CaptureError.alreadyCapturing }
 
@@ -180,7 +190,10 @@ final class MeetingCaptureService: ObservableObject {
         // AD7: resolve any matching capture-context rule *before* streaming starts so its live
         // engine/model/language overrides feed `startStreaming()` and its final-pass policy +
         // default template are stashed for this session. No-op when no matcher/rule applies.
-        applyContextRule(for: meeting)
+        // The calendar (source list) name — only known at capture start from the originating
+        // `CalendarEventDTO` (it is not persisted on `Meeting`) — feeds the calendar-name trigger
+        // tier (addendum AD7); nil for ad-hoc captures.
+        applyContextRule(for: meeting, calendarName: calendarName)
 
         // Watermark the pre-existing content so finalize (stop) touches only this session's
         // segments and its timestamps sit after the prior session's (finding 1).
@@ -263,6 +276,9 @@ final class MeetingCaptureService: ObservableObject {
         // Final timestamped transcript (plan D3). Prefer a segmented live-session result; else
         // re-transcribe the full buffer; if neither yields segments, keep the live segments.
         let finalSegments = await finalizeSegments(liveSessionResult: liveSessionResult, buffer: fullBuffer)
+        // Scope the degraded status to this meeting so it surfaces only on the meeting that
+        // finalized in a reduced mode (AD8), never on unrelated meetings browsed afterward.
+        finalRetranscriptionDegradedMeetingID = finalRetranscriptionDegraded ? meeting.id : nil
         if let finalSegments, !finalSegments.isEmpty {
             // Final segments are timed relative to *this* session's buffer (0-based); shift them
             // onto the meeting timeline and replace only this session's live segments, preserving
@@ -483,7 +499,9 @@ final class MeetingCaptureService: ObservableObject {
         case .sameEngine:
             return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
         case .engine(let id, let model):
-            return await runOverrideEngineFinalize(buffer: buffer, engineId: id, model: model)
+            return await runOverrideEngineFinalize(
+                liveSessionResult: liveSessionResult, buffer: buffer, engineId: id, model: model
+            )
         }
     }
 
@@ -536,9 +554,13 @@ final class MeetingCaptureService: ObservableObject {
     }
 
     /// `.engine(id, model)`: run the full-buffer pass on a specific override engine (AD8). On
-    /// failure/empty, degrade to the `.sameEngine` path (which itself keeps live segments if that
-    /// too fails). Never uses the live-session result — the point is a fresh override pass.
+    /// failure/empty, degrade to the `.sameEngine` path — forwarding the already-computed
+    /// `liveSessionResult` so the degrade prefers the segmented live-session segments (which
+    /// `.sameEngine` would normally use) instead of forcing a redundant full-buffer re-transcription
+    /// (finding: avoid a second full pass on degrade). The override pass itself never uses the
+    /// live-session result — the point is a fresh override transcription.
     private func runOverrideEngineFinalize(
+        liveSessionResult: TranscriptionResult?,
         buffer: [Float],
         engineId: String,
         model: String?
@@ -559,9 +581,10 @@ final class MeetingCaptureService: ObservableObject {
         } catch {
             logger.warning("Override-engine final transcription failed; degrading to same-engine: \(error.localizedDescription)")
         }
-        // Override produced nothing usable — degrade one step (never lose content).
+        // Override produced nothing usable — degrade one step (never lose content). Prefer the
+        // already-computed live-session segments before paying for a second full-buffer pass.
         finalRetranscriptionDegraded = true
-        return await runSameEngineFinalize(liveSessionResult: nil, buffer: buffer)
+        return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
     }
 
     // MARK: - Elapsed time
@@ -604,7 +627,9 @@ final class MeetingCaptureService: ObservableObject {
         elapsedSeconds = 0
         isDegradedLiveMode = false
         finalRetranscriptionDegraded = false
+        finalRetranscriptionDegradedMeetingID = nil
         activeMeetingDefaultTemplateID = nil
+        defaultTemplateMeetingID = nil
         sessionLiveEngineOverride = nil
         sessionLiveModelOverride = nil
         sessionLanguageOverride = nil
@@ -616,12 +641,12 @@ final class MeetingCaptureService: ObservableObject {
     /// Match `meeting` against the capture-context rules and stash the winning rule's overrides on
     /// the session. Pure w.r.t. persistence — only sets in-memory session state consumed by
     /// `startStreaming()` and `finalizeSegments()`.
-    private func applyContextRule(for meeting: Meeting) {
+    private func applyContextRule(for meeting: Meeting, calendarName: String?) {
         guard let ruleMatcher else { return }
         let context = MeetingContext(
             title: meeting.title,
             attendeeEmails: meeting.attendees.compactMap(\.email),
-            calendarName: nil,
+            calendarName: calendarName,
             seriesID: meeting.seriesID,
             isRecurringSeries: meeting.seriesID != nil
         )
@@ -638,5 +663,6 @@ final class MeetingCaptureService: ObservableObject {
         }
         sessionRulePolicy = actions.finalRetranscription
         activeMeetingDefaultTemplateID = actions.defaultOutputTemplateID
+        defaultTemplateMeetingID = actions.defaultOutputTemplateID != nil ? meeting.id : nil
     }
 }

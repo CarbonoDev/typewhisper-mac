@@ -19,6 +19,13 @@ struct MeetingDetailView: View {
                     interruptedBanner
                 }
 
+                // AD8: the final re-transcription for this meeting degraded to a safer path
+                // (unavailable override engine or an oversized cloud pass). Surfaced as a status,
+                // never an error dialog — the live-stabilized transcript was kept.
+                if viewModel.finalRetranscriptionDegradedMeetingID == meeting.id {
+                    finalPassDegradedBanner
+                }
+
                 // Pre-meeting brief (M5): available regardless of whether a transcript exists yet,
                 // since it draws on prior meetings and the knowledge base, not this meeting's audio.
                 Divider()
@@ -88,6 +95,15 @@ struct MeetingDetailView: View {
 
     private var interruptedBanner: some View {
         Label(String(localized: "meetings.detail.interruptedBanner"), systemImage: "exclamationmark.triangle")
+            .font(.callout)
+            .foregroundStyle(.orange)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var finalPassDegradedBanner: some View {
+        Label(String(localized: "meetings.finalPass.degradedStatus"), systemImage: "wifi.exclamationmark")
             .font(.callout)
             .foregroundStyle(.orange)
             .padding(8)

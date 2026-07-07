@@ -80,6 +80,36 @@ extension MeetingsViewModel {
         contextRuleService.match(ruleContext(for: meeting))
     }
 
+    // MARK: - Rule-selected default output template (AD7)
+
+    /// The output template of `kind` that the generate flow should pre-select for `meeting`. When a
+    /// capture-context rule matched the active/just-captured meeting and chose a default template
+    /// (`captureService.activeMeetingDefaultTemplateID`) of this kind, that template wins; otherwise
+    /// (no rule, wrong kind, or an orphaned id) it falls back to the kind's current default — the
+    /// first template — so the picker is never left without a sensible selection.
+    func defaultTemplate(ofKind kind: MeetingOutputKind, for meeting: Meeting) -> MeetingTemplate? {
+        let templates = meetingService.templates(ofKind: kind)
+        // Scope to the meeting the rule configured (`defaultTemplateMeetingID` persists from the
+        // matched-rule capture through the post-stop generate flow, until the next capture), so
+        // unrelated meetings browsed afterward fall through to the plain default.
+        let ruleTemplateID = (captureService.defaultTemplateMeetingID == meeting.id)
+            ? captureService.activeMeetingDefaultTemplateID
+            : nil
+        return Self.preselectedTemplate(from: templates, ruleTemplateID: ruleTemplateID)
+    }
+
+    /// Pure resolver (testable without a live capture): the rule-selected template if its id is
+    /// present, else the first template (the current default), else nil for an empty set.
+    static func preselectedTemplate(
+        from templates: [MeetingTemplate],
+        ruleTemplateID: UUID?
+    ) -> MeetingTemplate? {
+        if let ruleTemplateID, let match = templates.first(where: { $0.id == ruleTemplateID }) {
+            return match
+        }
+        return templates.first
+    }
+
     // MARK: - Per-meeting final re-transcription override (AD8)
 
     func finalRetranscriptionOverride(for meeting: Meeting) -> FinalRetranscriptionPolicy? {

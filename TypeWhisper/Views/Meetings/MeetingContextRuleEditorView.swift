@@ -168,7 +168,9 @@ struct MeetingContextRuleEditorView: View {
         let trimmedLanguage = languageSelection.trimmingCharacters(in: .whitespacesAndNewlines)
         let actions = MeetingRuleActions(
             liveEngineId: liveEngineId.isEmpty ? nil : liveEngineId,
-            liveModelId: nil,
+            // The editor has no live-model field; preserve any existing model override instead of
+            // silently wiping it on every edit (round-trips through the rules store).
+            liveModelId: rule.actions.liveModelId,
             languageSelection: trimmedLanguage.isEmpty ? nil : trimmedLanguage,
             defaultOutputTemplateID: defaultTemplateID,
             finalRetranscription: finalPolicy
