@@ -760,7 +760,7 @@ private struct ExampleWebhookEditView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section(String(localized: "webhook.meetingEvents.section", bundle: bundle)) {
+                Section(String(localized: "Meeting Events", bundle: bundle)) {
                     ForEach(MeetingWebhookEvent.all, id: \.self) { name in
                         Toggle(name, isOn: Binding(
                             get: { webhook.meetingEvents.contains(name) },
@@ -777,8 +777,8 @@ private struct ExampleWebhookEditView: View {
                     }
 
                     Text(webhook.meetingEvents.isEmpty
-                         ? String(localized: "webhook.meetingEvents.off", bundle: bundle)
-                         : String(localized: "webhook.meetingEvents.on", bundle: bundle))
+                         ? String(localized: "Inactive for meetings. Select events to enable.", bundle: bundle)
+                         : String(localized: "Only active for selected meeting events.", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

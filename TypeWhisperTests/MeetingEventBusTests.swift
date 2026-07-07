@@ -95,6 +95,21 @@ final class MeetingEventBusTests: XCTestCase {
         XCTAssertEqual(bridged.first?.durationSeconds, 99)
     }
 
+    func testBridgeOnDoesNotEmitClassicEventForEmptyTranscript() {
+        let bus = MeetingEventBus()
+        let defaults = UserDefaults(suiteName: "MeetingEventBusTests-empty-\(UUID().uuidString)")!
+        defaults.set(true, forKey: UserDefaultsKeys.meetingsBridgeToDictationEvents)
+
+        var bridged: [TranscriptionCompletedPayload] = []
+        let emitter = MeetingEventBusEmitter(bus: bus, defaults: defaults) { bridged.append($0) }
+
+        // A no-speech meeting stop yields an empty (or whitespace-only) transcript; bridging it would
+        // fire dictation-keyed integrations (Obsidian auto-export, webhooks) with empty content.
+        emitter.emit(sampleReady(UUID(), text: ""))
+        emitter.emit(sampleReady(UUID(), text: "   \n\t"))
+        XCTAssertTrue(bridged.isEmpty)
+    }
+
     // MARK: - Host capability wiring + dictation isolation
 
     func testHostServicesExposesMeetingEventsAndDelivers() async throws {

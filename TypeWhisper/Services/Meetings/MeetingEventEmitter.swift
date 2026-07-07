@@ -49,6 +49,11 @@ final class MeetingEventBusEmitter: MeetingEventEmitting {
         guard defaults.bool(forKey: UserDefaultsKeys.meetingsBridgeToDictationEvents) else { return }
         guard case let .transcriptReady(payload) = event else { return }
 
+        // Don't bridge an empty transcript: a no-speech meeting stop would otherwise fire
+        // dictation-keyed integrations (Obsidian auto-export, `transcriptionCompleted` webhooks)
+        // with empty content.
+        guard !payload.fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
         let bridged = TranscriptionCompletedPayload(
             rawText: payload.fullText,
             finalText: payload.fullText,

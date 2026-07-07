@@ -145,23 +145,7 @@
         }
       }
     },
-    "webhook.meetingEvents.section": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Meeting-Ereignisse"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "会議イベント"
-          }
-        }
-      }
-    },
-    "webhook.meetingEvents.off": {
+    "Inactive for meetings. Select events to enable.": {
       "localizations": {
         "de": {
           "stringUnit": {
@@ -177,18 +161,18 @@
         }
       }
     },
-    "webhook.meetingEvents.on": {
+    "Meeting Events": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur für ausgewählte Meeting-Ereignisse aktiv."
+            "value": "Meeting-Ereignisse"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "選択した会議イベントにのみアクティブ。"
+            "value": "会議イベント"
           }
         }
       }
@@ -237,6 +221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhookなし"
+          }
+        }
+      }
+    },
+    "Only active for selected meeting events.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur für ausgewählte Meeting-Ereignisse aktiv."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した会議イベントにのみアクティブ。"
           }
         }
       }
