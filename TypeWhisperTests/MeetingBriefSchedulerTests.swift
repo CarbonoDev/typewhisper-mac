@@ -314,6 +314,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
             return .authorized
         }
         func events(from start: Date, to end: Date) -> [CalendarEventDTO] { eventsToReturn }
+        func calendars() -> [CalendarInfo] { [] }
     }
 
     func testDisabledSettingIsNoOp() async throws {

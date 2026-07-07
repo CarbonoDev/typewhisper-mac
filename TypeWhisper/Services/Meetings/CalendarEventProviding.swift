@@ -27,9 +27,23 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
     /// has recurrence rules), used to match a meeting against prior occurrences.
     var seriesID: String?
     /// Name of the calendar (EventKit source list) the event belongs to, e.g. "Work". Used by
-    /// capture-context rules (addendum AD7). Optional/additive — nil when unknown.
+    /// capture-context rules (addendum AD7) and shown as the row's calendar-name label (M11).
+    /// Optional/additive — nil when unknown. This is also the event's "calendar title"; the
+    /// `calendarTitle` accessor below aliases it so the M11 spec's naming is available without a
+    /// second stored field (extend, don't duplicate).
     var calendarName: String?
+    /// Identifier of the owning calendar (`EKCalendar.calendarIdentifier`), used to include/exclude
+    /// the event by the user's calendar selection (M11). nil when unknown — treated as selected so
+    /// events are never silently dropped.
+    var calendarID: String?
+    /// The owning calendar's display color, mapped to sRGB components at the provider boundary
+    /// (M11 color coding). nil when unknown.
+    var calendarColor: CalendarColor?
     var attendees: [Attendee]
+
+    /// The owning calendar's title. Alias of `calendarName` (M11 spec calls this `calendarTitle`);
+    /// kept as a computed accessor so the two names never diverge.
+    var calendarTitle: String? { calendarName }
 
     init(
         id: String,
@@ -39,6 +53,8 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         isAllDay: Bool = false,
         seriesID: String? = nil,
         calendarName: String? = nil,
+        calendarID: String? = nil,
+        calendarColor: CalendarColor? = nil,
         attendees: [Attendee] = []
     ) {
         self.id = id
@@ -48,8 +64,24 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         self.isAllDay = isAllDay
         self.seriesID = seriesID
         self.calendarName = calendarName
+        self.calendarID = calendarID
+        self.calendarColor = calendarColor
         self.attendees = attendees
     }
+}
+
+/// A calendar the user can include/exclude in Settings (M11). Plain value type projected from
+/// `EKCalendar` at the provider boundary so the settings list renders — and is testable — without
+/// EventKit.
+struct CalendarInfo: Equatable, Sendable, Identifiable {
+    /// `EKCalendar.calendarIdentifier`.
+    var id: String
+    /// Calendar title, e.g. "Work".
+    var title: String
+    /// Owning account / source name, e.g. "iCloud" or "Google" (`EKSource.title`).
+    var sourceName: String
+    /// Display color, mapped to sRGB components at the provider boundary.
+    var color: CalendarColor
 }
 
 /// Fakeable seam over `EKEventStore`. Production uses `EventKitCalendarProvider`; tests inject
@@ -63,4 +95,7 @@ protocol CalendarEventProviding: AnyObject {
     /// Events overlapping the `[start, end]` window. Ordering is not guaranteed by the seam;
     /// `CalendarService` sorts.
     func events(from start: Date, to end: Date) -> [CalendarEventDTO]
+    /// Every `.event` calendar across the user's accounts, for the "Calendars" selection list
+    /// (M11). Empty when access is not granted.
+    func calendars() -> [CalendarInfo]
 }

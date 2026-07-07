@@ -309,6 +309,38 @@ final class MeetingsViewModel: ObservableObject {
         pendingFocusMeetingID = meeting.id
     }
 
+    // MARK: - Calendar selection (M11)
+
+    /// Rows for the "Calendars" settings list: every macOS calendar plus whether it is selected.
+    func calendarSelectionRows() -> [CalendarSelectionRow] {
+        Self.makeCalendarRows(
+            calendars: calendarService.availableCalendars(),
+            isSelected: calendarService.isCalendarSelected
+        )
+    }
+
+    /// Toggle a calendar's inclusion, then re-query so the Upcoming/Earlier lists (and thereby the
+    /// scheduler + notifications, which consume them) immediately reflect the change.
+    func setCalendarSelected(_ selected: Bool, for calendarID: String, now: Date = Date()) {
+        calendarService.setCalendarSelected(selected, for: calendarID)
+        loadUpcoming(now: now)
+    }
+
+    /// Pure list-rendering projection for the "Calendars" settings section (M11), unit-testable
+    /// without EventKit or the full view model: pairs each calendar with its selection state and
+    /// sorts by account then title for a stable order.
+    static func makeCalendarRows(
+        calendars: [CalendarInfo],
+        isSelected: (String) -> Bool
+    ) -> [CalendarSelectionRow] {
+        calendars
+            .sorted { lhs, rhs in
+                if lhs.sourceName != rhs.sourceName { return lhs.sourceName < rhs.sourceName }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+            .map { CalendarSelectionRow(calendar: $0, isSelected: isSelected($0.id)) }
+    }
+
     /// [M10] Clear a pending focus request once the window has honoured it.
     func consumeFocusRequest() {
         pendingFocusMeetingID = nil

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 import EventKit
 import os.log
@@ -36,6 +37,7 @@ final class CalendarService: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let provider: CalendarEventProviding
+    private let selectionStore: CalendarSelectionStoring
     private let lookAhead: TimeInterval
     private let grace: TimeInterval
 
@@ -50,10 +52,12 @@ final class CalendarService: ObservableObject {
 
     init(
         provider: CalendarEventProviding = EventKitCalendarProvider(),
+        selectionStore: CalendarSelectionStoring = CalendarSelectionStore(),
         lookAhead: TimeInterval = CalendarService.defaultLookAhead,
         grace: TimeInterval = CalendarService.defaultGrace
     ) {
         self.provider = provider
+        self.selectionStore = selectionStore
         self.lookAhead = lookAhead
         self.grace = grace
         self.authorizationStatus = provider.authorizationStatus
@@ -112,16 +116,25 @@ final class CalendarService: ObservableObject {
     /// `dismiss(eventID:)`), so dismissing an overrunning row updates the UI without a provider hit.
     private func republish() {
         guard let now = lastNow else { return }
+        // [M11] Single filtering choke point: drop events from calendars the user has deselected
+        // BEFORE any windowing, so every downstream consumer (Upcoming, Earlier, the auto-brief
+        // scheduler, start notifications, and capture-context rules) sees a consistent list and a
+        // deselected calendar can never generate a brief or notification. Events with no known
+        // `calendarID` are kept (treated as selected) so nothing is ever silently lost.
+        let selected = lastRawEvents.filter { event in
+            guard let id = event.calendarID else { return true }
+            return selectionStore.isSelected(id)
+        }
         let excludedFromPrimary = lastExcludedEventIDs.union(dismissedEventIDs)
         upcomingEvents = CalendarService.currentUpcomingAndOverrunning(
-            from: lastRawEvents,
+            from: selected,
             now: now,
             lookAhead: lookAhead,
             grace: grace,
             excludingEventIDs: excludedFromPrimary
         )
         earlierEvents = CalendarService.earlierEvents(
-            from: lastRawEvents,
+            from: selected,
             now: now,
             since: CalendarService.lookbackStart(for: now),
             grace: grace,
@@ -134,6 +147,26 @@ final class CalendarService: ObservableObject {
     /// the Earlier list. In-memory only.
     func dismiss(eventID: String) {
         dismissedEventIDs.insert(eventID)
+        republish()
+    }
+
+    // MARK: - Calendar selection (M11)
+
+    /// Every `.event` calendar across the user's accounts, for the "Calendars" settings list.
+    func availableCalendars() -> [CalendarInfo] {
+        provider.calendars()
+    }
+
+    /// Whether the given calendar is currently selected (new/unknown calendars default selected).
+    func isCalendarSelected(_ calendarID: String) -> Bool {
+        selectionStore.isSelected(calendarID)
+    }
+
+    /// Toggle a calendar's inclusion and immediately re-publish both event sections from the
+    /// retained last query (no provider round-trip), so the lists react without waiting for the
+    /// next poll.
+    func setCalendarSelected(_ selected: Bool, for calendarID: String) {
+        selectionStore.setSelected(selected, for: calendarID)
         republish()
     }
 
@@ -281,6 +314,18 @@ final class EventKitCalendarProvider: CalendarEventProviding {
         return store.events(matching: predicate).map(Self.dto(from:))
     }
 
+    func calendars() -> [CalendarInfo] {
+        guard authorizationStatus == .authorized else { return [] }
+        return store.calendars(for: .event).map { calendar in
+            CalendarInfo(
+                id: calendar.calendarIdentifier,
+                title: calendar.title,
+                sourceName: calendar.source?.title ?? "",
+                color: (calendar.color as NSColor?).map(CalendarColor.init(nsColor:)) ?? .fallback
+            )
+        }
+    }
+
     // MARK: - Mapping
 
     private static func map(_ status: EKAuthorizationStatus) -> CalendarAuthorizationStatus {
@@ -303,6 +348,8 @@ final class EventKitCalendarProvider: CalendarEventProviding {
             isAllDay: event.isAllDay,
             seriesID: event.hasRecurrenceRules ? event.calendarItemExternalIdentifier : nil,
             calendarName: event.calendar?.title,
+            calendarID: event.calendar?.calendarIdentifier,
+            calendarColor: event.calendar.map { CalendarColor(nsColor: $0.color) },
             attendees: attendees(from: event)
         )
     }

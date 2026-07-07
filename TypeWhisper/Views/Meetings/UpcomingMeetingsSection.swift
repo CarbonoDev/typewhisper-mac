@@ -75,6 +75,8 @@ struct UpcomingMeetingsSection: View {
 
     private func eventRow(_ event: CalendarEventDTO) -> some View {
         HStack(alignment: .center, spacing: 12) {
+            // [M11] Color bar in the owning calendar's color, matching macOS Calendar.
+            calendarColorBar(for: event)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(event.title.isEmpty ? String(localized: "meetings.calendar.untitledEvent") : event.title)
@@ -84,6 +86,8 @@ struct UpcomingMeetingsSection: View {
                 Text(event.startDate, format: .dateTime.weekday().hour().minute())
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // [M11] Small calendar-name label so the source is visible like in macOS Calendar.
+                calendarLabel(for: event)
                 // [Track D] Surface a ready auto-generated pre-meeting brief (plan AD9).
                 if viewModel.hasFreshBrief(for: event) {
                     Label(
@@ -138,6 +142,35 @@ struct UpcomingMeetingsSection: View {
             .foregroundStyle(tint)
     }
 
+    // MARK: - [M11] Calendar color coding + label
+
+    /// A vertical bar in the owning calendar's color (matching macOS Calendar's event coloring).
+    /// A fixed-size clear bar keeps row heights aligned when the color is unknown.
+    @ViewBuilder
+    private func calendarColorBar(for event: CalendarEventDTO) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(event.calendarColor?.swiftUIColor ?? .clear)
+            .frame(width: 4, height: 32)
+    }
+
+    /// A small dot + calendar-name label so the event's source calendar is visible, like macOS
+    /// Calendar. Renders nothing when the calendar name is unknown.
+    @ViewBuilder
+    private func calendarLabel(for event: CalendarEventDTO) -> some View {
+        if let name = event.calendarTitle, !name.isEmpty {
+            HStack(spacing: 4) {
+                if let color = event.calendarColor {
+                    Circle()
+                        .fill(color.swiftUIColor)
+                        .frame(width: 6, height: 6)
+                }
+                Text(name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     // MARK: - Earlier (past events) section
 
     @ViewBuilder
@@ -164,12 +197,16 @@ struct UpcomingMeetingsSection: View {
     private func earlierRow(_ event: CalendarEventDTO) -> some View {
         let existing = viewModel.existingMeeting(for: event)
         return HStack(alignment: .center, spacing: 12) {
+            // [M11] Color bar in the owning calendar's color, matching macOS Calendar.
+            calendarColorBar(for: event)
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title.isEmpty ? String(localized: "meetings.calendar.untitledEvent") : event.title)
                     .font(.body)
                 Text(event.startDate, format: .dateTime.weekday().hour().minute())
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // [M11] Small calendar-name label so the source is visible like in macOS Calendar.
+                calendarLabel(for: event)
             }
             Spacer()
             Button(

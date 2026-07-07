@@ -32,6 +32,9 @@ final class CalendarServiceTests: XCTestCase {
             lastQueryWindow = (start, end)
             return eventsToReturn
         }
+
+        var calendarsToReturn: [CalendarInfo] = []
+        func calendars() -> [CalendarInfo] { calendarsToReturn }
     }
 
     private let now = Date(timeIntervalSince1970: 1_700_000_000)

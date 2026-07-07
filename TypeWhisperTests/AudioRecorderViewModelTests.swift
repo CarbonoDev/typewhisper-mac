@@ -269,6 +269,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
+        // Keep the recorder hermetic: never let init's loadRecordings() touch the
+        // real ~/Documents/TypeWhisper Recordings, which can block indefinitely on a
+        // TCC/Documents consent prompt in a freshly ad-hoc-signed full-suite run.
+        if recorderService.recordingsDirectoryOverride == nil {
+            recorderService.recordingsDirectoryOverride = makeTemporaryDirectory()
+        }
         return AudioRecorderViewModel(
             recorderService: recorderService,
             modelManager: modelManager,

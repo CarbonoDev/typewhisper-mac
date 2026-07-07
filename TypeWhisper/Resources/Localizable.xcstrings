@@ -22315,6 +22315,70 @@
         }
       }
     },
+    "meetings.calendar.calendarsSection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendars"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalender"
+          }
+        }
+      }
+    },
+    "meetings.calendar.calendarsExplanation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose which calendars appear in meetings and generate briefs and notifications."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie, welche Kalender in Besprechungen erscheinen und Briefings sowie Benachrichtigungen erzeugen."
+          }
+        }
+      }
+    },
+    "meetings.calendar.calendarsNeedsAccess": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grant calendar access to choose which calendars to include."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlauben Sie den Kalenderzugriff, um auszuwählen, welche Kalender einbezogen werden."
+          }
+        }
+      }
+    },
+    "meetings.calendar.noCalendars": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No calendars found."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Kalender gefunden."
+          }
+        }
+      }
+    },
     "meetings.capture.error.recorderBusy": {
       "localizations": {
         "en": {

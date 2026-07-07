@@ -162,6 +162,10 @@
 		AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000386 /* MeetingsSettingsView.swift */; };
 		AA00000000000000000387 /* CalendarEventProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000387 /* CalendarEventProviding.swift */; };
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
+		CA11000000000000000001 /* CalendarColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000001 /* CalendarColor.swift */; };
+		CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000002 /* CalendarSelectionStore.swift */; };
+		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
+		CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000004 /* CalendarSelectionTests.swift */; };
 		AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000389 /* UpcomingMeetingsSection.swift */; };
 		AA00000000000000000390 /* MeetingCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000390 /* MeetingCaptureService.swift */; };
 		CCA000000000000000000001 /* MeetingContextRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000001 /* MeetingContextRule.swift */; };
@@ -703,6 +707,10 @@
 		BB00000000000000000386 /* MeetingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000387 /* CalendarEventProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventProviding.swift; sourceTree = "<group>"; };
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		CA11F00000000000000001 /* CalendarColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColor.swift; sourceTree = "<group>"; };
+		CA11F00000000000000002 /* CalendarSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionStore.swift; sourceTree = "<group>"; };
+		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
+		CA11F00000000000000004 /* CalendarSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSelectionTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000389 /* UpcomingMeetingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingMeetingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000390 /* MeetingCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCaptureService.swift; sourceTree = "<group>"; };
 		CCB000000000000000000001 /* MeetingContextRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRule.swift; sourceTree = "<group>"; };
@@ -1873,6 +1881,8 @@
 				BB00000000000000000384 /* MeetingSegmentMapper.swift */,
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
+				CA11F00000000000000001 /* CalendarColor.swift */,
+				CA11F00000000000000002 /* CalendarSelectionStore.swift */,
 				BB00000000000000000390 /* MeetingCaptureService.swift */,
 				CCB000000000000000000003 /* MeetingContextRuleService.swift */,
 				BBEVTBUS0000000000000001 /* MeetingEventBus.swift */,
@@ -1911,6 +1921,7 @@
 				CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */,
 				CCB000000000000000000005 /* MeetingContextRulesView.swift */,
 				BB00000000000000000389 /* UpcomingMeetingsSection.swift */,
+				CA11F00000000000000003 /* CalendarSelectionSection.swift */,
 				DDF0000000000000000003 /* AutoBriefSettingsView.swift */,
 				BB00000000000000000392 /* MeetingsWindowView.swift */,
 				BB00000000000000000393 /* MeetingLiveCaptureView.swift */,
@@ -2564,6 +2575,7 @@
 				MEF0000000000000000001 /* MeetingServiceTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
+				CA11F00000000000000004 /* CalendarSelectionTests.swift */,
 				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
 				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
@@ -4082,6 +4094,7 @@
 				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
+				CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */,
 				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
 				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
@@ -4206,6 +4219,9 @@
 				AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */,
 				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
+				CA11000000000000000001 /* CalendarColor.swift in Sources */,
+				CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */,
+				CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */,
 				AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */,
 				AA00000000000000000390 /* MeetingCaptureService.swift in Sources */,
 				CCA000000000000000000001 /* MeetingContextRule.swift in Sources */,

@@ -171,6 +171,11 @@ enum UserDefaultsKeys {
     /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
     /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.
     static let meetingsBridgeToDictationEvents = "meetings.bridgeToDictationEvents"
+    /// [M11] Identifiers (`EKCalendar.calendarIdentifier`) of calendars the user has DEselected in
+    /// Settings › Meetings › Calendars. Deselected (not selected) ids are stored so that calendars
+    /// added later default to selected: an id absent from this set — including a brand-new one — is
+    /// shown. Empty/absent ⇒ all calendars selected.
+    static let meetingsCalendarDeselectedIDs = "meetings.calendar.deselectedIDs"
     // MARK: - Meetings · Final re-transcription (addendum AD8, Track C)
     /// Global default final re-transcription mode: "off" | "sameEngine" | "engine".
     static let meetingsFinalPassDefaultMode = "meetings.finalPass.defaultMode"

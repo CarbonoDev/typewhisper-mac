@@ -18,6 +18,7 @@ final class CalendarVisibilityTests: XCTestCase {
 
         func requestAccess() async -> CalendarAuthorizationStatus { authorizationStatus }
         func events(from start: Date, to end: Date) -> [CalendarEventDTO] { eventsToReturn }
+        func calendars() -> [CalendarInfo] { [] }
     }
 
     // Pinned to *noon of the local calendar day* (not the raw epoch instant): the refresh-driven

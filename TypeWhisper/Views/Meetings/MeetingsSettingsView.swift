@@ -16,6 +16,11 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                // [M11] Per-calendar inclusion: which macOS calendars feed the feature.
+                CalendarSelectionSection()
+
+                Divider()
+
                 vaultSection
 
                 Divider()
