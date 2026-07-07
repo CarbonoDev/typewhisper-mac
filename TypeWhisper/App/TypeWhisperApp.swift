@@ -256,15 +256,10 @@ struct TypeWhisperApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: 500, height: 400)
 
-        Window(String(localized: "meetings.window.title"), id: AppWindowID.meetings) {
-            meetingsContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 1000, height: 640)
-
-        // New meetings-first main window (UI Step 0, D1/D10). The scene always exists so
-        // `open(id: AppWindowID.main)` works, but its content is gated on `mainWindowEnabled`
-        // (default OFF through Steps 0–1) — so app behavior is unchanged until the flag flips.
+        // Meetings-first main window (UI Step 2, D1/D10): now the app's primary window. The legacy
+        // `Window(id: AppWindowID.meetings)` + `MeetingsWindowView` were deleted here; all meeting
+        // navigation goes through this scene via `MainWindowCoordinator`. Content stays gated on
+        // `mainWindowEnabled` (now registered default ON) for a clean rollback seam.
         Window(String(localized: "mainwindow.title"), id: AppWindowID.main) {
             mainWindowContent
         }
@@ -339,15 +334,6 @@ struct TypeWhisperApp: App {
             EmptyView()
         } else {
             ErrorLogView()
-        }
-    }
-
-    @ViewBuilder
-    private var meetingsContent: some View {
-        if AppConstants.isRunningTests {
-            EmptyView()
-        } else {
-            MeetingsWindowView()
         }
     }
 
@@ -592,6 +578,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
             UserDefaultsKeys.showMainWindowAtLaunch: true,
+            // UI Step 2 (D10): the meetings-first main window is now the default. The legacy
+            // `"meetings"` window scene + `MeetingsWindowView` have been deleted; this flag stays as
+            // the gate for the `main` scene content and the menu-bar retarget, now defaulting ON.
+            UserDefaultsKeys.mainWindowEnabled: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,

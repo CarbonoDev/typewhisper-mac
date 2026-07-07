@@ -222,12 +222,13 @@ struct UpcomingMeetingsSection: View {
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    /// [M10] Open (or create then open) the meeting for a past event, focusing it in the Meetings
-    /// window. `createMeeting(from:)` returns the existing meeting when one already backs the event,
-    /// so this never duplicates.
+    /// [M10] Open (or create then open) the meeting for a past event, focusing it in the main
+    /// window (UI Step 2: retargeted from the retired `meetings` window to `AppWindowID.main`; the
+    /// focus request is bridged to `.meeting(id)` by `MainWindowView`). `createMeeting(from:)`
+    /// returns the existing meeting when one already backs the event, so this never duplicates.
     private func openEarlierEvent(_ event: CalendarEventDTO) {
         let meeting = viewModel.createMeeting(from: event)
         viewModel.requestFocus(on: meeting)
-        ManagedAppWindowOpener.shared.open(id: AppWindowID.meetings)
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.main)
     }
 }

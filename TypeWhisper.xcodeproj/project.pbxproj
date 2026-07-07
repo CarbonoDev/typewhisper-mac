@@ -203,7 +203,6 @@
 		AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTBUS0000000000000001 /* MeetingEventBus.swift */; };
 		AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */; };
 		AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000391 /* MeetingStartNotificationService.swift */; };
-		AA00000000000000000392 /* MeetingsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000392 /* MeetingsWindowView.swift */; };
 		AA00000000000000000394 /* MeetingNotesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000394 /* MeetingNotesPane.swift */; };
 		AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000396 /* TranscriptContextBuilder.swift */; };
 		AA00000000000000000397 /* MeetingLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000397 /* MeetingLLMService.swift */; };
@@ -770,7 +769,6 @@
 		BBEVTBUS0000000000000001 /* MeetingEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventBus.swift; sourceTree = "<group>"; };
 		BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventEmitter.swift; sourceTree = "<group>"; };
 		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
-		BB00000000000000000392 /* MeetingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsWindowView.swift; sourceTree = "<group>"; };
 		BBB0000000000000000B01 /* PromptSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptSurface.swift; sourceTree = "<group>"; };
 		BBB0000000000000000B02 /* MeetingTemplateMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigration.swift; sourceTree = "<group>"; };
 		BBB0000000000000000B03 /* PromptTemplateEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptTemplateEditor.swift; sourceTree = "<group>"; };
@@ -1990,7 +1988,6 @@
 				BB00000000000000000389 /* UpcomingMeetingsSection.swift */,
 				CA11F00000000000000003 /* CalendarSelectionSection.swift */,
 				DDF0000000000000000003 /* AutoBriefSettingsView.swift */,
-				BB00000000000000000392 /* MeetingsWindowView.swift */,
 				BB00000000000000000394 /* MeetingNotesPane.swift */,
 				MWF0000000000000000009 /* MeetingDocumentView.swift */,
 				MWF0000000000000000011 /* MeetingDocumentHeader.swift */,
@@ -4333,7 +4330,6 @@
 				AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */,
 				AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */,
 				AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */,
-				AA00000000000000000392 /* MeetingsWindowView.swift in Sources */,
 				AA00000000000000000394 /* MeetingNotesPane.swift in Sources */,
 				AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */,
 				AA00000000000000000397 /* MeetingLLMService.swift in Sources */,
