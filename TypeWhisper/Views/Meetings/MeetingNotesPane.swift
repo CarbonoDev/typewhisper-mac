@@ -28,7 +28,7 @@ struct MeetingNotesPane: View {
                     ForEach(meeting.notes.sorted { $0.createdAt < $1.createdAt }, id: \.id) { note in
                         HStack(alignment: .top, spacing: 8) {
                             if let offset = note.timestampOffset {
-                                Text(MeetingDetailView.timestamp(offset))
+                                Text(MeetingTranscriptPanel.timestamp(offset))
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
                                     .frame(width: 48, alignment: .leading)

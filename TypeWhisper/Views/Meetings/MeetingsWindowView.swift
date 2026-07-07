@@ -115,11 +115,9 @@ struct MeetingsWindowView: View {
     @ViewBuilder
     private var detail: some View {
         if let meeting = selectedMeeting {
-            if meeting.id == viewModel.activeMeeting?.id, viewModel.isCapturing {
-                MeetingLiveCaptureView(meeting: meeting)
-            } else {
-                MeetingDetailView(meeting: meeting)
-            }
+            // [Track B] The old detail/live split was retired into the single lifecycle document.
+            // This legacy window (deleted by Track A at Step 2) now hosts the same document view.
+            MeetingDocumentView(meeting: meeting)
         } else {
             ContentUnavailableView {
                 Label(String(localized: "meetings.window.selectPrompt.title"), systemImage: "person.2.wave.2")
