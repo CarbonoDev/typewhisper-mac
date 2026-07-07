@@ -22043,6 +22043,54 @@
         }
       }
     },
+    "meetings.plugins.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin integration"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin-Integration"
+          }
+        }
+      }
+    },
+    "meetings.plugins.bridge.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bridge meetings to dictation plugins"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings mit Diktier-Plugins verbinden"
+          }
+        }
+      }
+    },
+    "meetings.plugins.bridge.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also emit a finished meeting's transcript as a dictation event so dictation-based plugins (Obsidian auto-export, transcription webhooks) run for meetings too. Off by default."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sende das Transkript eines beendeten Meetings zusätzlich als Diktier-Ereignis, damit diktatbasierte Plugins (Obsidian-Auto-Export, Transkriptions-Webhooks) auch für Meetings ausgeführt werden. Standardmäßig aus."
+          }
+        }
+      }
+    },
     "meetings.state.scheduled": {
       "localizations": {
         "en": {

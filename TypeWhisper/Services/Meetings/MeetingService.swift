@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Combine
+import TypeWhisperPluginSDK
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MeetingService")
@@ -16,8 +17,16 @@ final class MeetingService: ObservableObject {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let audioDirectory: URL
+    /// Publishes `MeetingEvent`s to plugins (addendum AD4). Defaulted no-op so v1 call sites/tests
+    /// are unchanged. `addOutput` is the single output-persistence choke point, so emitting here
+    /// covers LLM summaries/extended, briefs, and auto-briefs with one emit.
+    private let eventEmitter: MeetingEventEmitting
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter()
+    ) {
+        self.eventEmitter = eventEmitter
         let audioDir = appSupportDirectory.appendingPathComponent("meetings-audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
         self.audioDirectory = audioDir
@@ -335,6 +344,18 @@ final class MeetingService: ObservableObject {
         meeting.updatedAt = Date()
         save()
         fetchMeetings()
+
+        // AD4 emission point 5/5: an output was generated/persisted (summary/extended/brief).
+        // Single choke point → covers MeetingLLMService, MeetingBriefService, and auto-briefs.
+        eventEmitter.emit(.outputGenerated(MeetingOutputGeneratedPayload(
+            meetingID: meeting.id,
+            kindRaw: kind.rawValue,
+            templateID: templateID,
+            content: content,
+            provider: providerUsed,
+            model: modelUsed
+        )))
+
         return output
     }
 

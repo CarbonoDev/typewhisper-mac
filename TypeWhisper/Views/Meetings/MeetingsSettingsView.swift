@@ -5,6 +5,9 @@ import SwiftUI
 /// standalone window arrive in later milestones.
 struct MeetingsSettingsView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track A] AD5 dictation bridge toggle — defaults OFF. Self-contained UserDefaults binding so
+    // no shared view-model edit is required.
+    @AppStorage(UserDefaultsKeys.meetingsBridgeToDictationEvents) private var bridgeToDictationEvents = false
 
     var body: some View {
         ScrollView {
@@ -14,6 +17,10 @@ struct MeetingsSettingsView: View {
                 Divider()
 
                 vaultSection
+
+                Divider()
+
+                pluginBridgeSection
 
                 Divider()
 
@@ -66,6 +73,26 @@ struct MeetingsSettingsView: View {
                     Button(String(localized: "meetings.vault.chooseButton")) {
                         viewModel.chooseVault()
                     }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// [Track A] Plugin integration for meetings. The bridge (AD5) re-emits a finished meeting's
+    /// transcript on the classic dictation event stream so dictation-keyed plugins fire for
+    /// meetings; default OFF to preserve the meeting/dictation isolation guarantee.
+    private var pluginBridgeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.plugins.sectionTitle"))
+                .font(.headline)
+
+            Toggle(isOn: $bridgeToDictationEvents) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "meetings.plugins.bridge.title"))
+                    Text(String(localized: "meetings.plugins.bridge.subtitle"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

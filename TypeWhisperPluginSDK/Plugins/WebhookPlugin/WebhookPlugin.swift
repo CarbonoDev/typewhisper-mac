@@ -24,6 +24,7 @@ final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
 
     private var host: HostServices?
     private var subscriptionId: UUID?
+    private var meetingSubscriptionId: UUID?
     private var service: ExampleWebhookService?
 
     required override init() {
@@ -46,6 +47,12 @@ final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
                 break
             }
         }
+
+        // Subscribe to meeting events via the additive `meetingEvents` capability (addendum,
+        // Track A). `nil` on hosts that predate meeting events (tolerated).
+        meetingSubscriptionId = host.meetingEvents?.subscribeMeetingEvents { [weak svc] event in
+            await svc?.sendMeetingWebhooks(for: event)
+        }
     }
 
     func deactivate() {
@@ -53,6 +60,10 @@ final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
         if let id = subscriptionId {
             host?.eventBus.unsubscribe(id: id)
             subscriptionId = nil
+        }
+        if let id = meetingSubscriptionId {
+            host?.meetingEvents?.unsubscribeMeetingEvents(id: id)
+            meetingSubscriptionId = nil
         }
         host = nil
         service = nil
@@ -78,11 +89,15 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var secretHeaderNames: [String]
     var isEnabled: Bool
     var profileFilter: [String]  // Empty = all rules
+    /// Enabled `meeting.*` event names (addendum, Track A). `nil`/empty = meeting events off
+    /// (default). A webhook only fires for a meeting event whose name is listed here.
+    var meetingEvents: [String]
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
          secretHeaderNames: [String] = [],
-         isEnabled: Bool = true, profileFilter: [String] = []) {
+         isEnabled: Bool = true, profileFilter: [String] = [],
+         meetingEvents: [String] = []) {
         self.id = UUID()
         self.name = name
         self.url = url
@@ -91,6 +106,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.secretHeaderNames = secretHeaderNames
         self.isEnabled = isEnabled
         self.profileFilter = profileFilter
+        self.meetingEvents = meetingEvents
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -102,6 +118,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         case secretHeaderNames
         case isEnabled
         case profileFilter
+        case meetingEvents
     }
 
     init(from decoder: Decoder) throws {
@@ -114,6 +131,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         secretHeaderNames = try container.decodeIfPresent([String].self, forKey: .secretHeaderNames) ?? []
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         profileFilter = try container.decode([String].self, forKey: .profileFilter)
+        meetingEvents = try container.decodeIfPresent([String].self, forKey: .meetingEvents) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -126,7 +144,21 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         try container.encode(secretHeaderNames, forKey: .secretHeaderNames)
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(profileFilter, forKey: .profileFilter)
+        try container.encode(meetingEvents, forKey: .meetingEvents)
     }
+}
+
+/// Canonical `meeting.*` event names (addendum AD3). Shared by the send path and settings UI.
+enum MeetingWebhookEvent {
+    static let started = "meeting.started"
+    static let transcriptSegment = "meeting.transcriptSegment"
+    static let transcriptReady = "meeting.transcriptReady"
+    static let outputGenerated = "meeting.outputGenerated"
+    static let ended = "meeting.ended"
+
+    static let all: [String] = [
+        started, transcriptSegment, transcriptReady, outputGenerated, ended,
+    ]
 }
 
 // MARK: - Delivery Log
@@ -355,6 +387,87 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
                 }
             }
             await sendSingle(webhook, payload: payload)
+        }
+    }
+
+    // MARK: - Meeting event sending (addendum, Track A)
+
+    /// Fan a meeting event out to every enabled webhook that opted into that `meeting.*` event
+    /// name. The POST body is the JSON payload with an added `event` discriminator field.
+    func sendMeetingWebhooks(for event: MeetingEvent) async {
+        let (eventName, body) = Self.meetingWebhookBody(for: event)
+        guard let body else { return }
+        for webhook in webhooks where webhook.isEnabled {
+            guard webhook.meetingEvents.contains(eventName) else { continue }
+            await sendMeetingSingle(webhook, eventName: eventName, body: body)
+        }
+    }
+
+    /// Encode a meeting event into `(eventName, body)`, flattening the payload and adding `event`.
+    static func meetingWebhookBody(for event: MeetingEvent) -> (String, Data?) {
+        switch event {
+        case .started(let payload):
+            return (MeetingWebhookEvent.started, envelope(MeetingWebhookEvent.started, payload))
+        case .transcriptSegment(let payload):
+            return (MeetingWebhookEvent.transcriptSegment, envelope(MeetingWebhookEvent.transcriptSegment, payload))
+        case .transcriptReady(let payload):
+            return (MeetingWebhookEvent.transcriptReady, envelope(MeetingWebhookEvent.transcriptReady, payload))
+        case .outputGenerated(let payload):
+            return (MeetingWebhookEvent.outputGenerated, envelope(MeetingWebhookEvent.outputGenerated, payload))
+        case .ended(let payload):
+            return (MeetingWebhookEvent.ended, envelope(MeetingWebhookEvent.ended, payload))
+        }
+    }
+
+    private static func envelope<P: Encodable>(_ event: String, _ payload: P) -> Data? {
+        guard let payloadData = try? JSONEncoder().encode(payload),
+              var object = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else {
+            return nil
+        }
+        object["event"] = event
+        return try? JSONSerialization.data(withJSONObject: object)
+    }
+
+    private func sendMeetingSingle(
+        _ webhook: ExampleWebhookConfig,
+        eventName: String,
+        body: Data,
+        isRetry: Bool = false
+    ) async {
+        guard let url = URL(string: webhook.url) else {
+            addLog(ExampleDeliveryLogEntry(webhookName: webhook.name, url: webhook.url,
+                                           statusCode: nil, error: "Invalid URL", success: false))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = webhook.httpMethod
+        request.timeoutInterval = 15
+        for (key, value) in webhook.headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        request.httpBody = body
+
+        do {
+            let (_, response) = try await PluginHTTPClient.data(for: request)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let success = (200...299).contains(statusCode)
+
+            addLog(ExampleDeliveryLogEntry(webhookName: webhook.name, url: webhook.url,
+                                           statusCode: statusCode, error: nil, success: success))
+
+            if !success && !isRetry {
+                try? await Task.sleep(for: .seconds(5))
+                await sendMeetingSingle(webhook, eventName: eventName, body: body, isRetry: true)
+            }
+        } catch {
+            addLog(ExampleDeliveryLogEntry(webhookName: webhook.name, url: webhook.url,
+                                           statusCode: nil, error: error.localizedDescription, success: false))
+
+            if !isRetry {
+                try? await Task.sleep(for: .seconds(5))
+                await sendMeetingSingle(webhook, eventName: eventName, body: body, isRetry: true)
+            }
         }
     }
 
@@ -643,6 +756,29 @@ private struct ExampleWebhookEditView: View {
                     Text(webhook.profileFilter.isEmpty
                          ? String(localized: "Active for all transcriptions.", bundle: bundle)
                          : "Only active for selected rules.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section(String(localized: "Meeting Events", bundle: bundle)) {
+                    ForEach(MeetingWebhookEvent.all, id: \.self) { name in
+                        Toggle(name, isOn: Binding(
+                            get: { webhook.meetingEvents.contains(name) },
+                            set: { selected in
+                                if selected {
+                                    if !webhook.meetingEvents.contains(name) {
+                                        webhook.meetingEvents.append(name)
+                                    }
+                                } else {
+                                    webhook.meetingEvents.removeAll { $0 == name }
+                                }
+                            }
+                        ))
+                    }
+
+                    Text(webhook.meetingEvents.isEmpty
+                         ? String(localized: "Inactive for meetings. Select events to enable.", bundle: bundle)
+                         : String(localized: "Only active for selected meeting events.", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

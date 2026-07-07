@@ -45,6 +45,8 @@ final class ServiceContainer: ObservableObject {
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
     let supporterDiscordService: SupporterDiscordService
+    // [Track A] Meeting-event capability bus (addendum AD4).
+    let meetingEventBus: MeetingEventBus
     let meetingService: MeetingService
     let calendarService: CalendarService
     let meetingCaptureService: MeetingCaptureService
@@ -141,12 +143,20 @@ final class ServiceContainer: ObservableObject {
             licenseService: licenseService,
             syncStore: userDataSyncStore
         )
-        meetingService = MeetingService()
+        // [Track A] Construct the meeting-event bus BEFORE the services that emit through it
+        // (`meetingService`, `meetingCaptureService`) — the emitter holds a concrete reference and
+        // never reads `.shared` lazily (addendum AD4 ordering trap). `MeetingEventBus.shared` is
+        // assigned later beside `EventBus.shared` for `PluginManager`'s per-plugin host wiring.
+        let meetingEventBus = MeetingEventBus()
+        self.meetingEventBus = meetingEventBus
+        let meetingEventEmitter = MeetingEventBusEmitter(bus: meetingEventBus)
+        meetingService = MeetingService(eventEmitter: meetingEventEmitter)
         calendarService = CalendarService()
         meetingCaptureService = MeetingCaptureService(
             meetingService: meetingService,
             audioRecorderService: audioRecorderService,
-            modelManager: modelManagerService
+            modelManager: modelManagerService,
+            eventEmitter: meetingEventEmitter
         )
         meetingStartNotificationService = MeetingStartNotificationService()
         // Obsidian vault knowledge base (plan M5), constructed before the LLM service because M6's
@@ -316,6 +326,9 @@ final class ServiceContainer: ObservableObject {
 
         // Plugin system
         EventBus.shared = EventBus()
+        // [Track A] Expose the already-constructed meeting-event bus for `PluginManager` to hand to
+        // each plugin's `HostServicesImpl` (addendum AD4).
+        MeetingEventBus.shared = meetingEventBus
         PluginManager.shared = pluginManager
         PluginRegistryService.shared = pluginRegistryService
         TermPackRegistryService.shared = termPackRegistryService

@@ -665,6 +665,7 @@ final class PluginManager: ObservableObject {
         let host = HostServicesImpl(
             pluginId: plugin.manifest.id,
             eventBus: EventBus.shared,
+            meetingEventBus: MeetingEventBus.shared,
             ruleNamesProvider: ruleNamesProvider,
             workflowProvider: workflowProvider
         )

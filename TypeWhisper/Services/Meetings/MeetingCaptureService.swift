@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import TypeWhisperPluginSDK
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MeetingCaptureService")
@@ -55,6 +56,9 @@ final class MeetingCaptureService: ObservableObject {
     private let defaults: UserDefaults
     /// Interval (seconds) between durable stable-segment flushes during capture (plan D2 ≤ 5 s).
     private let flushIntervalSeconds: TimeInterval
+    /// Publishes `MeetingEvent`s to plugins (addendum AD4). Defaulted no-op so v1 call sites/tests
+    /// are unchanged.
+    private let eventEmitter: MeetingEventEmitting
 
     // MARK: - Session bookkeeping
 
@@ -88,13 +92,15 @@ final class MeetingCaptureService: ObservableObject {
         audioRecorderService: AudioRecorderService,
         modelManager: ModelManagerService,
         defaults: UserDefaults = .standard,
-        flushIntervalSeconds: TimeInterval = 5
+        flushIntervalSeconds: TimeInterval = 5,
+        eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter()
     ) {
         self.meetingService = meetingService
         self.audioRecorderService = audioRecorderService
         self.modelManager = modelManager
         self.defaults = defaults
         self.flushIntervalSeconds = flushIntervalSeconds
+        self.eventEmitter = eventEmitter
     }
 
     // MARK: - Lifecycle
@@ -156,6 +162,15 @@ final class MeetingCaptureService: ObservableObject {
         captureStartTime = Date()
         startElapsedTimer()
         startStreaming()
+
+        // AD4 emission point 1/5: capture session started.
+        eventEmitter.emit(.started(MeetingStartedPayload(
+            meetingID: meeting.id,
+            title: meeting.title,
+            startedAt: captureStartTime ?? Date(),
+            isCalendarMeeting: meeting.source == .calendar,
+            attendeeCount: meeting.attendees.count
+        )))
     }
 
     /// Stop capturing: finalize the live session, persist any pending stable tail, move the audio
@@ -218,13 +233,43 @@ final class MeetingCaptureService: ObservableObject {
             )
         }
 
+        // AD4 emission point 3/5: final transcript is ready (after live segments were replaced).
+        let readyText = transcriptText(for: meeting)
+        let durationSeconds = meeting.segments.map(\.end).max() ?? latestElapsed
+        let segmentCount = meeting.segments.count
+        eventEmitter.emit(.transcriptReady(MeetingTranscriptReadyPayload(
+            meetingID: meeting.id,
+            fullText: readyText,
+            segmentCount: segmentCount,
+            durationSeconds: durationSeconds
+        )))
+
         meeting.state = .completed
         meetingService.update(meeting)
+
+        // AD4 emission point 4/5: capture session ended.
+        eventEmitter.emit(.ended(MeetingEndedPayload(
+            meetingID: meeting.id,
+            endedAt: Date(),
+            durationSeconds: durationSeconds,
+            stateRaw: meeting.state.rawValue,
+            segmentCount: segmentCount
+        )))
 
         activeMeeting = nil
         liveTranscript = ""
         elapsedSeconds = 0
         isDegradedLiveMode = false
+    }
+
+    /// The meeting's full transcript rendered as newline-separated segment text, ordered by
+    /// `order`, for the `.transcriptReady` payload (addendum AD4).
+    private func transcriptText(for meeting: Meeting) -> String {
+        meeting.segments
+            .sorted { $0.order < $1.order }
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
     }
 
     // MARK: - Notes
@@ -350,6 +395,12 @@ final class MeetingCaptureService: ObservableObject {
         )
         persistedText = newBaseline
         lastSegmentEnd = end
+
+        // AD4 emission point 2/5: batched stable-segment flush (never per 350 ms partial).
+        eventEmitter.emit(.transcriptSegment(MeetingTranscriptSegmentPayload(
+            meetingID: meeting.id,
+            segments: [MeetingEventSegment(text: suffix, startSeconds: start, endSeconds: end)]
+        )))
     }
 
     // MARK: - Finalization

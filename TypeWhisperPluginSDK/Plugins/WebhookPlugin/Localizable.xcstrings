@@ -145,6 +145,38 @@
         }
       }
     },
+    "Inactive for meetings. Select events to enable.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für Meetings inaktiv. Wähle Ereignisse, um sie zu aktivieren."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会議では無効です。有効にするイベントを選択してください。"
+          }
+        }
+      }
+    },
+    "Meeting Events": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting-Ereignisse"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会議イベント"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "de": {
@@ -189,6 +221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhookなし"
+          }
+        }
+      }
+    },
+    "Only active for selected meeting events.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur für ausgewählte Meeting-Ereignisse aktiv."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した会議イベントにのみアクティブ。"
           }
         }
       }
