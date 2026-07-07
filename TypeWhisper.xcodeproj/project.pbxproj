@@ -200,7 +200,6 @@
 		AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000396 /* TranscriptContextBuilder.swift */; };
 		AA00000000000000000397 /* MeetingLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000397 /* MeetingLLMService.swift */; };
 		AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000398 /* MeetingTemplatePresets.swift */; };
-		AA00000000000000000399 /* MeetingOutputsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000399 /* MeetingOutputsView.swift */; };
 		AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000400 /* MeetingTemplateEditorView.swift */; };
 		AAB0000000000000000B01 /* PromptSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B01 /* PromptSurface.swift */; };
 		AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B02 /* MeetingTemplateMigration.swift */; };
@@ -767,7 +766,6 @@
 		BB00000000000000000396 /* TranscriptContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilder.swift; sourceTree = "<group>"; };
 		BB00000000000000000397 /* MeetingLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLLMService.swift; sourceTree = "<group>"; };
 		BB00000000000000000398 /* MeetingTemplatePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresets.swift; sourceTree = "<group>"; };
-		BB00000000000000000399 /* MeetingOutputsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOutputsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000400 /* MeetingTemplateEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateEditorView.swift; sourceTree = "<group>"; };
 		BB00000000000000000401 /* LexicalRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalRetriever.swift; sourceTree = "<group>"; };
 		BB00000000000000000402 /* ObsidianVaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianVaultService.swift; sourceTree = "<group>"; };
@@ -1978,7 +1976,6 @@
 				MWF0000000000000000013 /* MeetingBottomBar.swift */,
 				MWF0000000000000000014 /* MeetingTranscriptPanel.swift */,
 				MWF0000000000000000015 /* MarkdownDocumentView.swift */,
-				BB00000000000000000399 /* MeetingOutputsView.swift */,
 				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
 				BB00000000000000000404 /* MeetingBriefView.swift */,
 				BB00000000000000000405 /* MeetingQAView.swift */,
@@ -4325,7 +4322,6 @@
 				AA00000000000000000412 /* MeetingDiarizationEnricher.swift in Sources */,
 				AA00000000000000000411 /* MeetingImportView.swift in Sources */,
 				AA00000000000000000413 /* SpeakerMappingView.swift in Sources */,
-				AA00000000000000000399 /* MeetingOutputsView.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
 				AAB0000000000000000B01 /* PromptSurface.swift in Sources */,
 				AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */,

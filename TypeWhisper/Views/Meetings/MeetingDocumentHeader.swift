@@ -109,9 +109,11 @@ struct MeetingDocumentHeader: View {
                 Divider()
                 Section(String(localized: "meetingdoc.output.customTemplates")) {
                     ForEach(customTemplates, id: \.id) { template in
+                        // Selection-only: switch the rendered body to this template's kind (showing the
+                        // latest output of that kind). Generation stays exclusively on the bottom bar's
+                        // Generate ▾ — an accidental menu click here must never cost a provider call.
                         Button(template.name) {
                             model.selectedOutputKind = kind(of: template)
-                            Task { await viewModel.generateOutput(for: meeting, using: template) }
                         }
                     }
                 }
@@ -211,9 +213,11 @@ struct MeetingDocumentHeader: View {
     // MARK: - Custom template helpers
 
     private var customTemplateRows: [PromptAction] {
-        // Templates beyond the first (default) per kind surface as explicit "custom" generate rows.
-        MeetingsViewModel.selectableOutputKinds.flatMap { kind in
-            viewModel.templates(ofKind: kind).dropFirst()
+        // Templates beyond the kind's actual default (per-meeting/rule override, AD7 — not necessarily
+        // the first) surface as explicit "custom" selection rows.
+        MeetingsViewModel.selectableOutputKinds.flatMap { kind -> [PromptAction] in
+            let defaultID = viewModel.defaultTemplate(ofKind: kind, for: meeting)?.id
+            return viewModel.templates(ofKind: kind).filter { $0.id != defaultID }
         }
     }
 

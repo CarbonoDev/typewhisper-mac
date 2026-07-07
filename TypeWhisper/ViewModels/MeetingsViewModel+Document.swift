@@ -124,7 +124,10 @@ extension MeetingsViewModel {
             /// A timestamp marker inserted where a silence gap separates two segments.
             case gap
         }
-        let id: UUID
+        /// Deterministic, order-stable identity derived from the adjacent segment (`speech-<uuid>` /
+        /// `gap-<uuid>`) so `bubbles` recomputation on every live tick keeps identity and the
+        /// `LazyVStack` rows don't tear down/rebuild (which jittered scroll anchoring at gaps).
+        let id: String
         let kind: Kind
         /// Raw `SPEAKER_xx` label, or nil when the segment is unlabeled.
         let speakerLabel: String?
@@ -161,7 +164,7 @@ extension MeetingsViewModel {
             if let previousEnd, segment.start - previousEnd >= gapThreshold {
                 bubbles.append(
                     TranscriptBubble(
-                        id: UUID(),
+                        id: "gap-\(segment.id.uuidString)",
                         kind: .gap,
                         speakerLabel: nil,
                         displayName: nil,
@@ -177,7 +180,7 @@ extension MeetingsViewModel {
             let isMe = (label == MeetingDiarizationEnricher.micSpeakerLabel)
             bubbles.append(
                 TranscriptBubble(
-                    id: segment.id,
+                    id: "speech-\(segment.id.uuidString)",
                     kind: .speech,
                     speakerLabel: (label?.isEmpty == false) ? label : nil,
                     displayName: MeetingTranscriptPanel.speakerName(for: segment, speakerMap: speakerMap),

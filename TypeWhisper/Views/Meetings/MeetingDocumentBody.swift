@@ -94,6 +94,18 @@ struct MeetingDocumentBody: View {
                 Divider()
                 notesSection
             }
+
+            // The per-meeting final-pass override still matters for a scheduled meeting that already
+            // carries an imported transcript, and for a stopped-but-resumable one (state .live) — the
+            // final pass runs at the next stop. Collapsed so it doesn't dominate the rendered document.
+            if meeting.state == .scheduled || meeting.state == .live {
+                Divider()
+                DisclosureGroup(String(localized: "meetingdoc.finalPass.disclosure")) {
+                    MeetingFinalRetranscriptionOverrideView(meeting: meeting)
+                        .padding(.top, 8)
+                }
+                .font(.headline)
+            }
         }
     }
 
@@ -112,6 +124,17 @@ struct MeetingDocumentBody: View {
                 }
             }
 
+            // Re-hosted from the retired MeetingOutputsView: let the user fold in-meeting notes into
+            // (or out of) generated outputs. Only meaningful when the meeting actually has notes;
+            // MeetingLLMService reads meeting.notesIncludedInOutputs at generation time.
+            if !meeting.notes.isEmpty {
+                Toggle(isOn: notesIncludedBinding) {
+                    Text(String(localized: "meetings.output.includeNotes"))
+                        .font(.caption)
+                }
+                .toggleStyle(.checkbox)
+            }
+
             if let error = viewModel.outputErrorMessage {
                 Text(error)
                     .font(.caption)
@@ -124,6 +147,13 @@ struct MeetingDocumentBody: View {
                 emptyOutputPlaceholder
             }
         }
+    }
+
+    private var notesIncludedBinding: Binding<Bool> {
+        Binding(
+            get: { meeting.notesIncludedInOutputs },
+            set: { viewModel.setNotesIncluded($0, for: meeting) }
+        )
     }
 
     private var emptyOutputPlaceholder: some View {

@@ -80,12 +80,14 @@ struct MeetingDocumentView: View {
 
     private func applyPanelDefault() {
         // Apply the "open by default while live" rule once per meeting so the user can still
-        // minimize it without it snapping back open on the next state tick.
+        // minimize it without it snapping back open on the next state tick. The applied marker is
+        // recorded ONLY when the default actually fires (i.e. the panel is opened) — otherwise a
+        // scheduled meeting (default = false) would consume the guard on appear, and the later
+        // scheduled→live flip (Start pressed) would be swallowed and never open the panel.
         guard model.appliedPanelDefaultForMeetingID != meeting.id else { return }
+        guard presentation.transcriptPanelOpenByDefault else { return }
         model.appliedPanelDefaultForMeetingID = meeting.id
-        if presentation.transcriptPanelOpenByDefault {
-            model.isTranscriptPanelOpen = true
-        }
+        model.isTranscriptPanelOpen = true
     }
 }
 

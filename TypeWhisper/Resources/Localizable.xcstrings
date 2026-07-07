@@ -648,6 +648,22 @@
         }
       }
     },
+    "meetingdoc.finalPass.disclosure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final transcription pass"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finaler Transkriptionsdurchlauf"
+          }
+        }
+      }
+    },
     "© 2024-2026 TypeWhisper Contributors": {
       "localizations": {
         "de": {

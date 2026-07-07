@@ -280,7 +280,8 @@ final class MeetingDocumentLocalizationTests: XCTestCase {
             "meetingdoc.transcript.empty",
             "meetingdoc.transcript.noMatches",
             "meetingdoc.transcript.importedTag",
-            "meetingdoc.transcript.meLabel"
+            "meetingdoc.transcript.meLabel",
+            "meetingdoc.finalPass.disclosure"
         ]
         for key in keys {
             XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "en").isEmpty, "EN missing for \(key)")
