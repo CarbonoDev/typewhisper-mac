@@ -70,7 +70,7 @@ struct SettingsView: View {
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
-            SettingsDestination(tab: .meetings, title: String(localized: "settings.tab.meetings"), systemImage: "person.2.wave.2", badge: nil),
+            SettingsDestination(tab: .meetings, title: String(localized: "settings.tab.meetings"), systemImage: "calendar.badge.clock", badge: nil),
             SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),

@@ -41,6 +41,8 @@
 	<string>public.app-category.productivity</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>TypeWhisper reads your calendar to show upcoming meetings and create meetings from events.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
 	<key>NSAppTransportSecurity</key>

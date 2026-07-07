@@ -46,6 +46,7 @@ final class ServiceContainer: ObservableObject {
     let licenseService: LicenseService
     let supporterDiscordService: SupporterDiscordService
     let meetingService: MeetingService
+    let calendarService: CalendarService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -133,6 +134,7 @@ final class ServiceContainer: ObservableObject {
             syncStore: userDataSyncStore
         )
         meetingService = MeetingService()
+        calendarService = CalendarService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -232,7 +234,7 @@ final class ServiceContainer: ObservableObject {
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
         )
-        meetingsViewModel = MeetingsViewModel(meetingService: meetingService)
+        meetingsViewModel = MeetingsViewModel(meetingService: meetingService, calendarService: calendarService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

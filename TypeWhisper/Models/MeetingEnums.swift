@@ -12,6 +12,19 @@ enum MeetingState: String, CaseIterable, Codable, Sendable {
     case processing
     case completed
     case failed
+
+    /// Localized, user-facing label for the state (used in the meetings list). The raw value
+    /// is an implementation detail and must never be rendered directly.
+    var displayName: String {
+        switch self {
+        case .scheduled: return String(localized: "meetings.state.scheduled")
+        case .live: return String(localized: "meetings.state.live")
+        case .interrupted: return String(localized: "meetings.state.interrupted")
+        case .processing: return String(localized: "meetings.state.processing")
+        case .completed: return String(localized: "meetings.state.completed")
+        case .failed: return String(localized: "meetings.state.failed")
+        }
+    }
 }
 
 /// How a `Meeting` originated.

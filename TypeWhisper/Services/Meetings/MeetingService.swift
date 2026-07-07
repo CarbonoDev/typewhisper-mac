@@ -132,10 +132,13 @@ final class MeetingService: ObservableObject {
             modelContext.delete(existing)
         }
         var newSegments: [MeetingSegment] = []
-        for segment in segments {
+        // Assign sequential provisional orders (not all 0) so that when `renumber` sorts by
+        // (start, order), segments that share an identical start time keep their input order —
+        // Swift's sort is not stable, so equal keys would otherwise scramble.
+        for (offset, segment) in segments.enumerated() {
             let modelSegment = MeetingSegmentMapper.makeSegment(
                 from: segment,
-                order: 0,
+                order: offset,
                 source: source,
                 isStable: true
             )
