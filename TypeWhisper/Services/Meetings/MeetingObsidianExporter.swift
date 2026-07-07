@@ -120,8 +120,9 @@ final class MeetingObsidianExporter: ObservableObject {
     private func renderTranscript(_ meeting: Meeting) -> String {
         let segments = meeting.segments.sorted { $0.order < $1.order }
         guard !segments.isEmpty else { return "" }
+        let speakerMap = meeting.speakerMap
         return segments
-            .map { "- **\(Self.timestamp($0.start))** \(Self.displayText(for: $0))" }
+            .map { "- **\(Self.timestamp($0.start))** \(Self.displayText(for: $0, speakerMap: speakerMap))" }
             .joined(separator: "\n")
     }
 
@@ -138,18 +139,20 @@ final class MeetingObsidianExporter: ObservableObject {
             .joined(separator: "\n")
     }
 
-    /// Mirrors `SubtitleExporter.displayText`: prefix the segment with its speaker label when
-    /// present (and not already prefixed). M7 renders the raw label; mapped attendee names are a
-    /// later milestone (M9).
-    private static func displayText(for segment: MeetingSegment) -> String {
-        guard let speakerLabel = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !speakerLabel.isEmpty else {
+    /// Mirrors `SubtitleExporter.displayText`: prefix the segment with its speaker when present (and
+    /// not already prefixed). The raw `SPEAKER_xx` label is resolved through the meeting's speaker map
+    /// so mapped attendee names are exported (plan M9); an unmapped label falls back to itself.
+    private static func displayText(for segment: MeetingSegment, speakerMap: [String: String]) -> String {
+        guard let rawLabel = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawLabel.isEmpty else {
             return segment.text
         }
-        if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\(speakerLabel):") {
+        let speaker = speakerMap[rawLabel].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : $0 } ?? rawLabel
+        if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\(speaker):") {
             return segment.text
         }
-        return "\(speakerLabel): \(segment.text)"
+        return "\(speaker): \(segment.text)"
     }
 
     private static func timestamp(_ seconds: Double) -> String {

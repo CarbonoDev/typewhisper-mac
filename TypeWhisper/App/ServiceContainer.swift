@@ -54,6 +54,7 @@ final class ServiceContainer: ObservableObject {
     let meetingBriefService: MeetingBriefService
     let meetingObsidianExporter: MeetingObsidianExporter
     let meetingImportService: MeetingImportService
+    let meetingDiarizationEnricher: MeetingDiarizationEnricher
 
     // HTTP API
     let httpServer: HTTPServer
@@ -177,6 +178,10 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             transcriber: modelManagerService
         )
+        // Opt-in post-finalize speaker diarization (plan M9): labels a completed meeting's segments
+        // via the local pyannote sidecar (or an offline separate-track heuristic) and persists a
+        // SPEAKER_xx → attendee-name map. Depends only on `meetingService`.
+        meetingDiarizationEnricher = MeetingDiarizationEnricher(meetingService: meetingService)
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -285,7 +290,8 @@ final class ServiceContainer: ObservableObject {
             vaultService: obsidianVaultService,
             briefService: meetingBriefService,
             exporter: meetingObsidianExporter,
-            importService: meetingImportService
+            importService: meetingImportService,
+            diarizationEnricher: meetingDiarizationEnricher
         )
 
         // Set shared references

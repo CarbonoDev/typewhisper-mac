@@ -89,6 +89,55 @@ final class TranscriptMergerTests: XCTestCase {
         XCTAssertEqual(merged.filter { $0.source == .importedTranscript }.count, 2)
     }
 
+    /// M8 review 1: clock alignment must not leave negative timestamps. In the late-join case the
+    /// captured clock is 0-based while the import is meeting-relative, so the estimated offset is
+    /// negative and the pre-capture gap would land at negative starts — which every timestamp
+    /// formatter clamps to 0, collapsing the whole imported first half to 00:00. After merge, the
+    /// set is uniformly shifted so the minimum start is exactly 0 and no timestamp is negative.
+    func testMergeNeverProducesNegativeTimestamps() {
+        let existing = [
+            captured("Second half point one.", 0, 30),
+            captured("Second half point two.", 30, 60)
+        ]
+        let imported = [
+            imported("Opening remarks about scope.", 0, 60),
+            imported("Early discussion of budget planning.", 60, 120),
+            imported("Second half point one.", 300, 330),
+            imported("Second half point two.", 330, 360)
+        ]
+
+        let merged = TranscriptMerger.merge(existing: existing, imported: imported)
+
+        XCTAssertTrue(merged.allSatisfy { $0.start >= 0 && $0.end >= 0 })
+        XCTAssertEqual(merged.map(\.start).min(), 0)
+        // Relative timing is preserved: the gap-fillers stay 60s apart, ahead of the captured half.
+        XCTAssertEqual(merged.map(\.start), [0, 60, 300, 330])
+    }
+
+    /// M8 review 3: one long imported turn that time-overlaps several short captured segments must be
+    /// deduped. Per-segment corroboration alone fails (each captured segment restates only a fraction
+    /// of the long turn, below threshold), so the turn would escape dedup and duplicate the overlap.
+    /// Corroborating against the union of all time-overlapping captured segments catches it.
+    func testLongImportedTurnSpanningManyCapturedSegmentsIsDeduped() {
+        // Captured broke a single spoken sentence into four short segments (real timing).
+        let existing = [
+            captured("We should", 0, 2),
+            captured("really prioritize", 2, 4),
+            captured("the mobile onboarding", 4, 6),
+            captured("redesign work", 6, 8)
+        ]
+        // Imported (Meet) rendered the same sentence as one long turn — no single captured segment
+        // restates half of it, but their union does. It must be dropped, not duplicated.
+        let imported = [
+            imported("We should really prioritize the mobile onboarding redesign work.", 0, 8)
+        ]
+
+        let merged = TranscriptMerger.merge(existing: existing, imported: imported)
+
+        XCTAssertEqual(merged.filter { $0.source == .importedTranscript }.count, 0)
+        XCTAssertEqual(merged.filter { $0.source == .liveCapture }.count, 4)
+    }
+
     /// A short, generic imported segment must not be dropped just because its few content words
     /// appear *somewhere* in a long captured transcript (locality-aware, corroborated dedup).
     func testGenericImportedSegmentNotDroppedByGlobalTokenCollision() {

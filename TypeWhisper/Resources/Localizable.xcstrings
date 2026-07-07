@@ -23781,6 +23781,114 @@
         }
       }
     },
+    "meetings.diarization.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Sprechererkennung" } }
+      }
+    },
+    "meetings.diarization.identify": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Identify speakers" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Sprecher erkennen" } }
+      }
+    },
+    "meetings.diarization.error.alreadyEnriching": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification is already running." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung läuft bereits." } }
+      }
+    },
+    "meetings.diarization.error.audioLoad": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not read the meeting audio: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das Meeting-Audio konnte nicht gelesen werden: %@" } }
+      }
+    },
+    "meetings.diarization.error.provider": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification failed: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung ist fehlgeschlagen: %@" } }
+      }
+    },
+    "meetings.diarization.speaker.me": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Me" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Ich" } }
+      }
+    },
+    "meetings.diarization.speaker.others": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Others" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Andere" } }
+      }
+    },
+    "meetings.diarization.status.noSpeakers": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No speakers were detected in this recording." } },
+        "de": { "stringUnit": { "state": "translated", "value": "In dieser Aufnahme wurden keine Sprecher erkannt." } }
+      }
+    },
+    "meetings.diarization.status.unavailable": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification is unavailable. Set up local diarization in Settings." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung ist nicht verfügbar. Richte die lokale Diarisierung in den Einstellungen ein." } }
+      }
+    },
+    "meetings.diarization.status.noAudio": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This meeting has no stored audio to analyze." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Für dieses Meeting ist kein Audio zum Analysieren gespeichert." } }
+      }
+    },
+    "meetings.diarization.status.noTranscript": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This meeting has no transcript to label." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dieses Meeting hat kein Transkript zum Beschriften." } }
+      }
+    },
+    "meetings.diarization.status.timelineMismatch": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The transcript timeline does not match the stored audio, so speakers cannot be identified reliably." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Transkript-Zeitachse stimmt nicht mit dem gespeicherten Audio überein, daher können Sprecher nicht zuverlässig erkannt werden." } }
+      }
+    },
+    "meetings.diarization.mapping.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speaker names" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Sprechernamen" } }
+      }
+    },
+    "meetings.diarization.mapping.empty": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run speaker identification to label the transcript first." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Führe zuerst die Sprechererkennung durch, um das Transkript zu beschriften." } }
+      }
+    },
+    "meetings.diarization.mapping.hint": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Map each detected speaker to a name. Names appear in the transcript, exports, and generated outputs." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Ordne jedem erkannten Sprecher einen Namen zu. Namen erscheinen im Transkript, in Exporten und in generierten Ausgaben." } }
+      }
+    },
+    "meetings.diarization.mapping.namePlaceholder": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Name" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Name" } }
+      }
+    },
+    "meetings.diarization.mapping.save": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save names" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Namen speichern" } }
+      }
+    },
+    "meetings.diarization.mapping.suggestAttendee": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose an attendee" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Teilnehmer auswählen" } }
+      }
+    },
     "meetings.export.section.brief": {
       "localizations": {
         "en": {

@@ -91,6 +91,46 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Speaker labels & mapping (M9)
+
+    /// Apply diarization speaker labels to a meeting's segments (plan M9). Each assignment targets a
+    /// segment by id; unmatched segments are left unchanged. An optional `speakerMap` (e.g. the
+    /// separate-track heuristic's seeded `Me`/`Others` names) is stored alongside in the same
+    /// transaction so labels and their display names stay consistent.
+    func applySpeakerLabels(
+        _ assignments: [MeetingSpeakerAssignment],
+        speakerMap: [String: String]? = nil,
+        to meeting: Meeting
+    ) {
+        guard !assignments.isEmpty || speakerMap != nil else { return }
+        let byID = Dictionary(assignments.map { ($0.segmentID, $0) }, uniquingKeysWith: { first, _ in first })
+        for segment in meeting.segments {
+            guard let assignment = byID[segment.id] else { continue }
+            segment.speakerLabel = assignment.label
+            segment.speakerConfidence = assignment.confidence
+        }
+        if let speakerMap {
+            meeting.speakerMap = speakerMap
+        }
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Persist the `SPEAKER_xx → attendee name` map edited in the speaker-mapping editor (plan M9).
+    /// Empty/whitespace names are dropped so a segment falls back to rendering its raw label.
+    func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {
+        let cleaned = map.reduce(into: [String: String]()) { result, pair in
+            let name = pair.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { result[pair.key] = name }
+        }
+        guard meeting.speakerMap != cleaned else { return }
+        meeting.speakerMap = cleaned
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     // MARK: - Segment writes
 
     /// Append newly-stabilized transcript segments to a meeting, continuing the existing

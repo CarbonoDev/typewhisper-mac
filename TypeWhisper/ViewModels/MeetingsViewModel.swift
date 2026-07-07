@@ -48,6 +48,13 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var isImporting = false
     @Published var importErrorMessage: String?
 
+    // Speaker diarization & mapping (M9)
+    @Published private(set) var isEnriching = false
+    @Published var diarizationErrorMessage: String?
+    /// A localized status shown after enrichment finishes without labeling (e.g. "no speakers
+    /// detected"). Cleared when a new enrichment starts.
+    @Published var diarizationStatusMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
@@ -57,6 +64,7 @@ final class MeetingsViewModel: ObservableObject {
     private let briefService: MeetingBriefService
     private let exporter: MeetingObsidianExporter
     private let importService: MeetingImportService
+    private let diarizationEnricher: MeetingDiarizationEnricher
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -69,7 +77,8 @@ final class MeetingsViewModel: ObservableObject {
         vaultService: ObsidianVaultService,
         briefService: MeetingBriefService,
         exporter: MeetingObsidianExporter,
-        importService: MeetingImportService
+        importService: MeetingImportService,
+        diarizationEnricher: MeetingDiarizationEnricher
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
@@ -80,6 +89,7 @@ final class MeetingsViewModel: ObservableObject {
         self.briefService = briefService
         self.exporter = exporter
         self.importService = importService
+        self.diarizationEnricher = diarizationEnricher
         self.meetings = meetingService.meetings
         self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
@@ -173,6 +183,10 @@ final class MeetingsViewModel: ObservableObject {
         importService.$isImporting
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isImporting = value }
+            .store(in: &cancellables)
+        diarizationEnricher.$isEnriching
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isEnriching = value }
             .store(in: &cancellables)
     }
 
@@ -460,6 +474,65 @@ final class MeetingsViewModel: ObservableObject {
             importErrorMessage = error.localizedDescription
             return false
         }
+    }
+
+    // MARK: - Speaker diarization & mapping (M9)
+
+    /// Whether — and how — speaker identification can run for a meeting (drives showing/hiding the
+    /// "Identify speakers" action). `.unavailable` when there is no audio and no sidecar.
+    func diarizationAvailability(for meeting: Meeting) async -> MeetingDiarizationEnricher.Availability {
+        await diarizationEnricher.availability(for: meeting)
+    }
+
+    /// Run opt-in diarization over a meeting's audio and persist speaker labels. Surfaces an explicit
+    /// "no speakers detected" status (plan D8) and any hard failure via published messages.
+    func identifySpeakers(for meeting: Meeting) async {
+        diarizationErrorMessage = nil
+        diarizationStatusMessage = nil
+        do {
+            let outcome = try await diarizationEnricher.enrich(meeting)
+            switch outcome {
+            case .labeled:
+                break // labels now render in the transcript; nothing to announce
+            case .noSpeakersDetected:
+                diarizationStatusMessage = String(localized: "meetings.diarization.status.noSpeakers")
+            case .unavailable:
+                diarizationStatusMessage = String(localized: "meetings.diarization.status.unavailable")
+            case .noAudio:
+                diarizationStatusMessage = String(localized: "meetings.diarization.status.noAudio")
+            case .noTranscript:
+                diarizationStatusMessage = String(localized: "meetings.diarization.status.noTranscript")
+            case .timelineMismatch:
+                diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
+            }
+        } catch {
+            diarizationErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// The distinct `SPEAKER_xx` labels present on a meeting's transcript, sorted — the rows of the
+    /// mapping editor.
+    func speakerLabels(in meeting: Meeting) -> [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for segment in meeting.segments.sorted(by: { $0.order < $1.order }) {
+            guard let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !label.isEmpty, seen.insert(label).inserted else { continue }
+            ordered.append(label)
+        }
+        return ordered.sorted()
+    }
+
+    /// Persist the edited `SPEAKER_xx → name` map; empty names clear a label back to its raw form.
+    func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {
+        meetingService.setSpeakerMap(map, for: meeting)
+    }
+
+    /// Attendee names (from a linked calendar event or manual entry) offered as mapping suggestions.
+    func attendeeNameSuggestions(for meeting: Meeting) -> [String] {
+        meeting.attendees
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - Template CRUD (editor)

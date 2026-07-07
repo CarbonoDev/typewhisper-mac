@@ -1,6 +1,6 @@
 import Foundation
 
-struct SpeakerSegment {
+struct SpeakerSegment: Sendable {
     let start: TimeInterval
     let end: TimeInterval
     let speaker: String
