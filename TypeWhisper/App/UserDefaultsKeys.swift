@@ -167,4 +167,8 @@ enum UserDefaultsKeys {
     // MARK: - Meetings
     /// Absolute path of the Obsidian vault connected as a knowledge base (plan M5, D9).
     static let meetingsObsidianVaultPath = "meetings.obsidianVaultPath"
+    /// Opt-in bridge (addendum AD5, default OFF): when true, finishing a meeting also emits a
+    /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
+    /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.
+    static let meetingsBridgeToDictationEvents = "meetings.bridgeToDictationEvents"
 }

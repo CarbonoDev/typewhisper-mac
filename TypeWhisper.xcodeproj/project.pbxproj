@@ -14,6 +14,7 @@
 		1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */; };
 		4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */; };
 		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
+		C4290000000000000MIR001 /* MeetingTranscriptMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
@@ -163,6 +164,8 @@
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
 		AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000389 /* UpcomingMeetingsSection.swift */; };
 		AA00000000000000000390 /* MeetingCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000390 /* MeetingCaptureService.swift */; };
+		AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTBUS0000000000000001 /* MeetingEventBus.swift */; };
+		AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */; };
 		AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000391 /* MeetingStartNotificationService.swift */; };
 		AA00000000000000000392 /* MeetingsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000392 /* MeetingsWindowView.swift */; };
 		AA00000000000000000393 /* MeetingLiveCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000393 /* MeetingLiveCaptureView.swift */; };
@@ -199,6 +202,8 @@
 		MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000006 /* MeetingLLMServiceTests.swift */; };
 		MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */; };
 		MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */; };
+		MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */; };
+		MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */; };
 		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
 		MEB0000000000000000002 /* MeetingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000002 /* MeetingModelTests.swift */; };
 		MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000003 /* CalendarServiceTests.swift */; };
@@ -396,6 +401,7 @@
 		AA00000000000000000224 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000214 /* Localizable.xcstrings */; };
 		AA00000000000000000225 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000026 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000226 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
+		AA0000000000000000MIR01 /* MeetingTranscriptMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */; };
 		AA00000000000000000227 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000217 /* manifest.json */; };
 		AA00000000000000000228 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000218 /* Localizable.xcstrings */; };
 		AA00000000000000000229 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000027 /* TypeWhisperPluginSDK */; };
@@ -675,6 +681,8 @@
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		BB00000000000000000389 /* UpcomingMeetingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingMeetingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000390 /* MeetingCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCaptureService.swift; sourceTree = "<group>"; };
+		BBEVTBUS0000000000000001 /* MeetingEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventBus.swift; sourceTree = "<group>"; };
+		BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventEmitter.swift; sourceTree = "<group>"; };
 		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
 		BB00000000000000000392 /* MeetingsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsWindowView.swift; sourceTree = "<group>"; };
 		BB00000000000000000393 /* MeetingLiveCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLiveCaptureView.swift; sourceTree = "<group>"; };
@@ -711,6 +719,8 @@
 		MEF0000000000000000006 /* MeetingLLMServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresetsTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureServiceTests.swift; sourceTree = "<group>"; };
+		MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventBusTests.swift; sourceTree = "<group>"; };
+		MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventEmissionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000002 /* MeetingModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000003 /* CalendarServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceTests.swift; sourceTree = "<group>"; };
@@ -907,6 +917,7 @@
 		F48400000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		F48400000000000000000012 /* FileJobScriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FileJobScriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000216 /* LiveTranscriptPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptPlugin.swift; sourceTree = "<group>"; };
+		BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTranscriptMirror.swift; sourceTree = "<group>"; };
 		BB00000000000000000217 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000218 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000219 /* LiveTranscriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveTranscriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1808,6 +1819,8 @@
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
 				BB00000000000000000390 /* MeetingCaptureService.swift */,
+				BBEVTBUS0000000000000001 /* MeetingEventBus.swift */,
+				BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */,
 				BB00000000000000000391 /* MeetingStartNotificationService.swift */,
 				BB00000000000000000396 /* TranscriptContextBuilder.swift */,
 				BB00000000000000000397 /* MeetingLLMService.swift */,
@@ -2151,6 +2164,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000216 /* LiveTranscriptPlugin.swift */,
+				BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */,
 				BB00000000000000000217 /* manifest.json */,
 				BB00000000000000000218 /* Localizable.xcstrings */,
 			);
@@ -2481,6 +2495,8 @@
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
+				MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */,
+				MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */,
 				MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */,
 				MEF0000000000000000006 /* MeetingLLMServiceTests.swift */,
 				MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */,
@@ -3987,6 +4003,8 @@
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
+				MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */,
+				MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */,
 				MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */,
 				MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */,
 				MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */,
@@ -4015,6 +4033,7 @@
 				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,
 				C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */,
 				C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */,
+				C4290000000000000MIR001 /* MeetingTranscriptMirror.swift in Sources */,
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
@@ -4099,6 +4118,8 @@
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
 				AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */,
 				AA00000000000000000390 /* MeetingCaptureService.swift in Sources */,
+				AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */,
+				AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */,
 				AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */,
 				AA00000000000000000392 /* MeetingsWindowView.swift in Sources */,
 				AA00000000000000000393 /* MeetingLiveCaptureView.swift in Sources */,
@@ -4474,6 +4495,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000226 /* LiveTranscriptPlugin.swift in Sources */,
+				AA0000000000000000MIR01 /* MeetingTranscriptMirror.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

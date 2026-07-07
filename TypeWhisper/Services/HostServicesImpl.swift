@@ -27,21 +27,26 @@ private enum PassiveLoadedModelRestoreContext {
     }
 }
 
-final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, MeetingEventObserving, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     let eventBus: EventBusProtocol
+    /// Meeting-event capability bus (addendum AD4). `nil` keeps `host.meetingEvents` inert on hosts
+    /// constructed without a bus (e.g. legacy code paths / tests), which plugins already tolerate.
+    private let meetingEventBus: MeetingEventBus?
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
 
     init(
         pluginId: String,
         eventBus: EventBusProtocol,
+        meetingEventBus: MeetingEventBus? = nil,
         ruleNamesProvider: @escaping @MainActor () -> [String],
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] }
     ) {
         self.pluginId = pluginId
         self.eventBus = eventBus
+        self.meetingEventBus = meetingEventBus
         self.ruleNamesProvider = ruleNamesProvider
         self.workflowProvider = workflowProvider
 
@@ -144,6 +149,20 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         DispatchQueue.main.async {
             DictationViewModel._shared?.updateExternalStreamingDisplay(active: active)
         }
+    }
+
+    // MARK: - Meeting Events (addendum AD4)
+
+    @discardableResult
+    func subscribeMeetingEvents(
+        _ handler: @escaping @Sendable (MeetingEvent) async -> Void
+    ) -> UUID {
+        guard let meetingEventBus else { return UUID() }
+        return meetingEventBus.subscribeMeetingEvents(handler)
+    }
+
+    func unsubscribeMeetingEvents(id: UUID) {
+        meetingEventBus?.unsubscribeMeetingEvents(id: id)
     }
 
     private func readMainActor<Value: Sendable>(_ body: @escaping @MainActor () -> Value) -> Value {

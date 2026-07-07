@@ -38,6 +38,8 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject,
 
     fileprivate var host: HostServices?
     private var subscriptionId: UUID?
+    private var meetingSubscriptionId: UUID?
+    private let meetingMirror = MeetingTranscriptMirror()
     private var panel: LiveTranscriptPanel?
     private var viewModel: LiveTranscriptViewModel?
     private var autoCloseTask: Task<Void, Never>?
@@ -97,6 +99,12 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject,
             await self?.handleEvent(event)
         }
 
+        // Mirror live meetings into the same window (addendum, Track A). Reached via the additive
+        // `meetingEvents` capability; `nil` on hosts that predate meeting events (tolerated).
+        meetingSubscriptionId = host.meetingEvents?.subscribeMeetingEvents { [weak self] event in
+            await self?.handleMeetingEvent(event)
+        }
+
         setStreamingDisplayActiveIfNeeded(_autoOpen)
     }
 
@@ -105,6 +113,10 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject,
             host?.eventBus.unsubscribe(id: id)
             subscriptionId = nil
         }
+        if let id = meetingSubscriptionId {
+            host?.meetingEvents?.unsubscribeMeetingEvents(id: id)
+            meetingSubscriptionId = nil
+        }
         setStreamingDisplayActiveIfNeeded(false)
         tearDownHotkeyMonitor()
         autoCloseTask?.cancel()
@@ -112,6 +124,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject,
             self?.panel?.close()
             self?.panel = nil
             self?.viewModel = nil
+            self?.meetingMirror.reset()
         }
         host = nil
     }
@@ -232,6 +245,43 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject,
         default:
             break
         }
+    }
+
+    // MARK: - Meeting Event Handling (addendum, Track A)
+
+    @MainActor
+    private func handleMeetingEvent(_ event: MeetingEvent) {
+        switch event {
+        case .started(let payload):
+            autoCloseTask?.cancel()
+            hasCompletedTranscript = false
+            meetingMirror.started(meetingID: payload.meetingID)
+            if _autoOpen { showPanel() }
+            viewModel?.reset()
+
+        case .transcriptSegment(let payload):
+            guard !hasCompletedTranscript else { return }
+            meetingMirror.appendSegments(payload)
+            viewModel?.updateText(meetingMirror.renderedText, isFinal: false)
+
+        case .transcriptReady(let payload):
+            meetingMirror.transcriptReady(payload)
+            viewModel?.updateText(meetingMirror.renderedText, isFinal: false)
+
+        case .ended(let payload):
+            meetingMirror.ended(meetingID: payload.meetingID)
+            hasCompletedTranscript = true
+            viewModel?.updateText(meetingMirror.renderedText, isFinal: true)
+            scheduleAutoClose()
+
+        case .outputGenerated:
+            break
+        }
+    }
+
+    @MainActor
+    var mirroredMeetingTextForTesting: String {
+        meetingMirror.renderedText
     }
 
     // MARK: - Panel Management

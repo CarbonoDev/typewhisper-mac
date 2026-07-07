@@ -145,6 +145,54 @@
         }
       }
     },
+    "webhook.meetingEvents.section": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting-Ereignisse"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会議イベント"
+          }
+        }
+      }
+    },
+    "webhook.meetingEvents.off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für Meetings inaktiv. Wähle Ereignisse, um sie zu aktivieren."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会議では無効です。有効にするイベントを選択してください。"
+          }
+        }
+      }
+    },
+    "webhook.meetingEvents.on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur für ausgewählte Meeting-Ereignisse aktiv."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した会議イベントにのみアクティブ。"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "de": {
