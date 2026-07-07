@@ -3156,6 +3156,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.pasteVerificationAttempts = 0
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
         service.focusedTextStateOverride = { _ in
@@ -3192,6 +3193,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.verifiedRestoreGraceDelay = .milliseconds(1)
 
         var didAttemptDirectAXInsertion = false
@@ -3280,6 +3282,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in
@@ -3319,6 +3322,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in

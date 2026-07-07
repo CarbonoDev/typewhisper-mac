@@ -77,14 +77,19 @@ final class ObsidianVaultService: ObservableObject {
         return result.sorted { $0.timestamp > $1.timestamp }
     }
 
-    /// Connect to the most-recently-opened detected vault, if any and none is already connected.
-    /// Returns whether a vault is connected afterwards.
+    /// Connect to the most-recently-opened detected vault whose path still exists, if any and none
+    /// is already connected. `connect(to:)` refuses a stale (deleted) path, so we iterate the
+    /// detected vaults (most-recent first) until one actually connects rather than assuming the
+    /// first candidate is valid (M5 review finding 1). Returns whether a vault is connected
+    /// afterwards.
     @discardableResult
     func autoConnect() -> Bool {
         if isConnected { return true }
-        guard let latest = Self.detectVaults().first else { return false }
-        connect(to: latest.path)
-        return true
+        for vault in Self.detectVaults() {
+            connect(to: vault.path)
+            if isConnected { break }
+        }
+        return isConnected
     }
 
     /// Connect to (and persist) a specific vault path.

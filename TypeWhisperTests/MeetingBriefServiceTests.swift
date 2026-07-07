@@ -162,6 +162,28 @@ final class MeetingBriefServiceTests: XCTestCase {
         XCTAssertEqual(output.kind, .brief)
     }
 
+    func testBriefWithVaultButNoPriorMeetingsUsesKnowledgeBaseOnly() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(meetingService: service, vaultService: vault, processor: stub)
+
+        // A lone meeting whose title matches the vault note, with no prior related meetings
+        // (no series, no shared-attendee history). Degrades to knowledge-base-only (M5 finding 4).
+        let target = service.createMeeting(title: "Acme Sync", source: .adHoc, state: .scheduled)
+        let output = try await brief.generateBrief(for: target)
+
+        XCTAssertEqual(stub.calls.count, 1)
+        let call = try XCTUnwrap(stub.calls.first)
+        // The vault passage is present; no prior-meeting markers leak in.
+        XCTAssertTrue(call.text.contains("VAULT_MARKER_XYZ"))
+        XCTAssertFalse(call.text.contains("PRIOR_MARKER_B"))
+        XCTAssertFalse(call.text.contains("PRIOR_MARKER_C"))
+        XCTAssertEqual(output.kind, .brief)
+        XCTAssertEqual(service.latestOutput(ofKind: .brief, for: target)?.id, output.id)
+    }
+
     func testInsufficientContextThrowsAndPersistsNothing() async throws {
         let service = try makeService()
         let vault = ObsidianVaultService(defaults: makeDefaults())

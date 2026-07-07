@@ -23482,6 +23482,214 @@
           }
         }
       }
+    },
+    "meetings.qa.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Q&A"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fragen & Antworten"
+          }
+        }
+      }
+    },
+    "meetings.qa.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No questions yet. Ask about anything discussed so far."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Fragen. Fragen Sie zu allem, was bisher besprochen wurde."
+          }
+        }
+      }
+    },
+    "meetings.qa.placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask a question about this meeting…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stellen Sie eine Frage zu diesem Meeting…"
+          }
+        }
+      }
+    },
+    "meetings.qa.ask": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fragen"
+          }
+        }
+      }
+    },
+    "meetings.qa.error.alreadyAnswering": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A question is already being answered."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Frage wird bereits beantwortet."
+          }
+        }
+      }
+    },
+    "meetings.qa.error.emptyQuestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a question to ask."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geben Sie eine Frage ein."
+          }
+        }
+      }
+    },
+    "meetings.qa.systemPrompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are a meeting assistant answering a question about a meeting. Use only the provided transcript, knowledge-base excerpts, and prior questions and answers as your source of truth. Answer concisely and factually; if the provided context does not contain the answer, say so plainly rather than inventing details."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Verwenden Sie ausschließlich das bereitgestellte Transkript, die Auszüge aus der Wissensdatenbank sowie frühere Fragen und Antworten als Grundlage. Antworten Sie präzise und sachlich; enthält der bereitgestellte Kontext die Antwort nicht, sagen Sie das klar, anstatt Details zu erfinden."
+          }
+        }
+      }
+    },
+    "meetings.qa.context.knowledgeHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Knowledge base"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Wissensdatenbank"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.transcriptHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Transcript"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Transkript"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.priorHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Earlier questions"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Frühere Fragen"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.questionHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Question"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Frage"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.questionLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Q:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "F:"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.answerLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A:"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

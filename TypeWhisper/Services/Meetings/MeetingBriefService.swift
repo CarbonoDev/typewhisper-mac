@@ -22,6 +22,10 @@ final class MeetingBriefService: ObservableObject {
     private let processor: any PromptProcessing
     private let charBudget: Int
 
+    /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
+    /// stops a long history from dominating the budget (M5 review finding 2).
+    private let maxPriorMeetings = 5
+
     init(
         meetingService: MeetingService,
         vaultService: ObsidianVaultService,
@@ -80,10 +84,11 @@ final class MeetingBriefService: ObservableObject {
         let prior = meetingService.priorMeetings(matching: meeting)
         guard !prior.isEmpty else { return "" }
 
-        // Deterministic ordering: most recent first.
+        // Deterministic ordering: most recent first, capped so a long history can't crowd out the
+        // knowledge-base section (M5 review finding 2).
         let ordered = prior.sorted { lhs, rhs in
             (lhs.startDate ?? lhs.createdAt) > (rhs.startDate ?? rhs.createdAt)
-        }
+        }.prefix(maxPriorMeetings)
 
         var entries: [String] = []
         for prev in ordered {
@@ -141,9 +146,15 @@ final class MeetingBriefService: ObservableObject {
     // MARK: - Assembly
 
     /// Compose and bound the final brief context: meeting metadata, prior-meeting summaries, and
-    /// knowledge-base passages, truncated to the char budget (plan D7). Section headers are
-    /// localized so the scaffolding matches the rest of the UI.
+    /// knowledge-base passages (plan D7). Section headers are localized so the scaffolding matches
+    /// the rest of the UI.
+    ///
+    /// Rather than truncate the whole joined string at the end — which let several substantial prior
+    /// meetings silently truncate the knowledge-base block away entirely (M5 review finding 2) — the
+    /// KB block is guaranteed a reserved slice (~a quarter of the budget) and the prior-meeting block
+    /// absorbs the remainder. Each block carries a localized truncation notice when it is cut.
     private func assembleContext(meeting: Meeting, priorBlock: String, kbBlock: String) -> String {
+        let notice = String(localized: "meetings.output.truncationNotice")
         var sections: [String] = []
 
         var meta = ["\(String(localized: "meetings.brief.context.meetingLabel")) \(meeting.title)"]
@@ -154,17 +165,39 @@ final class MeetingBriefService: ObservableObject {
         if !attendeeNames.isEmpty {
             meta.append("\(String(localized: "meetings.brief.context.attendeesLabel")) \(attendeeNames.joined(separator: ", "))")
         }
-        sections.append(meta.joined(separator: "\n"))
+        let metaSection = meta.joined(separator: "\n")
+        sections.append(metaSection)
+
+        // Reserve a quarter of the budget for the knowledge base so prior meetings can't crowd it
+        // out; the prior block gets whatever is left after meta + that reservation.
+        var runningLength = metaSection.count
+        let kbReserve = kbBlock.isEmpty ? 0 : charBudget / 4
 
         if !priorBlock.isEmpty {
-            sections.append("\(String(localized: "meetings.brief.context.priorHeader"))\n\(priorBlock)")
+            let priorHeader = String(localized: "meetings.brief.context.priorHeader")
+            let priorBudget = max(0, charBudget - runningLength - kbReserve - priorHeader.count - 4)
+            let bounded = bound(priorBlock, to: priorBudget, notice: notice)
+            let section = "\(priorHeader)\n\(bounded)"
+            sections.append(section)
+            runningLength += section.count + 2
         }
         if !kbBlock.isEmpty {
-            sections.append("\(String(localized: "meetings.brief.context.knowledgeHeader"))\n\(kbBlock)")
+            let kbHeader = String(localized: "meetings.brief.context.knowledgeHeader")
+            // The KB block gets all the remaining budget (at least the reserved slice).
+            let kbBudget = max(0, charBudget - runningLength - kbHeader.count - 4)
+            let bounded = bound(kbBlock, to: kbBudget, notice: notice)
+            sections.append("\(kbHeader)\n\(bounded)")
         }
 
         let assembled = sections.joined(separator: "\n\n")
         return TranscriptContextBuilder.truncateWords(assembled, to: charBudget)
+    }
+
+    /// Truncate `text` at a word boundary to `budget`, appending `notice` when content is cut.
+    private func bound(_ text: String, to budget: Int, notice: String) -> String {
+        guard budget > 0, text.count > budget else { return text }
+        let truncated = TranscriptContextBuilder.truncateWords(text, to: max(0, budget - notice.count - 1))
+        return "\(truncated) \(notice)"
     }
 
     // MARK: - Provenance

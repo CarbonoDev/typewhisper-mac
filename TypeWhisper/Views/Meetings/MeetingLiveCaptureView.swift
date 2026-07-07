@@ -15,9 +15,8 @@ struct MeetingLiveCaptureView: View {
                 transcriptPane
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
-                MeetingNotesPane(meeting: meeting)
-                    .frame(width: 300)
-                    .padding()
+                sidePane
+                    .frame(width: 320)
             }
         }
     }
@@ -47,6 +46,24 @@ struct MeetingLiveCaptureView: View {
             .keyboardShortcut(".", modifiers: [.command])
         }
         .padding()
+    }
+
+    /// The right column: in-meeting notes above the live Q&A chat pane (plan M6). Each half keeps
+    /// its own scroll region — `MeetingNotesPane` already scrolls its list internally, so it is not
+    /// nested inside another ScrollView (which would collapse it to zero height).
+    private var sidePane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MeetingNotesPane(meeting: meeting)
+                .padding()
+                .frame(maxHeight: .infinity)
+            Divider()
+            ScrollView {
+                MeetingQAView(meeting: meeting)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxHeight: .infinity)
+        }
     }
 
     private var transcriptPane: some View {

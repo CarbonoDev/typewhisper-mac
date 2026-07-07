@@ -146,16 +146,19 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService
         )
         meetingStartNotificationService = MeetingStartNotificationService()
-        // Constructed after `promptProcessingService` (its single-turn `process` seam) and
-        // `meetingService` (plan M4 dependency order).
+        // Obsidian vault knowledge base (plan M5), constructed before the LLM service because M6's
+        // in-meeting Q&A retrieves KB passages through it.
+        obsidianVaultService = ObsidianVaultService()
+        // Constructed after `promptProcessingService` (its single-turn `process` seam),
+        // `meetingService`, and `obsidianVaultService` (KB passages for Q&A — plan M4/M6).
         meetingLLMService = MeetingLLMService(
             meetingService: meetingService,
+            vaultService: obsidianVaultService,
             processor: promptProcessingService
         )
-        // Obsidian vault knowledge base + pre-meeting brief (plan M5). The brief service depends on
-        // `meetingService` (prior meetings), `obsidianVaultService` (KB passages), and the
-        // `promptProcessingService` single-turn seam.
-        obsidianVaultService = ObsidianVaultService()
+        // Pre-meeting brief (plan M5). The brief service depends on `meetingService` (prior
+        // meetings), `obsidianVaultService` (KB passages), and the `promptProcessingService`
+        // single-turn seam.
         meetingBriefService = MeetingBriefService(
             meetingService: meetingService,
             vaultService: obsidianVaultService,

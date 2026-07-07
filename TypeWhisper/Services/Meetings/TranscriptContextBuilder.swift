@@ -91,6 +91,11 @@ enum TranscriptContextBuilder {
     /// higher-signal notes block is preserved and the transcript portion is truncated at a word
     /// boundary, with a localized truncation notice appended so the model knows content was cut.
     /// When the input already fits, this is exactly `assemble`.
+    ///
+    /// The notes block is itself capped at ~half the budget (`truncateWords`) so an oversized notes
+    /// blob cannot blow the char-budget guarantee — previously the preserved notes were emitted
+    /// whole, so notes larger than the budget produced an over-budget payload (M5-carried review
+    /// finding 3). Notes that already fit within half the budget are preserved untouched.
     static func boundedAssemble(transcript: String, notes: String, charBudget: Int = defaultCharBudget) -> String {
         let assembled = assemble(transcript: transcript, notes: notes)
         guard charBudget > 0, assembled.count > charBudget else { return assembled }
@@ -101,9 +106,13 @@ enum TranscriptContextBuilder {
 
         if !trimmedNotes.isEmpty {
             let header = String(localized: "meetings.output.notesHeader")
-            let notesBlock = "\n\n\(header)\n\(trimmedNotes)"
-            // Reserve room for the (preserved) notes block and the notice so the total stays within
-            // budget; the transcript absorbs the overflow.
+            // Cap the notes block at ~half the budget so oversized notes cannot themselves break the
+            // guarantee; notes under that cap are preserved whole.
+            let notesBudget = max(0, charBudget / 2 - header.count - 2)
+            let boundedNotes = truncateWords(trimmedNotes, to: notesBudget)
+            let notesBlock = "\n\n\(header)\n\(boundedNotes)"
+            // Reserve room for the (bounded) notes block and the notice so the total stays within
+            // budget; the transcript absorbs the remaining overflow.
             let reserve = notesBlock.count + notice.count + 2
             let transcriptBudget = max(0, charBudget - reserve)
             let bounded = truncateWords(trimmedTranscript, to: transcriptBudget)

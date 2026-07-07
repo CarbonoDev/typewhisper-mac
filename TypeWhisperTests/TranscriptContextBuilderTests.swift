@@ -106,6 +106,21 @@ final class TranscriptContextBuilderTests: XCTestCase {
         XCTAssertTrue(bounded.contains("A NOTE_MARKER here."))
     }
 
+    func testBoundedAssembleTruncatesOversizedNotesToStayWithinBudget() {
+        // Notes larger than the budget must not be emitted whole — previously the preserved notes
+        // block blew the guarantee (M5-carried review finding 3). The notes block is capped at
+        // ~half the budget and the total stays bounded.
+        let transcript = String(repeating: "word ", count: 2_000)
+        let notes = String(repeating: "NOTE_WORD ", count: 2_000)
+        let budget = 400
+        let bounded = TranscriptContextBuilder.boundedAssemble(
+            transcript: transcript, notes: notes, charBudget: budget
+        )
+        XCTAssertLessThanOrEqual(bounded.count, budget, "oversized notes must not break the budget guarantee")
+        // Some notes content still survives (the notes block was truncated, not dropped).
+        XCTAssertTrue(bounded.contains("NOTE_WORD"))
+    }
+
     func testBoundedAssembleWithoutNotesStaysWithinBudget() {
         let partials = String(repeating: "word ", count: 5_000)
         let budget = 400

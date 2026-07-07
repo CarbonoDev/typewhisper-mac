@@ -49,6 +49,15 @@ final class MeetingLLMServiceTests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// A disconnected vault (unique defaults suite) — output generation never touches the KB, so
+    /// these tests keep it empty. M6 Q&A composer/KB behavior is covered in `MeetingQAComposerTests`.
+    private func makeVault() -> ObsidianVaultService {
+        let suite = "MeetingLLMServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
+        return ObsidianVaultService(defaults: defaults)
+    }
+
     private func makeMeeting(
         on service: MeetingService,
         segmentTexts: [String],
@@ -94,7 +103,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Short transcript."])
         let template = makeTemplate(prompt: "Summarize this.", kind: .summary)
@@ -124,7 +133,7 @@ final class MeetingLLMServiceTests: XCTestCase {
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
         // Tiny budget forces multiple map chunks over the rendered transcript.
-        let llm = MeetingLLMService(meetingService: service, processor: stub, charBudget: 30)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub, charBudget: 30)
 
         let meeting = makeMeeting(on: service, segmentTexts: [
             "First segment of the discussion here.",
@@ -153,7 +162,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Short transcript."])
         let summaryTemplate = makeTemplate(prompt: "Summarize.", kind: .summary)
@@ -189,7 +198,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Short."])
         let template = makeTemplate(
@@ -218,7 +227,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Body."], notesIncluded: true)
         service.addNote(to: meeting, text: "IMPORTANT_NOTE_MARKER", timestampOffset: 3)
@@ -233,7 +242,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Body."], notesIncluded: false)
         service.addNote(to: meeting, text: "IMPORTANT_NOTE_MARKER", timestampOffset: 3)
@@ -250,7 +259,7 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         let service = MeetingService(appSupportDirectory: dir)
         let stub = StubProcessor()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = service.createMeeting(title: "Empty", source: .adHoc, state: .completed)
 
@@ -272,7 +281,7 @@ final class MeetingLLMServiceTests: XCTestCase {
         let stub = StubProcessor()
         struct Boom: Error {}
         stub.errorToThrow = Boom()
-        let llm = MeetingLLMService(meetingService: service, processor: stub)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: stub)
 
         let meeting = makeMeeting(on: service, segmentTexts: ["Body."])
 

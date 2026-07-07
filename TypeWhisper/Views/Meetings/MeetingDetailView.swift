@@ -23,6 +23,10 @@ struct MeetingDetailView: View {
                 if !meeting.segments.isEmpty {
                     Divider()
                     MeetingOutputsView(meeting: meeting)
+
+                    // In-meeting Q&A (M6): ask against this meeting's transcript + knowledge base.
+                    Divider()
+                    MeetingQAView(meeting: meeting)
                 }
 
                 Divider()

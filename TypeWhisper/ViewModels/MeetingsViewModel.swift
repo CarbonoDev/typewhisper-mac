@@ -37,6 +37,10 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var isGeneratingBrief = false
     @Published var briefErrorMessage: String?
 
+    // In-meeting Q&A (M6)
+    @Published private(set) var isAnswering = false
+    @Published var qaErrorMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
@@ -88,6 +92,10 @@ final class MeetingsViewModel: ObservableObject {
         llmService.$isGenerating
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isGeneratingOutput = value }
+            .store(in: &cancellables)
+        llmService.$isAnswering
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isAnswering = value }
             .store(in: &cancellables)
 
         calendarService.$authorizationStatus
@@ -337,6 +345,26 @@ final class MeetingsViewModel: ObservableObject {
             try await briefService.generateBrief(for: meeting)
         } catch {
             briefErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - In-meeting Q&A (M6)
+
+    /// Ask a question against a meeting's transcript-so-far plus the connected knowledge base and
+    /// prior turns. During live capture of this meeting the transcript is scoped to elapsed time so
+    /// the answer can't draw on words spoken after the question. Persists one `MeetingQATurn` on
+    /// success; surfaces failures via `qaErrorMessage`. Returns `true` on success so the composer can
+    /// keep the user's typed question on failure (M6 review finding 4) instead of losing it.
+    @discardableResult
+    func askQuestion(_ question: String, for meeting: Meeting) async -> Bool {
+        qaErrorMessage = nil
+        let offset: Double? = (isCapturing && activeMeeting?.id == meeting.id) ? captureElapsedSeconds : nil
+        do {
+            try await llmService.answerQuestion(for: meeting, question: question, asOfOffset: offset)
+            return true
+        } catch {
+            qaErrorMessage = error.localizedDescription
+            return false
         }
     }
 
