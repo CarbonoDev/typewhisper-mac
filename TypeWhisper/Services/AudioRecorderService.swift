@@ -450,6 +450,45 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Identifies which feature currently owns the shared capture stack. `AudioRecorderService`
+    /// is a singleton owning mic/SCStream/engine state, so the standalone Recorder and meeting
+    /// capture are mutually exclusive. This additive gate lets each entry point refuse to start
+    /// while the other owns the recorder (see plan D1). It does not touch existing recorder
+    /// behavior — callers that never acquire ownership are unaffected.
+    enum CaptureOwner: String, Sendable {
+        case recorder
+        case meeting
+    }
+
+    private let captureOwnerLock = OSAllocatedUnfairLock<CaptureOwner?>(initialState: nil)
+
+    /// The feature currently holding the capture stack, or `nil` when idle.
+    var currentCaptureOwner: CaptureOwner? {
+        captureOwnerLock.withLock { $0 }
+    }
+
+    /// Attempt to claim the shared capture stack for `owner`. Returns `true` if the stack was
+    /// free (now claimed) or already owned by the same `owner` (re-entrant), `false` if the
+    /// other feature currently owns it.
+    func acquireCaptureOwnership(_ owner: CaptureOwner) -> Bool {
+        captureOwnerLock.withLock { current in
+            if let current {
+                return current == owner
+            }
+            current = owner
+            return true
+        }
+    }
+
+    /// Release ownership if (and only if) `owner` currently holds it.
+    func releaseCaptureOwnership(_ owner: CaptureOwner) {
+        captureOwnerLock.withLock { current in
+            if current == owner {
+                current = nil
+            }
+        }
+    }
+
     @Published private(set) var isRecording = false
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var micLevel: Float = 0

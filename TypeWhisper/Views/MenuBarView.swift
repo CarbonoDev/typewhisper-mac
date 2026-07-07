@@ -187,6 +187,7 @@ private final class MenuBarState: ObservableObject {
 
 enum MenuBarMenuItem: Hashable {
     case settings
+    case meetings
     case history
     case errorLog
     case toggleRecorder
@@ -229,7 +230,7 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .history, .errorLog]
+            [.settings, .meetings, .history, .errorLog]
         case .recorder:
             [.toggleRecorder]
         case .transcription:
@@ -289,6 +290,13 @@ struct MenuBarView: View {
                 Label(String(localized: "Settings..."), systemImage: "gear")
             }
             .keyboardShortcut(",")
+
+        case .meetings:
+            Button {
+                openManagedWindow("meetings")
+            } label: {
+                Label(String(localized: "meetings.window.title"), systemImage: "person.2.wave.2")
+            }
 
         case .history:
             Button {

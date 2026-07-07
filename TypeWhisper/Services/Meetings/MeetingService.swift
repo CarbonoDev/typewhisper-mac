@@ -119,16 +119,23 @@ final class MeetingService: ObservableObject {
     /// Replace all segments of a meeting that carry the given source with a fresh set (e.g. the
     /// final timestamped transcription supersedes live-stabilized segments). Segments from other
     /// sources are preserved; `order` is renumbered chronologically across the whole meeting.
+    ///
+    /// `preservingSegmentIDs` scopes the replacement to a single capture session: same-source
+    /// segments whose id is in the set are kept (they belong to an earlier, already-finalized
+    /// session and must never be destroyed — plan D3 "never lose content"). Only same-source
+    /// segments *created during the current session* are deleted and replaced.
     func replaceSegments(
         of meeting: Meeting,
         source: MeetingSegmentSource,
-        with segments: [TranscriptionSegment]
+        with segments: [TranscriptionSegment],
+        preservingSegmentIDs preserved: Set<UUID> = []
     ) {
-        // Segments from other sources survive; delete only the ones being replaced. We track the
-        // surviving/new set explicitly because SwiftData does not remove deleted rows from the
-        // relationship array until save, so `meeting.segments` cannot be trusted for renumbering yet.
-        let surviving = meeting.segments.filter { $0.source != source }
-        for existing in meeting.segments where existing.source == source {
+        // Segments from other sources — and same-source segments explicitly preserved — survive;
+        // delete only the ones being replaced. We track the surviving/new set explicitly because
+        // SwiftData does not remove deleted rows from the relationship array until save, so
+        // `meeting.segments` cannot be trusted for renumbering yet.
+        let surviving = meeting.segments.filter { $0.source != source || preserved.contains($0.id) }
+        for existing in meeting.segments where existing.source == source && !preserved.contains(existing.id) {
             modelContext.delete(existing)
         }
         var newSegments: [MeetingSegment] = []
@@ -230,7 +237,65 @@ final class MeetingService: ObservableObject {
         }
     }
 
+    // MARK: - Crash recovery
+
+    /// Startup recovery pass (plan D2). Any meeting still marked `.live` when the app launches
+    /// was interrupted by a crash/force-quit mid-capture; flip it to `.interrupted` so its
+    /// already-persisted segments remain visible while making clear capture did not finish.
+    /// Returns the meetings that were recovered.
+    @discardableResult
+    func recoverInterruptedMeetings() -> [Meeting] {
+        // Both `.live` (never reached stop) and `.processing` (crashed during stop()'s finalize
+        // window — state is set to `.processing` before several awaits, incl. a potentially long
+        // final transcription) are stuck states with no other exit on relaunch. Recover both; the
+        // persisted live segments remain visible either way.
+        let interrupted = meetings.filter { $0.state == .live || $0.state == .processing }
+        guard !interrupted.isEmpty else { return [] }
+        for meeting in interrupted {
+            meeting.state = .interrupted
+            meeting.updatedAt = Date()
+        }
+        save()
+        fetchMeetings()
+        return interrupted
+    }
+
     // MARK: - Audio blobs
+
+    /// Move a finished recording into the meetings audio directory, keyed by the meeting UUID,
+    /// and record its filename on the meeting. The source file (born in the Recorder library) is
+    /// removed by the move so it never lingers there (plan D17).
+    ///
+    /// If capture was *restarted* on an already-finalized meeting, an audio file for this UUID may
+    /// already exist. We must not overwrite it (plan D3 "never lose content"): the new file gets a
+    /// versioned suffix (`<uuid>-2.<ext>`, …) and the meeting points at the newest, leaving the
+    /// prior session's audio on disk for manual salvage. `deleteAudioFile` sweeps every version.
+    func adoptAudioFile(_ sourceURL: URL, for meeting: Meeting) {
+        let ext = sourceURL.pathExtension.isEmpty ? "wav" : sourceURL.pathExtension
+        let destination = uniqueAudioDestination(for: meeting, ext: ext)
+        do {
+            try FileManager.default.moveItem(at: sourceURL, to: destination)
+            meeting.audioFileName = destination.lastPathComponent
+            meeting.updatedAt = Date()
+            save()
+            fetchMeetings()
+        } catch {
+            logger.error("Failed to adopt audio file for meeting: \(error.localizedDescription)")
+        }
+    }
+
+    /// A non-colliding destination in the audio directory: `<uuid>.<ext>` when free, otherwise
+    /// `<uuid>-2.<ext>`, `<uuid>-3.<ext>`, … so a restarted session never clobbers prior audio.
+    private func uniqueAudioDestination(for meeting: Meeting, ext: String) -> URL {
+        let base = meeting.id.uuidString
+        var candidate = audioDirectory.appendingPathComponent("\(base).\(ext)")
+        var version = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = audioDirectory.appendingPathComponent("\(base)-\(version).\(ext)")
+            version += 1
+        }
+        return candidate
+    }
 
     func audioFileURL(for meeting: Meeting) -> URL? {
         guard let fileName = meeting.audioFileName else { return nil }
@@ -240,9 +305,17 @@ final class MeetingService: ObservableObject {
     }
 
     private func deleteAudioFile(for meeting: Meeting) {
-        guard let fileName = meeting.audioFileName else { return }
-        let url = audioDirectory.appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: url)
+        // Remove every version keyed to this meeting's UUID (`<uuid>.ext`, `<uuid>-2.ext`, …),
+        // not just the currently-referenced one, so restarted-session versions are not orphaned.
+        let prefix = meeting.id.uuidString
+        if let entries = try? FileManager.default.contentsOfDirectory(
+            at: audioDirectory,
+            includingPropertiesForKeys: nil
+        ) {
+            for url in entries where url.lastPathComponent.hasPrefix(prefix) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: - Fetch / persist

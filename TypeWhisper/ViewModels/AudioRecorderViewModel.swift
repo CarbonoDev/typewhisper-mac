@@ -38,6 +38,7 @@ final class AudioRecorderViewModel: ObservableObject {
         case alreadyRecording
         case finalizing
         case notRecording
+        case busyWithMeeting
 
         var errorDescription: String? {
             switch self {
@@ -49,6 +50,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 "Recorder is finalizing"
             case .notRecording:
                 "Not recording"
+            case .busyWithMeeting:
+                String(localized: "recorder.busyWithMeeting")
             }
         }
     }
@@ -455,6 +458,12 @@ final class AudioRecorderViewModel: ObservableObject {
             throw RecorderAPIError.noSourceEnabled
         }
 
+        // Mutual exclusion with meeting capture (plan D1): both drive the same singleton capture
+        // stack, so refuse to start while a meeting owns it.
+        guard recorderService.acquireCaptureOwnership(.recorder) else {
+            throw RecorderAPIError.busyWithMeeting
+        }
+
         errorMessage = nil
         systemAudioWarningMessage = nil
         partialText = ""
@@ -469,6 +478,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 format: outputFormat
             )
         } catch {
+            recorderService.releaseCaptureOwnership(.recorder)
             state = .idle
             currentOutputURL = nil
             if let apiSessionID {
@@ -507,6 +517,7 @@ final class AudioRecorderViewModel: ObservableObject {
         Task {
             let liveSessionResult = await streamingHandler.finish()
             let url = await recorderService.stopRecording()
+            recorderService.releaseCaptureOwnership(.recorder)
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
             if transcriptionEnabled, let url {

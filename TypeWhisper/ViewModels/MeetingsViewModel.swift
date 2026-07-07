@@ -18,14 +18,31 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
     @Published private(set) var calendarErrorMessage: String?
 
+    // Capture (M3)
+    @Published private(set) var activeMeeting: Meeting?
+    @Published private(set) var isCapturing = false
+    @Published private(set) var liveTranscript: String = ""
+    @Published private(set) var captureElapsedSeconds: TimeInterval = 0
+    @Published private(set) var isDegradedLiveMode = false
+    @Published private(set) var captureErrorMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
+    private let captureService: MeetingCaptureService
+    private let startNotificationService: MeetingStartNotificationService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
-    init(meetingService: MeetingService, calendarService: CalendarService) {
+    init(
+        meetingService: MeetingService,
+        calendarService: CalendarService,
+        captureService: MeetingCaptureService,
+        startNotificationService: MeetingStartNotificationService
+    ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
+        self.captureService = captureService
+        self.startNotificationService = startNotificationService
         self.meetings = meetingService.meetings
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
         self.upcomingEvents = calendarService.upcomingEvents
@@ -47,7 +64,10 @@ final class MeetingsViewModel: ObservableObject {
         calendarService.$upcomingEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in
-                self?.upcomingEvents = events
+                guard let self else { return }
+                self.upcomingEvents = events
+                // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
+                self.startNotificationService.notifyStartingMeetings(events)
             }
             .store(in: &cancellables)
         calendarService.$errorMessage
@@ -55,6 +75,31 @@ final class MeetingsViewModel: ObservableObject {
             .sink { [weak self] message in
                 self?.calendarErrorMessage = message
             }
+            .store(in: &cancellables)
+
+        captureService.$activeMeeting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] meeting in self?.activeMeeting = meeting }
+            .store(in: &cancellables)
+        captureService.$isCapturing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isCapturing = value }
+            .store(in: &cancellables)
+        captureService.$liveTranscript
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.liveTranscript = value }
+            .store(in: &cancellables)
+        captureService.$elapsedSeconds
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.captureElapsedSeconds = value }
+            .store(in: &cancellables)
+        captureService.$isDegradedLiveMode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isDegradedLiveMode = value }
+            .store(in: &cancellables)
+        captureService.$errorMessage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.captureErrorMessage = value }
             .store(in: &cancellables)
     }
 
@@ -107,6 +152,50 @@ final class MeetingsViewModel: ObservableObject {
         )
         loadUpcoming()
         return meeting
+    }
+
+    // MARK: - Capture (M3)
+
+    var canStartCapture: Bool { !isCapturing }
+
+    /// Create an ad-hoc meeting so capture never hard-depends on the calendar (plan §1).
+    @discardableResult
+    func createAdHocMeeting(title: String? = nil) -> Meeting {
+        let resolved = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTitle = (resolved?.isEmpty == false) ? resolved! : String(localized: "meetings.adHoc.defaultTitle")
+        return meetingService.createMeeting(title: finalTitle, source: .adHoc, state: .scheduled, startDate: Date())
+    }
+
+    /// Start live capture for an existing meeting. Surfaces a localized error (e.g. the Recorder
+    /// currently owns the capture stack) via `captureErrorMessage`.
+    func startCapture(for meeting: Meeting) async {
+        captureErrorMessage = nil
+        do {
+            try await captureService.start(meeting: meeting)
+        } catch {
+            captureErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Create an ad-hoc meeting and immediately begin capturing it.
+    func startAdHocCapture(title: String? = nil) async {
+        let meeting = createAdHocMeeting(title: title)
+        await startCapture(for: meeting)
+    }
+
+    /// Create (or reuse) the meeting backing a calendar event, then begin capture.
+    func startCapture(from event: CalendarEventDTO) async {
+        let meeting = createMeeting(from: event)
+        await startCapture(for: meeting)
+    }
+
+    func stopCapture() async {
+        await captureService.stop()
+    }
+
+    /// Add an in-meeting note to the active capture, timestamped with elapsed seconds.
+    func addNote(_ text: String) {
+        captureService.addNote(text)
     }
 
     /// Poll the calendar roughly once a minute while the meetings UI is visible (plan D10).

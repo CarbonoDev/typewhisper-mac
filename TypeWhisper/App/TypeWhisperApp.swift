@@ -199,6 +199,12 @@ struct TypeWhisperApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 500, height: 400)
+
+        Window(String(localized: "meetings.window.title"), id: "meetings") {
+            meetingsContent
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1000, height: 640)
     }
 
     private var settingsScene: some Scene {
@@ -268,6 +274,15 @@ struct TypeWhisperApp: App {
             EmptyView()
         } else {
             ErrorLogView()
+        }
+    }
+
+    @ViewBuilder
+    private var meetingsContent: some View {
+        if AppConstants.isRunningTests {
+            EmptyView()
+        } else {
+            MeetingsWindowView()
         }
     }
 
@@ -646,7 +661,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             if identifier.contains("settings")
                 || identifier.contains("setup")
                 || identifier.contains("history")
-                || identifier.contains("errors") {
+                || identifier.contains("errors")
+                || identifier.contains("meetings") {
                 return true
             }
         }
@@ -656,6 +672,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             || title == String(localized: "TypeWhisper Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
+            || title == String(localized: "meetings.window.title")
     }
 
     private var hasVisibleManagedWindow: Bool {

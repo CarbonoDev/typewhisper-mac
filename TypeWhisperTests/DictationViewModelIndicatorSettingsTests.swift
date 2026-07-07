@@ -685,7 +685,7 @@ final class MenuBarGroupingTests: XCTestCase {
     func testMenuBarSectionsContainExpectedItems() {
         XCTAssertEqual(
             MenuBarMenuSection.general.items,
-            [.settings, .history, .errorLog]
+            [.settings, .meetings, .history, .errorLog]
         )
         XCTAssertEqual(
             MenuBarMenuSection.recorder.items,

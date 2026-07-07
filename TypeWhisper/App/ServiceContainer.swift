@@ -47,6 +47,8 @@ final class ServiceContainer: ObservableObject {
     let supporterDiscordService: SupporterDiscordService
     let meetingService: MeetingService
     let calendarService: CalendarService
+    let meetingCaptureService: MeetingCaptureService
+    let meetingStartNotificationService: MeetingStartNotificationService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -135,6 +137,12 @@ final class ServiceContainer: ObservableObject {
         )
         meetingService = MeetingService()
         calendarService = CalendarService()
+        meetingCaptureService = MeetingCaptureService(
+            meetingService: meetingService,
+            audioRecorderService: audioRecorderService,
+            modelManager: modelManagerService
+        )
+        meetingStartNotificationService = MeetingStartNotificationService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -234,7 +242,12 @@ final class ServiceContainer: ObservableObject {
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
         )
-        meetingsViewModel = MeetingsViewModel(meetingService: meetingService, calendarService: calendarService)
+        meetingsViewModel = MeetingsViewModel(
+            meetingService: meetingService,
+            calendarService: calendarService,
+            captureService: meetingCaptureService,
+            startNotificationService: meetingStartNotificationService
+        )
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -273,6 +286,10 @@ final class ServiceContainer: ObservableObject {
 
     func initialize() async {
         guard !AppConstants.isRunningTests else { return }
+
+        // Crash recovery: mark any meeting left `.live` by a crash/force-quit as `.interrupted`
+        // while keeping its persisted transcript segments visible (plan D2).
+        meetingService.recoverInterruptedMeetings()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
