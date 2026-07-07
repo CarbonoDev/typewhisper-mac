@@ -6,6 +6,7 @@ import SwiftUI
 struct MeetingsWindowView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @State private var selectedMeetingID: UUID?
+    @State private var isPresentingImport = false
 
     var body: some View {
         NavigationSplitView {
@@ -17,6 +18,11 @@ struct MeetingsWindowView: View {
         .onDisappear { viewModel.stopCalendarPolling() }
         .onChange(of: viewModel.activeMeeting?.id) { _, newValue in
             if let newValue { selectedMeetingID = newValue }
+        }
+        .sheet(isPresented: $isPresentingImport) {
+            MeetingImportView(mergeTarget: selectedMeeting) { meeting in
+                selectedMeetingID = meeting.id
+            }
         }
     }
 
@@ -62,6 +68,13 @@ struct MeetingsWindowView: View {
                     Label(String(localized: "meetings.newMeeting"), systemImage: "plus")
                 }
                 .disabled(!viewModel.canStartCapture)
+            }
+            ToolbarItem {
+                Button {
+                    isPresentingImport = true
+                } label: {
+                    Label(String(localized: "meetings.import.toolbar"), systemImage: "square.and.arrow.down")
+                }
             }
         }
     }

@@ -161,6 +161,97 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Import (M8)
+
+    /// Create a new meeting from an imported source (audio or transcript file). Segments are
+    /// appended in file/transcription order (already chronological); when they all carry a zero
+    /// timestamp (plain-text imports) the sequential `order` keeps them stable (plan reminder 4).
+    /// An optional audio file is adopted into `meetings-audio/`.
+    @discardableResult
+    func createFromImport(
+        title: String,
+        source: MeetingSource,
+        segments: [TranscriptionSegment],
+        segmentSource: MeetingSegmentSource,
+        startDate: Date? = nil,
+        audioFileURL: URL? = nil,
+        state: MeetingState = .completed
+    ) -> Meeting {
+        let meeting = createMeeting(title: title, source: source, state: state, startDate: startDate)
+        if !segments.isEmpty {
+            appendStableSegments(segments, source: segmentSource, to: meeting)
+        }
+        if let audioFileURL {
+            adoptAudioFile(audioFileURL, for: meeting)
+        }
+        return meeting
+    }
+
+    /// Merge an imported transcript into an existing meeting (plan M8 / D12). Captured content is
+    /// preserved; imported segments duplicating the overlap are dropped by `TranscriptMerger`; the
+    /// union is re-numbered chronologically and deterministically (stable for equal start times).
+    func mergeImport(
+        into meeting: Meeting,
+        segments: [TranscriptionSegment],
+        source: MeetingSegmentSource = .importedTranscript
+    ) {
+        guard !segments.isEmpty else { return }
+
+        let existing = meeting.segments
+            .sorted { $0.order < $1.order }
+            .map {
+                TranscriptMerger.Segment(
+                    text: $0.text,
+                    start: $0.start,
+                    end: $0.end,
+                    speakerLabel: $0.speakerLabel,
+                    speakerConfidence: $0.speakerConfidence,
+                    source: $0.source
+                )
+            }
+        let imported = segments.map {
+            TranscriptMerger.Segment(
+                text: $0.text,
+                start: $0.start,
+                end: $0.end,
+                speakerLabel: $0.speakerLabel,
+                speakerConfidence: $0.speakerConfidence,
+                source: source
+            )
+        }
+
+        let merged = TranscriptMerger.merge(existing: existing, imported: imported)
+
+        // Replace the meeting's segments with the merged set. The old rows are deleted and the
+        // merged sequence re-inserted so provenance tags and ordering are authoritative. `renumber`
+        // re-sorts by (start, provisional order); the merger already produced the final order, so
+        // provisional order == index preserves it (including all-zero-timestamp stability).
+        for existingSegment in meeting.segments {
+            modelContext.delete(existingSegment)
+        }
+        var inserted: [MeetingSegment] = []
+        inserted.reserveCapacity(merged.count)
+        for (offset, segment) in merged.enumerated() {
+            let modelSegment = MeetingSegment(
+                order: offset,
+                start: segment.start,
+                end: segment.end,
+                text: segment.text,
+                speakerLabel: segment.speakerLabel,
+                speakerConfidence: segment.speakerConfidence,
+                source: segment.source,
+                isStable: true
+            )
+            modelSegment.meeting = meeting
+            modelContext.insert(modelSegment)
+            inserted.append(modelSegment)
+        }
+        renumber(inserted)
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     private func renumber(_ segments: [MeetingSegment]) {
         let ordered = segments.sorted {
             if $0.start != $1.start { return $0.start < $1.start }

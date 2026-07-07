@@ -44,6 +44,10 @@ final class MeetingsViewModel: ObservableObject {
     // Obsidian export (M7)
     @Published var exportErrorMessage: String?
 
+    // Import / merge (M8)
+    @Published private(set) var isImporting = false
+    @Published var importErrorMessage: String?
+
     private let meetingService: MeetingService
     private let calendarService: CalendarService
     private let captureService: MeetingCaptureService
@@ -52,6 +56,7 @@ final class MeetingsViewModel: ObservableObject {
     private let vaultService: ObsidianVaultService
     private let briefService: MeetingBriefService
     private let exporter: MeetingObsidianExporter
+    private let importService: MeetingImportService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -63,7 +68,8 @@ final class MeetingsViewModel: ObservableObject {
         llmService: MeetingLLMService,
         vaultService: ObsidianVaultService,
         briefService: MeetingBriefService,
-        exporter: MeetingObsidianExporter
+        exporter: MeetingObsidianExporter,
+        importService: MeetingImportService
     ) {
         self.meetingService = meetingService
         self.calendarService = calendarService
@@ -73,6 +79,7 @@ final class MeetingsViewModel: ObservableObject {
         self.vaultService = vaultService
         self.briefService = briefService
         self.exporter = exporter
+        self.importService = importService
         self.meetings = meetingService.meetings
         self.templates = meetingService.templates
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
@@ -162,6 +169,10 @@ final class MeetingsViewModel: ObservableObject {
         briefService.$isGenerating
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isGeneratingBrief = value }
+            .store(in: &cancellables)
+        importService.$isImporting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isImporting = value }
             .store(in: &cancellables)
     }
 
@@ -400,6 +411,54 @@ final class MeetingsViewModel: ObservableObject {
         } catch {
             exportErrorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    // MARK: - Import / merge (M8)
+
+    /// Supported transcript-file extensions for the import file picker (never the audio set).
+    var transcriptFileExtensions: [String] { Array(TranscriptFileParser.supportedExtensions).sorted() }
+
+    /// Supported audio-file extensions for the import file picker.
+    var audioFileExtensions: [String] { Array(AudioFileService.supportedExtensions).sorted() }
+
+    /// Import a transcript-only file (Google Meet / `Speaker:` / timestamped / plain text) as a new
+    /// meeting. Returns the created meeting, or nil on failure (surfaced via `importErrorMessage`).
+    @discardableResult
+    func importTranscriptFile(at url: URL) -> Meeting? {
+        importErrorMessage = nil
+        do {
+            return try importService.importTranscriptFile(at: url)
+        } catch {
+            importErrorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Import an audio file as a new meeting: it is decoded, transcribed, and adopted into the
+    /// meetings library. Returns the created meeting, or nil on failure.
+    @discardableResult
+    func importAudioFile(at url: URL) async -> Meeting? {
+        importErrorMessage = nil
+        do {
+            return try await importService.importAudioFile(at: url)
+        } catch {
+            importErrorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Merge an imported transcript file into an existing meeting, time-ordered and deduped against
+    /// the captured transcript (plan D12). Returns true on success.
+    @discardableResult
+    func mergeTranscriptFile(at url: URL, into meeting: Meeting) -> Bool {
+        importErrorMessage = nil
+        do {
+            try importService.mergeTranscriptFile(at: url, into: meeting)
+            return true
+        } catch {
+            importErrorMessage = error.localizedDescription
+            return false
         }
     }
 

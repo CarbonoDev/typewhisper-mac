@@ -22363,6 +22363,96 @@
         }
       }
     },
+    "meetings.import.toolbar": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Import" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Importieren" } }
+      }
+    },
+    "meetings.import.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Import Meeting" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Besprechung importieren" } }
+      }
+    },
+    "meetings.import.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Create a new meeting from an audio or transcript file, or merge a transcript into the selected meeting." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Erstelle eine neue Besprechung aus einer Audio- oder Transkriptdatei oder führe ein Transkript mit der ausgewählten Besprechung zusammen." } }
+      }
+    },
+    "meetings.import.transcriptButton": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Import Transcript File…" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Transkriptdatei importieren…" } }
+      }
+    },
+    "meetings.import.audioButton": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Import Audio File…" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Audiodatei importieren…" } }
+      }
+    },
+    "meetings.import.mergeInto": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Merge into “%@”" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Mit „%@“ zusammenführen" } }
+      }
+    },
+    "meetings.import.mergeButton": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Merge Transcript File…" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Transkriptdatei zusammenführen…" } }
+      }
+    },
+    "meetings.import.inProgress": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Importing…" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wird importiert…" } }
+      }
+    },
+    "meetings.import.close": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Close" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Schließen" } }
+      }
+    },
+    "meetings.import.defaultTitle": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Imported Meeting" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Importierte Besprechung" } }
+      }
+    },
+    "meetings.import.error.unsupportedTranscript": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This file type isn’t a supported transcript format." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dieser Dateityp ist kein unterstütztes Transkriptformat." } }
+      }
+    },
+    "meetings.import.error.unreadableTranscript": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The transcript file couldn’t be read as text." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Transkriptdatei konnte nicht als Text gelesen werden." } }
+      }
+    },
+    "meetings.import.error.emptyTranscript": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No transcript content was found in the file." } },
+        "de": { "stringUnit": { "state": "translated", "value": "In der Datei wurde kein Transkriptinhalt gefunden." } }
+      }
+    },
+    "meetings.import.error.emptyAudioTranscription": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The audio file produced no transcript." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Audiodatei ergab kein Transkript." } }
+      }
+    },
+    "meetings.import.error.alreadyImporting": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "An import is already in progress." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Ein Import läuft bereits." } }
+      }
+    },
     "meetings.capture.start": {
       "localizations": {
         "en": {

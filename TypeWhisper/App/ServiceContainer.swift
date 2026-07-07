@@ -53,6 +53,7 @@ final class ServiceContainer: ObservableObject {
     let obsidianVaultService: ObsidianVaultService
     let meetingBriefService: MeetingBriefService
     let meetingObsidianExporter: MeetingObsidianExporter
+    let meetingImportService: MeetingImportService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -168,6 +169,14 @@ final class ServiceContainer: ObservableObject {
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).
         meetingObsidianExporter = MeetingObsidianExporter(vaultService: obsidianVaultService)
+        // Import / merge (plan M8): new meetings from audio or transcript files, and merging an
+        // imported transcript into an existing captured meeting. Reuses `audioFileService` +
+        // `modelManagerService.transcribe` for audio and `TranscriptFileParser` for transcripts.
+        meetingImportService = MeetingImportService(
+            meetingService: meetingService,
+            audioFileService: audioFileService,
+            transcriber: modelManagerService
+        )
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -275,7 +284,8 @@ final class ServiceContainer: ObservableObject {
             llmService: meetingLLMService,
             vaultService: obsidianVaultService,
             briefService: meetingBriefService,
-            exporter: meetingObsidianExporter
+            exporter: meetingObsidianExporter,
+            importService: meetingImportService
         )
 
         // Set shared references
