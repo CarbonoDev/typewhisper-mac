@@ -297,11 +297,6 @@ final class ServiceContainer: ObservableObject {
         // Start memory service
         memoryService.startListening()
 
-        // Validate license if needed
-        await licenseService.validateIfNeeded()
-        await licenseService.validateSupporterIfNeeded()
-        await supporterDiscordService.refreshStatusIfNeeded()
-
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),
            let bookmark = UserDefaults.standard.data(forKey: UserDefaultsKeys.watchFolderBookmark) {

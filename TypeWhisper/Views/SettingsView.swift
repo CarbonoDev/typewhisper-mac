@@ -60,7 +60,7 @@ struct SettingsView: View {
             ),
             SettingsDestination(
                 tab: .premium,
-                title: localizedAppText("Premium", de: "Premium"),
+                title: localizedAppText("Correction & Sync", de: "Korrektur & Sync"),
                 systemImage: "sparkles",
                 badge: nil
             ),
@@ -72,7 +72,6 @@ struct SettingsView: View {
             ),
             SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
     }
@@ -294,7 +293,6 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
             destinations: [
                 settingsDestination(destinations, .diarization),
                 settingsDestination(destinations, .advanced),
-                settingsDestination(destinations, .license),
                 settingsDestination(destinations, .about)
             ]
         )

@@ -611,7 +611,9 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
-    func testRecoveryAutomaticFallbackRequiresCommercialOrSupporterAccess() throws {
+    func testRecoveryAutomaticFallbackIsAvailableToEveryone() throws {
+        // TypeWhisper is free and open source: automatic transcription fallback is
+        // unlocked for all users, with no license or supporter status required.
         setupPluginManager()
         let defaults = try makeDefaults()
         let license = LicenseService(defaults: defaults)
@@ -620,11 +622,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.selectedEngine = "backup"
         viewModel.selectedModel = "backup-large"
         viewModel.automaticFallbackEnabled = true
-
-        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
-
-        license.licenseStatus = .active
-        license.licenseTier = .individual
 
         XCTAssertEqual(
             viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),

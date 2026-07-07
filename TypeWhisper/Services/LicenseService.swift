@@ -198,9 +198,14 @@ final class LicenseService: ObservableObject {
         case supporter
     }
 
-    var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
-    var hasCommercialLicense: Bool { licenseStatus == .active }
-    var canUseProTranscriptionFallback: Bool { hasCommercialLicense || isSupporter }
+    // TypeWhisper is free and open source (GPLv3). Every feature is unlocked for
+    // everyone, so the feature-gate accessors below are constants. The remaining
+    // license/supporter machinery is retained as an inert compatibility shim so the
+    // wider codebase (and its tests) keep compiling; no UI surfaces it and it makes
+    // no network calls in production.
+    var isSupporter: Bool { false }
+    var hasCommercialLicense: Bool { true }
+    var canUseProTranscriptionFallback: Bool { true }
     var supporterClaimProof: SupporterClaimProof? {
         guard supporterStatus == .active,
               let supporterTier,
@@ -213,21 +218,13 @@ final class LicenseService: ObservableObject {
         )
     }
 
-    var needsWelcomeSheet: Bool {
-        !defaults.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
-    }
+    var needsWelcomeSheet: Bool { false }
 
-    var shouldShowReminder: Bool {
-        requiresCommercialLicense && licenseStatus != .active
-    }
+    var shouldShowReminder: Bool { false }
 
-    var requiresCommercialLicense: Bool {
-        usageIntent != .personalOSS
-    }
+    var requiresCommercialLicense: Bool { false }
 
-    var shouldShowWorkUsagePrompt: Bool {
-        usageIntent == .personalOSS && licenseStatus != .active
-    }
+    var shouldShowWorkUsagePrompt: Bool { false }
 
     // MARK: - Init
 

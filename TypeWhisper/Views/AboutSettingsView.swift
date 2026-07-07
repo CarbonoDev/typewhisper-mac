@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct AboutSettingsView: View {
-    @ObservedObject private var license = LicenseService.shared
     @AppStorage(UserDefaultsKeys.updateChannel) private var selectedUpdateChannelRawValue = AppConstants.defaultReleaseChannel.rawValue
 
     private var selectedUpdateChannel: AppConstants.ReleaseChannel {
@@ -30,10 +29,6 @@ struct AboutSettingsView: View {
                     Text("TypeWhisper")
                         .font(.title)
                         .fontWeight(.semibold)
-
-                    if license.isSupporter, let tier = license.supporterTier {
-                        SupporterBadgeView(tier: tier)
-                    }
 
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"

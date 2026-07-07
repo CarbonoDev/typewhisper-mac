@@ -496,35 +496,6 @@ final class CLISupportTests: XCTestCase {
         )
     }
 
-    func testCommercialPurchaseOptionCopyMapsPriceAndBillingLabels() {
-        XCTAssertEqual(
-            commercialPurchaseOptionCopy(for: .individual, cadence: .monthly),
-            CommercialPurchaseOptionCopy(
-                price: "5 EUR",
-                billingLabel: localizedAppText("per month", de: "pro Monat"),
-                detail: localizedAppText("Lower upfront cost", de: "Geringerer Einstiegspreis")
-            )
-        )
-
-        XCTAssertEqual(
-            commercialPurchaseOptionCopy(for: .team, cadence: .lifetime),
-            CommercialPurchaseOptionCopy(
-                price: "299 EUR",
-                billingLabel: localizedAppText("one-time", de: "einmalig"),
-                detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
-            )
-        )
-
-        XCTAssertEqual(
-            commercialPurchaseOptionCopy(for: .enterprise, cadence: .monthly),
-            CommercialPurchaseOptionCopy(
-                price: "99 EUR",
-                billingLabel: localizedAppText("per month", de: "pro Monat"),
-                detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
-            )
-        )
-    }
-
     @MainActor
     func testActivateAnyKeyRoutesCommercialBenefitIntoCommercialState() async throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
