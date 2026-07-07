@@ -75,18 +75,25 @@ final class MeetingStartNotificationService: ObservableObject {
         }
     }
 
-    private func deliverNotification(for event: CalendarEventDTO, via center: UNUserNotificationCenter) {
-        let content = UNMutableNotificationContent()
-        content.title = String(localized: "meetings.notification.starting.title")
+    /// Build the notification body for `event`. Extracted from `deliverNotification` so the
+    /// brief-line composition is unit-testable without a notification center (which is nil under
+    /// tests). [Track D] appends the "brief ready" line only when `freshBriefLookup` reports a fresh
+    /// auto-brief; a nil lookup keeps the v1 body verbatim (plan AD9).
+    func notificationBody(for event: CalendarEventDTO, now: Date = Date()) -> String {
         var body = String(
             format: String(localized: "meetings.notification.starting.body"),
             event.title
         )
-        // [Track D] Mention a ready pre-meeting brief so the user knows to open it (plan AD9).
-        if freshBriefLookup?(event.id, Date()) == true {
+        if freshBriefLookup?(event.id, now) == true {
             body += "\n" + String(localized: "meetings.brief.auto.notification.briefReady")
         }
-        content.body = body
+        return body
+    }
+
+    private func deliverNotification(for event: CalendarEventDTO, via center: UNUserNotificationCenter) {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "meetings.notification.starting.title")
+        content.body = notificationBody(for: event)
         content.sound = .default
 
         let request = UNNotificationRequest(

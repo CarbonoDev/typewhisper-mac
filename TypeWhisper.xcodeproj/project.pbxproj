@@ -193,6 +193,7 @@
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
 		DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */; };
+		DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */; };
 		MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000011 /* MeetingQAComposerTests.swift */; };
 		MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */; };
 		MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000013 /* TranscriptFileParserTests.swift */; };
@@ -709,6 +710,7 @@
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
 		DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefSchedulerTests.swift; sourceTree = "<group>"; };
+		DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000011 /* MeetingQAComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporterTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000013 /* TranscriptFileParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFileParserTests.swift; sourceTree = "<group>"; };
@@ -2499,6 +2501,7 @@
 				MEF0000000000000000009 /* LexicalRetrieverTests.swift */,
 				MEF0000000000000000010 /* MeetingBriefServiceTests.swift */,
 				DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */,
+				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
 				MEF0000000000000000011 /* MeetingQAComposerTests.swift */,
 				MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */,
 				MEF0000000000000000013 /* TranscriptFileParserTests.swift */,
@@ -4006,6 +4009,7 @@
 				MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */,
 				MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */,
 				DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */,
+				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
 				MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */,
 				MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */,
 				MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */,

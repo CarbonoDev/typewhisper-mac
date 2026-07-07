@@ -605,8 +605,33 @@ final class MeetingsViewModel: ObservableObject {
     /// Derived from the service's synchronously-updated `meetings` (not the Combine-mirrored
     /// `self.meetings`) so `loadUpcoming()` called right after `createMeeting` sees the newly
     /// created event and excludes it immediately.
+    ///
+    /// [Track D] Auto-brief placeholder meetings (pre-created by the scheduler without any user
+    /// action, still `.scheduled`) are deliberately NOT excluded: excluding them would drop the
+    /// event from the Upcoming section ~lead-minutes before it starts, taking the "Brief ready"
+    /// affordance and the start-notification prompt with it (AD9/finding 1). Once the user engages
+    /// such a meeting (capture starts → state leaves `.scheduled`), it is excluded like any other.
     private var existingCalendarEventIDs: Set<String> {
-        Set(meetingService.meetings.compactMap { $0.calendarEventID })
+        Self.engagedCalendarEventIDs(
+            meetings: meetingService.meetings,
+            autoBriefPlaceholders: briefScheduler.placeholderEventIDs
+        )
+    }
+
+    /// The calendar-event ids to exclude from the Upcoming list: every stored meeting's
+    /// `calendarEventID` except auto-brief placeholders still in `.scheduled` state (finding 1).
+    /// Static + pure so the exclusion rule is unit-testable without constructing the full view model.
+    static func engagedCalendarEventIDs(
+        meetings: [Meeting],
+        autoBriefPlaceholders placeholders: Set<String>
+    ) -> Set<String> {
+        Set(
+            meetings.compactMap { meeting -> String? in
+                guard let id = meeting.calendarEventID else { return nil }
+                if meeting.state == .scheduled, placeholders.contains(id) { return nil }
+                return id
+            }
+        )
     }
 
     #if DEBUG

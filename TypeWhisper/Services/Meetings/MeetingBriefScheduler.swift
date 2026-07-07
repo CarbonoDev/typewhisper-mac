@@ -63,6 +63,23 @@ final class MeetingBriefScheduler: ObservableObject {
     private var queue: [(meeting: Meeting, eventID: String)] = []
     private var isDraining = false
 
+    /// Calendar-event ids whose backing `Meeting` this scheduler pre-created as an auto-brief
+    /// placeholder (no user action). These must NOT be treated as "already handled" by the
+    /// upcoming-list exclusion, or the event would drop out of the Upcoming section ~lead-minutes
+    /// before it starts — taking the "Brief ready" affordance and the start-notification prompt with
+    /// it (finding 1). Exposed to `MeetingsViewModel.existingCalendarEventIDs`; once the user engages
+    /// the meeting (capture starts → state leaves `.scheduled`) it is excluded like any other.
+    private var autoCreatedEventIDs: Set<String> = []
+
+    /// Read-only view of the calendar-event ids for scheduler-pre-created placeholder meetings.
+    var placeholderEventIDs: Set<String> { autoCreatedEventIDs }
+
+    /// Events whose auto-brief generation threw. Suppresses re-enqueue on every subsequent poll tick
+    /// within the same lead window (finding 3): without this a persistent failure (no LLM configured,
+    /// network down, or a colliding manual `alreadyGenerating`) would re-attempt generation ~once a
+    /// minute for the whole ~20 min window. Cleared when the event leaves the lead window.
+    private var failedEventIDs: Set<String> = []
+
     /// The current drain task. Exposed to tests so they can await settled generation deterministically.
     private(set) var currentWorker: Task<Void, Never>?
 
@@ -112,8 +129,15 @@ final class MeetingBriefScheduler: ObservableObject {
         let config = loadConfig()
         guard config.enabled else { return }
 
-        for event in events where isEligible(event, config: config, now: now) {
+        let eligible = events.filter { isEligible($0, config: config, now: now) }
+        // Forget failures for events that have left the lead window so a later, distinct occurrence
+        // can retry (finding 3); keep suppression for events still in-window.
+        failedEventIDs.formIntersection(Set(eligible.map(\.id)))
+
+        for event in eligible {
             guard !pendingEventIDs.contains(event.id) else { continue }
+            // A prior attempt threw; do not re-enqueue for the remainder of the lead window.
+            guard !failedEventIDs.contains(event.id) else { continue }
             let meeting = resolveMeeting(for: event)
             if hasFreshBrief(for: meeting, freshnessHours: config.freshnessHours, now: now) { continue }
             enqueue(meeting: meeting, eventID: event.id)
@@ -137,6 +161,7 @@ final class MeetingBriefScheduler: ObservableObject {
             return existing
         }
         let projection = CalendarService.meetingProjection(for: event)
+        autoCreatedEventIDs.insert(event.id)
         return store.createMeeting(
             title: projection.title,
             source: .calendar,
@@ -184,7 +209,13 @@ final class MeetingBriefScheduler: ObservableObject {
     }
 
     private func drain() async {
-        defer { isDraining = false }
+        defer {
+            isDraining = false
+            // The coarse status is a transient surface, not a persistent error banner (AD9): once the
+            // queue empties, do not leave a stale `.failed`/`.generating` lingering forever
+            // (finding 4). Durable failure memory lives in `failedEventIDs`, not in `status`.
+            status = .idle
+        }
         while !queue.isEmpty {
             let job = queue.removeFirst()
             status = .generating(meetingTitle: job.meeting.title)
@@ -194,6 +225,9 @@ final class MeetingBriefScheduler: ObservableObject {
             } catch {
                 // Silent-fail (plan AD9): never propagate into the poll loop; surface via status only.
                 logger.info("Auto-brief generation skipped: \(error.localizedDescription, privacy: .public)")
+                // Remember the failure so the next poll tick does not retry within the lead window
+                // (finding 3).
+                failedEventIDs.insert(job.eventID)
                 status = .failed(reason: error.localizedDescription)
             }
             pendingEventIDs.remove(job.eventID)

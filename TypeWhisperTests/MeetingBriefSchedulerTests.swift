@@ -215,7 +215,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         XCTAssertEqual(stub.maxConcurrent, 1, "brief generation must be serialized (cap 1)")
     }
 
-    func testThrowingGenerateBriefSetsStatusAndDoesNotPropagate() async throws {
+    func testThrowingGenerateBriefDoesNotPropagateAndResetsStatus() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
         stub.errorToThrow = Boom()
@@ -231,10 +231,89 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         // Meeting was pre-created but no brief persisted.
         let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
         XCTAssertNil(store.latestOutput(ofKind: .brief, for: meeting))
-        // Status reflects the failure.
-        if case .failed = scheduler.status {} else {
-            XCTFail("Expected .failed status, got \(scheduler.status)")
+        // The coarse status does not linger on `.failed` once the queue drains (finding 4).
+        XCTAssertEqual(scheduler.status, .idle)
+    }
+
+    /// finding 3: a thrown generation is remembered and not retried on every subsequent poll tick
+    /// while the event remains in the lead window (guards against an LLM/network retry storm).
+    func testThrowingGenerateBriefIsNotRetriedWithinLeadWindow() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        stub.errorToThrow = Boom()
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let now = Date()
+        let evt = event(now: now)
+
+        scheduler.tick(events: [evt], now: now)
+        await settle(scheduler)
+        XCTAssertEqual(stub.calls.count, 1)
+
+        // Several more poll ticks inside the same lead window must not re-attempt generation.
+        for offset in [1.0, 2.0, 3.0] {
+            scheduler.tick(events: [evt], now: now.addingTimeInterval(offset * 60))
+            await settle(scheduler)
         }
+        XCTAssertEqual(stub.calls.count, 1, "a failed event must not be retried within its lead window")
+    }
+
+    /// finding 1: after the scheduler pre-creates a placeholder meeting, the event must NOT be
+    /// excluded from the upcoming list (so the "Brief ready" row and the start-notification prompt
+    /// survive). Routes the event through `CalendarService.refresh` with the exclusion set the view
+    /// model computes, and confirms the event stays visible and the start notification still fires.
+    func testPlaceholderMeetingKeepsEventVisibleAndNotifiable() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let now = Date()
+        let evt = event(startInMinutes: 15, now: now)
+
+        // Scheduler pre-creates the backing meeting ~15 min before start.
+        scheduler.tick(events: [evt], now: now)
+        await settle(scheduler)
+        let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
+        XCTAssertEqual(meeting.state, .scheduled)
+        XCTAssertTrue(scheduler.placeholderEventIDs.contains(evt.id))
+
+        // The exclusion set the view model feeds to CalendarService.refresh must keep the placeholder.
+        let excluded = MeetingsViewModel.engagedCalendarEventIDs(
+            meetings: store.meetings,
+            autoBriefPlaceholders: scheduler.placeholderEventIDs
+        )
+        XCTAssertFalse(excluded.contains(evt.id), "auto-brief placeholder must not be excluded")
+
+        // Routed through the real windowing, the event remains visible.
+        let provider = FakeProvider(events: [evt])
+        let calendar = CalendarService(provider: provider)
+        await calendar.requestAccess(now: now)
+        calendar.refresh(now: now, existingCalendarEventIDs: excluded)
+        XCTAssertEqual(calendar.upcomingEvents.map(\.id), [evt.id])
+
+        // The start notification still fires once the event reaches its start window.
+        let notifier = MeetingStartNotificationService(center: nil)
+        let atStart = evt.startDate.addingTimeInterval(-30)
+        XCTAssertTrue(notifier.shouldNotify(evt, now: atStart))
+
+        // Contrast: once the user engages the meeting (state leaves `.scheduled`), it IS excluded.
+        meeting.state = .live
+        let afterEngage = MeetingsViewModel.engagedCalendarEventIDs(
+            meetings: store.meetings,
+            autoBriefPlaceholders: scheduler.placeholderEventIDs
+        )
+        XCTAssertTrue(afterEngage.contains(evt.id))
+    }
+
+    // MARK: - Fake calendar provider (no live EKEventStore)
+
+    private final class FakeProvider: CalendarEventProviding {
+        var authorizationStatus: CalendarAuthorizationStatus = .notDetermined
+        var eventsToReturn: [CalendarEventDTO]
+        init(events: [CalendarEventDTO]) { self.eventsToReturn = events }
+        func requestAccess() async -> CalendarAuthorizationStatus {
+            authorizationStatus = .authorized
+            return .authorized
+        }
+        func events(from start: Date, to end: Date) -> [CalendarEventDTO] { eventsToReturn }
     }
 
     func testDisabledSettingIsNoOp() async throws {

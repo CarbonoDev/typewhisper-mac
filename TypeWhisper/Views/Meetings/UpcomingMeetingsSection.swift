@@ -56,6 +56,13 @@ struct UpcomingMeetingsSection: View {
                 }
             }
         }
+        // [Track D] Surface the auto-brief scheduler's coarse status (plan AD9): a neutral caption
+        // while a pre-meeting brief is being prepared, nothing when idle.
+        if let status = viewModel.autoBriefStatusMessage {
+            Label(status, systemImage: "sparkles")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func eventRow(_ event: CalendarEventDTO) -> some View {
