@@ -453,6 +453,27 @@ final class StreamingHandler: @unchecked Sendable {
         return appendPreviewText(confirmed, new)
     }
 
+    /// Bounded variant of `stabilizeText` for long-running captures (meeting mode). The caller
+    /// supplies `frozenPrefix` — text that has already been committed/persisted and can therefore
+    /// no longer change. When both snapshots share that prefix, only the still-active tail beyond
+    /// it is fed through the (potentially O(n*m)) stabilization heuristics, so per-update cost stays
+    /// bounded by the unpersisted region instead of growing with the whole transcript. Falls back to
+    /// a full `stabilizeText` when the prefix does not line up (rare provider rewrite of committed
+    /// text), preserving the original behavior.
+    nonisolated static func stabilizeText(confirmed: String, new: String, frozenPrefix: String) -> String {
+        let frozen = frozenPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !frozen.isEmpty,
+              confirmed.hasPrefix(frozen),
+              new.hasPrefix(frozen) else {
+            return stabilizeText(confirmed: confirmed, new: new)
+        }
+
+        let confirmedTail = String(confirmed.dropFirst(frozen.count))
+        let newTail = String(new.dropFirst(frozen.count))
+        let stabilizedTail = stabilizeText(confirmed: confirmedTail, new: newTail)
+        return appendPreviewText(frozen, stabilizedTail)
+    }
+
     private nonisolated static func looksLikeProviderCorrection(confirmed: String, new: String) -> Bool {
         let confirmedScalars = Array(confirmed.unicodeScalars)
         let newScalars = Array(new.unicodeScalars)
@@ -479,12 +500,17 @@ final class StreamingHandler: @unchecked Sendable {
         let newWords = transcriptWords(in: new)
         guard confirmedWords.count >= 4, newWords.count >= 4 else { return false }
 
+        // Cheap length gate BEFORE the O(n*m) LCS: a large word-count disparity can never satisfy
+        // the `wordCountRatio <= 1.5` requirement, so reject it in O(1) instead of after a full DP
+        // (perf: this is the hottest path during long meeting captures).
+        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
+        guard wordCountRatio <= 1.5 else { return false }
+
         let matchedCount = approximateWordMatchCount(newWords, in: confirmedWords)
         let newCoverage = Double(matchedCount) / Double(newWords.count)
         let confirmedCoverage = Double(matchedCount) / Double(confirmedWords.count)
-        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
 
-        return newCoverage >= 0.72 && confirmedCoverage >= 0.60 && wordCountRatio <= 1.5
+        return newCoverage >= 0.72 && confirmedCoverage >= 0.60
     }
 
     private nonisolated static func approximateWordMatchCount(

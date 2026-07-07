@@ -156,7 +156,12 @@ extension MeetingsViewModel {
         speakerMap: [String: String],
         gapThreshold: Double = transcriptGapThreshold
     ) -> [TranscriptBubble] {
-        let ordered = segments.sorted { $0.order < $1.order }
+        // Read the SwiftData-persisted `.order` once per segment (each access faults the property)
+        // instead of on every comparison during the sort — this runs inside `body` on every publish.
+        let ordered = segments
+            .map { (segment: $0, order: $0.order) }
+            .sorted { $0.order < $1.order }
+            .map(\.segment)
         var bubbles: [TranscriptBubble] = []
         var previousEnd: Double?
 

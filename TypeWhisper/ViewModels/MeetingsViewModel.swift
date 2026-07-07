@@ -196,11 +196,16 @@ final class MeetingsViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isCapturing = value }
             .store(in: &cancellables)
+        // `removeDuplicates` guards the singleton VM's `objectWillChange` from firing (and rebuilding
+        // every transcript observer) on redundant republishes — the 350 ms live-preview poll and the
+        // 1 s elapsed timer frequently re-emit an unchanged value.
         captureService.$liveTranscript
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.liveTranscript = value }
             .store(in: &cancellables)
         captureService.$elapsedSeconds
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.captureElapsedSeconds = value }
             .store(in: &cancellables)

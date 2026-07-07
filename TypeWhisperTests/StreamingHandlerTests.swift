@@ -749,6 +749,59 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(stable, "Ich bin an Koeln.")
     }
 
+    // MARK: - Bounded (frozen-prefix) stabilization (meeting-capture perf fix)
+
+    func testBoundedStabilizeAppendsBeyondFrozenPrefix() {
+        // New content extends the confirmed text; the frozen (already-persisted) prefix is preserved
+        // and the tail is appended, matching the unbounded result.
+        let frozen = "First sentence. Second sentence."
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: frozen,
+            new: "First sentence. Second sentence. Third sentence.",
+            frozenPrefix: frozen
+        )
+
+        XCTAssertEqual(stable, "First sentence. Second sentence. Third sentence.")
+    }
+
+    func testBoundedStabilizePreservesFrozenPrefixWhileCorrectingActiveTail() {
+        // A provider correction in the still-active tail is applied, but the persisted prefix ahead
+        // of it stays verbatim (it can no longer change) and is not re-stabilized.
+        let frozen = "First sentence. Second sentence."
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "First sentence. Second sentence. Ich bin an Koin.",
+            new: "First sentence. Second sentence. Ich bin an Koeln.",
+            frozenPrefix: frozen
+        )
+
+        XCTAssertEqual(stable, "First sentence. Second sentence. Ich bin an Koeln.")
+    }
+
+    func testBoundedStabilizeFallsBackToFullStabilizationWhenPrefixDoesNotLineUp() {
+        // When the frozen prefix is not shared by both snapshots (rare rewrite of committed text),
+        // the bounded variant must produce the same result as the unbounded one.
+        let confirmed = "Ich bin an Koin."
+        let new = "Ich bin an Koeln."
+        let bounded = StreamingHandler.stabilizeText(
+            confirmed: confirmed,
+            new: new,
+            frozenPrefix: "Totally unrelated persisted text."
+        )
+        let full = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
+
+        XCTAssertEqual(bounded, full)
+        XCTAssertEqual(bounded, "Ich bin an Koeln.")
+    }
+
+    func testBoundedStabilizeWithEmptyFrozenPrefixMatchesUnbounded() {
+        let confirmed = "First sentence. Second sentence."
+        let new = "Second sentence. Third sentence."
+        let bounded = StreamingHandler.stabilizeText(confirmed: confirmed, new: new, frozenPrefix: "")
+        let full = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
+
+        XCTAssertEqual(bounded, full)
+    }
+
     func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

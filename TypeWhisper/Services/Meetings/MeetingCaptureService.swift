@@ -413,7 +413,15 @@ final class MeetingCaptureService: ObservableObject {
     /// engine.
     func ingestLiveTranscript(_ raw: String, elapsed: TimeInterval) {
         latestElapsed = elapsed
-        let stabilized = StreamingHandler.stabilizeText(confirmed: confirmedText, new: raw)
+        // Bounded stabilization: text already persisted to segments can no longer change, so freeze
+        // it and only run the (potentially O(n*m)) stabilization heuristics on the still-active tail.
+        // Without this the whole meeting transcript is re-stabilized on the main actor every ~350 ms,
+        // pegging a core and freezing the UI as the meeting grows.
+        let stabilized = StreamingHandler.stabilizeText(
+            confirmed: confirmedText,
+            new: raw,
+            frozenPrefix: persistedText
+        )
         confirmedText = stabilized
         liveTranscript = stabilized
 
