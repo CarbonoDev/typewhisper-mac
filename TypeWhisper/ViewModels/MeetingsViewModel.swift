@@ -30,6 +30,11 @@ final class MeetingsViewModel: ObservableObject {
     @Published private(set) var captureElapsedSeconds: TimeInterval = 0
     @Published private(set) var isDegradedLiveMode = false
     @Published private(set) var captureErrorMessage: String?
+    // [Track C] AD8 final re-transcription degradation, mirrored from the capture service so the
+    // detail view can surface a status (never an error dialog) when a meeting's final pass ran in a
+    // reduced mode. `finalRetranscriptionDegradedMeetingID` scopes the banner to the affected meeting.
+    @Published private(set) var finalRetranscriptionDegraded = false
+    @Published private(set) var finalRetranscriptionDegradedMeetingID: UUID?
 
     // Knowledge base + brief (M5)
     @Published private(set) var isVaultConnected = false
@@ -55,12 +60,17 @@ final class MeetingsViewModel: ObservableObject {
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
 
-    private let meetingService: MeetingService
+    // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
+    // per-meeting final re-transcription override through it.
+    let meetingService: MeetingService
     // [Track B] Unified prompt/template library — meeting output templates are `.meeting`-surface
     // PromptAction rows owned by PromptActionService (plan AD6).
     private let promptActionService: PromptActionService
     private let calendarService: CalendarService
-    private let captureService: MeetingCaptureService
+    // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can read
+    // `captureService.activeMeetingDefaultTemplateID` to pre-select the rule-selected default output
+    // template in the generate flow (`defaultTemplate(ofKind:for:)`, addendum AD7).
+    let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
     private let llmService: MeetingLLMService
     private let vaultService: ObsidianVaultService
@@ -68,6 +78,9 @@ final class MeetingsViewModel: ObservableObject {
     private let exporter: MeetingObsidianExporter
     private let importService: MeetingImportService
     private let diarizationEnricher: MeetingDiarizationEnricher
+    // [Track C] Capture-context rules service (addendum AD7). Rule CRUD, context building, and
+    // resolution preview live in `MeetingsViewModel+Rules.swift`.
+    let contextRuleService: MeetingContextRuleService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -82,8 +95,11 @@ final class MeetingsViewModel: ObservableObject {
         briefService: MeetingBriefService,
         exporter: MeetingObsidianExporter,
         importService: MeetingImportService,
-        diarizationEnricher: MeetingDiarizationEnricher
+        diarizationEnricher: MeetingDiarizationEnricher,
+        // [Track C]
+        contextRuleService: MeetingContextRuleService
     ) {
+        self.contextRuleService = contextRuleService
         self.meetingService = meetingService
         self.promptActionService = promptActionService
         self.calendarService = calendarService
@@ -167,6 +183,14 @@ final class MeetingsViewModel: ObservableObject {
         captureService.$isDegradedLiveMode
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isDegradedLiveMode = value }
+            .store(in: &cancellables)
+        captureService.$finalRetranscriptionDegraded
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.finalRetranscriptionDegraded = value }
+            .store(in: &cancellables)
+        captureService.$finalRetranscriptionDegradedMeetingID
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.finalRetranscriptionDegradedMeetingID = value }
             .store(in: &cancellables)
         captureService.$errorMessage
             .receive(on: DispatchQueue.main)
@@ -272,11 +296,12 @@ final class MeetingsViewModel: ObservableObject {
     }
 
     /// Start live capture for an existing meeting. Surfaces a localized error (e.g. the Recorder
-    /// currently owns the capture stack) via `captureErrorMessage`.
-    func startCapture(for meeting: Meeting) async {
+    /// currently owns the capture stack) via `captureErrorMessage`. `calendarName` (the originating
+    /// calendar's source-list name) feeds the AD7 calendar-name rule tier; nil for ad-hoc captures.
+    func startCapture(for meeting: Meeting, calendarName: String? = nil) async {
         captureErrorMessage = nil
         do {
-            try await captureService.start(meeting: meeting)
+            try await captureService.start(meeting: meeting, calendarName: calendarName)
         } catch {
             captureErrorMessage = error.localizedDescription
         }
@@ -316,7 +341,9 @@ final class MeetingsViewModel: ObservableObject {
     /// Create (or reuse) the meeting backing a calendar event, then begin capture.
     func startCapture(from event: CalendarEventDTO) async {
         let meeting = createMeeting(from: event)
-        await startCapture(for: meeting)
+        // Thread the event's calendar (source-list) name through so a calendar-name capture-context
+        // rule (AD7) can match — it is not persisted on `Meeting`, so it must ride the start call.
+        await startCapture(for: meeting, calendarName: event.calendarName)
     }
 
     func stopCapture() async {

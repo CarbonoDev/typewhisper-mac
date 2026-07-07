@@ -12,6 +12,10 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// (plan D2), and on stop the full buffer is re-transcribed to timestamped segments (plan D3).
 @MainActor
 final class MeetingCaptureService: ObservableObject {
+    /// Capture sample rate (16 kHz mono) — used to convert the finalize buffer length to seconds
+    /// for the AD8 cloud-ceiling guard.
+    static let sampleRate: Double = 16_000
+
     enum CaptureError: LocalizedError, Equatable {
         /// The standalone Recorder (or another meeting) currently owns the capture stack.
         case recorderBusy
@@ -46,6 +50,24 @@ final class MeetingCaptureService: ObservableObject {
     /// True when the selected engine lacks live-session support and the handler is running the
     /// windowed re-transcription fallback (plan D18) — surfaced as a reduced-quality indicator.
     @Published private(set) var isDegradedLiveMode = false
+    /// True when the resolved final re-transcription policy (addendum AD8) could not be honored and
+    /// degraded to a safer path (unavailable override engine, or an oversized cloud pass). Surfaced
+    /// as a status, never an error dialog. Persists after `stop()` so the UI can note the last
+    /// capture finalized in a degraded mode.
+    @Published private(set) var finalRetranscriptionDegraded = false
+    /// The meeting whose final re-transcription just finalized in a degraded mode, so the UI can
+    /// scope the degraded status to the correct completed meeting (and not show it on unrelated
+    /// meetings the user browses before the next capture). `nil` when the last finalize was not
+    /// degraded. Set at `stop()`; reset by `resetSessionState()` on the next `start()`.
+    @Published private(set) var finalRetranscriptionDegradedMeetingID: UUID?
+    /// The default output template (opaque UUID) chosen by the matched capture-context rule for the
+    /// active meeting (addendum AD7), so the generate flow can pre-select it. `nil` when no rule
+    /// matched or the rule set no default. Persists after `stop()` (generation happens post-stop);
+    /// reset by `resetSessionState()` on the next `start()`.
+    @Published private(set) var activeMeetingDefaultTemplateID: UUID?
+    /// The meeting `activeMeetingDefaultTemplateID` was chosen for, so the generate flow applies the
+    /// rule-selected template only to that meeting and not to unrelated meetings browsed afterward.
+    @Published private(set) var defaultTemplateMeetingID: UUID?
     @Published private(set) var errorMessage: String?
 
     // MARK: - Dependencies
@@ -59,6 +81,16 @@ final class MeetingCaptureService: ObservableObject {
     /// Publishes `MeetingEvent`s to plugins (addendum AD4). Defaulted no-op so v1 call sites/tests
     /// are unchanged.
     private let eventEmitter: MeetingEventEmitting
+    /// Resolves an about-to-start meeting to a capture-context rule (addendum AD7). Optional so v1
+    /// call sites/tests compile without rules; when nil, recorder defaults always apply.
+    private let ruleMatcher: MeetingContextRuleMatching?
+    /// Cloud audio duration ceiling before an `.engine` final pass on a metered engine degrades to
+    /// `.sameEngine` (addendum AD8).
+    private let cloudCeilingSeconds: Double
+    /// Whether a final-pass override engine id is currently available (loadable/selectable).
+    private let engineAvailabilityCheck: (String) -> Bool
+    /// Whether a final-pass override engine id is a metered/cloud engine.
+    private let engineIsCloudCheck: (String) -> Bool
 
     // MARK: - Session bookkeeping
 
@@ -87,13 +119,28 @@ final class MeetingCaptureService: ObservableObject {
     /// Latest elapsed value observed from a live-transcript update.
     private var latestElapsed: TimeInterval = 0
 
+    // MARK: - Capture-context rule session overrides (addendum AD7/AD8)
+
+    /// Live engine override selected by the matched rule for this session (nil = recorder default).
+    private var sessionLiveEngineOverride: String?
+    /// Live model override selected by the matched rule for this session.
+    private var sessionLiveModelOverride: String?
+    /// Language override selected by the matched rule for this session (nil = `.auto`).
+    private var sessionLanguageOverride: LanguageSelection?
+    /// Final re-transcription policy the matched rule set for this session (nil = inherit).
+    private var sessionRulePolicy: FinalRetranscriptionPolicy?
+
     init(
         meetingService: MeetingService,
         audioRecorderService: AudioRecorderService,
         modelManager: ModelManagerService,
         defaults: UserDefaults = .standard,
         flushIntervalSeconds: TimeInterval = 5,
-        eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter()
+        eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter(),
+        ruleMatcher: MeetingContextRuleMatching? = nil,
+        cloudCeilingSeconds: Double = FinalRetranscriptionPolicy.defaultCloudCeilingSeconds,
+        engineAvailabilityCheck: ((String) -> Bool)? = nil,
+        engineIsCloudCheck: ((String) -> Bool)? = nil
     ) {
         self.meetingService = meetingService
         self.audioRecorderService = audioRecorderService
@@ -101,6 +148,14 @@ final class MeetingCaptureService: ObservableObject {
         self.defaults = defaults
         self.flushIntervalSeconds = flushIntervalSeconds
         self.eventEmitter = eventEmitter
+        self.ruleMatcher = ruleMatcher
+        self.cloudCeilingSeconds = cloudCeilingSeconds
+        self.engineAvailabilityCheck = engineAvailabilityCheck ?? { id in
+            PluginManager.shared.transcriptionEngine(for: id) != nil
+        }
+        self.engineIsCloudCheck = engineIsCloudCheck ?? { [weak modelManager] id in
+            modelManager?.usesMeteredStreamingFallback(engineOverrideId: id) ?? false
+        }
     }
 
     // MARK: - Lifecycle
@@ -111,7 +166,8 @@ final class MeetingCaptureService: ObservableObject {
     func start(
         meeting: Meeting,
         micEnabled: Bool = true,
-        systemAudioEnabled: Bool = true
+        systemAudioEnabled: Bool = true,
+        calendarName: String? = nil
     ) async throws {
         guard !isCapturing, !isFinalizing else { throw CaptureError.alreadyCapturing }
 
@@ -130,6 +186,14 @@ final class MeetingCaptureService: ObservableObject {
         resetSessionState()
         errorMessage = nil
         activeMeeting = meeting
+
+        // AD7: resolve any matching capture-context rule *before* streaming starts so its live
+        // engine/model/language overrides feed `startStreaming()` and its final-pass policy +
+        // default template are stashed for this session. No-op when no matcher/rule applies.
+        // The calendar (source list) name — only known at capture start from the originating
+        // `CalendarEventDTO` (it is not persisted on `Meeting`) — feeds the calendar-name trigger
+        // tier (addendum AD7); nil for ad-hoc captures.
+        applyContextRule(for: meeting, calendarName: calendarName)
 
         // Watermark the pre-existing content so finalize (stop) touches only this session's
         // segments and its timestamps sit after the prior session's (finding 1).
@@ -212,6 +276,9 @@ final class MeetingCaptureService: ObservableObject {
         // Final timestamped transcript (plan D3). Prefer a segmented live-session result; else
         // re-transcribe the full buffer; if neither yields segments, keep the live segments.
         let finalSegments = await finalizeSegments(liveSessionResult: liveSessionResult, buffer: fullBuffer)
+        // Scope the degraded status to this meeting so it surfaces only on the meeting that
+        // finalized in a reduced mode (AD8), never on unrelated meetings browsed afterward.
+        finalRetranscriptionDegradedMeetingID = finalRetranscriptionDegraded ? meeting.id : nil
         if let finalSegments, !finalSegments.isEmpty {
             // Final segments are timed relative to *this* session's buffer (0-based); shift them
             // onto the meeting timeline and replace only this session's live segments, preserving
@@ -311,11 +378,14 @@ final class MeetingCaptureService: ObservableObject {
         }
         streamingHandler = handler
 
-        // Read the Recorder's engine/model selection read-only; never mutate its settings (D1).
-        let providerId = defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine)
+        // Read the Recorder's engine/model selection read-only; never mutate its settings (D1). A
+        // matched capture-context rule (AD7) overrides the engine/model for this session only.
+        let providerId = sessionLiveEngineOverride
+            ?? defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine)
         let cloudModelOverride = modelManager.resolvedModelId(
             engineOverrideId: providerId,
-            cloudModelOverride: defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel)
+            cloudModelOverride: sessionLiveModelOverride
+                ?? defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel)
         )
         let selectedProviderId = modelManager.selectedProviderId
         let effectiveProviderId = providerId ?? selectedProviderId
@@ -328,7 +398,7 @@ final class MeetingCaptureService: ObservableObject {
             streamPrompt: "",
             engineOverrideId: providerId,
             selectedProviderId: selectedProviderId,
-            languageSelection: .auto,
+            languageSelection: sessionLanguageOverride ?? .auto,
             task: .transcribe,
             cloudModelOverride: cloudModelOverride,
             allowLiveTranscription: true,
@@ -409,6 +479,52 @@ final class MeetingCaptureService: ObservableObject {
         liveSessionResult: TranscriptionResult?,
         buffer: [Float]
     ) async -> [TranscriptionSegment]? {
+        // AD8: resolve the final re-transcription policy (per-meeting → rule → global → sameEngine)
+        // and apply the availability + cloud-ceiling guards.
+        let policy = resolveFinalRetranscriptionPolicy(for: activeMeeting)
+        let durationSeconds = Double(buffer.count) / MeetingCaptureService.sampleRate
+        let plan = FinalRetranscriptionPolicy.plan(
+            for: policy,
+            durationSeconds: durationSeconds,
+            cloudCeilingSeconds: cloudCeilingSeconds,
+            isEngineAvailable: engineAvailabilityCheck,
+            isCloudEngine: engineIsCloudCheck
+        )
+        finalRetranscriptionDegraded = plan.degraded
+
+        switch plan.execution {
+        case .keepLiveSegments:
+            // `.off`: skip re-transcription entirely; the persisted `.liveCapture` segments stand.
+            return nil
+        case .sameEngine:
+            return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+        case .engine(let id, let model):
+            return await runOverrideEngineFinalize(
+                liveSessionResult: liveSessionResult, buffer: buffer, engineId: id, model: model
+            )
+        }
+    }
+
+    /// Resolve the effective final re-transcription policy for `meeting` from the AD8 layers.
+    private func resolveFinalRetranscriptionPolicy(for meeting: Meeting?) -> FinalRetranscriptionPolicy {
+        let global = FinalRetranscriptionPolicy(
+            mode: defaults.string(forKey: UserDefaultsKeys.meetingsFinalPassDefaultMode),
+            engineId: defaults.string(forKey: UserDefaultsKeys.meetingsFinalPassEngineId),
+            model: defaults.string(forKey: UserDefaultsKeys.meetingsFinalPassModel)
+        )
+        return FinalRetranscriptionPolicy.resolve(
+            perMeeting: meeting?.finalRetranscriptionPolicy,
+            rule: sessionRulePolicy,
+            global: global
+        )
+    }
+
+    /// `.sameEngine`: today's behavior — prefer a segmented live-session result, else re-transcribe
+    /// the full buffer with the Recorder's engine defaults; keep live segments on failure.
+    private func runSameEngineFinalize(
+        liveSessionResult: TranscriptionResult?,
+        buffer: [Float]
+    ) async -> [TranscriptionSegment]? {
         if let liveSessionResult, !liveSessionResult.segments.isEmpty {
             return liveSessionResult.segments
         }
@@ -435,6 +551,40 @@ final class MeetingCaptureService: ObservableObject {
             logger.warning("Final meeting transcription failed; keeping live segments: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// `.engine(id, model)`: run the full-buffer pass on a specific override engine (AD8). On
+    /// failure/empty, degrade to the `.sameEngine` path — forwarding the already-computed
+    /// `liveSessionResult` so the degrade prefers the segmented live-session segments (which
+    /// `.sameEngine` would normally use) instead of forcing a redundant full-buffer re-transcription
+    /// (finding: avoid a second full pass on degrade). The override pass itself never uses the
+    /// live-session result — the point is a fresh override transcription.
+    private func runOverrideEngineFinalize(
+        liveSessionResult: TranscriptionResult?,
+        buffer: [Float],
+        engineId: String,
+        model: String?
+    ) async -> [TranscriptionSegment]? {
+        guard buffer.count > 8_000 else { return nil }
+        do {
+            let result = try await modelManager.transcribe(
+                audioSamples: buffer,
+                languageSelection: .auto,
+                task: .transcribe,
+                engineOverrideId: engineId,
+                cloudModelOverride: model,
+                onProgress: { _ in true }
+            )
+            if !result.segments.isEmpty {
+                return result.segments
+            }
+        } catch {
+            logger.warning("Override-engine final transcription failed; degrading to same-engine: \(error.localizedDescription)")
+        }
+        // Override produced nothing usable — degrade one step (never lose content). Prefer the
+        // already-computed live-session segments before paying for a second full-buffer pass.
+        finalRetranscriptionDegraded = true
+        return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
     }
 
     // MARK: - Elapsed time
@@ -476,5 +626,43 @@ final class MeetingCaptureService: ObservableObject {
         liveTranscript = ""
         elapsedSeconds = 0
         isDegradedLiveMode = false
+        finalRetranscriptionDegraded = false
+        finalRetranscriptionDegradedMeetingID = nil
+        activeMeetingDefaultTemplateID = nil
+        defaultTemplateMeetingID = nil
+        sessionLiveEngineOverride = nil
+        sessionLiveModelOverride = nil
+        sessionLanguageOverride = nil
+        sessionRulePolicy = nil
+    }
+
+    // MARK: - Capture-context rule resolution (addendum AD7)
+
+    /// Match `meeting` against the capture-context rules and stash the winning rule's overrides on
+    /// the session. Pure w.r.t. persistence — only sets in-memory session state consumed by
+    /// `startStreaming()` and `finalizeSegments()`.
+    private func applyContextRule(for meeting: Meeting, calendarName: String?) {
+        guard let ruleMatcher else { return }
+        let context = MeetingContext(
+            title: meeting.title,
+            attendeeEmails: meeting.attendees.compactMap(\.email),
+            calendarName: calendarName,
+            seriesID: meeting.seriesID,
+            isRecurringSeries: meeting.seriesID != nil
+        )
+        guard let match = ruleMatcher.match(context) else { return }
+        let actions = match.actions
+        if let engine = actions.liveEngineId, !engine.isEmpty {
+            sessionLiveEngineOverride = engine
+        }
+        if let model = actions.liveModelId, !model.isEmpty {
+            sessionLiveModelOverride = model
+        }
+        if let language = actions.languageSelection {
+            sessionLanguageOverride = LanguageSelection(storedValue: language, nilBehavior: .auto)
+        }
+        sessionRulePolicy = actions.finalRetranscription
+        activeMeetingDefaultTemplateID = actions.defaultOutputTemplateID
+        defaultTemplateMeetingID = actions.defaultOutputTemplateID != nil ? meeting.id : nil
     }
 }

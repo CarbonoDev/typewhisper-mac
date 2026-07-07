@@ -22413,92 +22413,242 @@
     },
     "meetings.import.toolbar": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Import" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Importieren" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importieren"
+          }
+        }
       }
     },
     "meetings.import.title": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Import Meeting" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Besprechung importieren" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Meeting"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechung importieren"
+          }
+        }
       }
     },
     "meetings.import.description": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Create a new meeting from an audio or transcript file, or merge a transcript into the selected meeting." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Erstelle eine neue Besprechung aus einer Audio- oder Transkriptdatei oder führe ein Transkript mit der ausgewählten Besprechung zusammen." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a new meeting from an audio or transcript file, or merge a transcript into the selected meeting."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstelle eine neue Besprechung aus einer Audio- oder Transkriptdatei oder führe ein Transkript mit der ausgewählten Besprechung zusammen."
+          }
+        }
       }
     },
     "meetings.import.transcriptButton": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Import Transcript File…" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Transkriptdatei importieren…" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Transcript File…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptdatei importieren…"
+          }
+        }
       }
     },
     "meetings.import.audioButton": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Import Audio File…" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Audiodatei importieren…" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Audio File…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audiodatei importieren…"
+          }
+        }
       }
     },
     "meetings.import.mergeInto": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Merge into “%@”" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Mit „%@“ zusammenführen" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge into “%@”"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit „%@“ zusammenführen"
+          }
+        }
       }
     },
     "meetings.import.mergeButton": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Merge Transcript File…" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Transkriptdatei zusammenführen…" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge Transcript File…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptdatei zusammenführen…"
+          }
+        }
       }
     },
     "meetings.import.inProgress": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Importing…" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Wird importiert…" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird importiert…"
+          }
+        }
       }
     },
     "meetings.import.close": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Close" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Schließen" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        }
       }
     },
     "meetings.import.defaultTitle": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Imported Meeting" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Importierte Besprechung" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported Meeting"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importierte Besprechung"
+          }
+        }
       }
     },
     "meetings.import.error.unsupportedTranscript": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "This file type isn’t a supported transcript format." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dieser Dateityp ist kein unterstütztes Transkriptformat." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file type isn’t a supported transcript format."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Dateityp ist kein unterstütztes Transkriptformat."
+          }
+        }
       }
     },
     "meetings.import.error.unreadableTranscript": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The transcript file couldn’t be read as text." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Transkriptdatei konnte nicht als Text gelesen werden." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transcript file couldn’t be read as text."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Transkriptdatei konnte nicht als Text gelesen werden."
+          }
+        }
       }
     },
     "meetings.import.error.emptyTranscript": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "No transcript content was found in the file." } },
-        "de": { "stringUnit": { "state": "translated", "value": "In der Datei wurde kein Transkriptinhalt gefunden." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transcript content was found in the file."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Datei wurde kein Transkriptinhalt gefunden."
+          }
+        }
       }
     },
     "meetings.import.error.emptyAudioTranscription": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The audio file produced no transcript." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Audiodatei ergab kein Transkript." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio file produced no transcript."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Audiodatei ergab kein Transkript."
+          }
+        }
       }
     },
     "meetings.import.error.alreadyImporting": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "An import is already in progress." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Ein Import läuft bereits." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An import is already in progress."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Import läuft bereits."
+          }
+        }
       }
     },
     "meetings.capture.start": {
@@ -23863,110 +24013,290 @@
     },
     "meetings.diarization.title": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Sprechererkennung" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker identification"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechererkennung"
+          }
+        }
       }
     },
     "meetings.diarization.identify": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Identify speakers" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Sprecher erkennen" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identify speakers"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher erkennen"
+          }
+        }
       }
     },
     "meetings.diarization.error.alreadyEnriching": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification is already running." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung läuft bereits." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker identification is already running."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprechererkennung läuft bereits."
+          }
+        }
       }
     },
     "meetings.diarization.error.audioLoad": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Could not read the meeting audio: %@" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Das Meeting-Audio konnte nicht gelesen werden: %@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not read the meeting audio: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Meeting-Audio konnte nicht gelesen werden: %@"
+          }
+        }
       }
     },
     "meetings.diarization.error.provider": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification failed: %@" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung ist fehlgeschlagen: %@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker identification failed: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprechererkennung ist fehlgeschlagen: %@"
+          }
+        }
       }
     },
     "meetings.diarization.speaker.me": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Me" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Ich" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ich"
+          }
+        }
       }
     },
     "meetings.diarization.speaker.others": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Others" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Andere" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Others"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Andere"
+          }
+        }
       }
     },
     "meetings.diarization.status.noSpeakers": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "No speakers were detected in this recording." } },
-        "de": { "stringUnit": { "state": "translated", "value": "In dieser Aufnahme wurden keine Sprecher erkannt." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No speakers were detected in this recording."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In dieser Aufnahme wurden keine Sprecher erkannt."
+          }
+        }
       }
     },
     "meetings.diarization.status.unavailable": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Speaker identification is unavailable. Set up local diarization in Settings." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Sprechererkennung ist nicht verfügbar. Richte die lokale Diarisierung in den Einstellungen ein." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker identification is unavailable. Set up local diarization in Settings."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprechererkennung ist nicht verfügbar. Richte die lokale Diarisierung in den Einstellungen ein."
+          }
+        }
       }
     },
     "meetings.diarization.status.noAudio": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "This meeting has no stored audio to analyze." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Für dieses Meeting ist kein Audio zum Analysieren gespeichert." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no stored audio to analyze."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für dieses Meeting ist kein Audio zum Analysieren gespeichert."
+          }
+        }
       }
     },
     "meetings.diarization.status.noTranscript": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "This meeting has no transcript to label." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dieses Meeting hat kein Transkript zum Beschriften." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no transcript to label."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting hat kein Transkript zum Beschriften."
+          }
+        }
       }
     },
     "meetings.diarization.status.timelineMismatch": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The transcript timeline does not match the stored audio, so speakers cannot be identified reliably." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Transkript-Zeitachse stimmt nicht mit dem gespeicherten Audio überein, daher können Sprecher nicht zuverlässig erkannt werden." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transcript timeline does not match the stored audio, so speakers cannot be identified reliably."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Transkript-Zeitachse stimmt nicht mit dem gespeicherten Audio überein, daher können Sprecher nicht zuverlässig erkannt werden."
+          }
+        }
       }
     },
     "meetings.diarization.mapping.title": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Speaker names" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Sprechernamen" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker names"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprechernamen"
+          }
+        }
       }
     },
     "meetings.diarization.mapping.empty": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Run speaker identification to label the transcript first." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Führe zuerst die Sprechererkennung durch, um das Transkript zu beschriften." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run speaker identification to label the transcript first."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führe zuerst die Sprechererkennung durch, um das Transkript zu beschriften."
+          }
+        }
       }
     },
     "meetings.diarization.mapping.hint": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Map each detected speaker to a name. Names appear in the transcript, exports, and generated outputs." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Ordne jedem erkannten Sprecher einen Namen zu. Namen erscheinen im Transkript, in Exporten und in generierten Ausgaben." } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map each detected speaker to a name. Names appear in the transcript, exports, and generated outputs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordne jedem erkannten Sprecher einen Namen zu. Namen erscheinen im Transkript, in Exporten und in generierten Ausgaben."
+          }
+        }
       }
     },
     "meetings.diarization.mapping.namePlaceholder": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Name" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Name" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
       }
     },
     "meetings.diarization.mapping.save": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Save names" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Namen speichern" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save names"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Namen speichern"
+          }
+        }
       }
     },
     "meetings.diarization.mapping.suggestAttendee": {
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Choose an attendee" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Teilnehmer auswählen" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an attendee"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer auswählen"
+          }
+        }
       }
     },
     "meetings.export.section.brief": {
@@ -24541,6 +24871,566 @@
           "stringUnit": {
             "state": "translated",
             "value": "Benutzerdefiniert"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.degradedStatus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The final transcription ran in a reduced mode to protect your recording — the live transcript was kept."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die finale Transkription lief in einem reduzierten Modus, um deine Aufnahme zu schützen – das Live-Transkript wurde beibehalten."
+          }
+        }
+      }
+    },
+    "meetings.finalPass.engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.mode.engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-transcribe with a specific engine"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit bestimmter Engine neu transkribieren"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.mode.label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.mode.off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep live transcript"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkript behalten"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.mode.sameEngine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-transcribe with recording engine"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Aufnahme-Engine neu transkribieren"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model (optional)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell (optional)"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.section.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How a meeting's transcript is produced after you stop recording. A rule or per-meeting setting can override this."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie das Transkript eines Meetings nach dem Stoppen erzeugt wird. Eine Regel oder Meeting-Einstellung kann dies überschreiben."
+          }
+        }
+      }
+    },
+    "meetings.finalPass.section.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final transcription"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finale Transkription"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.defaultTemplate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default output template"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard-Ausgabevorlage"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.finalPass": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final transcription"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finale Transkription"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.inherit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inherit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übernehmen"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language override"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprach-Override"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.liveEngine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live engine"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Engine"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.noTemplate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anwenden"
+          }
+        }
+      }
+    },
+    "meetings.rule.actions.useDefault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use default"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard verwenden"
+          }
+        }
+      }
+    },
+    "meetings.rule.add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add rule"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regel hinzufügen"
+          }
+        }
+      }
+    },
+    "meetings.rule.delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete rule"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regel löschen"
+          }
+        }
+      }
+    },
+    "meetings.rule.done": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        }
+      }
+    },
+    "meetings.rule.edit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bearbeiten"
+          }
+        }
+      }
+    },
+    "meetings.rule.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meeting rules yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Meeting-Regeln."
+          }
+        }
+      }
+    },
+    "meetings.rule.enabled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiviert"
+          }
+        }
+      }
+    },
+    "meetings.rule.name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        }
+      }
+    },
+    "meetings.rule.newRuleName": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Rule"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Regel"
+          }
+        }
+      }
+    },
+    "meetings.rule.section.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically pick the live engine, language, default template, and final transcription for matching meetings."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählt automatisch Live-Engine, Sprache, Standardvorlage und finale Transkription für passende Meetings."
+          }
+        }
+      }
+    },
+    "meetings.rule.section.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting rules"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting-Regeln"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.attendeeDomains": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendee domains"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer-Domains"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.attendeeEmails": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendee emails"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer-E-Mails"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.calendarNames": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendar names"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalendernamen"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.commaHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comma-separated"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommagetrennt"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any meeting"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jedes Meeting"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.recurringOnly": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring series only"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur wiederkehrende Serien"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a meeting matches"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn ein Meeting passt"
+          }
+        }
+      }
+    },
+    "meetings.rule.trigger.titleKeywords": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title keywords"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titel-Schlagwörter"
           }
         }
       }

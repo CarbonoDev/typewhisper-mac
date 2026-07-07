@@ -23,6 +23,9 @@ final class Meeting {
     /// JSON-encoded `[String: String]` mapping `SPEAKER_xx` → attendee name (see `speakerMap`).
     var speakerMapJSON: String?
     var audioFileName: String?
+    /// JSON-encoded per-meeting `FinalRetranscriptionPolicy` override (addendum AD8, additive;
+    /// nil = inherit the matched rule / global default / `.sameEngine`).
+    var finalRetranscriptionRaw: String?
     var notesIncludedInOutputs: Bool
     var obsidianFolder: String?
     /// JSON-encoded `[String]` (see `obsidianTags`).
@@ -54,6 +57,7 @@ final class Meeting {
         attendeesJSON: String? = nil,
         speakerMapJSON: String? = nil,
         audioFileName: String? = nil,
+        finalRetranscriptionRaw: String? = nil,
         notesIncludedInOutputs: Bool = true,
         obsidianFolder: String? = nil,
         obsidianTagsJSON: String? = nil,
@@ -71,6 +75,7 @@ final class Meeting {
         self.attendeesJSON = attendeesJSON
         self.speakerMapJSON = speakerMapJSON
         self.audioFileName = audioFileName
+        self.finalRetranscriptionRaw = finalRetranscriptionRaw
         self.notesIncludedInOutputs = notesIncludedInOutputs
         self.obsidianFolder = obsidianFolder
         self.obsidianTagsJSON = obsidianTagsJSON
@@ -109,6 +114,12 @@ final class Meeting {
     var obsidianTags: [String] {
         get { Meeting.decode([String].self, from: obsidianTagsJSON) ?? [] }
         set { obsidianTagsJSON = Meeting.encode(newValue) }
+    }
+
+    /// Per-meeting final re-transcription override (addendum AD8). `nil` = inherit.
+    var finalRetranscriptionPolicy: FinalRetranscriptionPolicy? {
+        get { FinalRetranscriptionPolicy(jsonString: finalRetranscriptionRaw) }
+        set { finalRetranscriptionRaw = newValue?.jsonString }
     }
 
     // MARK: - Codable helpers

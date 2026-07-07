@@ -171,4 +171,11 @@ enum UserDefaultsKeys {
     /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
     /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.
     static let meetingsBridgeToDictationEvents = "meetings.bridgeToDictationEvents"
+    // MARK: - Meetings · Final re-transcription (addendum AD8, Track C)
+    /// Global default final re-transcription mode: "off" | "sameEngine" | "engine".
+    static let meetingsFinalPassDefaultMode = "meetings.finalPass.defaultMode"
+    /// Override engine (plugin provider id) when the global mode is "engine".
+    static let meetingsFinalPassEngineId = "meetings.finalPass.engineId"
+    /// Override cloud model id when the global mode is "engine".
+    static let meetingsFinalPassModel = "meetings.finalPass.model"
 }

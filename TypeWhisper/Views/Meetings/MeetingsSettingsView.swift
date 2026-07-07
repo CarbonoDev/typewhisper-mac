@@ -24,6 +24,15 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                // [Track C] Capture-context rules (AD7) + global final re-transcription (AD8).
+                MeetingContextRulesView()
+
+                Divider()
+
+                FinalRetranscriptionSettingsView()
+
+                Divider()
+
                 if viewModel.hasMeetings {
                     meetingsList
                 } else {

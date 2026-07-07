@@ -177,6 +177,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
             endDate: event.endDate,
             isAllDay: event.isAllDay,
             seriesID: event.hasRecurrenceRules ? event.calendarItemExternalIdentifier : nil,
+            calendarName: event.calendar?.title,
             attendees: attendees(from: event)
         )
     }
