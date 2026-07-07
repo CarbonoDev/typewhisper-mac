@@ -26,6 +26,9 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
     /// Recurrence-series identifier (`EKEvent.calendarItemExternalIdentifier` when the event
     /// has recurrence rules), used to match a meeting against prior occurrences.
     var seriesID: String?
+    /// Name of the calendar (EventKit source list) the event belongs to, e.g. "Work". Used by
+    /// capture-context rules (addendum AD7). Optional/additive — nil when unknown.
+    var calendarName: String?
     var attendees: [Attendee]
 
     init(
@@ -35,6 +38,7 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         endDate: Date,
         isAllDay: Bool = false,
         seriesID: String? = nil,
+        calendarName: String? = nil,
         attendees: [Attendee] = []
     ) {
         self.id = id
@@ -43,6 +47,7 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         self.endDate = endDate
         self.isAllDay = isAllDay
         self.seriesID = seriesID
+        self.calendarName = calendarName
         self.attendees = attendees
     }
 }

@@ -50,6 +50,8 @@ final class ServiceContainer: ObservableObject {
     let meetingService: MeetingService
     let calendarService: CalendarService
     let meetingCaptureService: MeetingCaptureService
+    // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
+    let meetingContextRuleService: MeetingContextRuleService
     let meetingStartNotificationService: MeetingStartNotificationService
     let meetingLLMService: MeetingLLMService
     let obsidianVaultService: ObsidianVaultService
@@ -152,11 +154,16 @@ final class ServiceContainer: ObservableObject {
         let meetingEventEmitter = MeetingEventBusEmitter(bus: meetingEventBus)
         meetingService = MeetingService(eventEmitter: meetingEventEmitter)
         calendarService = CalendarService()
+        // [Track C] Capture-context rules constructed after `meetingService` (addendum AD7); the
+        // matcher feeds `meetingCaptureService.start()` and the rules UI in the view model.
+        let meetingContextRuleService = MeetingContextRuleService()
+        self.meetingContextRuleService = meetingContextRuleService
         meetingCaptureService = MeetingCaptureService(
             meetingService: meetingService,
             audioRecorderService: audioRecorderService,
             modelManager: modelManagerService,
-            eventEmitter: meetingEventEmitter
+            eventEmitter: meetingEventEmitter,
+            ruleMatcher: meetingContextRuleService
         )
         meetingStartNotificationService = MeetingStartNotificationService()
         // Obsidian vault knowledge base (plan M5), constructed before the LLM service because M6's
@@ -301,7 +308,9 @@ final class ServiceContainer: ObservableObject {
             briefService: meetingBriefService,
             exporter: meetingObsidianExporter,
             importService: meetingImportService,
-            diarizationEnricher: meetingDiarizationEnricher
+            diarizationEnricher: meetingDiarizationEnricher,
+            // [Track C]
+            contextRuleService: meetingContextRuleService
         )
 
         // Set shared references

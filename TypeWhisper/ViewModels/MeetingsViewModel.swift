@@ -55,9 +55,13 @@ final class MeetingsViewModel: ObservableObject {
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
 
-    private let meetingService: MeetingService
+    // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
+    // per-meeting final re-transcription override through it.
+    let meetingService: MeetingService
     private let calendarService: CalendarService
-    private let captureService: MeetingCaptureService
+    // [Track C] `internal` so the rules extension can read the active meeting's rule-selected
+    // default template id and degraded status.
+    let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
     private let llmService: MeetingLLMService
     private let vaultService: ObsidianVaultService
@@ -65,6 +69,9 @@ final class MeetingsViewModel: ObservableObject {
     private let exporter: MeetingObsidianExporter
     private let importService: MeetingImportService
     private let diarizationEnricher: MeetingDiarizationEnricher
+    // [Track C] Capture-context rules service (addendum AD7). Rule CRUD, context building, and
+    // resolution preview live in `MeetingsViewModel+Rules.swift`.
+    let contextRuleService: MeetingContextRuleService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -78,8 +85,11 @@ final class MeetingsViewModel: ObservableObject {
         briefService: MeetingBriefService,
         exporter: MeetingObsidianExporter,
         importService: MeetingImportService,
-        diarizationEnricher: MeetingDiarizationEnricher
+        diarizationEnricher: MeetingDiarizationEnricher,
+        // [Track C]
+        contextRuleService: MeetingContextRuleService
     ) {
+        self.contextRuleService = contextRuleService
         self.meetingService = meetingService
         self.calendarService = calendarService
         self.captureService = captureService

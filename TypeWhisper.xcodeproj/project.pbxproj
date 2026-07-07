@@ -164,6 +164,13 @@
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
 		AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000389 /* UpcomingMeetingsSection.swift */; };
 		AA00000000000000000390 /* MeetingCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000390 /* MeetingCaptureService.swift */; };
+		CCA000000000000000000001 /* MeetingContextRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000001 /* MeetingContextRule.swift */; };
+		CCA000000000000000000002 /* FinalRetranscriptionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */; };
+		CCA000000000000000000003 /* MeetingContextRuleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000003 /* MeetingContextRuleService.swift */; };
+		CCA000000000000000000004 /* MeetingsViewModel+Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */; };
+		CCA000000000000000000005 /* MeetingContextRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000005 /* MeetingContextRulesView.swift */; };
+		CCA000000000000000000006 /* MeetingContextRuleEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */; };
+		CCA000000000000000000007 /* FinalRetranscriptionSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */; };
 		AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTBUS0000000000000001 /* MeetingEventBus.swift */; };
 		AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */; };
 		AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000391 /* MeetingStartNotificationService.swift */; };
@@ -202,6 +209,9 @@
 		MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000006 /* MeetingLLMServiceTests.swift */; };
 		MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */; };
 		MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */; };
+		CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */; };
+		CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */; };
+		CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */; };
 		MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */; };
 		MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */; };
 		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
@@ -681,6 +691,13 @@
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		BB00000000000000000389 /* UpcomingMeetingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingMeetingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000390 /* MeetingCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCaptureService.swift; sourceTree = "<group>"; };
+		CCB000000000000000000001 /* MeetingContextRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRule.swift; sourceTree = "<group>"; };
+		CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionPolicy.swift; sourceTree = "<group>"; };
+		CCB000000000000000000003 /* MeetingContextRuleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleService.swift; sourceTree = "<group>"; };
+		CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Rules.swift"; sourceTree = "<group>"; };
+		CCB000000000000000000005 /* MeetingContextRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRulesView.swift; sourceTree = "<group>"; };
+		CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleEditorView.swift; sourceTree = "<group>"; };
+		CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionSettingsView.swift; sourceTree = "<group>"; };
 		BBEVTBUS0000000000000001 /* MeetingEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventBus.swift; sourceTree = "<group>"; };
 		BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventEmitter.swift; sourceTree = "<group>"; };
 		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
@@ -719,6 +736,9 @@
 		MEF0000000000000000006 /* MeetingLLMServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresetsTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureServiceTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleServiceTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionResolutionTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureConfigTests.swift; sourceTree = "<group>"; };
 		MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventBusTests.swift; sourceTree = "<group>"; };
 		MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventEmissionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
@@ -1598,6 +1618,8 @@
 				BB00000000000000000381 /* MeetingEnums.swift */,
 				BB00000000000000000382 /* Attendee.swift */,
 				BB00000000000000000375 /* Meeting.swift */,
+				CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */,
+				CCB000000000000000000001 /* MeetingContextRule.swift */,
 				BB00000000000000000376 /* MeetingSegment.swift */,
 				BB00000000000000000377 /* MeetingNote.swift */,
 				BB00000000000000000378 /* MeetingOutput.swift */,
@@ -1727,6 +1749,7 @@
 				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
 				BB00000000000000000242 /* WatchFolderViewModel.swift */,
 				BB00000000000000000385 /* MeetingsViewModel.swift */,
+				CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1819,6 +1842,7 @@
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
 				BB00000000000000000390 /* MeetingCaptureService.swift */,
+				CCB000000000000000000003 /* MeetingContextRuleService.swift */,
 				BBEVTBUS0000000000000001 /* MeetingEventBus.swift */,
 				BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */,
 				BB00000000000000000391 /* MeetingStartNotificationService.swift */,
@@ -1841,6 +1865,9 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000386 /* MeetingsSettingsView.swift */,
+				CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */,
+				CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */,
+				CCB000000000000000000005 /* MeetingContextRulesView.swift */,
 				BB00000000000000000389 /* UpcomingMeetingsSection.swift */,
 				BB00000000000000000392 /* MeetingsWindowView.swift */,
 				BB00000000000000000393 /* MeetingLiveCaptureView.swift */,
@@ -2495,6 +2522,9 @@
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
+				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
+				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
+				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
 				MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */,
 				MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */,
 				MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */,
@@ -4003,6 +4033,9 @@
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
+				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
+				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
+				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,
 				MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */,
 				MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */,
 				MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */,
@@ -4118,6 +4151,13 @@
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
 				AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */,
 				AA00000000000000000390 /* MeetingCaptureService.swift in Sources */,
+				CCA000000000000000000001 /* MeetingContextRule.swift in Sources */,
+				CCA000000000000000000002 /* FinalRetranscriptionPolicy.swift in Sources */,
+				CCA000000000000000000003 /* MeetingContextRuleService.swift in Sources */,
+				CCA000000000000000000004 /* MeetingsViewModel+Rules.swift in Sources */,
+				CCA000000000000000000005 /* MeetingContextRulesView.swift in Sources */,
+				CCA000000000000000000006 /* MeetingContextRuleEditorView.swift in Sources */,
+				CCA000000000000000000007 /* FinalRetranscriptionSettingsView.swift in Sources */,
 				AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */,
 				AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */,
 				AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */,
