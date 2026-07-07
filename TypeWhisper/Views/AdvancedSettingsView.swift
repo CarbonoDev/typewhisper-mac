@@ -21,9 +21,22 @@ struct AdvancedSettingsView: View {
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
+    // Track A owns the key + launch wiring (D2); Track D renders this toggle in the Application
+    // group. Registered default is ON (`AppDelegate.registerDefaultUserDefaults`).
+    @AppStorage(UserDefaultsKeys.showMainWindowAtLaunch) private var showMainWindowAtLaunch: Bool = true
 
     var body: some View {
         Form {
+            // MARK: - Window
+            Section(String(localized: "settings.mainWindow.section")) {
+                Toggle(isOn: $showMainWindowAtLaunch) {
+                    SettingsInfoLabel(
+                        title: String(localized: "settings.mainWindow.showAtLaunch.title"),
+                        info: String(localized: "settings.mainWindow.showAtLaunch.help")
+                    )
+                }
+            }
+
             // MARK: - Support Diagnostics
             Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
                 HStack {

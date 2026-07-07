@@ -674,37 +674,9 @@ final class DockIconVisibilityTests: XCTestCase {
     }
 }
 
-final class MenuBarGroupingTests: XCTestCase {
-    func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
-        XCTAssertEqual(
-            MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
-            ["General", "Recorder", "Transcription", "Updates"]
-        )
-    }
-
-    func testMenuBarSectionsContainExpectedItems() {
-        XCTAssertEqual(
-            MenuBarMenuSection.general.items,
-            [.settings, .meetings, .startMeetingRecording, .history, .errorLog]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.recorder.items,
-            [.toggleRecorder]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.updates.items,
-            [.checkForUpdates]
-        )
-    }
-}
+// The former `MenuBarGroupingTests` covered the pre-slim sectioned menu (General/Recorder/
+// Transcription/Updates). The meetings-first slim menu (D8) replaces that structure; its coverage
+// now lives in `MenuBarItemsTests` (SettingsRegroupTests.swift).
 
 final class MenuBarIconStateTests: XCTestCase {
     func testRecordingIndicatorIsActiveDuringDictationRecording() {
