@@ -79,6 +79,7 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
     let meetingsViewModel: MeetingsViewModel
+    let homeFeedViewModel: HomeFeedViewModel // [Track C]
 
     private init() {
         // Services
@@ -333,6 +334,7 @@ final class ServiceContainer: ObservableObject {
             contextRuleService: meetingContextRuleService,
             briefScheduler: meetingBriefScheduler // [Track D]
         )
+        homeFeedViewModel = HomeFeedViewModel() // [Track C]
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -349,6 +351,7 @@ final class ServiceContainer: ObservableObject {
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
         MeetingsViewModel._shared = meetingsViewModel
+        HomeFeedViewModel._shared = homeFeedViewModel // [Track C]
 
         // License
         LicenseService.shared = licenseService

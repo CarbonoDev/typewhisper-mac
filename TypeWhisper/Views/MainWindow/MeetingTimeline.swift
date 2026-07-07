@@ -1,0 +1,108 @@
+import SwiftUI
+
+/// The day-grouped meeting timeline on the Home feed (plan Track C / D6). Meetings are bucketed by
+/// day (Today / Yesterday / weekday / date) newest-first, each row carrying its state badges
+/// (Running long / Brief ready / Summary / Extended / In vault). Clicking any row routes to that
+/// meeting's document via the shared coordinator — the single navigation channel.
+struct MeetingTimeline: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    @ObservedObject private var coordinator = MainWindowCoordinator.shared
+    @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
+
+    var body: some View {
+        let groups = homeViewModel.timelineGroups(from: viewModel.meetings)
+        if groups.isEmpty {
+            emptyState
+        } else {
+            VStack(alignment: .leading, spacing: 20) {
+                ForEach(groups) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(homeViewModel.groupTitle(for: group))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+
+                        VStack(spacing: 6) {
+                            ForEach(group.meetings, id: \.id) { meeting in
+                                row(meeting)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func row(_ meeting: Meeting) -> some View {
+        let isLive = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
+        return Button {
+            coordinator.openMeeting(id: meeting.id)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        if isLive {
+                            Image(systemName: "record.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                        Text(meeting.title)
+                            .font(.body)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 8) {
+                        if let start = meeting.startDate {
+                            Text(start, format: .dateTime.hour().minute())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        badges(for: meeting, isLive: isLive)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func badges(for meeting: Meeting, isLive: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isLive {
+                badgeCapsule(
+                    text: String(localized: "meetings.state.live"),
+                    systemImage: "waveform",
+                    tint: .red
+                )
+            }
+            ForEach(homeViewModel.badges(for: meeting), id: \.self) { badge in
+                badgeCapsule(text: badge.displayName, systemImage: badge.systemImage, tint: badge.tint)
+            }
+        }
+    }
+
+    private func badgeCapsule(text: String, systemImage: String, tint: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.15), in: Capsule())
+            .foregroundStyle(tint)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(String(localized: "home.timeline.empty.title"), systemImage: "calendar")
+        } description: {
+            Text(String(localized: "home.timeline.empty.message"))
+        }
+    }
+}
