@@ -25147,6 +25147,54 @@
         }
       }
     },
+    "meetings.finalPass.perMeeting.inherit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use rule or global default"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regel oder globalen Standard verwenden"
+          }
+        }
+      }
+    },
+    "meetings.finalPass.perMeeting.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Override how this meeting's transcript is produced after you stop recording. Inherit defers to a matching rule, then the global default."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überschreibe, wie das Transkript dieses Meetings nach dem Stoppen erzeugt wird. Übernehmen nutzt eine passende Regel und dann den globalen Standard."
+          }
+        }
+      }
+    },
+    "meetings.finalPass.perMeeting.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final transcription override"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Override der finalen Transkription"
+          }
+        }
+      }
+    },
     "meetings.finalPass.section.subtitle": {
       "localizations": {
         "en": {

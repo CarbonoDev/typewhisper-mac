@@ -120,6 +120,10 @@ extension MeetingsViewModel {
     func setFinalRetranscriptionOverride(_ policy: FinalRetranscriptionPolicy?, for meeting: Meeting) {
         meeting.finalRetranscriptionPolicy = policy
         meetingService.update(meeting)
+        // The detail-view picker reads the override straight off the `meeting` reference; the
+        // `meetingService.$meetings` mirror into `self.meetings` is an async main hop, so publish
+        // synchronously here for immediate radio-button feedback (mirrors the global setter).
+        objectWillChange.send()
     }
 
     // MARK: - Global final re-transcription default (AD8)

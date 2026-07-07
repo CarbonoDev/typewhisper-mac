@@ -520,7 +520,7 @@
 		AA00000000000000000310 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
 		AA00000000000000000311 /* Gemma4SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000296 /* Gemma4SettingsView.swift */; };
 		AA00000000000000000312 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000297 /* manifest.json */; };
-		AA00000000000000000313 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
+		AA00000000000000000316 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
 		AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000305 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000045 /* MLXLLM */; };
 		AA00000000000000000313 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000047 /* MLXVLM */; };
@@ -4026,7 +4026,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000312 /* manifest.json in Resources */,
-				AA00000000000000000313 /* Localizable.xcstrings in Resources */,
+				AA00000000000000000316 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
