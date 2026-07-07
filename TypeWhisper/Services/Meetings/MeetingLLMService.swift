@@ -60,7 +60,7 @@ final class MeetingLLMService: ObservableObject {
     /// return it. Regeneration always inserts a new row (history retained; the UI shows the
     /// newest per kind — plan D15). Throws if the meeting has no transcript, or the LLM call fails.
     @discardableResult
-    func generateOutput(for meeting: Meeting, using template: MeetingTemplate) async throws -> MeetingOutput {
+    func generateOutput(for meeting: Meeting, using template: PromptAction) async throws -> MeetingOutput {
         // Synchronous re-entrancy guard on the service itself (M4 review finding 1). The VM mirrors
         // `isGenerating` through `DispatchQueue.main` into `isGeneratingOutput`, an async hop behind,
         // so a rapid double-click on a generate menu would otherwise slip two concurrent generations
@@ -97,7 +97,7 @@ final class MeetingLLMService: ObservableObject {
 
         return meetingService.addOutput(
             to: meeting,
-            kind: template.kind,
+            kind: template.meetingKind ?? .summary,
             content: content,
             templateID: template.id,
             providerUsed: resolvedProvider(for: template),
@@ -174,7 +174,7 @@ final class MeetingLLMService: ObservableObject {
 
     // MARK: - Map / reduce
 
-    private func runMapReduce(template: MeetingTemplate, transcript: String, notes: String) async throws -> String {
+    private func runMapReduce(template: PromptAction, transcript: String, notes: String) async throws -> String {
         let chunks = TranscriptContextBuilder.chunk(transcript, charBudget: charBudget)
 
         // Direct path: the transcript fits a single chunk — one call through the template prompt.
@@ -214,7 +214,7 @@ final class MeetingLLMService: ObservableObject {
         return try await run(template: template, prompt: template.prompt, text: reduceInput)
     }
 
-    private func run(template: MeetingTemplate, prompt: String, text: String) async throws -> String {
+    private func run(template: PromptAction, prompt: String, text: String) async throws -> String {
         try await processor.process(
             prompt: prompt,
             text: text,
@@ -229,7 +229,7 @@ final class MeetingLLMService: ObservableObject {
 
     /// Provider recorded on the output: the template override when set, else the current global
     /// selection.
-    private func resolvedProvider(for template: MeetingTemplate) -> String? {
+    private func resolvedProvider(for template: PromptAction) -> String? {
         if let provider = template.providerType?.trimmingCharacters(in: .whitespacesAndNewlines),
            !provider.isEmpty {
             return provider
@@ -240,7 +240,7 @@ final class MeetingLLMService: ObservableObject {
 
     /// Model recorded on the output: the template override when set, else the current global
     /// selection (nil when neither exists, e.g. a provider with no model dimension).
-    private func resolvedModel(for template: MeetingTemplate) -> String? {
+    private func resolvedModel(for template: PromptAction) -> String? {
         if let model = template.cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines),
            !model.isEmpty {
             return model

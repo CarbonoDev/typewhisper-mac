@@ -11,13 +11,21 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 @MainActor
 final class MeetingService: ObservableObject {
     @Published private(set) var meetings: [Meeting] = []
-    @Published private(set) var templates: [MeetingTemplate] = []
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let audioDirectory: URL
+    /// Meeting output templates now live in `promptActions.store` as `.meeting`-surface rows
+    /// (plan AD6). `MeetingService.templates(ofKind:)` delegates here so Track C and existing UI
+    /// call sites keep the same signature. Optional so unit tests that only exercise meeting CRUD
+    /// can construct the service without the prompt-action store.
+    private weak var promptActionService: PromptActionService?
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        promptActionService: PromptActionService? = nil
+    ) {
+        self.promptActionService = promptActionService
         let audioDir = appSupportDirectory.appendingPathComponent("meetings-audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
         self.audioDirectory = audioDir
@@ -42,7 +50,6 @@ final class MeetingService: ObservableObject {
         }
 
         fetchMeetings()
-        fetchTemplates()
     }
 
     // MARK: - Meeting CRUD
@@ -403,88 +410,46 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
-    // MARK: - Templates
+    // MARK: - Templates (plan AD6 — unified into `promptActions.store`)
 
-    /// Idempotently seed the curated starter templates (plan M4 §3). Mirrors
-    /// `PromptActionService.seedPresetsIfNeeded`: presets missing by name are inserted, existing
-    /// user/preset rows are never overwritten, so re-running is safe and additive.
-    func seedTemplatesIfNeeded() {
-        let existingNames = Set(templates.map(\.name))
-        let missing = MeetingTemplatePresets.all.filter { !existingNames.contains($0.name) }
-        guard !missing.isEmpty else { return }
+    /// No-op shim (plan AD6). Meeting templates are seeded/migrated into the unified
+    /// `promptActions.store` by `PromptActionService.migrateMeetingTemplatesIfNeeded`; this method is
+    /// retained so any stray caller compiles. Kept intentionally empty.
+    func seedTemplatesIfNeeded() {}
 
-        let nextSortOrder = (templates.map(\.sortOrder).max() ?? -1) + 1
-        for (offset, preset) in missing.enumerated() {
-            let template = MeetingTemplate(
-                name: preset.name,
-                kind: preset.kind,
-                prompt: preset.prompt,
-                providerType: preset.providerType,
-                cloudModel: preset.cloudModel,
-                temperatureModeRaw: preset.temperatureModeRaw,
-                temperatureValue: preset.temperatureValue,
-                isPreset: true,
-                sortOrder: templates.isEmpty ? preset.sortOrder : nextSortOrder + offset
-            )
-            modelContext.insert(template)
-        }
-        save()
-        fetchTemplates()
+    /// Templates of a given output kind, in sort order (drives the generate menus). Delegates to the
+    /// unified store (plan AD6); the signature is unchanged so Track C and the output views are
+    /// unaffected. Returns `[]` when no prompt-action service is wired (unit tests).
+    func templates(ofKind kind: MeetingOutputKind) -> [PromptAction] {
+        promptActionService?.meetingTemplates(ofKind: kind) ?? []
     }
 
-    /// Templates of a given output kind, in sort order (drives the generate menu).
-    func templates(ofKind kind: MeetingOutputKind) -> [MeetingTemplate] {
-        templates.filter { $0.kind == kind }
-    }
-
-    @discardableResult
-    func addTemplate(
-        name: String,
-        kind: MeetingOutputKind,
-        prompt: String,
-        providerType: String? = nil,
-        cloudModel: String? = nil,
-        temperatureModeRaw: String? = nil,
-        temperatureValue: Double? = nil
-    ) -> MeetingTemplate {
-        let template = MeetingTemplate(
-            name: name,
-            kind: kind,
-            prompt: prompt,
-            providerType: providerType,
-            cloudModel: cloudModel,
-            temperatureModeRaw: temperatureModeRaw,
-            temperatureValue: temperatureValue,
-            isPreset: false,
-            sortOrder: (templates.map(\.sortOrder).max() ?? -1) + 1
-        )
-        modelContext.insert(template)
-        save()
-        fetchTemplates()
-        return template
-    }
-
-    /// Persist edits to a fetched template.
-    func updateTemplate(_ template: MeetingTemplate) {
-        save()
-        fetchTemplates()
-    }
-
-    func deleteTemplate(_ template: MeetingTemplate) {
-        modelContext.delete(template)
-        save()
-        fetchTemplates()
-    }
-
-    private func fetchTemplates() {
+    /// Snapshot the frozen legacy `MeetingTemplate` rows still living in `meetings.store` so
+    /// `PromptActionService` can migrate them into unified `.meeting` `PromptAction` rows (plan AD6).
+    /// The `MeetingTemplate` `@Model` stays registered in the schema — removing it would risk a
+    /// destructive reset of every stored meeting — but is otherwise frozen and never written again.
+    func legacyMeetingTemplateSnapshots() -> [MeetingTemplateSnapshot] {
         let descriptor = FetchDescriptor<MeetingTemplate>(
             sortBy: [SortDescriptor(\.sortOrder, order: .forward)]
         )
         do {
-            templates = try modelContext.fetch(descriptor)
+            return try modelContext.fetch(descriptor).map { template in
+                MeetingTemplateSnapshot(
+                    id: template.id,
+                    name: template.name,
+                    kindRaw: template.kindRaw,
+                    prompt: template.prompt,
+                    providerType: template.providerType,
+                    cloudModel: template.cloudModel,
+                    temperatureModeRaw: template.temperatureModeRaw,
+                    temperatureValue: template.temperatureValue,
+                    isPreset: template.isPreset,
+                    sortOrder: template.sortOrder
+                )
+            }
         } catch {
-            logger.error("Failed to fetch meeting templates: \(error.localizedDescription)")
-            templates = []
+            logger.error("Failed to snapshot legacy meeting templates: \(error.localizedDescription)")
+            return []
         }
     }
 

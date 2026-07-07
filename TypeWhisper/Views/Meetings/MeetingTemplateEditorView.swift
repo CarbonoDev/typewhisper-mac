@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Management UI for meeting output templates (plan M4): list the seeded/custom templates and
-/// add, edit, or delete them. Presets are editable (edits persist) but flagged. Shown inside the
-/// Meetings settings tab.
+/// Management UI for meeting output templates (plan M4/AD6): lists the seeded/custom meeting
+/// templates — now unified `.meeting`-surface `PromptAction` rows — and adds, edits, or deletes
+/// them through the shared `PromptTemplateEditor`. Used as the Meeting section of
+/// `PromptLibraryView` and embeddable on its own.
 struct MeetingTemplateEditorView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
-    @State private var editingDraft: TemplateDraft?
+    @State private var editingDraft: MeetingTemplateDraft?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -14,7 +15,7 @@ struct MeetingTemplateEditorView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    editingDraft = TemplateDraft()
+                    editingDraft = MeetingTemplateDraft()
                 } label: {
                     Label(String(localized: "meetings.templates.add"), systemImage: "plus")
                 }
@@ -40,13 +41,13 @@ struct MeetingTemplateEditorView: View {
         }
     }
 
-    private func templateRow(_ template: MeetingTemplate) -> some View {
+    private func templateRow(_ template: PromptAction) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(template.name)
                         .font(.subheadline.bold())
-                    Text(kindLabel(template.kind))
+                    Text(kindLabel(template.meetingKind ?? .summary))
                         .font(.caption2)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
@@ -64,11 +65,11 @@ struct MeetingTemplateEditorView: View {
             }
             Spacer()
             Button(String(localized: "meetings.templates.edit")) {
-                editingDraft = TemplateDraft(template: template)
+                editingDraft = MeetingTemplateDraft(template: template)
             }
             .buttonStyle(.borderless)
             Button(role: .destructive) {
-                viewModel.deleteTemplate(template)
+                viewModel.deleteMeetingTemplate(template)
             } label: {
                 Image(systemName: "trash")
             }
@@ -77,18 +78,12 @@ struct MeetingTemplateEditorView: View {
         .padding(.vertical, 4)
     }
 
-    private func apply(_ draft: TemplateDraft) {
-        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !prompt.isEmpty else { return }
-
+    private func apply(_ draft: MeetingTemplateDraft) {
+        guard draft.spec.isValid else { return }
         if let existing = draft.existing {
-            existing.name = name
-            existing.kind = draft.kind
-            existing.prompt = prompt
-            viewModel.updateTemplate(existing)
+            viewModel.updateMeetingTemplate(existing, with: draft.spec)
         } else {
-            viewModel.addTemplate(name: name, kind: draft.kind, prompt: prompt)
+            viewModel.addMeetingTemplate(draft.spec)
         }
     }
 
@@ -101,32 +96,26 @@ struct MeetingTemplateEditorView: View {
     }
 }
 
-/// Editable draft backing the add/edit sheet.
-struct TemplateDraft: Identifiable {
+/// Editable draft backing the add/edit sheet — wraps a `PromptTemplateSpec` and the row it edits.
+struct MeetingTemplateDraft: Identifiable {
     let id = UUID()
-    var existing: MeetingTemplate?
-    var name: String
-    var kind: MeetingOutputKind
-    var prompt: String
+    var existing: PromptAction?
+    var spec: PromptTemplateSpec
 
     init() {
         self.existing = nil
-        self.name = ""
-        self.kind = .summary
-        self.prompt = ""
+        self.spec = PromptTemplateSpec(surface: .meeting)
     }
 
-    init(template: MeetingTemplate) {
+    init(template: PromptAction) {
         self.existing = template
-        self.name = template.name
-        self.kind = template.kind
-        self.prompt = template.prompt
+        self.spec = PromptTemplateSpec(meetingAction: template)
     }
 }
 
 private struct MeetingTemplateEditSheet: View {
-    @State var draft: TemplateDraft
-    let onSave: (TemplateDraft) -> Void
+    @State var draft: MeetingTemplateDraft
+    let onSave: (MeetingTemplateDraft) -> Void
     let onCancel: () -> Void
 
     var body: some View {
@@ -136,21 +125,7 @@ private struct MeetingTemplateEditSheet: View {
                  : String(localized: "meetings.templates.edit"))
                 .font(.headline)
 
-            TextField(String(localized: "meetings.templates.field.name"), text: $draft.name)
-
-            Picker(String(localized: "meetings.templates.field.kind"), selection: $draft.kind) {
-                Text(String(localized: "meetings.output.kind.summary")).tag(MeetingOutputKind.summary)
-                Text(String(localized: "meetings.output.kind.extended")).tag(MeetingOutputKind.extended)
-            }
-            .pickerStyle(.segmented)
-
-            Text(String(localized: "meetings.templates.field.prompt"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextEditor(text: $draft.prompt)
-                .font(.body)
-                .frame(minHeight: 140)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            PromptTemplateEditor(spec: $draft.spec)
 
             HStack {
                 Spacer()
@@ -159,13 +134,10 @@ private struct MeetingTemplateEditSheet: View {
                     onSave(draft)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(
-                    draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
+                .disabled(!draft.spec.isValid)
             }
         }
         .padding()
-        .frame(width: 460)
+        .frame(width: 480)
     }
 }
