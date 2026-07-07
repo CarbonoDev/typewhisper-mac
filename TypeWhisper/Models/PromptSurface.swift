@@ -74,4 +74,17 @@ struct PromptTemplateSpec: Equatable, Sendable {
     /// The trimmed name/prompt as they should be written to storage.
     var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     var trimmedPrompt: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// The provider/model overrides as they should be persisted: trimmed, with empty → nil. Trimming
+    /// here (not just in the editor binding) keeps a pasted `"openai "` from being stored verbatim and
+    /// then failing provider resolution at generate time while provenance records the clean name.
+    var trimmedProviderType: String? {
+        let value = (providerType ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    var trimmedCloudModel: String? {
+        let value = (cloudModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
 }

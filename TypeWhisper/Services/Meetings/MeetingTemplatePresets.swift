@@ -1,8 +1,11 @@
 import Foundation
 import TypeWhisperPluginSDK
 
-/// The curated starter set of meeting output templates (plan M4 §3), seeded idempotently by
-/// `MeetingService.seedTemplatesIfNeeded()` — mirroring `PromptAction.presets`. Names and prompts
+/// The curated starter set of meeting output templates (plan M4 §3). Under the unified library
+/// (plan AD6) these are migrated/backfilled into `.meeting`-surface `PromptAction` rows by
+/// `PromptActionService.migrateMeetingTemplatesIfNeeded` (via `MeetingTemplateMigration`) rather than
+/// seeded through the now-empty `MeetingService.seedTemplatesIfNeeded()` shim — mirroring
+/// `PromptAction.presets`. Names and prompts
 /// are localized (EN+DE). Provider/model are left unset so presets inherit the global LLM
 /// selection; temperature is pinned low for factual, non-inventive outputs.
 enum MeetingTemplatePresets {

@@ -298,8 +298,8 @@ class PromptActionService: ObservableObject {
             prompt: spec.trimmedPrompt,
             icon: "doc.text.magnifyingglass",
             sortOrder: maxOrder + 1,
-            providerType: spec.providerType,
-            cloudModel: spec.cloudModel,
+            providerType: spec.trimmedProviderType,
+            cloudModel: spec.trimmedCloudModel,
             temperatureModeRaw: spec.temperatureMode.rawValue,
             temperatureValue: spec.normalizedTemperatureValue,
             surfaceRaw: PromptSurface.meeting.rawValue,
@@ -315,8 +315,8 @@ class PromptActionService: ObservableObject {
         guard modelContext != nil else { return }
         action.name = spec.trimmedName
         action.prompt = spec.trimmedPrompt
-        action.providerType = spec.providerType
-        action.cloudModel = spec.cloudModel
+        action.providerType = spec.trimmedProviderType
+        action.cloudModel = spec.trimmedCloudModel
         action.temperatureModeRaw = spec.temperatureMode.rawValue
         action.temperatureValue = spec.normalizedTemperatureValue
         action.meetingKind = spec.meetingKind
@@ -341,8 +341,10 @@ class PromptActionService: ObservableObject {
     func migrateMeetingTemplatesIfNeeded(legacyTemplates: [MeetingTemplateSnapshot]) {
         guard let context = modelContext else { return }
 
-        // Existing meeting rows keyed by id/name (drives collision + preset-backfill checks).
-        let existingIDs = Set(meetingActions.map(\.id))
+        // Existing rows keyed by id/name (drives collision + preset-backfill checks). The id guard
+        // spans **both** surfaces (plan AD6: skip-and-log on collision with any existing PromptAction)
+        // so a legacy template sharing a UUID with a dictation row can never insert a duplicate id.
+        let existingIDs = Set(meetingActions.map(\.id)).union(promptActions.map(\.id))
         let existingNames = Set(meetingActions.map(\.name))
         var insertedIDs = existingIDs
         var insertedNames = existingNames
@@ -373,16 +375,25 @@ class PromptActionService: ObservableObject {
             didInsert = true
         }
 
+        var saveSucceeded = true
         if didInsert {
             do {
                 try context.save()
                 loadActions()
             } catch {
+                saveSucceeded = false
                 logger.error("Failed to persist meeting-template migration: \(error.localizedDescription)")
             }
         }
 
-        defaults.set(true, forKey: Self.migrationCompletedKey)
+        // Only mark the one-time legacy pass complete once its rows are durably saved (plan AD6). If a
+        // save failed while rows were pending (`didInsert && !saveSucceeded`), leave the guard unset so
+        // the next launch retries the legacy pass — user-edited `MeetingTemplate` rows and the
+        // `MeetingOutput.templateID` references pointing at them are never silently, permanently
+        // dropped. When there was nothing to insert, the pass is trivially complete.
+        if !didInsert || saveSucceeded {
+            defaults.set(true, forKey: Self.migrationCompletedKey)
+        }
     }
 
     private func saveAndReload(_ label: String) {

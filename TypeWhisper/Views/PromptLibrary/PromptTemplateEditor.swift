@@ -15,10 +15,13 @@ struct PromptTemplateEditor: View {
                 .textFieldStyle(.roundedBorder)
 
             if spec.surface == .meeting {
+                // Only summary/extended are offered: those are the kinds the outputs UI renders and
+                // the only preset kinds (MeetingTemplatePresetsTests asserts "brief is not a template
+                // kind"). `.brief` briefs come from MeetingBriefService's own prompt, not a template,
+                // so a brief template would be a dead row that never appears in any generate menu.
                 Picker(String(localized: "promptLibrary.editor.kind"), selection: $spec.meetingKind) {
                     Text(String(localized: "meetings.output.kind.summary")).tag(MeetingOutputKind.summary)
                     Text(String(localized: "meetings.output.kind.extended")).tag(MeetingOutputKind.extended)
-                    Text(String(localized: "meetings.output.kind.brief")).tag(MeetingOutputKind.brief)
                 }
                 .pickerStyle(.segmented)
             }
@@ -80,14 +83,20 @@ struct PromptTemplateEditor: View {
     private var providerBinding: Binding<String> {
         Binding(
             get: { spec.providerType ?? "" },
-            set: { spec.providerType = $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                spec.providerType = trimmed.isEmpty ? nil : trimmed
+            }
         )
     }
 
     private var modelBinding: Binding<String> {
         Binding(
             get: { spec.cloudModel ?? "" },
-            set: { spec.cloudModel = $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            set: {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                spec.cloudModel = trimmed.isEmpty ? nil : trimmed
+            }
         )
     }
 

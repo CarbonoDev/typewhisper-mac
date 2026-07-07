@@ -26,7 +26,8 @@ protocol PromptProcessing: AnyObject {
 
 extension PromptProcessingService: PromptProcessing {}
 
-/// Runs a `MeetingTemplate` over a meeting's transcript to produce a persisted `MeetingOutput`
+/// Runs a `.meeting`-surface `PromptAction` (the unified meeting template, plan AD6) over a
+/// meeting's transcript to produce a persisted `MeetingOutput`
 /// (plan M4). Long transcripts are handled with a char-budget map/reduce (plan D7): each chunk is
 /// summarized (map), then the partial summaries are reduced through the template's own prompt.
 /// Transcripts that fit one chunk take the direct single-call path. In-meeting notes are appended
