@@ -188,6 +188,7 @@ private final class MenuBarState: ObservableObject {
 enum MenuBarMenuItem: Hashable {
     case settings
     case meetings
+    case startMeetingRecording
     case history
     case errorLog
     case toggleRecorder
@@ -230,7 +231,7 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .meetings, .history, .errorLog]
+            [.settings, .meetings, .startMeetingRecording, .history, .errorLog]
         case .recorder:
             [.toggleRecorder]
         case .transcription:
@@ -296,6 +297,21 @@ struct MenuBarView: View {
                 openManagedWindow("meetings")
             } label: {
                 Label(String(localized: "meetings.window.title"), systemImage: "person.2.wave.2")
+            }
+
+        case .startMeetingRecording:
+            Button {
+                // [M10] Create an ad-hoc meeting, start capture, and open the Meetings window
+                // focused on it. The mutual-exclusion guard surfaces a busy message (never crashes)
+                // when a capture is already active; the window still opens so the user sees state.
+                Task {
+                    if let meeting = await MeetingsViewModel.shared.startMeetingRecordingFromMenu() {
+                        MeetingsViewModel.shared.requestFocus(on: meeting)
+                    }
+                    openManagedWindow("meetings")
+                }
+            } label: {
+                Label(String(localized: "meetings.menu.startRecording"), systemImage: "record.circle")
             }
 
         case .history:

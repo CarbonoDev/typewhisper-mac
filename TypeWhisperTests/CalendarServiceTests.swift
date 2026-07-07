@@ -238,13 +238,18 @@ final class CalendarServiceTests: XCTestCase {
 
     func testRefreshWhenAuthorizedPublishesFilteredEvents() {
         let current = event("current", startOffset: -10 * 60, endOffset: 50 * 60)
+        // Ended 1h ago (started 2h ago) — within the 2h overrunning grace, so it now REMAINS in the
+        // primary Upcoming section badged "ended" (M10) rather than vanishing at its scheduled end.
         let past = event("past", startOffset: -2 * 60 * 60, endOffset: -60 * 60)
         let provider = FakeCalendarProvider(authorizationStatus: .authorized, events: [current, past])
         let service = CalendarService(provider: provider, lookAhead: lookAhead)
 
         service.refresh(now: now, existingCalendarEventIDs: [])
 
-        XCTAssertEqual(service.upcomingEvents.map(\.id), ["current"])
+        // Sorted by start ascending: the overrunning event (started -2h) then the current one (-10m).
+        XCTAssertEqual(service.upcomingEvents.map(\.id), ["past", "current"])
+        // Neither belongs in Earlier (one in progress, one still within grace).
+        XCTAssertTrue(service.earlierEvents.isEmpty)
         XCTAssertNotNil(provider.lastQueryWindow)
     }
 

@@ -14,10 +14,24 @@ struct MeetingsWindowView: View {
         } detail: {
             detail
         }
-        .onAppear { viewModel.startCalendarPolling() }
+        .onAppear {
+            viewModel.startCalendarPolling()
+            // [M10] A focus request may have been queued before the window existed.
+            if let pending = viewModel.pendingFocusMeetingID {
+                selectedMeetingID = pending
+                viewModel.consumeFocusRequest()
+            }
+        }
         .onDisappear { viewModel.stopCalendarPolling() }
         .onChange(of: viewModel.activeMeeting?.id) { _, newValue in
             if let newValue { selectedMeetingID = newValue }
+        }
+        .onChange(of: viewModel.pendingFocusMeetingID) { _, newValue in
+            // [M10] Honour an external navigation request (e.g. "Start Meeting Recording" from the
+            // menu bar, or opening a past meeting from the Earlier section), then clear it.
+            guard let newValue else { return }
+            selectedMeetingID = newValue
+            viewModel.consumeFocusRequest()
         }
         .onChange(of: selectedMeetingID) { _, _ in
             // Per-meeting error/status banners are shared singleton state; clear them on switch so
@@ -61,18 +75,32 @@ struct MeetingsWindowView: View {
         .navigationTitle(String(localized: "meetings.window.title"))
         .toolbar {
             ToolbarItem {
-                Button {
-                    Task {
-                        // Guarded create+start so a rapid double-click can't leave a stray empty
-                        // meeting (M3 review finding 2).
-                        if let meeting = await viewModel.createAndStartAdHocCapture() {
-                            selectedMeetingID = meeting.id
+                // [M10] Secondary ad-hoc affordance: start recording now, or create an empty meeting
+                // (no capture) to attach imports/notes to later.
+                Menu {
+                    Button {
+                        Task {
+                            // Guarded create+start so a rapid double-click can't leave a stray empty
+                            // meeting (M3 review finding 2).
+                            if let meeting = await viewModel.createAndStartAdHocCapture() {
+                                selectedMeetingID = meeting.id
+                            }
                         }
+                    } label: {
+                        Label(String(localized: "meetings.newMeeting.startRecording"), systemImage: "record.circle")
+                    }
+                    .disabled(!viewModel.canStartCapture)
+
+                    Button {
+                        // Create without capturing; leaves the meeting `.scheduled` with no audio.
+                        let meeting = viewModel.createAdHocMeeting()
+                        selectedMeetingID = meeting.id
+                    } label: {
+                        Label(String(localized: "meetings.newMeeting.createEmpty"), systemImage: "doc.badge.plus")
                     }
                 } label: {
                     Label(String(localized: "meetings.newMeeting"), systemImage: "plus")
                 }
-                .disabled(!viewModel.canStartCapture)
             }
             ToolbarItem {
                 Button {

@@ -18,19 +18,44 @@ final class CalendarService: ObservableObject {
     /// already in progress). 12 hours covers "the rest of today" without listing next week.
     static let defaultLookAhead: TimeInterval = 12 * 60 * 60
 
+    /// How long an event that already *started* stays in the primary Upcoming section after its
+    /// scheduled end (M10 "past/overrunning visibility"). A meeting the user is still on that runs
+    /// long, or one that just ended, must not vanish the moment its scheduled end passes — it stays
+    /// visible (badged "ended") until this grace elapses or the user creates/starts/dismisses it.
+    static let defaultGrace: TimeInterval = 2 * 60 * 60
+
     @Published private(set) var authorizationStatus: CalendarAuthorizationStatus
+    /// Current + upcoming + overrunning (recently-ended, within `grace`) events. This is the primary
+    /// Upcoming section and the *only* list the start-notification and auto-brief paths consume; both
+    /// self-gate to events at/near their start, so the added overrunning entries never trip them.
     @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
+    /// Already-ended events (beyond `grace`) from the lookback window (since start of day) — the
+    /// collapsible "Earlier" section (M10). Unlike `upcomingEvents` these are NOT excluded when a
+    /// backing meeting already exists, so a past event whose meeting exists can still be opened.
+    @Published private(set) var earlierEvents: [CalendarEventDTO] = []
     @Published private(set) var errorMessage: String?
 
     private let provider: CalendarEventProviding
     private let lookAhead: TimeInterval
+    private let grace: TimeInterval
+
+    /// Last query inputs, retained so `dismiss(eventID:)` can re-publish both sections without a
+    /// provider round-trip (and deterministically under test).
+    private var lastRawEvents: [CalendarEventDTO] = []
+    private var lastNow: Date?
+    private var lastExcludedEventIDs: Set<String> = []
+    /// Overrunning events the user explicitly dismissed this session (M10). In-memory only —
+    /// dismissal is a transient "hide it now" affordance, not persisted state.
+    private var dismissedEventIDs: Set<String> = []
 
     init(
         provider: CalendarEventProviding = EventKitCalendarProvider(),
-        lookAhead: TimeInterval = CalendarService.defaultLookAhead
+        lookAhead: TimeInterval = CalendarService.defaultLookAhead,
+        grace: TimeInterval = CalendarService.defaultGrace
     ) {
         self.provider = provider
         self.lookAhead = lookAhead
+        self.grace = grace
         self.authorizationStatus = provider.authorizationStatus
         updateErrorMessage(for: provider.authorizationStatus)
     }
@@ -62,38 +87,138 @@ final class CalendarService: ObservableObject {
 
     // MARK: - Query
 
-    /// Re-query the provider and publish the current/upcoming events, excluding events that
-    /// already back an existing meeting (`existingCalendarEventIDs`).
+    /// Re-query the provider and publish both sections. The primary `upcomingEvents` excludes events
+    /// that already back an existing meeting (`existingCalendarEventIDs`); the `earlierEvents`
+    /// lookback list does not, so a past event whose meeting exists can still be opened (M10). The
+    /// query window is widened back to the start of `now`'s day so the lookback list has data.
     func refresh(now: Date = Date(), existingCalendarEventIDs: Set<String> = []) {
         guard authorizationStatus == .authorized else {
+            lastRawEvents = []
+            lastNow = now
+            lastExcludedEventIDs = []
             upcomingEvents = []
+            earlierEvents = []
             return
         }
-        let raw = provider.events(from: now, to: now.addingTimeInterval(lookAhead))
-        upcomingEvents = CalendarService.upcomingAndCurrent(
-            from: raw,
+        let from = CalendarService.lookbackStart(for: now)
+        let raw = provider.events(from: from, to: now.addingTimeInterval(lookAhead))
+        lastRawEvents = raw
+        lastNow = now
+        lastExcludedEventIDs = existingCalendarEventIDs
+        republish()
+    }
+
+    /// Recompute both published sections from the retained last query (used by `refresh` and by
+    /// `dismiss(eventID:)`), so dismissing an overrunning row updates the UI without a provider hit.
+    private func republish() {
+        guard let now = lastNow else { return }
+        let excludedFromPrimary = lastExcludedEventIDs.union(dismissedEventIDs)
+        upcomingEvents = CalendarService.currentUpcomingAndOverrunning(
+            from: lastRawEvents,
             now: now,
             lookAhead: lookAhead,
-            excludingEventIDs: existingCalendarEventIDs
+            grace: grace,
+            excludingEventIDs: excludedFromPrimary
+        )
+        earlierEvents = CalendarService.earlierEvents(
+            from: lastRawEvents,
+            now: now,
+            since: CalendarService.lookbackStart(for: now),
+            grace: grace,
+            excludingEventIDs: dismissedEventIDs
         )
     }
 
-    /// Pure windowing (unit-tested). An event qualifies when it has not yet ended and starts
-    /// within the look-ahead window; this naturally covers both currently-running and upcoming
-    /// events. All-day events and already-captured events are excluded. Result is sorted by
-    /// start date ascending.
-    static func upcomingAndCurrent(
+    /// Hide an overrunning (recently-ended) event from the Upcoming section for this session — the
+    /// "dismiss" arm of "visible until created / started / dismissed" (M10). Also keeps it out of
+    /// the Earlier list. In-memory only.
+    func dismiss(eventID: String) {
+        dismissedEventIDs.insert(eventID)
+        republish()
+    }
+
+    /// Start of `now`'s calendar day — the lookback boundary for the Earlier section.
+    static func lookbackStart(for now: Date, calendar: Calendar = .current) -> Date {
+        calendar.startOfDay(for: now)
+    }
+
+    /// Time-based classification of an event relative to `now`, driving both sectioning and badges
+    /// (M10). `grace` is how long a recently-ended event stays in the primary section.
+    enum EventTimeStatus: Equatable, Sendable {
+        /// Not yet started.
+        case upcoming
+        /// Started, not yet ended.
+        case inProgress
+        /// Ended within `grace` — still shown in the Upcoming section, badged "ended".
+        case endedRecently
+        /// Ended beyond `grace` — belongs only in the Earlier section.
+        case ended
+    }
+
+    static func timeStatus(
+        for event: CalendarEventDTO,
+        now: Date,
+        grace: TimeInterval = defaultGrace
+    ) -> EventTimeStatus {
+        if event.endDate > now {
+            return event.startDate <= now ? .inProgress : .upcoming
+        }
+        return now < event.endDate.addingTimeInterval(grace) ? .endedRecently : .ended
+    }
+
+    /// Pure windowing for the primary section (unit-tested): current + upcoming + overrunning
+    /// (recently-ended within `grace`). An event qualifies when it starts within the look-ahead
+    /// window and its `timeStatus` is anything but `.ended`. All-day and excluded events are
+    /// dropped. Sorted by start ascending so current/upcoming keep the visual focus.
+    static func currentUpcomingAndOverrunning(
         from events: [CalendarEventDTO],
         now: Date,
         lookAhead: TimeInterval,
+        grace: TimeInterval = defaultGrace,
         excludingEventIDs excluded: Set<String>
     ) -> [CalendarEventDTO] {
         let cutoff = now.addingTimeInterval(lookAhead)
         return events
             .filter { !$0.isAllDay }
             .filter { !excluded.contains($0.id) }
-            .filter { $0.endDate > now && $0.startDate <= cutoff }
+            .filter { $0.startDate <= cutoff }
+            .filter { timeStatus(for: $0, now: now, grace: grace) != .ended }
             .sorted { $0.startDate < $1.startDate }
+    }
+
+    /// Pure windowing for the "Earlier" section (unit-tested): events that ended beyond `grace` but
+    /// started on/after the lookback boundary `since`. Deliberately does NOT exclude events with a
+    /// backing meeting (they navigate to it). Sorted by start descending (most recent first).
+    static func earlierEvents(
+        from events: [CalendarEventDTO],
+        now: Date,
+        since: Date,
+        grace: TimeInterval = defaultGrace,
+        excludingEventIDs excluded: Set<String> = []
+    ) -> [CalendarEventDTO] {
+        events
+            .filter { !$0.isAllDay }
+            .filter { !excluded.contains($0.id) }
+            .filter { $0.startDate >= since }
+            .filter { timeStatus(for: $0, now: now, grace: grace) == .ended }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    /// Backward-compatible pure windowing: current + upcoming only (no overrunning grace). Retained
+    /// for callers/tests that want the pre-M10 "not yet ended" semantics.
+    static func upcomingAndCurrent(
+        from events: [CalendarEventDTO],
+        now: Date,
+        lookAhead: TimeInterval,
+        excludingEventIDs excluded: Set<String>
+    ) -> [CalendarEventDTO] {
+        currentUpcomingAndOverrunning(
+            from: events,
+            now: now,
+            lookAhead: lookAhead,
+            grace: 0,
+            excludingEventIDs: excluded
+        )
     }
 
     /// Whether the event is happening right now (started, not yet ended). Used for the

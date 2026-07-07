@@ -229,6 +229,8 @@
 		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
 		MEB0000000000000000002 /* MeetingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000002 /* MeetingModelTests.swift */; };
 		MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000003 /* CalendarServiceTests.swift */; };
+		MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010001 /* CalendarVisibilityTests.swift */; };
+		MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
 		AA00000000000000000040 /* HTTPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000040 /* HTTPResponse.swift */; };
@@ -768,6 +770,8 @@
 		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000002 /* MeetingModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000003 /* CalendarServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000010001 /* CalendarVisibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarVisibilityTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAdHocMenuTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -2560,6 +2564,8 @@
 				MEF0000000000000000001 /* MeetingServiceTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
+				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
+				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
 				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
@@ -4076,6 +4082,8 @@
 				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
+				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
+				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
 				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,

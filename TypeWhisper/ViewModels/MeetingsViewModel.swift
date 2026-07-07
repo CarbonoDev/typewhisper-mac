@@ -21,7 +21,15 @@ final class MeetingsViewModel: ObservableObject {
     // Calendar (M2)
     @Published private(set) var calendarAuthorizationStatus: CalendarAuthorizationStatus = .notDetermined
     @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
+    /// [M10] Already-ended events from the lookback window (since start of day) — the collapsible
+    /// "Earlier" section. Mirrored from `CalendarService.earlierEvents`.
+    @Published private(set) var earlierEvents: [CalendarEventDTO] = []
     @Published private(set) var calendarErrorMessage: String?
+
+    /// [M10] A meeting the UI should navigate to / focus (e.g. after "Start Meeting Recording" from
+    /// the menu bar, or opening a past meeting from the Earlier section). The Meetings window
+    /// observes this and clears it via `consumeFocusRequest()`.
+    @Published var pendingFocusMeetingID: UUID?
 
     // Capture (M3)
     @Published private(set) var activeMeeting: Meeting?
@@ -122,6 +130,7 @@ final class MeetingsViewModel: ObservableObject {
         self.templates = promptActionService.meetingActions
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
         self.upcomingEvents = calendarService.upcomingEvents
+        self.earlierEvents = calendarService.earlierEvents
         self.calendarErrorMessage = calendarService.errorMessage
         self.isVaultConnected = vaultService.isConnected
         self.vaultName = vaultService.vaultName
@@ -164,6 +173,12 @@ final class MeetingsViewModel: ObservableObject {
                 self.startNotificationService.notifyStartingMeetings(events)
                 // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
                 self.briefScheduler.tick(events: events, now: Date())
+            }
+            .store(in: &cancellables)
+        calendarService.$earlierEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] events in
+                self?.earlierEvents = events
             }
             .store(in: &cancellables)
         calendarService.$errorMessage
@@ -271,6 +286,34 @@ final class MeetingsViewModel: ObservableObject {
         CalendarService.isCurrent(event, now: now)
     }
 
+    /// [M10] Time-based classification for an event (drives the "in progress" / "ended" badges and
+    /// the upcoming-vs-earlier sectioning).
+    func timeStatus(for event: CalendarEventDTO, now: Date = Date()) -> CalendarService.EventTimeStatus {
+        CalendarService.timeStatus(for: event, now: now)
+    }
+
+    /// [M10] The stored meeting already backing a calendar event, if any — lets an Earlier-section
+    /// row navigate to an existing meeting instead of creating a duplicate.
+    func existingMeeting(for event: CalendarEventDTO) -> Meeting? {
+        meetingService.meetings.first { $0.calendarEventID == event.id }
+    }
+
+    /// [M10] Dismiss an overrunning (recently-ended) event from the Upcoming section for this
+    /// session — the "dismiss" arm of "visible until created / started / dismissed".
+    func dismissEvent(_ event: CalendarEventDTO) {
+        calendarService.dismiss(eventID: event.id)
+    }
+
+    /// [M10] Request that the Meetings window navigate to / focus `meeting`.
+    func requestFocus(on meeting: Meeting) {
+        pendingFocusMeetingID = meeting.id
+    }
+
+    /// [M10] Clear a pending focus request once the window has honoured it.
+    func consumeFocusRequest() {
+        pendingFocusMeetingID = nil
+    }
+
     /// Create (or return the existing) `.scheduled` meeting for a calendar event, deduping by
     /// `calendarEventID`. Refreshes the upcoming list so the created event drops out of it.
     @discardableResult
@@ -350,6 +393,21 @@ final class MeetingsViewModel: ObservableObject {
             meetingService.deleteMeeting(meeting)
             return nil
         }
+    }
+
+    /// [M10] Menu-bar entry point ("Start Meeting Recording"): create an ad-hoc meeting, start
+    /// capture, and return it so the caller can focus the window on it. If a capture is already in
+    /// progress (or finalizing) the mutual-exclusion guard surfaces a localized busy message via
+    /// `captureErrorMessage` — never a crash — and returns the already-active meeting so the window
+    /// can focus that instead of silently doing nothing.
+    @discardableResult
+    func startMeetingRecordingFromMenu() async -> Meeting? {
+        // Authoritative synchronous flags on the capture service (not the Combine-mirrored copies).
+        guard !captureService.isCapturing, !captureService.isFinalizing else {
+            captureErrorMessage = String(localized: "meetings.recording.alreadyActive")
+            return captureService.activeMeeting
+        }
+        return await createAndStartAdHocCapture()
     }
 
     /// Create (or reuse) the meeting backing a calendar event, then begin capture.

@@ -5,6 +5,9 @@ import SwiftUI
 /// when access is not yet granted, and a clear message when it has been denied.
 struct UpcomingMeetingsSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    /// [M10] The "Earlier" (past events, lookback) section is collapsed by default so the primary
+    /// visual focus stays on current + upcoming.
+    @State private var isEarlierExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -63,7 +66,12 @@ struct UpcomingMeetingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        // [M10] Collapsible "Earlier" section: past events from today's lookback window, scrollable,
+        // so the user can still create a meeting or open the linked one from a past event.
+        earlierSection
     }
+
+    // MARK: - Upcoming / current / overrunning row
 
     private func eventRow(_ event: CalendarEventDTO) -> some View {
         HStack(alignment: .center, spacing: 12) {
@@ -71,14 +79,7 @@ struct UpcomingMeetingsSection: View {
                 HStack(spacing: 8) {
                     Text(event.title.isEmpty ? String(localized: "meetings.calendar.untitledEvent") : event.title)
                         .font(.body)
-                    if viewModel.isCurrent(event) {
-                        Text(String(localized: "meetings.calendar.inProgress"))
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.15), in: Capsule())
-                            .foregroundStyle(Color.accentColor)
-                    }
+                    statusBadge(for: event)
                 }
                 Text(event.startDate, format: .dateTime.weekday().hour().minute())
                     .font(.caption)
@@ -94,6 +95,17 @@ struct UpcomingMeetingsSection: View {
                 }
             }
             Spacer()
+            // [M10] Let the user dismiss an overrunning (recently-ended) event that they don't want
+            // to record, without waiting out the grace window.
+            if viewModel.timeStatus(for: event) == .endedRecently {
+                Button {
+                    viewModel.dismissEvent(event)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .help(String(localized: "meetings.calendar.dismiss"))
+            }
             Button(String(localized: "meetings.calendar.createMeeting")) {
                 viewModel.createMeeting(from: event)
             }
@@ -101,5 +113,84 @@ struct UpcomingMeetingsSection: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// [M10] "In progress" for a running event; "ended" (badged) for an overrunning/recently-ended
+    /// one that is still shown so a meeting the user is on that ran long doesn't vanish.
+    @ViewBuilder
+    private func statusBadge(for event: CalendarEventDTO) -> some View {
+        switch viewModel.timeStatus(for: event) {
+        case .inProgress:
+            badge(String(localized: "meetings.calendar.inProgress"), tint: .accentColor)
+        case .endedRecently:
+            badge(String(localized: "meetings.calendar.ended"), tint: .secondary)
+        case .upcoming, .ended:
+            EmptyView()
+        }
+    }
+
+    private func badge(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.15), in: Capsule())
+            .foregroundStyle(tint)
+    }
+
+    // MARK: - Earlier (past events) section
+
+    @ViewBuilder
+    private var earlierSection: some View {
+        if !viewModel.earlierEvents.isEmpty {
+            DisclosureGroup(isExpanded: $isEarlierExpanded) {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(viewModel.earlierEvents) { event in
+                            earlierRow(event)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .frame(maxHeight: 240)
+            } label: {
+                Text(String(localized: "meetings.calendar.earlierSection"))
+                    .font(.subheadline)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func earlierRow(_ event: CalendarEventDTO) -> some View {
+        let existing = viewModel.existingMeeting(for: event)
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title.isEmpty ? String(localized: "meetings.calendar.untitledEvent") : event.title)
+                    .font(.body)
+                Text(event.startDate, format: .dateTime.weekday().hour().minute())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(
+                existing == nil
+                    ? String(localized: "meetings.calendar.createMeeting")
+                    : String(localized: "meetings.calendar.openMeeting")
+            ) {
+                openEarlierEvent(event)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// [M10] Open (or create then open) the meeting for a past event, focusing it in the Meetings
+    /// window. `createMeeting(from:)` returns the existing meeting when one already backs the event,
+    /// so this never duplicates.
+    private func openEarlierEvent(_ event: CalendarEventDTO) {
+        let meeting = viewModel.createMeeting(from: event)
+        viewModel.requestFocus(on: meeting)
+        ManagedAppWindowOpener.shared.open(id: "meetings")
     }
 }
