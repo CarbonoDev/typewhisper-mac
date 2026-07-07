@@ -632,11 +632,11 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoveryAutomaticFallbackAllowsSupporterAccessAndRejectsPrimaryEngine() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
+        // TypeWhisper is free and open source; automatic fallback is available to
+        // everyone.
         let license = LicenseService(defaults: defaults)
         let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
 
-        license.supporterStatus = .active
-        license.supporterTier = .bronze
         viewModel.selectedEngine = "backup"
         viewModel.automaticFallbackEnabled = true
 

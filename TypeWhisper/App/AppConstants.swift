@@ -147,42 +147,8 @@ enum AppConstants {
         #endif
     }()
 
-    // MARK: - Polar.sh (retained for the inert LicenseService compatibility shim)
-    // TypeWhisper is free and open source; there are no purchase or checkout links.
-    enum Polar {
-        static let organizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4"
-    }
-
-    // MARK: - Discord Claim Service
-    enum DiscordClaim {
-        static let defaultBaseURLString = "http://127.0.0.1:8787"
-        static let callbackScheme = "typewhisper"
-        static let callbackHost = "community"
-        static let callbackPath = "/claim-result"
-
-        static var baseURL: URL {
-            let environment = ProcessInfo.processInfo.environment
-            let configured = environment["TYPEWHISPER_DISCORD_CLAIM_BASE_URL"]
-                ?? Bundle.main.object(forInfoDictionaryKey: "TypeWhisperDiscordClaimBaseURL") as? String
-                ?? defaultBaseURLString
-
-            return URL(string: configured) ?? URL(string: defaultBaseURLString)!
-        }
-
-        static var callbackURL: URL {
-            URL(string: "\(callbackScheme)://\(callbackHost)\(callbackPath)")!
-        }
-
-        static var githubSponsorsURL: URL {
-            baseURL.appendingPathComponent("claims").appendingPathComponent("github")
-        }
-
-        static func isCallbackURL(_ url: URL) -> Bool {
-            url.scheme == callbackScheme &&
-                url.host == callbackHost &&
-                url.path == callbackPath
-        }
-    }
+    // TypeWhisper is free and open source (GPLv3); there is no licensing, purchase,
+    // supporter, or Discord-claim configuration.
 }
 
 private let factoryLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SwiftDataStoreFactory")

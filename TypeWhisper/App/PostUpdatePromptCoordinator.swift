@@ -75,10 +75,6 @@ final class PostUpdatePromptCoordinator {
         dismissForCurrentSession()
     }
 
-    private var hasActiveEntitlement: Bool {
-        licenseService.licenseStatus == .active || licenseService.supporterStatus == .active
-    }
-
     private var lastSeenReleaseFingerprint: String? {
         defaults.string(forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
     }

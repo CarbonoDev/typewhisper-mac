@@ -668,9 +668,9 @@ final class DictionaryServiceTests: XCTestCase {
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
         let defaults = UserDefaults(suiteName: #function)!
+        // TypeWhisper is free and open source; all features (including commercial
+        // industry term packs) are unlocked for everyone.
         let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .team
         let registry = TermPackRegistryService()
         let realEstatePack = makeCommercialIndustryPack(id: "real-estate", terms: ["Exposé", "Grundbuch"])
         registry.communityPacks = [realEstatePack]

@@ -44,7 +44,6 @@ final class ServiceContainer: ObservableObject {
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
-    let supporterDiscordService: SupporterDiscordService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -125,7 +124,6 @@ final class ServiceContainer: ObservableObject {
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
-        supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
             licenseService: licenseService,
             syncStore: userDataSyncStore
@@ -247,7 +245,6 @@ final class ServiceContainer: ObservableObject {
 
         // License
         LicenseService.shared = licenseService
-        SupporterDiscordService.shared = supporterDiscordService
 
         // Plugin system
         EventBus.shared = EventBus()

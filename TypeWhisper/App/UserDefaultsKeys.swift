@@ -145,22 +145,12 @@ enum UserDefaultsKeys {
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
-    // MARK: - Licensing
+    // MARK: - Post-update release tracking
+    // TypeWhisper is free and open source (GPLv3); the licensing/supporter keys
+    // have been removed. `usageIntent` and `welcomeSheetShown` are retained only
+    // because a couple of tests still reference them.
     static let usageIntent = "usageIntent"
-    static let userType = "userType"
-    static let licenseStatus = "licenseStatus"
-    static let licenseTier = "licenseTier"
-    static let lastLicenseValidation = "lastLicenseValidation"
-    static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
-    static let workUsagePromptDismissed = "workUsagePromptDismissed"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
     static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
-
-    // MARK: - Supporter
-    static let supporterTier = "supporterTier"
-    static let supporterStatus = "supporterStatus"
-    static let lastSupporterValidation = "lastSupporterValidation"
-    static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
-    static let supporterDiscordSessionId = "supporterDiscordSessionId"
 }
