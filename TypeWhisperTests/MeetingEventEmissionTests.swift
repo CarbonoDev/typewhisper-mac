@@ -32,6 +32,8 @@ final class RecordingMeetingEventEmitter: MeetingEventEmitting {
 @MainActor
 final class MeetingEventEmissionTests: XCTestCase {
     private var previousPluginManager: PluginManager?
+    /// [Track J] The final pass (and its transcriptReady/ended emissions) now runs on this queue.
+    private let captureJobQueue = JobQueueService()
 
     override func setUp() {
         super.setUp()
@@ -78,6 +80,7 @@ final class MeetingEventEmissionTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: defaults,
             flushIntervalSeconds: 0,
             eventEmitter: emitter
@@ -109,6 +112,8 @@ final class MeetingEventEmissionTests: XCTestCase {
         XCTAssertEqual(emitter.segmentPayloads.last?.segments.first?.text, "This is a test.")
 
         await capture.stop()
+        // [Track J] transcriptReady/ended now emit inside the queued final job; settle it first.
+        await captureJobQueue.drain()
 
         // .transcriptReady then .ended, both with the meeting id.
         XCTAssertEqual(emitter.readyPayloads.count, 1)
@@ -136,6 +141,7 @@ final class MeetingEventEmissionTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: defaults,
             flushIntervalSeconds: 0,
             eventEmitter: emitter
@@ -151,6 +157,7 @@ final class MeetingEventEmissionTests: XCTestCase {
         XCTAssertEqual(emitter.segmentPayloads.count, 1, "repeated identical snapshots must not re-emit")
 
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     // MARK: - addOutput emits outputGenerated (single choke point covers all output kinds)

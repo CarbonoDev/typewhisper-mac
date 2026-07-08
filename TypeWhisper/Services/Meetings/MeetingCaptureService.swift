@@ -75,7 +75,15 @@ final class MeetingCaptureService: ObservableObject {
     private let meetingService: MeetingService
     private let audioRecorderService: AudioRecorderService
     private let modelManager: ModelManagerService
+    /// [Track J] The final re-transcription runs as a cancellable `.finalTranscription` job on this
+    /// queue (plan J2) instead of being awaited inline in `stop()`, so the transcription lane serializes
+    /// it against imports/diarization and it can be cancelled without leaving the meeting `.processing`.
+    private let jobQueue: JobQueueService
     private let defaults: UserDefaults
+    /// Test seam (plan J2): overrides the full-buffer final re-transcription so the success /
+    /// keep-live / cancellation paths can be exercised without a loaded transcription plugin. Nil in
+    /// production (uses `modelManager.transcribe`). Mirrors `AudioRecorderService`'s override hooks.
+    var finalizeTranscribeOverrideForTesting: (@MainActor (_ samples: [Float]) async throws -> TranscriptionResult)?
     /// Interval (seconds) between durable stable-segment flushes during capture (plan D2 ≤ 5 s).
     private let flushIntervalSeconds: TimeInterval
     /// Publishes `MeetingEvent`s to plugins (addendum AD4). Defaulted no-op so v1 call sites/tests
@@ -134,6 +142,7 @@ final class MeetingCaptureService: ObservableObject {
         meetingService: MeetingService,
         audioRecorderService: AudioRecorderService,
         modelManager: ModelManagerService,
+        jobQueue: JobQueueService,
         defaults: UserDefaults = .standard,
         flushIntervalSeconds: TimeInterval = 5,
         eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter(),
@@ -145,6 +154,7 @@ final class MeetingCaptureService: ObservableObject {
         self.meetingService = meetingService
         self.audioRecorderService = audioRecorderService
         self.modelManager = modelManager
+        self.jobQueue = jobQueue
         self.defaults = defaults
         self.flushIntervalSeconds = flushIntervalSeconds
         self.eventEmitter = eventEmitter
@@ -170,6 +180,16 @@ final class MeetingCaptureService: ObservableObject {
         calendarName: String? = nil
     ) async throws {
         guard !isCapturing, !isFinalizing else { throw CaptureError.alreadyCapturing }
+
+        // [Track J] The synchronous `isFinalizing` window ends when `stop()`'s teardown completes, but
+        // this meeting's final re-transcription may still be queued/running as a `.finalTranscription`
+        // job. Restarting the *same* meeting before its final pass finishes would let `resetSessionState`
+        // clobber the session offsets that pass relies on and race its `replaceSegments`, so refuse
+        // until it settles (plan §CC2). Different meetings are unaffected — the transcription lane just
+        // serializes their final passes.
+        if jobQueue.hasActiveJob(kind: .finalTranscription, meetingID: meeting.id) {
+            throw CaptureError.alreadyCapturing
+        }
 
         // Claim `isCapturing` synchronously — before the first `await` — so a second `start()`
         // slipping in during `startRecording`'s suspension (double-click on "New Meeting" or the
@@ -237,21 +257,21 @@ final class MeetingCaptureService: ObservableObject {
         )))
     }
 
-    /// Stop capturing: finalize the live session, persist any pending stable tail, move the audio
-    /// file into the meetings library, re-transcribe the full buffer to timestamped segments
-    /// (falling back to the live-stabilized segments on failure), and mark the meeting completed.
+    /// Stop capturing. The synchronous teardown (stop the timer, mark `.processing`, grab the buffer,
+    /// finish the live session, flush the pending tail, stop the recorder, release ownership, adopt the
+    /// audio) runs inline; the heavy full-buffer re-transcription is then handed to the job queue as a
+    /// cancellable `.finalTranscription` job (plan J2) rather than being awaited here.
     func stop() async {
         // Re-entrancy guard (finding 3): a double-click on Stop (the VM's `isCapturing` mirror
         // lags by a main-queue hop) must not run the finalize pipeline twice concurrently.
         guard isCapturing, let meeting = activeMeeting else { return }
 
         isCapturing = false
-        // Keep `start()`'s guard closed across the multi-`await` finalize below: `isCapturing` is
+        // Keep `start()`'s guard closed across the multi-`await` teardown below: `isCapturing` is
         // already false (so the UI stops showing "recording"), but a new session must not begin
         // until teardown finishes (finding 2). A double-click on Stop is still handled by the
         // `guard isCapturing` above — this only gates a concurrent *start*.
         isFinalizing = true
-        defer { isFinalizing = false }
         stopElapsedTimer()
 
         meeting.state = .processing
@@ -273,12 +293,69 @@ final class MeetingCaptureService: ObservableObject {
             meetingService.adoptAudioFile(audioURL, for: meeting)
         }
 
+        // Snapshot the session state the final pass depends on *before* releasing the finalize gate: a
+        // new capture (of another meeting) may now `start()` and reset the live-session vars, so the
+        // queued finalization must read these snapshots, not `self` (plan §CC2). The buffer /
+        // liveSessionResult are retained in the job closure until it runs.
+        let sessionTimeOffsetSnapshot = sessionTimeOffset
+        let priorLiveCaptureSnapshot = priorLiveCaptureSegmentIDs
+        let sessionRulePolicySnapshot = sessionRulePolicy
+        let latestElapsedSnapshot = latestElapsed
+
+        // Teardown done: the recorder and ownership are released, so a *different* meeting may start.
+        // A restart of *this* meeting is still refused by `start()`'s `.finalTranscription` guard until
+        // the job below settles (plan §CC2).
+        isFinalizing = false
+
+        // The final re-transcription runs as a cancellable transcription-lane job (cap 1).
+        // `runFinalization` never throws: on transcription success it replaces the live segments; on
+        // failure *or* cancellation it keeps the live segments; in every case it marks the meeting
+        // `.completed`, so a stopped meeting is never stuck in `.processing` (plan J2).
+        jobQueue.enqueue(
+            kind: .finalTranscription,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.transcribing")
+        ) { [weak self] in
+            await self?.runFinalization(
+                for: meeting,
+                buffer: fullBuffer,
+                liveSessionResult: liveSessionResult,
+                sessionTimeOffset: sessionTimeOffsetSnapshot,
+                priorLiveCaptureSegmentIDs: priorLiveCaptureSnapshot,
+                sessionRulePolicy: sessionRulePolicySnapshot,
+                latestElapsed: latestElapsedSnapshot
+            )
+        }
+    }
+
+    /// The final (post-stop) re-transcription pass, run as the `.finalTranscription` job body (plan
+    /// J2). All session state is passed in as snapshots (never read off `self`) so a concurrent new
+    /// capture cannot corrupt it. Emits `transcriptReady`/`ended` exactly once and always marks the
+    /// meeting `.completed` — whether the transcription succeeds (segments replaced), fails, or is
+    /// cancelled (live segments kept) — so the meeting is never left stuck in `.processing`.
+    private func runFinalization(
+        for meeting: Meeting,
+        buffer: [Float],
+        liveSessionResult: TranscriptionResult?,
+        sessionTimeOffset: TimeInterval,
+        priorLiveCaptureSegmentIDs: Set<UUID>,
+        sessionRulePolicy: FinalRetranscriptionPolicy?,
+        latestElapsed: TimeInterval
+    ) async {
         // Final timestamped transcript (plan D3). Prefer a segmented live-session result; else
-        // re-transcribe the full buffer; if neither yields segments, keep the live segments.
-        let finalSegments = await finalizeSegments(liveSessionResult: liveSessionResult, buffer: fullBuffer)
-        // Scope the degraded status to this meeting so it surfaces only on the meeting that
-        // finalized in a reduced mode (AD8), never on unrelated meetings browsed afterward.
-        finalRetranscriptionDegradedMeetingID = finalRetranscriptionDegraded ? meeting.id : nil
+        // re-transcribe the full buffer; if neither yields segments (or the pass is cancelled/fails),
+        // keep the live segments.
+        let (finalSegments, degraded) = await finalizeSegments(
+            for: meeting,
+            liveSessionResult: liveSessionResult,
+            buffer: buffer,
+            sessionRulePolicy: sessionRulePolicy
+        )
+        // Scope the degraded status to this meeting so it surfaces only on the meeting that finalized
+        // in a reduced mode (AD8), never on unrelated meetings browsed afterward.
+        finalRetranscriptionDegraded = degraded
+        finalRetranscriptionDegradedMeetingID = degraded ? meeting.id : nil
+
         if let finalSegments, !finalSegments.isEmpty {
             // Final segments are timed relative to *this* session's buffer (0-based); shift them
             // onto the meeting timeline and replace only this session's live segments, preserving
@@ -323,10 +400,14 @@ final class MeetingCaptureService: ObservableObject {
             segmentCount: segmentCount
         )))
 
-        activeMeeting = nil
-        liveTranscript = ""
-        elapsedSeconds = 0
-        isDegradedLiveMode = false
+        // Clear the live UI state only if this meeting is still the active one — a new capture may have
+        // begun for a *different* meeting while this pass was queued (plan §CC2).
+        if activeMeeting?.id == meeting.id {
+            activeMeeting = nil
+            liveTranscript = ""
+            elapsedSeconds = 0
+            isDegradedLiveMode = false
+        }
     }
 
     /// The meeting's full transcript rendered as newline-separated segment text, ordered by
@@ -483,13 +564,19 @@ final class MeetingCaptureService: ObservableObject {
 
     // MARK: - Finalization
 
+    /// Resolve the final re-transcription plan and run it, returning the resulting segments (nil ⇒
+    /// keep live) and whether the pass ran in a degraded mode. Parameterized by snapshotted session
+    /// state (plan §CC2) so it never reads mutable `self` session vars a concurrent capture could
+    /// clobber.
     private func finalizeSegments(
+        for meeting: Meeting,
         liveSessionResult: TranscriptionResult?,
-        buffer: [Float]
-    ) async -> [TranscriptionSegment]? {
+        buffer: [Float],
+        sessionRulePolicy: FinalRetranscriptionPolicy?
+    ) async -> (segments: [TranscriptionSegment]?, degraded: Bool) {
         // AD8: resolve the final re-transcription policy (per-meeting → rule → global → sameEngine)
         // and apply the availability + cloud-ceiling guards.
-        let policy = resolveFinalRetranscriptionPolicy(for: activeMeeting)
+        let policy = resolveFinalRetranscriptionPolicy(for: meeting, sessionRulePolicy: sessionRulePolicy)
         let durationSeconds = Double(buffer.count) / MeetingCaptureService.sampleRate
         let plan = FinalRetranscriptionPolicy.plan(
             for: policy,
@@ -498,23 +585,27 @@ final class MeetingCaptureService: ObservableObject {
             isEngineAvailable: engineAvailabilityCheck,
             isCloudEngine: engineIsCloudCheck
         )
-        finalRetranscriptionDegraded = plan.degraded
 
         switch plan.execution {
         case .keepLiveSegments:
             // `.off`: skip re-transcription entirely; the persisted `.liveCapture` segments stand.
-            return nil
+            return (nil, plan.degraded)
         case .sameEngine:
-            return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+            let segments = await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+            return (segments, plan.degraded)
         case .engine(let id, let model):
-            return await runOverrideEngineFinalize(
+            let outcome = await runOverrideEngineFinalize(
                 liveSessionResult: liveSessionResult, buffer: buffer, engineId: id, model: model
             )
+            return (outcome.segments, plan.degraded || outcome.degraded)
         }
     }
 
     /// Resolve the effective final re-transcription policy for `meeting` from the AD8 layers.
-    private func resolveFinalRetranscriptionPolicy(for meeting: Meeting?) -> FinalRetranscriptionPolicy {
+    private func resolveFinalRetranscriptionPolicy(
+        for meeting: Meeting?,
+        sessionRulePolicy: FinalRetranscriptionPolicy?
+    ) -> FinalRetranscriptionPolicy {
         let global = FinalRetranscriptionPolicy(
             mode: defaults.string(forKey: UserDefaultsKeys.meetingsFinalPassDefaultMode),
             engineId: defaults.string(forKey: UserDefaultsKeys.meetingsFinalPassEngineId),
@@ -546,17 +637,26 @@ final class MeetingCaptureService: ObservableObject {
             cloudModelOverride: defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel)
         )
         do {
-            let result = try await modelManager.transcribe(
-                audioSamples: buffer,
-                languageSelection: .auto,
-                task: .transcribe,
-                engineOverrideId: providerId,
-                cloudModelOverride: cloudModelOverride,
-                onProgress: { _ in true }
-            )
+            // The test seam (when set) stands in for the real engine so the success / keep-live /
+            // cancellation paths are exercisable without a loaded transcription plugin (plan J2).
+            let result: TranscriptionResult
+            if let finalizeTranscribeOverrideForTesting {
+                result = try await finalizeTranscribeOverrideForTesting(buffer)
+            } else {
+                result = try await modelManager.transcribe(
+                    audioSamples: buffer,
+                    languageSelection: .auto,
+                    task: .transcribe,
+                    engineOverrideId: providerId,
+                    cloudModelOverride: cloudModelOverride,
+                    onProgress: { _ in true }
+                )
+            }
             return result.segments.isEmpty ? nil : result.segments
         } catch {
-            logger.warning("Final meeting transcription failed; keeping live segments: \(error.localizedDescription)")
+            // A thrown `CancellationError` (job cancelled) is handled identically to a transcription
+            // failure: keep the live segments (plan J2 finalTranscription cancel semantics).
+            logger.warning("Final meeting transcription failed/cancelled; keeping live segments: \(error.localizedDescription)")
             return nil
         }
     }
@@ -572,8 +672,8 @@ final class MeetingCaptureService: ObservableObject {
         buffer: [Float],
         engineId: String,
         model: String?
-    ) async -> [TranscriptionSegment]? {
-        guard buffer.count > 8_000 else { return nil }
+    ) async -> (segments: [TranscriptionSegment]?, degraded: Bool) {
+        guard buffer.count > 8_000 else { return (nil, false) }
         do {
             let result = try await modelManager.transcribe(
                 audioSamples: buffer,
@@ -584,15 +684,15 @@ final class MeetingCaptureService: ObservableObject {
                 onProgress: { _ in true }
             )
             if !result.segments.isEmpty {
-                return result.segments
+                return (result.segments, false)
             }
         } catch {
             logger.warning("Override-engine final transcription failed; degrading to same-engine: \(error.localizedDescription)")
         }
         // Override produced nothing usable — degrade one step (never lose content). Prefer the
         // already-computed live-session segments before paying for a second full-buffer pass.
-        finalRetranscriptionDegraded = true
-        return await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+        let segments = await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+        return (segments, true)
     }
 
     // MARK: - Elapsed time

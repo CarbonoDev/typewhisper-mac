@@ -9,19 +9,19 @@ extension MeetingsViewModel {
         briefScheduler.hasFreshBrief(forCalendarEventID: event.id, now: now)
     }
 
-    /// A localized, user-facing line for the current scheduler status, or nil when idle.
+    /// A localized, user-facing line for a currently-running automatic brief, or nil when none is
+    /// running. [Track J] Derived from the job queue (plan J2): the scheduler no longer owns a coarse
+    /// `status`; a running `.brief`/`.background` job *is* the "preparing" state. Failures stay silent
+    /// (AD9) — a failed job simply drops out of this line rather than surfacing an alarming message.
     var autoBriefStatusMessage: String? {
-        switch briefSchedulerStatus {
-        case .idle:
+        guard let job = jobQueue.jobs.first(where: {
+            $0.kind == .brief && $0.priority == .background && $0.state == .running
+        }),
+            let meetingID = job.meetingID,
+            let title = meetings.first(where: { $0.id == meetingID })?.title
+        else {
             return nil
-        case .generating(let title):
-            return String(
-                format: String(localized: "meetings.brief.auto.status.generating"),
-                title
-            )
-        case .failed:
-            // Silent-fail (AD9): surface a neutral, non-alarming line rather than the raw error.
-            return String(localized: "meetings.brief.auto.status.skipped")
         }
+        return String(format: String(localized: "meetings.brief.auto.status.preparing"), title)
     }
 }

@@ -5,6 +5,10 @@ import SwiftUI
 /// when access is not yet granted, and a clear message when it has been denied.
 struct UpcomingMeetingsSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track J] Observe the queue directly so the auto-brief status line (derived from a running
+    // background `.brief` job) updates reactively — the VM no longer mirrors a scheduler status
+    // (plan J2 §CC7).
+    @ObservedObject private var jobQueue = JobQueueService.shared
     /// [M10] The "Earlier" (past events, lookback) section is collapsed by default so the primary
     /// visual focus stays on current + upcoming.
     @State private var isEarlierExpanded = false

@@ -36,9 +36,10 @@ extension PromptProcessingService: PromptProcessing {}
 @MainActor
 final class MeetingLLMService: ObservableObject {
     @Published private(set) var isGenerating = false
-    /// Separate re-entrancy flag for in-meeting Q&A (plan M6) so asking a question and generating an
-    /// output do not block one another and the UI can mirror each independently.
-    @Published private(set) var isAnswering = false
+    /// Per-meeting Q&A re-entrancy set (plan J2). Replaces the single `isAnswering` bool so asking a
+    /// question in meeting A does not disable the Ask field in meeting B: a meeting id is present
+    /// while that meeting's answer is in flight. Asking and generating an output stay independent.
+    @Published private(set) var answeringMeetingIDs: Set<UUID> = []
 
     private let meetingService: MeetingService
     private let vaultService: ObsidianVaultService
@@ -62,11 +63,12 @@ final class MeetingLLMService: ObservableObject {
     /// newest per kind — plan D15). Throws if the meeting has no transcript, or the LLM call fails.
     @discardableResult
     func generateOutput(for meeting: Meeting, using template: PromptAction) async throws -> MeetingOutput {
-        // Synchronous re-entrancy guard on the service itself (M4 review finding 1). The VM mirrors
-        // `isGenerating` through `DispatchQueue.main` into `isGeneratingOutput`, an async hop behind,
-        // so a rapid double-click on a generate menu would otherwise slip two concurrent generations
-        // past the UI's disabled state. Claim the flag here — before the first `await` — mirroring
-        // `MeetingCaptureService.start()`'s `isCapturing` placement.
+        // Double-generation is prevented primarily by the job queue (plan J1/J2): the summary/extended
+        // job dedupes on `(kind, meetingID)`, so a rapid double-click is dropped before this call ever
+        // runs a second time. This synchronous flag is the last line of defense for any path that
+        // reaches the service *without* going through the queue (or races its main-queue republish):
+        // claimed here before the first `await`, mirroring `MeetingCaptureService.start()`'s
+        // `isCapturing` placement, so two concurrent generations can never both persist an output.
         guard !isGenerating else { throw MeetingLLMError.alreadyGenerating }
         isGenerating = true
         defer { isGenerating = false }
@@ -122,15 +124,17 @@ final class MeetingLLMService: ObservableObject {
         question: String,
         asOfOffset offset: Double? = nil
     ) async throws -> MeetingQATurn {
-        // Synchronous re-entrancy guard claimed before the first `await`, mirroring `generateOutput`.
+        // Per-meeting synchronous re-entrancy guard claimed before the first `await`, mirroring
+        // `generateOutput`. Scoped to *this* meeting (plan J2): a second question for the same meeting
+        // while its answer is in flight is rejected, but a question for a different meeting proceeds.
         // A dedicated case (not `.alreadyGenerating`) so a Q&A double-submit surfaces a Q&A-worded
         // message via `qaErrorMessage` rather than "An output is already being generated" (M6 review
         // finding 3).
-        guard !isAnswering else { throw MeetingLLMError.alreadyAnswering }
+        guard !answeringMeetingIDs.contains(meeting.id) else { throw MeetingLLMError.alreadyAnswering }
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { throw MeetingLLMError.emptyQuestion }
-        isAnswering = true
-        defer { isAnswering = false }
+        answeringMeetingIDs.insert(meeting.id)
+        defer { answeringMeetingIDs.remove(meeting.id) }
 
         let segments = meeting.segments
             .sorted { $0.order < $1.order }

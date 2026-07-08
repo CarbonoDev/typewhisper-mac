@@ -9,6 +9,9 @@ import SwiftUI
 ///   Q&A, speaker diarization / mapping, notes, and a merge-into-this-meeting action.
 struct MeetingDocumentBody: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track J] Observe the queue directly so the meeting-scoped "Identify speakers" spinner reacts to
+    // `.diarization` job state (the VM no longer mirrors `isEnriching` — plan J2 §CC7).
+    @ObservedObject private var jobQueue = JobQueueService.shared
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
@@ -242,15 +245,15 @@ struct MeetingDocumentBody: View {
     private var identifyButton: some View {
         if let availability = diarizationAvailability, availability != .unavailable {
             Button {
-                Task { await viewModel.identifySpeakers(for: meeting) }
+                viewModel.identifySpeakers(for: meeting)
             } label: {
-                if viewModel.isEnriching {
+                if viewModel.isEnriching(for: meeting) {
                     ProgressView().controlSize(.small)
                 } else {
                     Label(String(localized: "meetings.diarization.identify"), systemImage: "person.wave.2")
                 }
             }
-            .disabled(viewModel.isEnriching)
+            .disabled(viewModel.isEnriching(for: meeting))
         }
     }
 

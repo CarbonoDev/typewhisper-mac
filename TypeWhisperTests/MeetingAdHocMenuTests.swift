@@ -8,6 +8,8 @@ import XCTest
 @MainActor
 final class MeetingAdHocMenuTests: XCTestCase {
     private var previousPluginManager: PluginManager?
+    /// [Track J] The final pass runs on this queue; drained after `stop()`.
+    private let captureJobQueue = JobQueueService()
 
     override func setUp() {
         super.setUp()
@@ -54,6 +56,7 @@ final class MeetingAdHocMenuTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: defaults,
             flushIntervalSeconds: 0
         )
@@ -109,5 +112,6 @@ final class MeetingAdHocMenuTests: XCTestCase {
         XCTAssertTrue(capture.isCapturing)
 
         await capture.stop()
+        await captureJobQueue.drain()
     }
 }

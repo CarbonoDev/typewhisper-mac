@@ -7,6 +7,8 @@ import XCTest
 @MainActor
 final class MeetingCaptureConfigTests: XCTestCase {
     private var previousPluginManager: PluginManager?
+    /// [Track J] The final pass runs on this queue; tests settle it with `drain()` after `stop()`.
+    private let captureJobQueue = JobQueueService()
 
     override func setUp() {
         super.setUp()
@@ -77,6 +79,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: defaults,
             flushIntervalSeconds: 0,
             ruleMatcher: ruleMatcher,
@@ -110,6 +113,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     /// Finding 1: a `calendarNamePatterns` rule can only fire if the calendar name reaches matching
@@ -136,6 +140,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
         XCTAssertEqual(capture.defaultTemplateMeetingID, meeting.id)
         await capture.stop()
+        await captureJobQueue.drain()
 
         // Control: no calendar name → the calendar-name trigger cannot match.
         let recorder2 = makeRecorder(recordingsDirectory: dir.appendingPathComponent("rec2"))
@@ -148,6 +153,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         XCTAssertNil(capture2.activeMeetingDefaultTemplateID)
         XCTAssertNil(capture2.defaultTemplateMeetingID)
         await capture2.stop()
+        await captureJobQueue.drain()
     }
 
     // MARK: - Rule-selected default template pre-selection (finding 4)
@@ -214,6 +220,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await baseline.start(meeting: baseMeeting)
         XCTAssertFalse(baseline.isDegradedLiveMode)
         await baseline.stop()
+        await captureJobQueue.drain()
 
         // With a rule live-engine override to a non-live-capable engine in the empty test host,
         // `startStreaming` marks the session degraded — proving the override reached it.
@@ -230,6 +237,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         XCTAssertTrue(capture.isDegradedLiveMode, "Rule live-engine override should reach startStreaming")
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     func testNoRuleLeavesLiveModeUndegraded() async throws {
@@ -248,6 +256,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         // not the injected test defaults.)
         XCTAssertNil(capture.activeMeetingDefaultTemplateID)
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     // MARK: - Final re-transcription policy
@@ -269,6 +278,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         capture.ingestLiveTranscript("Live one.", elapsed: 1)
         capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
         await capture.stop()
+        await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.state, .completed)
         let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
@@ -294,6 +304,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Only live.", elapsed: 1)
         await capture.stop()
+        await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.segments.map(\.text), ["Only live."])
         XCTAssertFalse(capture.finalRetranscriptionDegraded)
@@ -319,6 +330,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Kept segment.", elapsed: 1)
         await capture.stop()
+        await captureJobQueue.drain()
 
         XCTAssertTrue(capture.finalRetranscriptionDegraded, "Unavailable override engine should degrade")
         // Content is never lost — the live segment survives.
@@ -340,6 +352,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: makeDefaults(),
             flushIntervalSeconds: 0,
             ruleMatcher: matcher,
@@ -352,6 +365,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Kept.", elapsed: 1)
         await capture.stop()
+        await captureJobQueue.drain()
 
         XCTAssertTrue(capture.finalRetranscriptionDegraded)
         XCTAssertEqual(meeting.segments.map(\.text), ["Kept."])

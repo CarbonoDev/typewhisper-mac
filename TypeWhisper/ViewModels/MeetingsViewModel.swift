@@ -49,12 +49,15 @@ final class MeetingsViewModel: ObservableObject {
     // Knowledge base + brief (M5)
     @Published private(set) var isVaultConnected = false
     @Published private(set) var vaultName: String?
-    @Published private(set) var isGeneratingBrief = false
+    // [Track J] `isGeneratingBrief` is no longer a VM mirror — brief generation runs on the `.brief`
+    // job (llm lane) and is surfaced meeting-scoped via `isGeneratingBrief(for:)`.
     @Published var briefErrorMessage: String?
     @Published var briefErrorNeedsProvider = false
 
     // In-meeting Q&A (M6)
-    @Published private(set) var isAnswering = false
+    /// [Track J] Meeting-scoped Q&A activity (plan J2): mirrored from `MeetingLLMService`. Asking a
+    /// question in meeting A must not disable meeting B's Ask field, so this is a set, not a bool.
+    @Published private(set) var answeringMeetingIDs: Set<UUID> = []
     @Published var qaErrorMessage: String?
     @Published var qaErrorNeedsProvider = false
 
@@ -62,18 +65,18 @@ final class MeetingsViewModel: ObservableObject {
     @Published var exportErrorMessage: String?
 
     // Import / merge (M8)
-    @Published private(set) var isImporting = false
+    // [Track J] `isImporting` is no longer a VM mirror — audio import runs on the `.audioImport` job
+    // (transcription lane) and is surfaced via `isImporting()` (global: a new-meeting import has no
+    // meeting id, and the import UI is a modal sheet).
     @Published var importErrorMessage: String?
 
     // Speaker diarization & mapping (M9)
-    @Published private(set) var isEnriching = false
+    // [Track J] `isEnriching` is no longer a VM mirror — diarization runs on the `.diarization` job
+    // (transcription lane) and is surfaced meeting-scoped via `isEnriching(for:)`.
     @Published var diarizationErrorMessage: String?
     /// A localized status shown after enrichment finishes without labeling (e.g. "no speakers
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
-
-    // [Track D] Automatic pre-meeting briefs (plan AD9). Mirrors the scheduler's coarse status.
-    @Published private(set) var briefSchedulerStatus: MeetingBriefSchedulerStatus = .idle
 
     // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
     // per-meeting final re-transcription override through it.
@@ -98,9 +101,11 @@ final class MeetingsViewModel: ObservableObject {
     let contextRuleService: MeetingContextRuleService
     // [Track D] Auto pre-meeting briefs (plan AD9). Internal so `MeetingsViewModel+AutoBrief` reaches it.
     let briefScheduler: MeetingBriefScheduler
-    // [Track J] Central background-job queue (plan J1). Output generation is routed through it so the
-    // Generate spinner is meeting-scoped (does not follow navigation) and double-clicks are deduped.
-    private let jobQueue: JobQueueService
+    // [Track J] Central background-job queue (plan J1/J2). Output/brief generation, audio import, and
+    // diarization are routed through it so their spinners are meeting-scoped (do not follow
+    // navigation) and double-clicks are deduped. `internal` so `MeetingsViewModel+AutoBrief` can
+    // derive the auto-brief status line from the queue.
+    let jobQueue: JobQueueService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -161,9 +166,10 @@ final class MeetingsViewModel: ObservableObject {
         // [Track J] `isGeneratingOutput` is no longer a VM mirror of `llmService.$isGenerating` — the
         // Generate spinner is now meeting-scoped, derived from the job queue via
         // `isGeneratingOutput(for:)`, so it stays on the originating meeting across navigation (J1).
-        llmService.$isAnswering
+        // Q&A activity IS mirrored (Q&A stays out of the queue) but is now a per-meeting set (J2).
+        llmService.$answeringMeetingIDs
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isAnswering = value }
+            .sink { [weak self] value in self?.answeringMeetingIDs = value }
             .store(in: &cancellables)
 
         calendarService.$authorizationStatus
@@ -242,23 +248,11 @@ final class MeetingsViewModel: ObservableObject {
                 self.vaultName = self.vaultService.vaultName
             }
             .store(in: &cancellables)
-        briefService.$isGenerating
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isGeneratingBrief = value }
-            .store(in: &cancellables)
-        importService.$isImporting
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isImporting = value }
-            .store(in: &cancellables)
-        diarizationEnricher.$isEnriching
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isEnriching = value }
-            .store(in: &cancellables)
-        // [Track D] Mirror the auto-brief scheduler status for optional UI surfacing (AD9).
-        briefScheduler.$status
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.briefSchedulerStatus = value }
-            .store(in: &cancellables)
+        // [Track J] `isGeneratingBrief`, `isImporting`, `isEnriching`, and the auto-brief scheduler
+        // status are no longer VM mirrors: brief/import/diarization run as queue jobs and are surfaced
+        // via `isGeneratingBrief(for:)` / `isImporting()` / `isEnriching(for:)`, and the auto-brief
+        // status line is derived from the queue in `autoBriefStatusMessage`. Leaf views observe
+        // `JobQueueService.shared` directly for reactivity (plan §CC7).
     }
 
     var hasMeetings: Bool { !meetings.isEmpty }
@@ -511,7 +505,15 @@ final class MeetingsViewModel: ObservableObject {
     func generateOutput(for meeting: Meeting, using template: PromptAction) {
         outputErrorMessage = nil
         outputErrorNeedsProvider = false
-        let kind: MeetingJobKind = (template.meetingKind == .extended) ? .extendedAnalysis : .summary
+        // Three-way kind mapping so a `.brief` template enqueues as `.brief` (not `.summary`): the
+        // auto-brief dedupe on `(brief, meetingID)` and the brief-scoped spinner depend on the job
+        // carrying the correct kind. `.extended` → `.extendedAnalysis`; everything else → `.summary`.
+        let kind: MeetingJobKind
+        switch template.meetingKind {
+        case .extended: kind = .extendedAnalysis
+        case .brief: kind = .brief
+        default: kind = .summary
+        }
         jobQueue.enqueue(
             kind: kind,
             meetingID: meeting.id,
@@ -579,15 +581,39 @@ final class MeetingsViewModel: ObservableObject {
 
     /// Generate (or regenerate) a pre-meeting brief for a meeting from prior related meetings and
     /// the connected knowledge base. Surfaces failures via `briefErrorMessage`.
-    func generateBrief(for meeting: Meeting) async {
+    ///
+    /// [Track J] Routed through the job queue (plan J2): a `.brief` job on the `llm` lane (cap 1),
+    /// deduped on `(brief, meetingID)`, so a user brief and the auto-brief scheduler never run two LLM
+    /// calls at once for the same meeting and a double-click produces one brief. Enqueue is synchronous.
+    func generateBrief(for meeting: Meeting) {
         briefErrorMessage = nil
         briefErrorNeedsProvider = false
-        do {
-            try await briefService.generateBrief(for: meeting)
-        } catch {
-            briefErrorMessage = error.localizedDescription
-            briefErrorNeedsProvider = needsProviderSetup(error)
+        jobQueue.enqueue(
+            kind: .brief,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.generating")
+        ) { [weak briefService, weak self] in
+            guard let briefService else { return }
+            do {
+                _ = try await briefService.generateBrief(for: meeting)
+            } catch {
+                self?.recordBriefError(error)
+                throw error
+            }
         }
+    }
+
+    /// Publish a brief-generation failure for the brief view (the "needs provider" deep link). Split
+    /// out so the job-queue closure can record it before rethrowing (which marks the job `.failed`).
+    private func recordBriefError(_ error: Error) {
+        briefErrorMessage = error.localizedDescription
+        briefErrorNeedsProvider = needsProviderSetup(error)
+    }
+
+    /// Whether a `.brief` job is in flight for this meeting — drives the brief view spinner.
+    /// Meeting-scoped so it does not follow navigation.
+    func isGeneratingBrief(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(kind: .brief, meetingID: meeting.id)
     }
 
     // MARK: - In-meeting Q&A (M6)
@@ -613,6 +639,12 @@ final class MeetingsViewModel: ObservableObject {
             qaErrorNeedsProvider = needsProviderSetup(error)
             return false
         }
+    }
+
+    /// Whether a Q&A answer is currently in flight for `meetingID` (plan J2, meeting-scoped): asking
+    /// in meeting A leaves this false for meeting B.
+    func isAnswering(for meetingID: UUID) -> Bool {
+        answeringMeetingIDs.contains(meetingID)
     }
 
     // MARK: - Obsidian export (M7)
@@ -671,16 +703,35 @@ final class MeetingsViewModel: ObservableObject {
     }
 
     /// Import an audio file as a new meeting: it is decoded, transcribed, and adopted into the
-    /// meetings library. Returns the created meeting, or nil on failure.
-    @discardableResult
-    func importAudioFile(at url: URL) async -> Meeting? {
+    /// meetings library. `onImported` is called with the created meeting once transcription finishes.
+    ///
+    /// [Track J] Routed through the job queue (plan J2): an `.audioImport` job on the `transcription`
+    /// lane (cap 1), so an import shares the lane with a meeting's final pass instead of contending for
+    /// the same local compute. A new-meeting import has no meeting id (`nil` dedupe key), so two
+    /// different files both import. Cancelling the job creates no meeting (transcription is awaited
+    /// before `createFromImport` runs). Failures surface via `importErrorMessage`.
+    func importAudioFile(at url: URL, onImported: @escaping (Meeting) -> Void = { _ in }) {
         importErrorMessage = nil
-        do {
-            return try await importService.importAudioFile(at: url)
-        } catch {
-            importErrorMessage = error.localizedDescription
-            return nil
+        jobQueue.enqueue(
+            kind: .audioImport,
+            meetingID: nil,
+            progressLabel: String(localized: "meetings.jobs.progress.importing")
+        ) { [weak importService, weak self] in
+            guard let importService else { return }
+            do {
+                let meeting = try await importService.importAudioFile(at: url)
+                onImported(meeting)
+            } catch {
+                self?.importErrorMessage = error.localizedDescription
+                throw error
+            }
         }
+    }
+
+    /// Whether any audio-import job is active (plan J2). Global — a new-meeting import has no meeting
+    /// id and the import UI is a modal sheet, so a global signal is correct (plan §CC6).
+    func isImporting() -> Bool {
+        jobQueue.jobs.contains { $0.kind == .audioImport && $0.state.isActive }
     }
 
     /// Merge an imported transcript file into an existing meeting, time-ordered and deduped against
@@ -707,28 +758,53 @@ final class MeetingsViewModel: ObservableObject {
 
     /// Run opt-in diarization over a meeting's audio and persist speaker labels. Surfaces an explicit
     /// "no speakers detected" status (plan D8) and any hard failure via published messages.
-    func identifySpeakers(for meeting: Meeting) async {
+    ///
+    /// [Track J] Routed through the job queue (plan J2): a `.diarization` job on the `transcription`
+    /// lane (cap 1), so it serializes with a meeting's final pass / an audio import rather than
+    /// oversubscribing local compute. Enqueue is synchronous; a cancelled pass writes no labels
+    /// (`applySpeakerLabels` runs only after a successful return).
+    func identifySpeakers(for meeting: Meeting) {
         diarizationErrorMessage = nil
         diarizationStatusMessage = nil
-        do {
-            let outcome = try await diarizationEnricher.enrich(meeting)
-            switch outcome {
-            case .labeled:
-                break // labels now render in the transcript; nothing to announce
-            case .noSpeakersDetected:
-                diarizationStatusMessage = String(localized: "meetings.diarization.status.noSpeakers")
-            case .unavailable:
-                diarizationStatusMessage = String(localized: "meetings.diarization.status.unavailable")
-            case .noAudio:
-                diarizationStatusMessage = String(localized: "meetings.diarization.status.noAudio")
-            case .noTranscript:
-                diarizationStatusMessage = String(localized: "meetings.diarization.status.noTranscript")
-            case .timelineMismatch:
-                diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.diarizing")
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            do {
+                let outcome = try await diarizationEnricher.enrich(meeting)
+                self?.recordDiarizationOutcome(outcome)
+            } catch {
+                self?.diarizationErrorMessage = error.localizedDescription
+                throw error
             }
-        } catch {
-            diarizationErrorMessage = error.localizedDescription
         }
+    }
+
+    /// Surface an enrichment outcome as a status line (plan D8). Split out so the job-queue closure
+    /// can publish it on the main actor after a successful (non-throwing) enrich.
+    private func recordDiarizationOutcome(_ outcome: MeetingDiarizationEnricher.Outcome) {
+        switch outcome {
+        case .labeled:
+            break // labels now render in the transcript; nothing to announce
+        case .noSpeakersDetected:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noSpeakers")
+        case .unavailable:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.unavailable")
+        case .noAudio:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noAudio")
+        case .noTranscript:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noTranscript")
+        case .timelineMismatch:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
+        }
+    }
+
+    /// Whether a `.diarization` job is in flight for this meeting — drives the "Identify speakers"
+    /// spinner. Meeting-scoped so it does not follow navigation.
+    func isEnriching(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(kind: .diarization, meetingID: meeting.id)
     }
 
     /// The distinct `SPEAKER_xx` labels present on a meeting's transcript, sorted — the rows of the

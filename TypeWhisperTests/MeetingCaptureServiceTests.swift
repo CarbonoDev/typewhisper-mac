@@ -9,6 +9,9 @@ final class MeetingCaptureServiceTests: XCTestCase {
     // no transcription plugins loaded, live streaming is skipped and the final transcription
     // throws, exercising the keep-live-segments fallback (plan D3).
     private var previousPluginManager: PluginManager?
+    /// [Track J] The capture service now enqueues the final re-transcription on this queue instead of
+    /// awaiting it inline; tests settle it with `await captureJobQueue.drain()` after `stop()`.
+    private let captureJobQueue = JobQueueService()
 
     override func setUp() {
         super.setUp()
@@ -59,6 +62,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
             meetingService: meetingService,
             audioRecorderService: recorder,
             modelManager: ModelManagerService(),
+            jobQueue: captureJobQueue,
             defaults: defaults,
             flushIntervalSeconds: flushIntervalSeconds
         )
@@ -132,6 +136,8 @@ final class MeetingCaptureServiceTests: XCTestCase {
         capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
 
         await capture.stop()
+        // [Track J] The final pass now runs as a queued job; settle it before asserting the outcome.
+        await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.state, .completed)
         let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
@@ -210,6 +216,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertFalse(recorder.acquireCaptureOwnership(.recorder))
 
         await capture.stop()
+        await captureJobQueue.drain()
         // Ownership is released after stop, so the recorder can claim it again.
         XCTAssertNil(recorder.currentCaptureOwner)
         XCTAssertTrue(recorder.acquireCaptureOwnership(.recorder))
@@ -245,6 +252,8 @@ final class MeetingCaptureServiceTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("New content.", elapsed: 2)
         await capture.stop()
+        // [Track J] The restart's final replace runs on the queued job; settle before asserting.
+        await captureJobQueue.drain()
 
         // Prior segments survive verbatim.
         let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
@@ -302,6 +311,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertEqual(second.state, .scheduled)
 
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     // MARK: - Notes persist with offsets
@@ -356,6 +366,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(offset, 10)
 
         await capture.stop()
+        await captureJobQueue.drain()
     }
 
     // MARK: - Start is refused during stop()'s finalize window (finding 2)
@@ -400,11 +411,114 @@ final class MeetingCaptureServiceTests: XCTestCase {
 
         await gate.release()
         await stopTask.value
-
+        // [Track J] Teardown is done (isFinalizing false) but the final pass is now a queued job; the
+        // meeting reaches `.completed` only once it runs.
         XCTAssertFalse(capture.isFinalizing)
         XCTAssertFalse(capture.isCapturing)
+        await captureJobQueue.drain()
+
         XCTAssertEqual(first.state, .completed)
         XCTAssertEqual(second.state, .scheduled)
+    }
+
+    // MARK: - [Track J] Final re-transcription runs as a queued, cancellable job
+
+    private func waitUntil(
+        _ condition: @escaping () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        var iterations = 0
+        while !condition() {
+            if iterations > 100_000 { XCTFail("condition never met", file: file, line: line); return }
+            await Task.yield()
+            iterations += 1
+        }
+    }
+
+    private func result(_ text: String, start: Double = 0, end: Double = 3) -> TranscriptionResult {
+        TranscriptionResult(
+            text: text,
+            detectedLanguage: "en",
+            duration: end,
+            processingTime: 0.1,
+            engineUsed: "stub",
+            segments: [TranscriptionSegment(text: text, start: start, end: end)]
+        )
+    }
+
+    /// The meeting stays `.processing` after `stop()` returns and only reaches `.completed` once the
+    /// queued final-transcription job runs (the J2 split of `stop()`).
+    func testMeetingStaysProcessingUntilFinalJobRunsThenCompletes() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+        capture.finalizeTranscribeOverrideForTesting = { _ in self.result("Final clean transcript.") }
+
+        let meeting = meetingService.createMeeting(title: "Proc", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: meeting)
+        capture.ingestLiveTranscript("Live rough.", elapsed: 1)
+        await capture.stop()
+
+        // Teardown returned but the queued job has not run yet: still processing.
+        XCTAssertEqual(meeting.state, .processing)
+        XCTAssertTrue(captureJobQueue.hasActiveJob(kind: .finalTranscription, meetingID: meeting.id))
+
+        await captureJobQueue.drain()
+        XCTAssertEqual(meeting.state, .completed)
+    }
+
+    /// A successful final pass replaces the live segments with the re-transcribed ones.
+    func testFinalTranscriptionSuccessReplacesLiveSegments() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+        capture.finalizeTranscribeOverrideForTesting = { _ in self.result("Final clean transcript.") }
+
+        let meeting = meetingService.createMeeting(title: "Success", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: meeting)
+        capture.ingestLiveTranscript("live rough.", elapsed: 1)
+        await capture.stop()
+        await captureJobQueue.drain()
+
+        XCTAssertEqual(meeting.state, .completed)
+        XCTAssertEqual(meeting.segments.sorted { $0.order < $1.order }.map(\.text), ["Final clean transcript."])
+    }
+
+    /// Cancelling the running final-transcription job keeps the live segments and still completes the
+    /// meeting — it must never be left stuck in `.processing` (mirrors the failure path).
+    func testCancelledFinalTranscriptionKeepsLiveSegmentsAndCompletes() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+        // Blocks long enough that the test cancels it first; the cancelled sleep throws, so the
+        // override's result is never used and the keep-live fallback fires.
+        capture.finalizeTranscribeOverrideForTesting = { _ in
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return self.result("SHOULD_NOT_BE_USED")
+        }
+
+        let meeting = meetingService.createMeeting(title: "Cancel", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: meeting)
+        capture.ingestLiveTranscript("Live one.", elapsed: 1)
+        capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
+        await capture.stop()
+
+        let jobID = try XCTUnwrap(captureJobQueue.jobs.first { $0.kind == .finalTranscription }?.id)
+        await waitUntil { self.captureJobQueue.jobs.first { $0.id == jobID }?.state == .running }
+        captureJobQueue.cancel(jobID)
+        await captureJobQueue.drain()
+
+        XCTAssertEqual(meeting.state, .completed, "meeting must never stay stuck in .processing")
+        XCTAssertEqual(meeting.segments.sorted { $0.order < $1.order }.map(\.text), ["Live one.", "Live two."])
+        XCTAssertTrue(meeting.segments.allSatisfy { $0.source == .liveCapture })
+        XCTAssertEqual(captureJobQueue.jobs.first { $0.id == jobID }?.state, .cancelled)
     }
 }
 

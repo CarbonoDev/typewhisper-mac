@@ -51,8 +51,8 @@ struct MeetingBottomBar: View {
             TextField(String(localized: "meetingdoc.bottombar.askPlaceholder"), text: $model.askDraft)
                 .textFieldStyle(.plain)
                 .onSubmit(submitAsk)
-                .disabled(viewModel.isAnswering)
-            if viewModel.isAnswering {
+                .disabled(viewModel.isAnswering(for: meeting.id))
+            if viewModel.isAnswering(for: meeting.id) {
                 ProgressView().controlSize(.small)
             }
         }
@@ -154,7 +154,7 @@ struct MeetingBottomBar: View {
 
     private func submitAsk() {
         let question = model.askDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty, !viewModel.isAnswering else { return }
+        guard !question.isEmpty, !viewModel.isAnswering(for: meeting.id) else { return }
         model.askDraft = ""
         Task {
             let ok = await viewModel.askQuestion(question, for: meeting)

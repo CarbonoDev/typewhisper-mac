@@ -172,6 +172,7 @@ final class ServiceContainer: ObservableObject {
             meetingService: meetingService,
             audioRecorderService: audioRecorderService,
             modelManager: modelManagerService,
+            jobQueue: meetingJobQueue,
             eventEmitter: meetingEventEmitter,
             ruleMatcher: meetingContextRuleService
         )
@@ -215,7 +216,8 @@ final class ServiceContainer: ObservableObject {
         // the lead window, deduped/freshness-gated and concurrency-capped, failing silently.
         meetingBriefScheduler = MeetingBriefScheduler(
             store: meetingService,
-            briefService: meetingBriefService
+            briefService: meetingBriefService,
+            jobQueue: meetingJobQueue
         )
         // Let the start-notification body mention a ready brief (plan AD9) without depending on the
         // scheduler at construction time (it is created after the notification service).

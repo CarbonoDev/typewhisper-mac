@@ -61,8 +61,8 @@ struct MeetingQAView: View {
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
                 .onSubmit(submit)
-                .disabled(viewModel.isAnswering)
-            if viewModel.isAnswering {
+                .disabled(viewModel.isAnswering(for: meeting.id))
+            if viewModel.isAnswering(for: meeting.id) {
                 ProgressView()
                     .controlSize(.small)
             } else {
@@ -74,7 +74,7 @@ struct MeetingQAView: View {
 
     private func submit() {
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty, !viewModel.isAnswering else { return }
+        guard !question.isEmpty, !viewModel.isAnswering(for: meeting.id) else { return }
         draft = ""
         // Restore the typed question if the call fails (network error, provider misconfigured) so the
         // user can retry without retyping it (M6 review finding 4).

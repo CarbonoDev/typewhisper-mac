@@ -6,6 +6,10 @@ import XCTest
 /// A fake `now` drives the lead-window logic; config comes from an isolated `UserDefaults` suite.
 @MainActor
 final class MeetingBriefSchedulerTests: XCTestCase {
+    /// [Track J] The scheduler now enqueues onto this queue instead of owning a serial worker; tests
+    /// settle on `await jobQueue.drain()`.
+    private let jobQueue = JobQueueService()
+
     // MARK: - Stub brief generator
 
     @MainActor
@@ -77,7 +81,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     }
 
     private func settle(_ scheduler: MeetingBriefScheduler) async {
-        await scheduler.currentWorker?.value
+        await jobQueue.drain()
     }
 
     // MARK: - Tests
@@ -85,7 +89,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testFiresOnceForEventEnteringLeadWindow() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
 
         let evt = event(now: now)
@@ -110,7 +114,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testSkipsOutsideLeadWindow() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
 
         // 45 min out (> 20 min default lead) and an already-started event are both ineligible.
@@ -125,7 +129,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testSkipsAllDayAndBelowMinAttendees() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
 
         scheduler.tick(events: [event(id: "allday", isAllDay: true, now: now)], now: now)
@@ -139,7 +143,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testReusesExistingMeetingInsteadOfCreatingDuplicate() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(now: now)
 
@@ -162,7 +166,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testSkipsWhenFreshBriefExists() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(now: now)
 
@@ -183,7 +187,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testRegeneratesWhenBriefIsStale() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(now: now)
 
@@ -204,7 +208,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testConcurrencyCapUnderBurst() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
 
         let events = (0..<5).map { event(id: "evt-\($0)", startInMinutes: Double(1 + $0), now: now) }
@@ -215,11 +219,11 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         XCTAssertEqual(stub.maxConcurrent, 1, "brief generation must be serialized (cap 1)")
     }
 
-    func testThrowingGenerateBriefDoesNotPropagateAndResetsStatus() async throws {
+    func testThrowingGenerateBriefDoesNotPropagate() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
         stub.errorToThrow = Boom()
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(now: now)
 
@@ -231,8 +235,6 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         // Meeting was pre-created but no brief persisted.
         let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
         XCTAssertNil(store.latestOutput(ofKind: .brief, for: meeting))
-        // The coarse status does not linger on `.failed` once the queue drains (finding 4).
-        XCTAssertEqual(scheduler.status, .idle)
     }
 
     /// finding 3: a thrown generation is remembered and not retried on every subsequent poll tick
@@ -241,7 +243,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
         stub.errorToThrow = Boom()
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(now: now)
 
@@ -264,7 +266,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testPlaceholderMeetingKeepsEventVisibleAndNotifiable() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
         let evt = event(startInMinutes: 15, now: now)
 
@@ -303,6 +305,89 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         XCTAssertTrue(afterEngage.contains(evt.id))
     }
 
+    // MARK: - [Track J] Queue routing
+
+    /// A resumable barrier so a stub can hold the llm lane deterministically.
+    @MainActor
+    private final class Gate {
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var opened = false
+        func wait() async { if opened { return }; await withCheckedContinuation { waiters.append($0) } }
+        func open() {
+            guard !opened else { return }
+            opened = true
+            let current = waiters
+            waiters = []
+            current.forEach { $0.resume() }
+        }
+    }
+
+    private func waitUntil(_ condition: @escaping () -> Bool) async {
+        var iterations = 0
+        while !condition() {
+            if iterations > 100_000 { XCTFail("condition never met"); return }
+            await Task.yield()
+            iterations += 1
+        }
+    }
+
+    /// `tick` enqueues a background `.brief` job (llm lane) for the pre-created meeting, deduped by
+    /// `(brief, meetingID)` so repeated ticks within the lead window never stack a second one.
+    func testTickEnqueuesBackgroundBriefJobDedupedByMeeting() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        stub.addsBriefOnSuccess = false // don't persist, so a re-tick isn't skipped by freshness
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
+        let now = Date()
+        let evt = event(now: now)
+
+        scheduler.tick(events: [evt], now: now)
+        let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
+        let briefJobs = jobQueue.jobs.filter { $0.kind == .brief }
+        XCTAssertEqual(briefJobs.count, 1)
+        XCTAssertEqual(briefJobs.first?.priority, .background)
+        XCTAssertEqual(briefJobs.first?.meetingID, meeting.id)
+
+        // A second tick while the first is still active is deduped by the queue.
+        scheduler.tick(events: [evt], now: now)
+        XCTAssertEqual(jobQueue.jobs.filter { $0.kind == .brief && $0.state.isActive }.count, 1)
+
+        await jobQueue.drain()
+        XCTAssertEqual(stub.calls.count, 1)
+    }
+
+    /// A user-initiated brief in the llm lane runs before a queued background auto-brief (priority).
+    func testUserInitiatedBriefRunsBeforeQueuedAutoBrief() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        stub.addsBriefOnSuccess = false
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
+        let now = Date()
+
+        // Hold the llm lane with a gated job so both briefs must queue behind it.
+        let gate = Gate()
+        jobQueue.enqueue(kind: .summary, meetingID: UUID(), priority: .userInitiated) { await gate.wait() }
+        await waitUntil { self.jobQueue.runningCount == 1 }
+
+        // Auto-brief (background) enqueued by the scheduler.
+        let evt = event(now: now)
+        scheduler.tick(events: [evt], now: now)
+        let autoMeeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
+
+        // A user-initiated brief for a different meeting, enqueued the way the view model does.
+        let userMeeting = store.createMeeting(title: "User", source: .adHoc, state: .completed)
+        jobQueue.enqueue(kind: .brief, meetingID: userMeeting.id, priority: .userInitiated) { [weak stub] in
+            _ = try await stub?.generateBrief(for: userMeeting)
+        }
+
+        gate.open()
+        await jobQueue.drain()
+
+        let userIdx = try XCTUnwrap(stub.calls.firstIndex(of: userMeeting.id))
+        let autoIdx = try XCTUnwrap(stub.calls.firstIndex(of: autoMeeting.id))
+        XCTAssertLessThan(userIdx, autoIdx, "a user-initiated brief must run before a queued auto-brief")
+    }
+
     // MARK: - Fake calendar provider (no live EKEventStore)
 
     private final class FakeProvider: CalendarEventProviding {
@@ -322,7 +407,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         let stub = StubBriefGenerator(store: store)
         let defaults = makeDefaults()
         defaults.set(false, forKey: UserDefaultsKeys.meetingsAutoBriefEnabled)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: defaults)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
         let now = Date()
 
         scheduler.tick(events: [event(now: now)], now: now)
@@ -338,7 +423,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         let defaults = makeDefaults()
         defaults.set(10, forKey: UserDefaultsKeys.meetingsAutoBriefLeadMinutes)
         defaults.set(3, forKey: UserDefaultsKeys.meetingsAutoBriefMinAttendees)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: defaults)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
         let now = Date()
 
         // 15 min out is beyond the 10 min lead → skip.
@@ -356,7 +441,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     func testHasFreshBriefForCalendarEventID() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)
-        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, defaults: makeDefaults())
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
         let now = Date()
 
         XCTAssertFalse(scheduler.hasFreshBrief(forCalendarEventID: "missing", now: now))

@@ -34,34 +34,22 @@ protocol MeetingBriefGenerating: AnyObject {
 extension MeetingService: MeetingBriefSchedulerStore {}
 extension MeetingBriefService: MeetingBriefGenerating {}
 
-/// A coarse status surfaced to the UI (plan AD9: "@Published briefSchedulerStatus (no error spam)").
-enum MeetingBriefSchedulerStatus: Equatable, Sendable {
-    case idle
-    /// A brief is currently being generated for `meetingTitle`.
-    case generating(meetingTitle: String)
-    /// The last auto-brief attempt failed; carries a short localized reason for optional display.
-    case failed(reason: String)
-}
-
-/// Automatic pre-meeting briefs (plan AD9). Hooked into the existing calendar poll: on each
-/// `tick(events:now:)` it looks for calendar events entering the pre-meeting lead window that have
-/// enough attendees, pre-creates the backing `Meeting`, and — unless a fresh `.brief` already exists
-/// — generates one in the background. Generation is concurrency-capped at 1 (a serial worker drains a
-/// queue), deduped by `calendarEventID`, and fails silently (surfaced only via `status`), so an LLM or
-/// network error can never propagate into the poll loop.
+/// Automatic pre-meeting briefs (plan AD9 / job-queue plan J2). Hooked into the existing calendar
+/// poll: on each `tick(events:now:)` it looks for calendar events entering the pre-meeting lead window
+/// that have enough attendees, pre-creates the backing `Meeting`, and — unless a fresh `.brief`
+/// already exists — enqueues one on the central `JobQueueService` as a `.background` `.brief` job.
+///
+/// [Track J] The bespoke serial queue/status this class used to own is gone: the job queue's `llm`
+/// lane (cap 1) provides the concurrency cap, and its `(brief, meetingID)` dedupe replaces the old
+/// `pendingEventIDs` set (a repeated tick while a brief is queued/running is dropped by the queue).
+/// A failing brief still fails silently (never propagates into the poll loop) and is remembered in
+/// `failedEventIDs` so `tick` does not re-enqueue it within the same lead window.
 @MainActor
 final class MeetingBriefScheduler: ObservableObject {
-    @Published private(set) var status: MeetingBriefSchedulerStatus = .idle
-
     private let store: MeetingBriefSchedulerStore
     private let briefService: MeetingBriefGenerating
+    private let jobQueue: JobQueueService
     private let defaults: UserDefaults
-
-    /// Events currently queued or in-flight, so repeated ticks inside the same lead window (the poll
-    /// fires ~once a minute) never enqueue the same event twice.
-    private var pendingEventIDs: Set<String> = []
-    private var queue: [(meeting: Meeting, eventID: String)] = []
-    private var isDraining = false
 
     /// Calendar-event ids whose backing `Meeting` this scheduler pre-created as an auto-brief
     /// placeholder (no user action). These must NOT be treated as "already handled" by the
@@ -80,16 +68,15 @@ final class MeetingBriefScheduler: ObservableObject {
     /// minute for the whole ~20 min window. Cleared when the event leaves the lead window.
     private var failedEventIDs: Set<String> = []
 
-    /// The current drain task. Exposed to tests so they can await settled generation deterministically.
-    private(set) var currentWorker: Task<Void, Never>?
-
     init(
         store: MeetingBriefSchedulerStore,
         briefService: MeetingBriefGenerating,
+        jobQueue: JobQueueService,
         defaults: UserDefaults = .standard
     ) {
         self.store = store
         self.briefService = briefService
+        self.jobQueue = jobQueue
         self.defaults = defaults
     }
 
@@ -135,12 +122,12 @@ final class MeetingBriefScheduler: ObservableObject {
         failedEventIDs.formIntersection(Set(eligible.map(\.id)))
 
         for event in eligible {
-            guard !pendingEventIDs.contains(event.id) else { continue }
-            // A prior attempt threw; do not re-enqueue for the remainder of the lead window.
+            // A prior attempt threw; do not re-enqueue for the remainder of the lead window. (Queue
+            // dedupe handles the "already queued/running" case; this handles the "already failed" one.)
             guard !failedEventIDs.contains(event.id) else { continue }
             let meeting = resolveMeeting(for: event)
             if hasFreshBrief(for: meeting, freshnessHours: config.freshnessHours, now: now) { continue }
-            enqueue(meeting: meeting, eventID: event.id)
+            enqueueBrief(meeting: meeting, eventID: event.id)
         }
     }
 
@@ -192,45 +179,36 @@ final class MeetingBriefScheduler: ObservableObject {
         return hasFreshBrief(for: meeting, freshnessHours: loadConfig().freshnessHours, now: now)
     }
 
-    // MARK: - Serial worker (concurrency cap 1)
+    // MARK: - Enqueue onto the central job queue (llm lane, cap 1, background priority)
 
-    private func enqueue(meeting: Meeting, eventID: String) {
-        pendingEventIDs.insert(eventID)
-        queue.append((meeting: meeting, eventID: eventID))
-        startWorkerIfNeeded()
-    }
-
-    private func startWorkerIfNeeded() {
-        guard !isDraining else { return }
-        isDraining = true
-        currentWorker = Task { [weak self] in
-            await self?.drain()
-        }
-    }
-
-    private func drain() async {
-        defer {
-            isDraining = false
-            // The coarse status is a transient surface, not a persistent error banner (AD9): once the
-            // queue empties, do not leave a stale `.failed`/`.generating` lingering forever
-            // (finding 4). Durable failure memory lives in `failedEventIDs`, not in `status`.
-            status = .idle
-        }
-        while !queue.isEmpty {
-            let job = queue.removeFirst()
-            status = .generating(meetingTitle: job.meeting.title)
+    /// Enqueue a background `.brief` job for `meeting`. The queue's `(brief, meetingID)` dedupe drops a
+    /// second enqueue while one is queued/running, so repeated ticks in the lead window never stack.
+    /// A failure fails silently (never propagates into the poll loop) and is remembered in
+    /// `failedEventIDs`; it is still marked `.failed` on the job so a J3 user Retry can re-run it.
+    private func enqueueBrief(meeting: Meeting, eventID: String) {
+        jobQueue.enqueue(
+            kind: .brief,
+            meetingID: meeting.id,
+            priority: .background,
+            progressLabel: String(localized: "meetings.jobs.progress.generating")
+        ) { [weak self, weak briefService] in
+            guard let briefService else { return }
             do {
-                _ = try await briefService.generateBrief(for: job.meeting)
-                status = .idle
+                _ = try await briefService.generateBrief(for: meeting)
             } catch {
-                // Silent-fail (plan AD9): never propagate into the poll loop; surface via status only.
+                // Silent-fail (plan AD9): never propagate into the poll loop; remember it so the next
+                // poll tick does not retry within the lead window (finding 3), then rethrow so the job
+                // is marked `.failed` (J3 popover Retry).
                 logger.info("Auto-brief generation skipped: \(error.localizedDescription, privacy: .public)")
-                // Remember the failure so the next poll tick does not retry within the lead window
-                // (finding 3).
-                failedEventIDs.insert(job.eventID)
-                status = .failed(reason: error.localizedDescription)
+                self?.recordAutoBriefFailure(eventID: eventID)
+                throw error
             }
-            pendingEventIDs.remove(job.eventID)
         }
+    }
+
+    /// Remember that an auto-brief for `eventID` failed so `tick` does not re-enqueue it within the
+    /// lead window (the queue does not auto-retry; only a J3 user Retry does).
+    private func recordAutoBriefFailure(eventID: String) {
+        failedEventIDs.insert(eventID)
     }
 }

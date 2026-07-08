@@ -20847,6 +20847,22 @@
         }
       }
     },
+    "meetings.brief.auto.status.preparing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing brief for %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefing wird vorbereitet für %@"
+          }
+        }
+      }
+    },
     "meetings.brief.auto.status.skipped": {
       "localizations": {
         "en": {
@@ -21771,6 +21787,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird erstellt…"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.transcribing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribing…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird transkribiert…"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.importing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird importiert…"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.diarizing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifying speakers…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher werden erkannt…"
           }
         }
       }

@@ -139,7 +139,7 @@ final class JobQueueService: ObservableObject {
     // MARK: - Testing seam
 
     /// Await every lane worker (and any in-flight `io` job) to quiescence — the deterministic settle
-    /// point tests use, mirroring `await scheduler.currentWorker?.value` (plan §0.3).
+    /// point tests use (plan §0.3).
     func drain() async {
         while true {
             let workers = Array(laneWorkers.values)

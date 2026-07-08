@@ -5,6 +5,9 @@ import SwiftUI
 /// related meetings and, when connected, the Obsidian knowledge base.
 struct MeetingBriefView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track J] Observe the queue directly so the meeting-scoped brief spinner reacts to job state
+    // (the VM does not republish on queue mutations — plan J2 §CC7).
+    @ObservedObject private var jobQueue = JobQueueService.shared
     let meeting: Meeting
 
     var body: some View {
@@ -66,12 +69,12 @@ struct MeetingBriefView: View {
             ? String(localized: "meetings.brief.regenerate")
             : String(localized: "meetings.brief.generate")
 
-        if viewModel.isGeneratingBrief {
+        if viewModel.isGeneratingBrief(for: meeting) {
             ProgressView()
                 .controlSize(.small)
         } else {
             Button(label) {
-                Task { await viewModel.generateBrief(for: meeting) }
+                viewModel.generateBrief(for: meeting)
             }
         }
     }

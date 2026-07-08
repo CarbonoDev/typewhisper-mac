@@ -297,4 +297,83 @@ final class MeetingLLMServiceTests: XCTestCase {
         }
         XCTAssertTrue(meeting.outputs.isEmpty)
     }
+
+    // MARK: - Q&A meeting-scoping (plan J2)
+
+    /// A resumable barrier so the processor can hold an answer in flight deterministically.
+    @MainActor
+    private final class Gate {
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var opened = false
+        func wait() async { if opened { return }; await withCheckedContinuation { waiters.append($0) } }
+        func open() {
+            guard !opened else { return }
+            opened = true
+            let current = waiters
+            waiters = []
+            current.forEach { $0.resume() }
+        }
+    }
+
+    /// A processor that blocks the LLM call on a gate so the test can observe the in-flight answer.
+    @MainActor
+    private final class GatedProcessor: PromptProcessing {
+        var selectedProviderId = "p"
+        var selectedCloudModel = "m"
+        private(set) var callCount = 0
+        private let gate: Gate
+        init(gate: Gate) { self.gate = gate }
+        func process(
+            prompt: String, text: String, providerOverride: String?, cloudModelOverride: String?,
+            temperatureDirective: PluginLLMTemperatureDirective, skipMemoryInjection: Bool
+        ) async throws -> String {
+            callCount += 1
+            await gate.wait()
+            return "answer"
+        }
+    }
+
+    private func waitUntil(_ condition: @escaping () -> Bool) async {
+        var iterations = 0
+        while !condition() {
+            if iterations > 100_000 { XCTFail("condition never met"); return }
+            await Task.yield()
+            iterations += 1
+        }
+    }
+
+    func testQAAnsweringIsMeetingScopedAndRejectsConcurrentSameMeeting() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let service = MeetingService(appSupportDirectory: dir)
+        let gate = Gate()
+        let processor = GatedProcessor(gate: gate)
+        let llm = MeetingLLMService(meetingService: service, vaultService: makeVault(), processor: processor)
+
+        let a = makeMeeting(on: service, segmentTexts: ["A transcript."])
+        let b = makeMeeting(on: service, segmentTexts: ["B transcript."])
+
+        // Start answering meeting A; it blocks on the gate. Discard the (non-Sendable) turn inside the
+        // Task so its result type is Void and never crosses the actor boundary.
+        let task = Task { _ = try await llm.answerQuestion(for: a, question: "What did we decide?") }
+        await waitUntil { llm.answeringMeetingIDs.contains(a.id) }
+
+        // Answering A must not mark B as answering (meeting-scoped set, not a global bool).
+        XCTAssertFalse(llm.answeringMeetingIDs.contains(b.id))
+
+        // A second question for A while the first is in flight is rejected by the per-meeting guard.
+        do {
+            _ = try await llm.answerQuestion(for: a, question: "Follow-up?")
+            XCTFail("Expected alreadyAnswering")
+        } catch {
+            XCTAssertEqual(error as? MeetingLLMError, .alreadyAnswering)
+        }
+        XCTAssertEqual(processor.callCount, 1, "the rejected second question must not reach the LLM")
+
+        gate.open()
+        _ = try await task.value
+        XCTAssertFalse(llm.answeringMeetingIDs.contains(a.id), "the id clears when the answer settles")
+        XCTAssertEqual(a.qaTurns.count, 1)
+    }
 }

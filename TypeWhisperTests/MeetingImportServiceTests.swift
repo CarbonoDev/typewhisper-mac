@@ -20,6 +20,30 @@ final class MeetingImportServiceTests: XCTestCase {
         }
     }
 
+    /// A transcriber that blocks long enough for the test to cancel the import job first; the
+    /// cancelled sleep throws, so `createFromImport` never runs.
+    @MainActor
+    private final class BlockingTranscriber: MeetingAudioTranscribing {
+        private(set) var started = false
+        func transcribeImportedAudio(samples: [Float]) async throws -> TranscriptionResult {
+            started = true
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return TranscriptionResult(
+                text: "unused", detectedLanguage: "en", duration: 1, processingTime: 0,
+                engineUsed: "stub", segments: [TranscriptionSegment(text: "unused", start: 0, end: 1)]
+            )
+        }
+    }
+
+    private func waitUntil(_ condition: @escaping () -> Bool) async {
+        var iterations = 0
+        while !condition() {
+            if iterations > 100_000 { XCTFail("condition never met"); return }
+            await Task.yield()
+            iterations += 1
+        }
+    }
+
     private func makeResult(segments: [TranscriptionSegment]) -> TranscriptionResult {
         TranscriptionResult(
             text: segments.map(\.text).joined(separator: " "),
@@ -162,6 +186,37 @@ final class MeetingImportServiceTests: XCTestCase {
         }
         // No meeting was created for the failed import.
         XCTAssertTrue(meetingService.meetings.isEmpty)
+    }
+
+    // MARK: - [Track J] Audio import routed through the job queue
+
+    /// Routed as an `.audioImport` job (the shape `MeetingsViewModel.importAudioFile` uses): while the
+    /// transcription is in flight an import job is active (what `isImporting()` reads), and cancelling
+    /// it creates no meeting — `createFromImport` runs only after transcription returns.
+    func testCancelledAudioImportJobCreatesNoMeeting() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let transcriber = BlockingTranscriber()
+        let service = makeService(meetingService: meetingService, transcriber: transcriber)
+        let queue = JobQueueService()
+
+        let audioURL = dir.appendingPathComponent("recording.wav")
+        try WavEncoder.encode(Array(repeating: Float(0.1), count: 16_000), sampleRate: 16_000).write(to: audioURL)
+
+        let id = queue.enqueue(kind: .audioImport, meetingID: nil) { [weak service] in
+            _ = try await service?.importAudioFile(at: audioURL)
+        }
+        // `isImporting()` equivalent: an audio-import job is active while the transcription runs.
+        XCTAssertTrue(queue.jobs.contains { $0.kind == .audioImport && $0.state.isActive })
+
+        await waitUntil { transcriber.started }
+        queue.cancel(id)
+        await queue.drain()
+
+        XCTAssertTrue(meetingService.meetings.isEmpty, "a cancelled import must create no meeting")
+        XCTAssertEqual(queue.jobs.first { $0.id == id }?.state, .cancelled)
     }
 
     // MARK: - Merge transcript into an existing captured meeting

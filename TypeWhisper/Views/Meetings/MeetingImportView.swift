@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 /// transcript file into an existing meeting. Presented as a sheet from the Meetings window.
 struct MeetingImportView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track J] Observe the queue directly so the import spinner reacts to `.audioImport` job state
+    // (the VM no longer mirrors `isImporting` — plan J2 §CC7).
+    @ObservedObject private var jobQueue = JobQueueService.shared
     @Environment(\.dismiss) private var dismiss
 
     /// When non-nil, the merge-into-existing option targets this meeting.
@@ -28,14 +31,14 @@ struct MeetingImportView: View {
                 } label: {
                     Label(String(localized: "meetings.import.transcriptButton"), systemImage: "doc.text")
                 }
-                .disabled(viewModel.isImporting)
+                .disabled(viewModel.isImporting())
 
                 Button {
-                    Task { await importAudio() }
+                    importAudio()
                 } label: {
                     Label(String(localized: "meetings.import.audioButton"), systemImage: "waveform")
                 }
-                .disabled(viewModel.isImporting)
+                .disabled(viewModel.isImporting())
 
                 if let meeting = mergeTarget {
                     Divider()
@@ -47,11 +50,11 @@ struct MeetingImportView: View {
                     } label: {
                         Label(String(localized: "meetings.import.mergeButton"), systemImage: "arrow.triangle.merge")
                     }
-                    .disabled(viewModel.isImporting)
+                    .disabled(viewModel.isImporting())
                 }
             }
 
-            if viewModel.isImporting {
+            if viewModel.isImporting() {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text(String(localized: "meetings.import.inProgress"))
@@ -86,9 +89,11 @@ struct MeetingImportView: View {
         }
     }
 
-    private func importAudio() async {
+    private func importAudio() {
         guard let url = openPanel(extensions: viewModel.audioFileExtensions) else { return }
-        if let meeting = await viewModel.importAudioFile(at: url) {
+        // [Track J] Audio import is now a queued `.audioImport` job; the sheet stays open showing the
+        // spinner (`isImporting()`) until the job's completion selects the created meeting and dismisses.
+        viewModel.importAudioFile(at: url) { meeting in
             onImported(meeting)
             dismiss()
         }

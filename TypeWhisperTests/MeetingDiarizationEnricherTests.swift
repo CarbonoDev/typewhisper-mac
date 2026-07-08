@@ -27,6 +27,16 @@ final class MeetingDiarizationEnricherTests: XCTestCase {
         }
     }
 
+    /// A provider whose `diarize` blocks long enough for the test to cancel the job first; the
+    /// cancelled sleep throws, so `applySpeakerLabels` never runs. `Sendable` (runs off-main).
+    private struct BlockingProvider: DiarizationProvider {
+        var isAvailable: Bool { get async { true } }
+        func diarize(wavData: Data, numSpeakers: Int?) async throws -> [SpeakerSegment] {
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return [SpeakerSegment(start: 0, end: 5, speaker: "SPEAKER_00")]
+        }
+    }
+
     /// Supplies synthetic per-channel audio, bypassing AVFoundation and real files.
     private struct StubInspector: MeetingAudioInspecting {
         let audio: MeetingAudioData
@@ -122,6 +132,52 @@ final class MeetingDiarizationEnricherTests: XCTestCase {
         let sorted = meeting.segments.sorted { $0.order < $1.order }
         XCTAssertEqual(sorted.map(\.speakerLabel), ["SPEAKER_00", "SPEAKER_01"])
         XCTAssertTrue(sorted.allSatisfy { ($0.speakerConfidence ?? 0) > 0 })
+    }
+
+    // MARK: - [Track J] Diarization routed through the job queue
+
+    private func waitUntil(_ condition: @escaping () -> Bool) async {
+        var iterations = 0
+        while !condition() {
+            if iterations > 100_000 { XCTFail("condition never met"); return }
+            await Task.yield()
+            iterations += 1
+        }
+    }
+
+    /// Routed as a `.diarization` job (the shape `MeetingsViewModel.identifySpeakers` uses): the job is
+    /// meeting-scoped (what `isEnriching(for:)` reads), and cancelling it writes no labels —
+    /// `applySpeakerLabels` runs only after `diarize` returns.
+    func testCancelledDiarizationJobWritesNoLabelsAndIsMeetingScoped() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+
+        let meeting = try makeMeetingWithAudio(in: dir, service: service, segments: [
+            TranscriptionSegment(text: "Hello there.", start: 0, end: 5)
+        ])
+        let other = service.createMeeting(title: "Other", source: .adHoc, state: .completed)
+        let enricher = MeetingDiarizationEnricher(
+            meetingService: service,
+            provider: BlockingProvider(),
+            audioInspector: monoInspector(),
+            numSpeakersProvider: { nil }
+        )
+        let queue = JobQueueService()
+
+        let id = queue.enqueue(kind: .diarization, meetingID: meeting.id) { [weak enricher] in
+            _ = try await enricher?.enrich(meeting)
+        }
+        // Meeting-scoped: active for this meeting, not another.
+        XCTAssertTrue(queue.hasActiveJob(kind: .diarization, meetingID: meeting.id))
+        XCTAssertFalse(queue.hasActiveJob(kind: .diarization, meetingID: other.id))
+
+        await waitUntil { queue.jobs.first { $0.id == id }?.state == .running }
+        queue.cancel(id)
+        await queue.drain()
+
+        XCTAssertTrue(meeting.segments.allSatisfy { $0.speakerLabel == nil }, "cancelled diarization writes no labels")
+        XCTAssertEqual(queue.jobs.first { $0.id == id }?.state, .cancelled)
     }
 
     func testZeroLabelResultYieldsNoSpeakersDetectedAndDoesNotCrash() async throws {
