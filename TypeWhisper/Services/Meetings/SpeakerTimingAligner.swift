@@ -128,12 +128,16 @@ enum SpeakerTimingAligner {
 
         case let (nil, next?):
             // Only a following anchor (an unmatched run at the very start) → lay the segments out to
-            // end at `next`, preserving durations. Build backward, then emit forward.
+            // end at `next`, preserving durations. Build backward, then emit forward. Clamp each start
+            // at 0: when the run's total duration exceeds `next`, the backward layout would otherwise
+            // walk into negative time and persist a segment whose start < 0 (M9-SPK-B minor). Clamping
+            // keeps `end` ≥ 0 too (each subsequent `end` is a prior clamped `start`), so the earliest
+            // segments collapse to `[0, …]` monotonically rather than going negative.
             var buffer: [RefinedTiming] = []
             var end = next
             for idx in range.reversed() {
                 let duration = max(0, live[idx].end - live[idx].start)
-                let start = end - duration
+                let start = max(0, end - duration)
                 buffer.append(RefinedTiming(id: live[idx].id, start: start, end: end))
                 end = start
             }

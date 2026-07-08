@@ -283,24 +283,12 @@ final class MeetingDiarizationEnricher: ObservableObject {
         guard !meeting.segments.isEmpty else { return .noTranscript }
         guard let url = meetingService.audioFileURL(for: meeting) else { return .noAudio }
 
-        // [M9-SPK-B / D-A6] Keep-live timing re-pass. When the segments still carry coarse live
-        // timestamps (`timestampsRefined != true`) and a reference transcriber is wired, refine each
-        // kept segment's start/end from a timing-only reference transcription BEFORE diarization, so
-        // overlap assignment keys on real speech times rather than batch-boundary spans (G7). The text
-        // is never changed — only the times. A cancelled re-pass throws before any write (times/labels
-        // persist only on success), so the meeting is never left half-mutated.
-        if meeting.timestampsRefined != true, let transcriber {
-            try await refineTimings(for: meeting, url: url, transcriber: transcriber)
-        }
-
-        // Re-read after the (possible) times-only write above, so overlap assignment uses the refined
-        // timeline.
-        let segments = meeting.segments.sorted { $0.order < $1.order }
-        let ranges = segments.map { MeetingSegmentTimeRange(id: $0.id, start: $0.start, end: $0.end) }
         let allowSeparateTrack = Self.isLiveCaptured(meeting)
 
-        // Gate on provider availability *before* decoding, so an unavailable sidecar never triggers a
-        // whole-file decode that can only end in `.unavailable`.
+        // Gate on provider availability *before* decoding — and before the keep-live timing re-pass
+        // below — so an unavailable sidecar never triggers a whole-file decode (or a full reference
+        // re-transcription) that can only end in `.unavailable`. A dead-end Identify (unavailable
+        // sidecar, not a separate-track recording) must cost nothing (M9-SPK-B minor).
         if await provider.isAvailable == false {
             // Imported recordings are never separate-track → straight to the unavailable state.
             if !allowSeparateTrack { return .unavailable }
@@ -319,6 +307,22 @@ final class MeetingDiarizationEnricher: ObservableObject {
                 return .unavailable
             }
         }
+
+        // [M9-SPK-B / D-A6] Keep-live timing re-pass. When the segments still carry coarse live
+        // timestamps (`timestampsRefined != true`) and a reference transcriber is wired, refine each
+        // kept segment's start/end from a timing-only reference transcription BEFORE diarization, so
+        // overlap assignment keys on real speech times rather than batch-boundary spans (G7). The text
+        // is never changed — only the times. A cancelled re-pass throws before any write (times/labels
+        // persist only on success), so the meeting is never left half-mutated. Runs only *after* the
+        // availability short-circuits above so a dead-end Identify never pays for it (M9-SPK-B minor).
+        if meeting.timestampsRefined != true, let transcriber {
+            try await refineTimings(for: meeting, url: url, transcriber: transcriber)
+        }
+
+        // Re-read after the (possible) times-only write above, so overlap assignment uses the refined
+        // timeline.
+        let segments = meeting.segments.sorted { $0.order < $1.order }
+        let ranges = segments.map { MeetingSegmentTimeRange(id: $0.id, start: $0.start, end: $0.end) }
 
         // Off-main: decode, timeline-check, decide track mode, and either compute separate-track
         // assignments or produce mono WAV data — none of this touches the main actor.
@@ -408,11 +412,12 @@ final class MeetingDiarizationEnricher: ObservableObject {
         try Task.checkCancellation()
 
         let referenceSegments = result.segments.map { (text: $0.text, start: $0.start, end: $0.end) }
-        let referenceTokens = SpeakerTimingAligner.referenceTokens(from: referenceSegments)
-        guard !referenceTokens.isEmpty else { return }
-
-        let refined = SpeakerTimingAligner.transfer(live: live, reference: referenceTokens)
+        // Tokenize the reference + transfer timings off the main actor (mirrors `loadMonoSamples`):
+        // both are pure but grow with transcript length, so on a long meeting they must not block the
+        // main actor (M9-SPK-B minor). An empty reference yields no refinement — keep the coarse times.
+        let refined = await Self.refineTimingsOffMain(live: live, referenceSegments: referenceSegments)
         try Task.checkCancellation()
+        guard !refined.isEmpty else { return }
 
         let timings = refined.map { (id: $0.id, start: $0.start, end: $0.end) }
         meetingService.updateSegmentTimings(timings, for: meeting)
@@ -426,6 +431,20 @@ final class MeetingDiarizationEnricher: ObservableObject {
         let frames = audio.channels.map(\.count).max() ?? 0
         guard frames > 0 else { return [] }
         return downmixToMono(audio.channels, frames: frames)
+    }
+
+    /// Tokenize the reference segments and transfer their timings onto the kept live segments off the
+    /// main actor (M9-SPK-B minor). The aligner is pure and `Sendable`-in/out, but its per-token work
+    /// scales with transcript length; running it on a `nonisolated` async helper (like
+    /// `loadMonoSamples`) keeps a long meeting's re-pass off the main thread. Returns `[]` when the
+    /// reference yields no tokens, so the caller keeps the coarse live times.
+    nonisolated static func refineTimingsOffMain(
+        live: [SpeakerTimingAligner.LiveSegment],
+        referenceSegments: [(text: String, start: Double, end: Double)]
+    ) async -> [SpeakerTimingAligner.RefinedTiming] {
+        let referenceTokens = SpeakerTimingAligner.referenceTokens(from: referenceSegments)
+        guard !referenceTokens.isEmpty else { return [] }
+        return SpeakerTimingAligner.transfer(live: live, reference: referenceTokens)
     }
 
     // MARK: - Separate-track heuristic

@@ -155,6 +155,44 @@ final class SpeakerTimingAlignerTests: XCTestCase {
         XCTAssertEqual(refined[1].end, 7, accuracy: 1e-9)
     }
 
+    // MARK: - Leading unmatched run clamps at 0 (never persists a negative start, M9-SPK-B minor)
+
+    func testLeadingUnmatchedRunClampsNegativeStartToZero() {
+        let a = UUID(), b = UUID()
+        // The leading unmatched segment is 12s long but the following anchor starts at only 10s, so a
+        // naive backward layout would place it at [-2, 10]. It must clamp to a non-negative start.
+        let liveSegs = [live("zzz", 0, 12, id: a), live("hello", 12, 15, id: b)]
+        let reference = refTokens([("hello", 10, 11)])
+
+        let refined = SpeakerTimingAligner.transfer(live: liveSegs, reference: reference)
+
+        XCTAssertEqual(refined[1].start, 10, accuracy: 1e-9)
+        XCTAssertEqual(refined[1].end, 11, accuracy: 1e-9)
+        XCTAssertEqual(refined[0].start, 0, accuracy: 1e-9, "clamped: never a negative start")
+        XCTAssertEqual(refined[0].end, 10, accuracy: 1e-9)
+        // No refined segment ever carries a negative time.
+        XCTAssertTrue(refined.allSatisfy { $0.start >= 0 && $0.end >= $0.start }, "non-negative and ordered")
+    }
+
+    func testMultipleLeadingUnmatchedOverflowStayNonNegativeAndOrdered() {
+        let a = UUID(), b = UUID(), c = UUID()
+        // Two 8s leading segments overflow a 10s anchor: the later one lands at [2,10], the earlier one
+        // clamps to [0,2] rather than [-6,2].
+        let liveSegs = [live("uno", 0, 8, id: a), live("dos", 8, 16, id: b), live("hello", 16, 19, id: c)]
+        let reference = refTokens([("hello", 10, 11)])
+
+        let refined = SpeakerTimingAligner.transfer(live: liveSegs, reference: reference)
+
+        XCTAssertEqual(refined.map(\.id), [a, b, c], "order preserved")
+        XCTAssertEqual(refined[0].start, 0, accuracy: 1e-9)
+        XCTAssertEqual(refined[1].end, 10, accuracy: 1e-9)
+        XCTAssertEqual(refined[2].start, 10, accuracy: 1e-9)
+        XCTAssertTrue(refined.allSatisfy { $0.start >= 0 && $0.end >= $0.start }, "all non-negative, monotone")
+        // Monotonic non-decreasing across the run.
+        XCTAssertLessThanOrEqual(refined[0].end, refined[1].start + 1e-9)
+        XCTAssertLessThanOrEqual(refined[1].end, refined[2].start + 1e-9)
+    }
+
     // MARK: - Reference tokenization & normalization
 
     func testReferenceTokensInterpolatePerWordAndNormalize() {

@@ -32,13 +32,13 @@ struct MainWindowSidebar: View {
                     destinationButton(
                         title: String(localized: "mainwindow.sidebar.home"),
                         systemImage: "house",
-                        isSelected: coordinator.route == .home
+                        isSelected: SidebarSelection.isHomeSelected(route: coordinator.route)
                     ) { coordinator.show(.home) }
 
                     destinationButton(
                         title: String(localized: "mainwindow.sidebar.meetings"),
                         systemImage: "person.2.wave.2",
-                        isSelected: isMeetingsRoute
+                        isSelected: SidebarSelection.isMeetingsSelected(route: coordinator.route)
                     ) { coordinator.show(.meetings) }
                 }
 
@@ -99,17 +99,6 @@ struct MainWindowSidebar: View {
             .padding(.vertical, 10)
         }
         .frame(minWidth: 220)
-    }
-
-    /// True for the meetings list and any single meeting document (both live under "Meetings"), but
-    /// **not** the tag-filtered list — a tag route highlights its own sidebar row instead.
-    private var isMeetingsRoute: Bool {
-        switch coordinator.route {
-        case .meetings, .meeting:
-            return true
-        default:
-            return false
-        }
     }
 
     /// Bridges the optional `renamingTag` to the `.alert(isPresented:)` API.
@@ -185,7 +174,7 @@ struct MainWindowSidebar: View {
     private func tagRow(_ tag: MeetingTagCount) -> some View {
         // Highlight from the coordinator's `activeTag` (not the route), so the row stays selected even
         // when the current route is `.folder` under folder+tag AND composition (plan D8).
-        let isSelected = coordinator.activeTag?.lowercased() == tag.key
+        let isSelected = SidebarSelection.isTagSelected(tag.key, activeTag: coordinator.activeTag)
         return Button {
             // Pass the display name (not the case-folded key) so the filter header reads "#Hiring"
             // with the sidebar's casing, not a lowercased twin (M3 minor 1).
@@ -260,7 +249,7 @@ struct MainWindowSidebar: View {
     }
 
     private func folderLabel(_ node: MeetingFolderNode) -> some View {
-        let isSelected = coordinator.activeFolder.map { MeetingService.normalizedFolderPath($0) == node.path } ?? false
+        let isSelected = SidebarSelection.isFolderSelected(node.path, activeFolder: coordinator.activeFolder)
         return Button {
             coordinator.showFolder(node.path)
         } label: {

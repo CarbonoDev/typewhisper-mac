@@ -177,6 +177,57 @@ final class MeetingTimingRepassTests: XCTestCase {
         XCTAssertEqual(sorted[1].end, 10, accuracy: 1e-9)
     }
 
+    // MARK: - Dead-end Identify pays nothing for the re-pass (M9-SPK-B minor)
+
+    /// When the provider is unavailable and the recording is mono (not separate-track), `enrich` can
+    /// only end in `.unavailable`. The keep-live timing re-pass must be gated *behind* that
+    /// short-circuit so a dead-end Identify never pays for a full reference re-transcription.
+    func testDeadEndIdentifySkipsTheTimingRepass() async throws {
+        let (service, dir) = try makeStore()
+        let meeting = try makeCoarseMeeting(service, dir: dir)
+
+        let transcriber = SpyTranscriber(result: referenceResult([("hello world", 0, 1), ("goodbye now", 2, 3)]))
+        // No sidecar + a mono recording → the only possible outcome is `.unavailable`.
+        let provider = StubProvider(available: false, segments: [])
+        let enricher = makeEnricher(service, inspector: monoInspector(), provider: provider, transcriber: transcriber)
+
+        let outcome = try await enricher.enrich(meeting)
+
+        XCTAssertEqual(outcome, .unavailable)
+        XCTAssertEqual(transcriber.callCount, 0, "a dead-end Identify must not run a reference transcription")
+        XCTAssertNil(meeting.timestampsRefined, "nothing was refined")
+        // Coarse times are left exactly as they were.
+        let sorted = meeting.segments.sorted { $0.order < $1.order }
+        XCTAssertEqual(sorted[0].end, 5, accuracy: 1e-9)
+        XCTAssertEqual(sorted[1].end, 10, accuracy: 1e-9)
+    }
+
+    // MARK: - Off-main tokenization + transfer helper (M9-SPK-B minor)
+
+    /// The `nonisolated` off-main helper produces the same refined timings the aligner would compute
+    /// on-actor, and returns `[]` for an empty reference (so the caller keeps the coarse times).
+    func testRefineTimingsOffMainHelperMatchesAligner() async {
+        let a = UUID(), b = UUID()
+        let live = [
+            SpeakerTimingAligner.LiveSegment(id: a, text: "hello world", start: 0, end: 5),
+            SpeakerTimingAligner.LiveSegment(id: b, text: "goodbye now", start: 5, end: 10)
+        ]
+
+        let refined = await MeetingDiarizationEnricher.refineTimingsOffMain(
+            live: live,
+            referenceSegments: [("hello world", 0, 1), ("goodbye now", 2, 3)]
+        )
+
+        XCTAssertEqual(refined.map(\.id), [a, b], "order preserved, none dropped")
+        XCTAssertEqual(refined[0].start, 0, accuracy: 1e-9)
+        XCTAssertEqual(refined[0].end, 1, accuracy: 1e-9)
+        XCTAssertEqual(refined[1].start, 2, accuracy: 1e-9)
+        XCTAssertEqual(refined[1].end, 3, accuracy: 1e-9)
+
+        let none = await MeetingDiarizationEnricher.refineTimingsOffMain(live: live, referenceSegments: [])
+        XCTAssertTrue(none.isEmpty, "an empty reference yields no refinement")
+    }
+
     // MARK: - Cancellation mid-re-pass leaves the meeting untouched
 
     func testCancelledRepassWritesNothing() async throws {
