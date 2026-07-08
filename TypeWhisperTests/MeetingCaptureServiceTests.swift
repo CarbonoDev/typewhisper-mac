@@ -285,6 +285,92 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertEqual(meeting.audioFileName, audioFiles.first { $0.hasPrefix("\(meeting.id.uuidString)-2") })
     }
 
+    // MARK: - A failed restart must not destroy the meeting's speaker labels (M2 carried finding)
+
+    /// Fix B clears a labeled meeting's speaker labels + map when capture is *restarted* on it (the
+    /// stitched timeline can never be honestly re-verified). That clear now runs only *after*
+    /// `startRecording` succeeds: a restart whose recorder start throws returns with the meeting's
+    /// valid labels intact instead of destroying honest attribution on a session that never began.
+    func testFailedRestartPreservesSpeakerLabels() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        // The recorder start fails (e.g. device unavailable) on this restart attempt.
+        struct StartBoom: Error {}
+        recorder.startRecordingOverride = { _, _, _, _ in throw StartBoom() }
+
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        // A previously-labeled, finalized meeting.
+        let meeting = meetingService.createMeeting(title: "Labeled", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [
+                TranscriptionSegment(text: "prior one", start: 0, end: 5),
+                TranscriptionSegment(text: "prior two", start: 5, end: 10)
+            ],
+            to: meeting
+        )
+        let ids = meeting.segments.sorted { $0.order < $1.order }.map(\.id)
+        meetingService.applySpeakerLabels(
+            [
+                MeetingSpeakerAssignment(segmentID: ids[0], label: "SPEAKER_00", confidence: 0.9),
+                MeetingSpeakerAssignment(segmentID: ids[1], label: "SPEAKER_01", confidence: 0.8)
+            ],
+            speakerMap: ["SPEAKER_00": "Marco", "SPEAKER_01": "Alex"],
+            to: meeting
+        )
+
+        do {
+            try await capture.start(meeting: meeting)
+            XCTFail("Expected the recorder start failure to propagate")
+        } catch {
+            XCTAssertTrue(error is StartBoom)
+        }
+
+        // Labels + map survive the failed restart; the meeting's state is restored.
+        XCTAssertEqual(meeting.speakerMap, ["SPEAKER_00": "Marco", "SPEAKER_01": "Alex"])
+        XCTAssertEqual(
+            meeting.segments.sorted { $0.order < $1.order }.compactMap(\.speakerLabel),
+            ["SPEAKER_00", "SPEAKER_01"]
+        )
+        XCTAssertEqual(meeting.state, .completed)
+        XCTAssertNil(capture.activeMeeting)
+        XCTAssertFalse(capture.isCapturing)
+    }
+
+    /// The other half of the moved clear: a *successful* restart on a labeled meeting still clears the
+    /// stale labels + map (the stitched timeline is a `.timelineMismatch`).
+    func testSuccessfulRestartClearsSpeakerLabels() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        let meeting = meetingService.createMeeting(title: "Labeled", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [TranscriptionSegment(text: "prior", start: 0, end: 5)],
+            to: meeting
+        )
+        let id = try XCTUnwrap(meeting.segments.first?.id)
+        meetingService.applySpeakerLabels(
+            [MeetingSpeakerAssignment(segmentID: id, label: "SPEAKER_00", confidence: 0.9)],
+            speakerMap: ["SPEAKER_00": "Marco"],
+            to: meeting
+        )
+
+        try await capture.start(meeting: meeting)
+        await capture.stop()
+        await captureJobQueue.drain()
+
+        // The prior label + map were cleared by the successful restart.
+        XCTAssertTrue(meeting.speakerMap.isEmpty)
+        XCTAssertTrue(meeting.segments.allSatisfy { $0.speakerLabel == nil })
+    }
+
     // MARK: - Concurrent start is rejected without side effects (M3 review finding 2)
 
     func testSecondConcurrentStartIsRejectedAndCreatesNoSideEffects() async throws {

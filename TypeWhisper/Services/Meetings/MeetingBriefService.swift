@@ -20,6 +20,10 @@ final class MeetingBriefService: ObservableObject {
     private let meetingService: MeetingService
     private let vaultService: ObsidianVaultService
     private let processor: any PromptProcessing
+    /// Source of the editable `.brief` template (plan M6, amendment DA2). Optional so unit tests and
+    /// any call site that predates templating construct the service without a prompt store; a nil
+    /// store (or no `.brief` template) falls back to the built-in `meetings.brief.systemPrompt`.
+    private let promptActionService: PromptActionService?
     private let charBudget: Int
 
     /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
@@ -30,11 +34,13 @@ final class MeetingBriefService: ObservableObject {
         meetingService: MeetingService,
         vaultService: ObsidianVaultService,
         processor: any PromptProcessing,
+        promptActionService: PromptActionService? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
         self.vaultService = vaultService
         self.processor = processor
+        self.promptActionService = promptActionService
         self.charBudget = charBudget
     }
 
@@ -56,17 +62,28 @@ final class MeetingBriefService: ObservableObject {
         }
 
         let context = assembleContext(meeting: meeting, priorBlock: priorBlock, kbBlock: kbBlock)
-        // Plan D4: the brief is a final output — honor the meeting's language via a prompt directive.
+
+        // Plan M6 (amendment DA1/DA2): the brief prompt is now a user-editable `.brief` template.
+        // Resolve the first `.brief` template (sort-ordered) as the system prompt — identical to how
+        // summary/extended templates work (`template.prompt` = instruction layer, the assembled
+        // context stays the `text` argument). Falls back to the built-in `meetings.brief.systemPrompt`
+        // so a user who deleted every brief template never breaks briefs. The template's
+        // provider/model/temperature overrides are honored (mirroring `MeetingLLMService.run`), and
+        // its id is recorded on the output.
+        let template = promptActionService?.meetingTemplates(ofKind: .brief).first
+        let basePrompt = template?.prompt ?? String(localized: "meetings.brief.systemPrompt")
+        // Plan D4: the brief is a final output — the meeting's language directive is appended on top
+        // of the resolved template (or the fallback default).
         let systemPrompt = MeetingLanguageDirective.appending(
             for: meeting.languageCode,
-            to: String(localized: "meetings.brief.systemPrompt")
+            to: basePrompt
         )
         let content = try await processor.process(
             prompt: systemPrompt,
             text: context,
-            providerOverride: nil,
-            cloudModelOverride: nil,
-            temperatureDirective: .inheritProviderSetting,
+            providerOverride: template?.providerType,
+            cloudModelOverride: template?.cloudModel,
+            temperatureDirective: template?.temperatureDirective ?? .inheritProviderSetting,
             skipMemoryInjection: true
         )
 
@@ -74,9 +91,9 @@ final class MeetingBriefService: ObservableObject {
             to: meeting,
             kind: .brief,
             content: content,
-            templateID: nil,
-            providerUsed: resolvedProvider(),
-            modelUsed: resolvedModel()
+            templateID: template?.id,
+            providerUsed: resolvedProvider(for: template),
+            modelUsed: resolvedModel(for: template)
         )
     }
 
@@ -206,12 +223,24 @@ final class MeetingBriefService: ObservableObject {
 
     // MARK: - Provenance
 
-    private func resolvedProvider() -> String? {
+    /// Provider recorded on the brief: the resolved template's override when set, else the current
+    /// global selection (mirrors `MeetingLLMService.resolvedProvider`).
+    private func resolvedProvider(for template: PromptAction?) -> String? {
+        if let provider = template?.providerType?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !provider.isEmpty {
+            return provider
+        }
         let selected = processor.selectedProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
         return selected.isEmpty ? nil : selected
     }
 
-    private func resolvedModel() -> String? {
+    /// Model recorded on the brief: the resolved template's override when set, else the current
+    /// global selection (mirrors `MeetingLLMService.resolvedModel`).
+    private func resolvedModel(for template: PromptAction?) -> String? {
+        if let model = template?.cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !model.isEmpty {
+            return model
+        }
         let selected = processor.selectedCloudModel.trimmingCharacters(in: .whitespacesAndNewlines)
         return selected.isEmpty ? nil : selected
     }

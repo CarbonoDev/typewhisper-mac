@@ -73,8 +73,8 @@ final class MeetingTemplateMigrationTests: XCTestCase {
         let service = PromptActionService(appSupportDirectory: dir, defaults: makeDefaults())
         service.migrateMeetingTemplatesIfNeeded(legacyTemplates: legacy)
 
-        // All seven meeting rows exist; UUIDs preserved.
-        XCTAssertEqual(service.meetingActions.count, 7)
+        // All preset rows plus the one user row exist; UUIDs preserved.
+        XCTAssertEqual(service.meetingActions.count, presetSnapshots().count + 1)
         let byID = Dictionary(uniqueKeysWithValues: service.meetingActions.map { ($0.id, $0) })
         for snapshot in legacy {
             XCTAssertNotNil(byID[snapshot.id], "template \(snapshot.name) lost its UUID")
@@ -98,6 +98,22 @@ final class MeetingTemplateMigrationTests: XCTestCase {
 
         XCTAssertEqual(service.meetingActions.count, presetSnapshots().count)
         XCTAssertTrue(service.meetingActions.allSatisfy { $0.surface == .meeting })
+    }
+
+    /// Plan M6 (amendment DA3): the curated preset set now includes exactly one `.brief` template, so
+    /// a fresh install backfills a `.brief` row resolvable via `meetingTemplates(ofKind: .brief)` —
+    /// this is the canonical prompt `MeetingBriefService` reads.
+    func testFreshInstallSeedsExactlyOneBriefTemplate() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let service = PromptActionService(appSupportDirectory: dir, defaults: makeDefaults())
+        service.migrateMeetingTemplatesIfNeeded(legacyTemplates: [])
+
+        let briefs = service.meetingTemplates(ofKind: .brief)
+        XCTAssertEqual(briefs.count, 1)
+        XCTAssertEqual(briefs.first?.prompt, String(localized: "meetings.template.preset.brief.prompt"))
+        XCTAssertEqual(briefs.first?.meetingKind, .brief)
     }
 
     func testSecondRunIsNoOp() throws {

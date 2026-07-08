@@ -15,13 +15,15 @@ struct PromptTemplateEditor: View {
                 .textFieldStyle(.roundedBorder)
 
             if spec.surface == .meeting {
-                // Only summary/extended are offered: those are the kinds the outputs UI renders and
-                // the only preset kinds (MeetingTemplatePresetsTests asserts "brief is not a template
-                // kind"). `.brief` briefs come from MeetingBriefService's own prompt, not a template,
-                // so a brief template would be a dead row that never appears in any generate menu.
+                // Summary/extended drive the per-meeting generate menus; `.brief` is the single
+                // editable pre-meeting brief template (plan M6, amendment DA3). MeetingBriefService
+                // resolves the first `.brief` template as the brief's system prompt (falling back to
+                // the built-in default when none exists), so a brief template is a live, user-editable
+                // prompt rather than a dead row.
                 Picker(String(localized: "promptLibrary.editor.kind"), selection: $spec.meetingKind) {
                     Text(String(localized: "meetings.output.kind.summary")).tag(MeetingOutputKind.summary)
                     Text(String(localized: "meetings.output.kind.extended")).tag(MeetingOutputKind.extended)
+                    Text(String(localized: "meetings.output.kind.brief")).tag(MeetingOutputKind.brief)
                 }
                 .pickerStyle(.segmented)
             }

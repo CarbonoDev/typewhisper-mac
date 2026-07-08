@@ -24191,6 +24191,38 @@
         }
       }
     },
+    "meetings.template.preset.brief.name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechungs-Briefing"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pre-Meeting Brief"
+          }
+        }
+      }
+    },
+    "meetings.template.preset.brief.prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du bist ein Assistent zur Besprechungsvorbereitung. Erstelle anhand der folgenden Zusammenfassungen früherer Besprechungen und Notizen aus der Wissensdatenbank ein knappes Briefing für die anstehende Besprechung: relevanter Hintergrund, offene Punkte und Entscheidungen aus früheren Besprechungen sowie 3-5 vorgeschlagene Gesprächspunkte oder Fragen. Bleibe sachlich und beziehe dich nur auf das, was der Kontext hergibt; erfinde keine Details."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are a meeting-preparation assistant. Using the prior-meeting summaries and knowledge-base notes below, write a concise pre-meeting brief for the upcoming meeting: relevant background, open items and decisions from previous meetings, and 3-5 suggested talking points or questions. Be factual and cite only what the context supports; do not invent details."
+          }
+        }
+      }
+    },
     "meetings.template.preset.decisionLog.name": {
       "localizations": {
         "de": {

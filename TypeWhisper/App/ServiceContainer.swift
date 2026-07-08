@@ -210,7 +210,10 @@ final class ServiceContainer: ObservableObject {
         meetingBriefService = MeetingBriefService(
             meetingService: meetingService,
             vaultService: obsidianVaultService,
-            processor: promptProcessingService
+            processor: promptProcessingService,
+            // Plan M6 (amendment DA2): the brief prompt is the editable `.brief` template resolved
+            // from the unified prompt store.
+            promptActionService: promptActionService
         )
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).

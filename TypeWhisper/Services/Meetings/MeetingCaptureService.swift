@@ -230,16 +230,6 @@ final class MeetingCaptureService: ObservableObject {
         sessionTimeOffset = meeting.segments.map(\.end).max() ?? 0
         lastSegmentEnd = sessionTimeOffset
 
-        // Speaker-recognition amendment, Fix B: restarting capture on a non-empty (previously-labeled)
-        // meeting stitches a second recording onto the timeline, making the whole meeting a
-        // `.timelineMismatch` for labeling — the pre-restart labels can never be honestly completed or
-        // extended across the stitched timeline, so clear stale segment labels + the speaker map now
-        // rather than let them persist as a permanent partial attribution. Idempotent (no-op for a
-        // fresh meeting with no labels).
-        if !meeting.segments.isEmpty {
-            meetingService.clearSpeakerLabels(for: meeting)
-        }
-
         meeting.state = .live
         meetingService.update(meeting)
 
@@ -257,6 +247,20 @@ final class MeetingCaptureService: ObservableObject {
             isCapturing = false
             errorMessage = error.localizedDescription
             throw error
+        }
+
+        // Speaker-recognition amendment, Fix B: restarting capture on a non-empty (previously-labeled)
+        // meeting stitches a second recording onto the timeline, making the whole meeting a
+        // `.timelineMismatch` for labeling — the pre-restart labels can never be honestly completed or
+        // extended across the stitched timeline, so clear stale segment labels + the speaker map
+        // rather than let them persist as a permanent partial attribution. Idempotent (no-op for a
+        // fresh meeting with no labels).
+        //
+        // Cleared only *after* `startRecording` succeeds (M2 carried finding): a failed restart throws
+        // above and returns with the meeting's valid labels intact — clearing them before the throwable
+        // start would destroy honest attribution on a session that never actually began.
+        if !meeting.segments.isEmpty {
+            meetingService.clearSpeakerLabels(for: meeting)
         }
 
         captureStartTime = Date()

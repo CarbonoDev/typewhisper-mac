@@ -64,6 +64,19 @@ enum MeetingTemplatePresets {
                 temperatureValue: 0.1,
                 isPreset: true,
                 sortOrder: 5
+            ),
+            // Plan M6 (amendment DA3): the single editable pre-meeting brief template. Its prompt is
+            // today's hard-coded `meetings.brief.systemPrompt` text; `MeetingBriefService` resolves the
+            // first `.brief` template as the brief's system prompt (falling back to the same default
+            // string when a user has deleted every brief template). Temperature inherits the provider
+            // setting to preserve the pre-template brief behavior.
+            MeetingTemplate(
+                name: String(localized: "meetings.template.preset.brief.name"),
+                kind: .brief,
+                prompt: String(localized: "meetings.template.preset.brief.prompt"),
+                temperatureModeRaw: PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
+                isPreset: true,
+                sortOrder: 6
             )
         ]
     }

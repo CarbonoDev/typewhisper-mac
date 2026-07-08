@@ -16,6 +16,7 @@ final class MeetingBriefServiceTests: XCTestCase {
             let text: String
             let providerOverride: String?
             let cloudModelOverride: String?
+            let temperatureDirective: PluginLLMTemperatureDirective
             let skipMemoryInjection: Bool
         }
 
@@ -38,6 +39,7 @@ final class MeetingBriefServiceTests: XCTestCase {
                 text: text,
                 providerOverride: providerOverride,
                 cloudModelOverride: cloudModelOverride,
+                temperatureDirective: temperatureDirective,
                 skipMemoryInjection: skipMemoryInjection
             ))
             if let errorToThrow { throw errorToThrow }
@@ -58,6 +60,36 @@ final class MeetingBriefServiceTests: XCTestCase {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingBrief")
         addTeardownBlock { TestSupport.remove(dir) }
         return MeetingService(appSupportDirectory: dir)
+    }
+
+    /// An empty prompt store (no meeting templates) into which brief templates can be added.
+    private func makePromptActionService(defaults: UserDefaults) throws -> PromptActionService {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingBriefPrompts")
+        addTeardownBlock { TestSupport.remove(dir) }
+        return PromptActionService(appSupportDirectory: dir, defaults: defaults)
+    }
+
+    /// Add a single `.brief` meeting template with the given prompt and optional overrides.
+    @discardableResult
+    private func addBriefTemplate(
+        to prompts: PromptActionService,
+        prompt: String,
+        provider: String? = nil,
+        model: String? = nil,
+        temperatureMode: PluginLLMTemperatureMode = .inheritProviderSetting,
+        temperatureValue: Double? = nil
+    ) throws -> PromptAction {
+        let spec = PromptTemplateSpec(
+            surface: .meeting,
+            name: "Brief Template",
+            prompt: prompt,
+            meetingKind: .brief,
+            providerType: provider,
+            cloudModel: model,
+            temperatureMode: temperatureMode,
+            temperatureValue: temperatureValue
+        )
+        return try XCTUnwrap(prompts.addMeetingTemplate(spec))
     }
 
     /// A temp vault with a single note that matches an "Acme Sync" query.
@@ -219,5 +251,124 @@ final class MeetingBriefServiceTests: XCTestCase {
             XCTAssertTrue(error is Boom)
         }
         XCTAssertTrue(target.outputs.filter { $0.kind == .brief }.isEmpty)
+    }
+
+    // MARK: - M6: editable brief template
+
+    /// Plan M6 (DA1/DA2): the resolved `.brief` template's prompt becomes the brief's system prompt,
+    /// while the assembled prior-meeting + KB context stays the `text` argument (fixed assembly).
+    func testBriefUsesResolvedTemplatePromptAsSystemPrompt() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+        let prompts = try makePromptActionService(defaults: defaults)
+        try addBriefTemplate(to: prompts, prompt: "CUSTOM_BRIEF_INSTRUCTION")
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub, promptActionService: prompts
+        )
+
+        let target = seedMeetings(on: service)
+        let output = try await brief.generateBrief(for: target)
+
+        let call = try XCTUnwrap(stub.calls.first)
+        // The template prompt is the system prompt (no language set → unchanged).
+        XCTAssertEqual(call.prompt, "CUSTOM_BRIEF_INSTRUCTION")
+        // Context assembly is unchanged — prior-meeting + KB blocks still ride in `text`.
+        XCTAssertTrue(call.text.contains("PRIOR_MARKER_B"))
+        XCTAssertTrue(call.text.contains("VAULT_MARKER_XYZ"))
+        // The output records the resolving template's id.
+        XCTAssertEqual(output.templateID, prompts.meetingTemplates(ofKind: .brief).first?.id)
+    }
+
+    /// Plan M6 (DA2): with no `.brief` template present the brief falls back to the localized default
+    /// system prompt and still generates.
+    func testBriefFallsBackToDefaultWhenNoTemplate() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+        // A prompt store with zero brief templates (fresh, no migration).
+        let prompts = try makePromptActionService(defaults: defaults)
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub, promptActionService: prompts
+        )
+
+        let target = seedMeetings(on: service)
+        let output = try await brief.generateBrief(for: target)
+
+        let call = try XCTUnwrap(stub.calls.first)
+        XCTAssertEqual(call.prompt, String(localized: "meetings.brief.systemPrompt"))
+        XCTAssertNil(call.providerOverride)
+        XCTAssertNil(call.cloudModelOverride)
+        XCTAssertNil(output.templateID)
+        XCTAssertEqual(output.kind, .brief)
+    }
+
+    /// Plan M6 (DA1): the meeting's language directive is appended on top of the resolved template
+    /// prompt (and also on the fallback default).
+    func testLanguageDirectiveAppendedOnTopOfTemplateAndFallback() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+
+        // Template path.
+        let prompts = try makePromptActionService(defaults: defaults)
+        try addBriefTemplate(to: prompts, prompt: "CUSTOM_BRIEF_INSTRUCTION")
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub, promptActionService: prompts
+        )
+        let target = seedMeetings(on: service)
+        service.setLanguage("de", for: target)
+        _ = try await brief.generateBrief(for: target)
+        let templateCall = try XCTUnwrap(stub.calls.first)
+        XCTAssertTrue(templateCall.prompt.hasPrefix("CUSTOM_BRIEF_INSTRUCTION"))
+        XCTAssertTrue(templateCall.prompt.contains("German (de)"))
+
+        // Fallback path (no template) still carries the directive.
+        let promptsEmpty = try makePromptActionService(defaults: defaults)
+        let stub2 = StubProcessor()
+        let briefFallback = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub2, promptActionService: promptsEmpty
+        )
+        let target2 = seedMeetings(on: service)
+        service.setLanguage("de", for: target2)
+        _ = try await briefFallback.generateBrief(for: target2)
+        let fallbackCall = try XCTUnwrap(stub2.calls.first)
+        XCTAssertTrue(fallbackCall.prompt.hasPrefix(String(localized: "meetings.brief.systemPrompt")))
+        XCTAssertTrue(fallbackCall.prompt.contains("German (de)"))
+    }
+
+    /// Plan M6 (DA2): the resolved template's provider/model/temperature overrides are forwarded to
+    /// the processor and recorded as the brief's provenance.
+    func testTemplateProviderModelTemperatureOverridesForwarded() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+        let prompts = try makePromptActionService(defaults: defaults)
+        try addBriefTemplate(
+            to: prompts,
+            prompt: "CUSTOM_BRIEF_INSTRUCTION",
+            provider: "anthropic",
+            model: "claude-3",
+            temperatureMode: .custom,
+            temperatureValue: 0.25
+        )
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub, promptActionService: prompts
+        )
+
+        let target = seedMeetings(on: service)
+        let output = try await brief.generateBrief(for: target)
+
+        let call = try XCTUnwrap(stub.calls.first)
+        XCTAssertEqual(call.providerOverride, "anthropic")
+        XCTAssertEqual(call.cloudModelOverride, "claude-3")
+        XCTAssertEqual(call.temperatureDirective, .custom(0.25))
+        // Provenance prefers the template overrides over the global selection.
+        XCTAssertEqual(output.providerUsed, "anthropic")
+        XCTAssertEqual(output.modelUsed, "claude-3")
     }
 }

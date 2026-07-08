@@ -9,7 +9,8 @@ final class MeetingTemplatePresetsTests: XCTestCase {
         "meetings.template.preset.decisionLog.name",
         "meetings.template.preset.salesDiscovery.name",
         "meetings.template.preset.interviewDebrief.name",
-        "meetings.template.preset.actionItems.name"
+        "meetings.template.preset.actionItems.name",
+        "meetings.template.preset.brief.name"
     ]
 
     private let promptKeys = [
@@ -18,14 +19,15 @@ final class MeetingTemplatePresetsTests: XCTestCase {
         "meetings.template.preset.decisionLog.prompt",
         "meetings.template.preset.salesDiscovery.prompt",
         "meetings.template.preset.interviewDebrief.prompt",
-        "meetings.template.preset.actionItems.prompt"
+        "meetings.template.preset.actionItems.prompt",
+        "meetings.template.preset.brief.prompt"
     ]
 
     // MARK: - Preset invariants
 
     func testPresetInvariants() {
         let presets = MeetingTemplatePresets.all
-        XCTAssertEqual(presets.count, 6)
+        XCTAssertEqual(presets.count, 7)
 
         // Unique ids.
         XCTAssertEqual(Set(presets.map(\.id)).count, presets.count)
@@ -37,8 +39,20 @@ final class MeetingTemplatePresetsTests: XCTestCase {
             XCTAssertTrue(preset.isPreset)
             XCTAssertFalse(preset.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             XCTAssertFalse(preset.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            XCTAssertTrue([.summary, .extended].contains(preset.kind), "brief is not a template kind")
+            // Plan M6 (amendment DA3/F5): `.brief` is now a first-class template kind (the editable
+            // pre-meeting brief prompt) alongside summary/extended.
+            XCTAssertTrue([.summary, .extended, .brief].contains(preset.kind))
         }
+    }
+
+    /// Plan M6 (amendment DA3/F5): exactly one `.brief` preset now exists — the single editable brief
+    /// template — flipping the former "brief is not a template kind" invariant.
+    func testExactlyOneBriefPresetExists() {
+        let briefPresets = MeetingTemplatePresets.all.filter { $0.kind == .brief }
+        XCTAssertEqual(briefPresets.count, 1)
+        let brief = briefPresets.first
+        XCTAssertEqual(brief?.name, String(localized: "meetings.template.preset.brief.name"))
+        XCTAssertEqual(brief?.prompt, String(localized: "meetings.template.preset.brief.prompt"))
     }
 
     // MARK: - Localization (EN + DE)
