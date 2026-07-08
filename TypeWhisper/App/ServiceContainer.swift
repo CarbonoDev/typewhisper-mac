@@ -223,6 +223,8 @@ final class ServiceContainer: ObservableObject {
         )
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).
+        // Reads the meetings root folder (plan D7/M4) from the shared defaults so exports nest under
+        // `<vault>/<root>/<folderPath>`.
         meetingObsidianExporter = MeetingObsidianExporter(vaultService: obsidianVaultService)
         // Import / merge (plan M8): new meetings from audio or transcript files, and merging an
         // imported transcript into an existing captured meeting. Reuses `audioFileService` +

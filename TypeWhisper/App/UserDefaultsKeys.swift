@@ -162,6 +162,10 @@ enum UserDefaultsKeys {
     // MARK: - Meetings
     /// Absolute path of the Obsidian vault connected as a knowledge base (plan M5, D9).
     static let meetingsObsidianVaultPath = "meetings.obsidianVaultPath"
+    /// Vault-relative root folder that all meeting exports are nested under (plan D7/M4). Registered
+    /// default `"Meetings"`; an empty value collapses to exporting at the vault root (the escape
+    /// hatch). The exporter prepends its sanitized components before the per-meeting `folderPath`.
+    static let meetingsObsidianRootFolder = "meetings.obsidianRootFolder"
     /// Opt-in bridge (addendum AD5, default OFF): when true, finishing a meeting also emits a
     /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
     /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.

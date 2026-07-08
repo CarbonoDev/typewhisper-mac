@@ -154,6 +154,15 @@ final class Meeting {
         set { obsidianTags = newValue }
     }
 
+    /// First-party alias over the canonical `obsidianFolder` store (plan D7, M4). A **computed
+    /// forward** — zero schema delta (renaming the stored property would be a non-additive schema
+    /// change). A single `/`-separated vertical path; `nil`/empty = "Unfiled". Obsidian export keeps
+    /// reading `obsidianFolder`; first-party folder surfaces read/write `folderPath`.
+    var folderPath: String? {
+        get { obsidianFolder }
+        set { obsidianFolder = newValue }
+    }
+
     /// Per-meeting final re-transcription override (addendum AD8). `nil` = inherit.
     var finalRetranscriptionPolicy: FinalRetranscriptionPolicy? {
         get { FinalRetranscriptionPolicy(jsonString: finalRetranscriptionRaw) }

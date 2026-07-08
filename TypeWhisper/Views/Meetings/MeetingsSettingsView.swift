@@ -14,6 +14,9 @@ struct MeetingsSettingsView: View {
     // [M2] Per-meeting language-detection provider/model (plan D5). Empty provider ⇒ prompt provider.
     @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionProviderId) private var detectionProviderId = ""
     @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionModel) private var detectionModel = ""
+    // [M4] Vault-relative root folder that meeting exports nest under (plan D7). Default "Meetings";
+    // empty exports to the vault root.
+    @AppStorage(UserDefaultsKeys.meetingsObsidianRootFolder) private var obsidianRootFolder = "Meetings"
 
     var body: some View {
         ScrollView {
@@ -105,6 +108,19 @@ struct MeetingsSettingsView: View {
                         viewModel.chooseVault()
                     }
                 }
+            }
+
+            // [M4] Meetings root folder (plan D7): exports nest under this vault-relative folder.
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "meetings.obsidian.root.label"))
+                    .font(.callout)
+                TextField(String(localized: "meetings.obsidian.root.placeholder"), text: $obsidianRootFolder)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 320)
+                Text(String(localized: "meetings.obsidian.root.hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

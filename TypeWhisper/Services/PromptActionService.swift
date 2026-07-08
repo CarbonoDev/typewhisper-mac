@@ -392,6 +392,9 @@ class PromptActionService: ObservableObject {
             guard !alreadyPresent else { continue }
             context.insert(MeetingTemplateMigration.makePromptAction(from: preset))
             insertedNames.insert(preset.name)
+            // Future-proofing (M3 minor): once the brief preset is inserted, mark it present so a
+            // second brief-kind preset in the snapshot list can never double-insert a duplicate.
+            if preset.kindRaw == briefKindRaw { hasBriefTemplate = true }
             didInsert = true
         }
 

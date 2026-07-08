@@ -26,6 +26,14 @@ final class MeetingService: ObservableObject {
     /// can construct the service without the prompt-action store.
     private weak var promptActionService: PromptActionService?
 
+    /// Amendment 1 / M7 seam (plan §M4 amendment): invoked when a folder path is renamed or moved
+    /// (`old` → `new`, component-wise prefix) so the future `MeetingFolderMetadataStore` can rewrite
+    /// its keyed config to follow the path — even when no meeting currently sits under the folder.
+    /// `nil` until M7 attaches it; folder core (M4) works without it.
+    var onFolderPathRewrite: ((String, String) -> Void)?
+    /// Amendment 1 / M7 seam: invoked when a folder is deleted so M7 metadata can drop its config.
+    var onFolderDeleted: ((String) -> Void)?
+
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
         eventEmitter: MeetingEventEmitting = NoopMeetingEventEmitter(),
@@ -598,6 +606,94 @@ final class MeetingService: ObservableObject {
         return tags
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    // MARK: - First-party folders (plan D7, M4)
+
+    /// Split a `/`-separated folder path into trimmed, non-empty components (the canonical folder
+    /// tokenization shared by the mutators, the tree, and the filter). `nil`/blank ⇒ `[]` (Unfiled).
+    static func folderComponents(_ path: String?) -> [String] {
+        guard let path else { return [] }
+        return path
+            .split(separator: "/")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Canonical string form of a folder path (components rejoined); `nil` when Unfiled.
+    static func normalizedFolderPath(_ path: String?) -> String? {
+        let comps = folderComponents(path)
+        return comps.isEmpty ? nil : comps.joined(separator: "/")
+    }
+
+    /// Set a meeting's folder (first-party alias over `obsidianFolder`), normalizing components.
+    /// Empty/blank clears it (the meeting becomes Unfiled).
+    func setFolder(_ path: String?, for meeting: Meeting) {
+        let normalized = Self.normalizedFolderPath(path)
+        guard meeting.obsidianFolder != normalized else { return }
+        meeting.obsidianFolder = normalized
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Bulk-rename a folder across every meeting at or under it, in a **single** `save()` (plan D7).
+    /// A rename is a component-wise prefix rewrite of the whole subtree, so `renameFolder` and
+    /// `moveFolder` share one implementation.
+    func renameFolder(_ old: String, to new: String) {
+        rewriteFolderPrefix(from: old, to: new)
+    }
+
+    /// Move a folder (and its whole subtree) under a new path — component-wise prefix rewrite, one
+    /// save (plan D7). Functionally identical to `renameFolder`; the two names document intent.
+    func moveFolder(_ old: String, to new: String) {
+        rewriteFolderPrefix(from: old, to: new)
+    }
+
+    /// Delete a folder: unfile every meeting at or under `path` (their `folderPath` becomes `nil`),
+    /// in one save. The M7 metadata seam is notified so a configured folder's config is dropped.
+    func deleteFolder(_ path: String) {
+        let comps = Self.folderComponents(path)
+        guard !comps.isEmpty else { return }
+
+        var didChange = false
+        for meeting in meetings {
+            let mc = Self.folderComponents(meeting.obsidianFolder)
+            guard mc.count >= comps.count, Array(mc.prefix(comps.count)) == comps else { continue }
+            meeting.obsidianFolder = nil
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        onFolderDeleted?(comps.joined(separator: "/"))
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Rewrite the folder prefix `old` → `new` (component-wise, so `Acme` never matches `Acme2`) on
+    /// every meeting at or under `old`, in one save. The M7 metadata seam always fires (even when no
+    /// meeting currently sits under the folder) so a configured-but-empty folder's config follows the
+    /// rename atomically.
+    private func rewriteFolderPrefix(from old: String, to new: String) {
+        let oldComps = Self.folderComponents(old)
+        let newComps = Self.folderComponents(new)
+        guard !oldComps.isEmpty, !newComps.isEmpty else { return }
+        let oldPath = oldComps.joined(separator: "/")
+        let newPath = newComps.joined(separator: "/")
+        guard oldPath != newPath else { return }
+
+        var didChange = false
+        for meeting in meetings {
+            let comps = Self.folderComponents(meeting.obsidianFolder)
+            guard comps.count >= oldComps.count, Array(comps.prefix(oldComps.count)) == oldComps else { continue }
+            meeting.obsidianFolder = (newComps + comps.dropFirst(oldComps.count)).joined(separator: "/")
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        onFolderPathRewrite?(oldPath, newPath)
+        guard didChange else { return }
+        save()
+        fetchMeetings()
     }
 
     // MARK: - Templates (plan AD6 — unified into `promptActions.store`)

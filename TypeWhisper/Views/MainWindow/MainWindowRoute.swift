@@ -15,6 +15,11 @@ enum MainWindowRoute: Hashable {
     /// under the coordinator-held `activeTag` filter. Additive case on the otherwise-frozen contract
     /// (the M3/M4 coordinated edits are the only ones permitted to grow this enum).
     case tag(String)
+    /// The meetings list filtered to a first-party folder (plan D8, M4). Renders `MeetingsListView`
+    /// under the coordinator-held `activeFolder` filter, which composes (AND) with `activeTag`.
+    /// Additive case — the M4 coordinated edit (the second and last permitted growth of this enum).
+    /// (M7 re-targets this same case to a folder detail view without adding an enum case.)
+    case folder(String)
     /// Phase 2 — a vault-relative meeting-export folder path (Track E).
     case spaceFolder(String)
     /// Phase 2 — a vault-relative note path (Track E).

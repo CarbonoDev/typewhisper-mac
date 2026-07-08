@@ -56,9 +56,10 @@ struct MainWindowView: View {
         switch coordinator.route {
         case .home:
             HomeFeedView()
-        case .meetings, .tag:
-            // Both render the same list; `MeetingsListView` applies the coordinator's `activeTag`
-            // filter (nil under `.meetings`, set under `.tag`) and shows the Clear header (plan D8).
+        case .meetings, .tag, .folder:
+            // All render the same list; `MeetingsListView` applies the coordinator's `activeFolder`
+            // and `activeTag` filters (which compose AND) and shows the combined Clear header (D8).
+            // (M7 re-targets `.folder` to a dedicated detail view.)
             MeetingsListView()
         case let .meeting(id):
             if let meeting = viewModel.meetings.first(where: { $0.id == id }) {

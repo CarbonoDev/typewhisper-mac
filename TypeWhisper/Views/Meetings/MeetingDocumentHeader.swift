@@ -12,6 +12,7 @@ struct MeetingDocumentHeader: View {
 
     @State private var isPresentingLanguagePicker = false
     @State private var isPresentingTagsEditor = false
+    @State private var isPresentingFolderEditor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -92,7 +93,7 @@ struct MeetingDocumentHeader: View {
         outputSelectorChip
         languageChip
         tagsChip
-        folderTagsChip
+        folderChip
         exportChip
     }
 
@@ -171,19 +172,22 @@ struct MeetingDocumentHeader: View {
         .fixedSize()
     }
 
-    private var folderTagsChip: some View {
+    // MARK: - Folder chip (plan D9/M4 — inline folder editing with tree autocomplete)
+
+    private var folderChip: some View {
         Button {
-            model.isPresentingExport = true
+            isPresentingFolderEditor = true
         } label: {
-            let folder = meeting.obsidianFolder?.trimmingCharacters(in: .whitespaces)
+            let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
             let text = (folder?.isEmpty == false)
                 ? folder!
                 : String(localized: "meetingdoc.chip.noFolder")
-            // Tags moved to their own chip (M3); this remains the folder/export entry point (M4
-            // finalizes folder editing).
             chipLabel(icon: "folder", text: text)
         }
         .buttonStyle(.plain)
+        .popover(isPresented: $isPresentingFolderEditor, arrowEdge: .bottom) {
+            MeetingFolderEditorPopover(meeting: meeting, isPresented: $isPresentingFolderEditor)
+        }
     }
 
     private var exportChip: some View {
@@ -474,6 +478,81 @@ private struct MeetingTagsEditorPopover: View {
             viewModel.addMeetingTag(part, to: meeting)
         }
         draft = ""
+    }
+}
+
+/// The per-meeting Folder editor popover (plan D9/M4): a text field for a `/`-separated path (commit
+/// on Return), autocomplete suggestions of existing folders drawn from the shared
+/// `MeetingOrganizationIndex` tree, and a Clear action. Writes go through the view model → the
+/// single-writer `MeetingService.setFolder`, so the sidebar tree, chip, and filters refresh together.
+private struct MeetingFolderEditorPopover: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
+    let meeting: Meeting
+    @Binding var isPresented: Bool
+
+    @State private var draft = ""
+
+    private var suggestions: [String] {
+        MeetingsViewModel.folderSuggestions(from: organizationIndex.folderTree, query: draft)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "meetingdoc.folder.editor.title"))
+                .font(.headline)
+
+            TextField(String(localized: "meetingdoc.folder.editor.field"), text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(commit)
+
+            Text(String(localized: "meetingdoc.folder.editor.hint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !suggestions.isEmpty {
+                Divider()
+                Text(String(localized: "meetingdoc.folder.editor.existing"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(suggestions, id: \.self) { suggestion in
+                            Button {
+                                viewModel.setMeetingFolder(suggestion, for: meeting)
+                                isPresented = false
+                            } label: {
+                                Label(suggestion, systemImage: "folder")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .padding(.vertical, 3)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 160)
+            }
+
+            if meeting.folderPath?.isEmpty == false {
+                Divider()
+                Button(role: .destructive) {
+                    viewModel.setMeetingFolder(nil, for: meeting)
+                    isPresented = false
+                } label: {
+                    Label(String(localized: "meetingdoc.folder.editor.clear"), systemImage: "xmark.circle")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
+        .onAppear { draft = meeting.folderPath ?? "" }
+    }
+
+    private func commit() {
+        viewModel.setMeetingFolder(draft, for: meeting)
+        isPresented = false
     }
 }
 

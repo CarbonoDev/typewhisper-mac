@@ -57,6 +57,86 @@ extension MeetingsViewModel {
         Self.meetings(meetings, taggedWith: tag)
     }
 
+    // MARK: - Per-meeting folder editing (Folder chip, plan D7/M4)
+
+    /// Set a meeting's folder path (normalized by the service). Empty/blank ⇒ Unfiled.
+    func setMeetingFolder(_ path: String?, for meeting: Meeting) {
+        meetingService.setFolder(path, for: meeting)
+    }
+
+    // MARK: - Bulk folder ops (sidebar context menu, plan D7)
+
+    /// Bulk-rename a folder (its whole subtree) across every meeting under it, one save (plan D7).
+    func renameFolder(_ old: String, to new: String) {
+        meetingService.renameFolder(old, to: new)
+    }
+
+    /// Bulk-delete a folder: unfile every meeting at or under it, one save (plan D7).
+    func deleteFolder(_ path: String) {
+        meetingService.deleteFolder(path)
+    }
+
+    // MARK: - Folder filtering (plan D8; pure over `meetings` + the coordinator's active folder)
+
+    /// Meetings at `folder` or nested under it — component-wise prefix match, so `Acme` never matches
+    /// `Acme2` and a parent folder includes its descendants (plan D8). Pure; the coordinator holds the
+    /// active folder and this projects it over a meetings snapshot.
+    static func meetings(_ meetings: [Meeting], inFolder folder: String) -> [Meeting] {
+        let prefix = MeetingService.folderComponents(folder)
+        guard !prefix.isEmpty else { return meetings }
+        return meetings.filter { meeting in
+            let comps = MeetingService.folderComponents(meeting.folderPath)
+            return comps.count >= prefix.count && Array(comps.prefix(prefix.count)) == prefix
+        }
+    }
+
+    /// Instance convenience over `self.meetings`.
+    func meetings(inFolder folder: String) -> [Meeting] {
+        Self.meetings(meetings, inFolder: folder)
+    }
+
+    /// Compose the coordinator's active folder (vertical) and active tag (horizontal) filters — the
+    /// two AND together (plan D8). `nil` inputs pass through. Pure so the list view and tests share it.
+    static func filteredMeetings(
+        _ meetings: [Meeting],
+        folder: String?,
+        tag: String?
+    ) -> [Meeting] {
+        var result = meetings
+        if let folder, !MeetingService.folderComponents(folder).isEmpty {
+            result = Self.meetings(result, inFolder: folder)
+        }
+        if let tag, !tag.trimmingCharacters(in: .whitespaces).isEmpty {
+            result = Self.meetings(result, taggedWith: tag)
+        }
+        return result
+    }
+
+    // MARK: - Folder autocomplete (Folder chip)
+
+    /// Existing folder paths from the derived tree (all nodes, depth-first), filtered by `query`
+    /// (case-insensitive substring over the full path), bounded to `limit`. Pure over the supplied
+    /// tree snapshot so the view passes `MeetingOrganizationIndex.shared.folderTree`.
+    static func folderSuggestions(
+        from folderTree: [MeetingFolderNode],
+        query: String,
+        limit: Int = 8
+    ) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        var paths: [String] = []
+        func collect(_ nodes: [MeetingFolderNode]) {
+            for node in nodes {
+                paths.append(node.path)
+                collect(node.children)
+            }
+        }
+        collect(folderTree)
+        return paths
+            .filter { trimmed.isEmpty || $0.localizedCaseInsensitiveContains(trimmed) }
+            .prefix(limit)
+            .map { $0 }
+    }
+
     // MARK: - Autocomplete (Tags chip)
 
     /// Suggestions for the Tags chip: index tag names not already on `meeting`, filtered by `query`

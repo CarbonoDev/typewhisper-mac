@@ -41,10 +41,12 @@ enum MeetingExportSection: String, CaseIterable, Identifiable, Codable, Sendable
 @MainActor
 final class MeetingObsidianExporter: ObservableObject {
     private let vaultService: ObsidianVaultService
+    private let defaults: UserDefaults
     private let fileManager = FileManager.default
 
-    init(vaultService: ObsidianVaultService) {
+    init(vaultService: ObsidianVaultService, defaults: UserDefaults = .standard) {
         self.vaultService = vaultService
+        self.defaults = defaults
     }
 
     /// Export the selected sections of `meeting` to the connected vault. When `combined` is true a
@@ -242,16 +244,23 @@ final class MeetingObsidianExporter: ObservableObject {
 
     // MARK: - Paths
 
-    /// The absolute folder the meeting's notes are written into: the vault root, plus the meeting's
-    /// per-meeting `obsidianFolder` (each path component sanitized; nested subfolders allowed).
+    /// The absolute folder the meeting's notes are written into: the vault root, plus the configured
+    /// **meetings root folder** (plan D7/M4, default `"Meetings"`; empty collapses to today's
+    /// behavior — the escape hatch), plus the meeting's per-meeting `obsidianFolder`. Every path
+    /// component is sanitized; nested subfolders are allowed. The uniform root-prepend (Decision 8)
+    /// means a meeting previously exported to `<vault>/Acme` writes, on its next export, under
+    /// `<vault>/Meetings/Acme` — old notes are untouched (`uniquePath` never overwrites).
     private func resolveFolderPath(vaultPath: String, meeting: Meeting) -> String {
-        let folder = (meeting.obsidianFolder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !folder.isEmpty else { return vaultPath }
         var path = vaultPath
-        for component in folder.split(separator: "/") {
-            let safe = sanitizeFilename(String(component))
-            guard !safe.isEmpty else { continue }
-            path = (path as NSString).appendingPathComponent(safe)
+        let root = (defaults.string(forKey: UserDefaultsKeys.meetingsObsidianRootFolder) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = (meeting.obsidianFolder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        for segment in [root, folder] {
+            for component in segment.split(separator: "/") {
+                let safe = sanitizeFilename(String(component))
+                guard !safe.isEmpty else { continue }
+                path = (path as NSString).appendingPathComponent(safe)
+            }
         }
         return path
     }

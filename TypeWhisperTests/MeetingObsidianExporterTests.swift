@@ -11,6 +11,13 @@ final class MeetingObsidianExporterTests: XCTestCase {
     private var service: MeetingService!
     private var vault: ObsidianVaultService!
     private var exporter: MeetingObsidianExporter!
+    /// Name of the suite the exporter also reads the meetings-root-folder setting from (plan D7/M4).
+    /// Left unset in setup, so `resolveFolderPath` collapses to today's behavior and the existing
+    /// folder/frontmatter assertions hold; the root tests set it via `rootDefaults`.
+    private var suiteName: String!
+
+    /// A fresh handle to the exporter's settings suite (same backing store) for the root tests.
+    private var rootDefaults: UserDefaults { UserDefaults(suiteName: suiteName)! }
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -22,12 +29,19 @@ final class MeetingObsidianExporterTests: XCTestCase {
         service = MeetingService(appSupportDirectory: storeDir)
 
         let suite = "MeetingExportTests-\(UUID().uuidString)"
+        suiteName = suite
         let defaults = UserDefaults(suiteName: suite)!
+        // Pin an empty root so the existing folder/frontmatter assertions are deterministic: the
+        // app's registered `"Meetings"` default lives in the process-global registration domain and
+        // would otherwise leak into this suite. The root tests override this explicitly.
+        defaults.set("", forKey: UserDefaultsKeys.meetingsObsidianRootFolder)
         addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
         vault = ObsidianVaultService(defaults: defaults)
         vault.connect(to: vaultDir.path)
 
-        exporter = MeetingObsidianExporter(vaultService: vault)
+        // Distinct handle to the same suite (a single value can't be sent into two MainActor objects
+        // under Swift 6 region isolation; the suite's backing store is shared regardless).
+        exporter = MeetingObsidianExporter(vaultService: vault, defaults: UserDefaults(suiteName: suite)!)
     }
 
     // MARK: - Fixtures
@@ -218,6 +232,43 @@ final class MeetingObsidianExporterTests: XCTestCase {
         XCTAssertThrowsError(try exporter.export(meeting, sections: [], combined: true)) { error in
             XCTAssertEqual(error as? MeetingExportError, .noSectionsSelected)
         }
+    }
+
+    // MARK: - Meetings root folder (plan D7/M4)
+
+    /// A configured root folder is prepended (sanitized) before the per-meeting folder, so the note
+    /// lands under `<vault>/<root>/<folderPath>`.
+    func testRootFolderIsPrependedToExportPath() throws {
+        rootDefaults.set("Team Meetings", forKey: UserDefaultsKeys.meetingsObsidianRootFolder)
+        let meeting = makeRichMeeting(folder: "Clients/Acme")
+        let urls = try exporter.export(meeting, sections: [.summary], combined: true)
+        let file = try XCTUnwrap(urls.first)
+
+        let expectedFolder = vaultDir
+            .appendingPathComponent("Team Meetings")
+            .appendingPathComponent("Clients")
+            .appendingPathComponent("Acme")
+        XCTAssertTrue(file.path.hasPrefix(expectedFolder.path), "note under <vault>/<root>/<folderPath>; got \(file.path)")
+    }
+
+    /// A meeting with no per-meeting folder still lands under the root folder.
+    func testRootFolderAppliesWhenMeetingHasNoFolder() throws {
+        rootDefaults.set("Meetings", forKey: UserDefaultsKeys.meetingsObsidianRootFolder)
+        let meeting = makeRichMeeting(folder: nil)
+        let urls = try exporter.export(meeting, sections: [.summary], combined: true)
+        let file = try XCTUnwrap(urls.first)
+
+        let expectedFolder = vaultDir.appendingPathComponent("Meetings")
+        XCTAssertEqual((file.path as NSString).deletingLastPathComponent, expectedFolder.path)
+    }
+
+    /// An empty root collapses to today's behavior (the escape hatch) — export at the vault root.
+    func testEmptyRootCollapsesToVaultRoot() throws {
+        rootDefaults.set("", forKey: UserDefaultsKeys.meetingsObsidianRootFolder)
+        let meeting = makeRichMeeting(folder: nil)
+        let urls = try exporter.export(meeting, sections: [.summary], combined: true)
+        let file = try XCTUnwrap(urls.first)
+        XCTAssertEqual((file.path as NSString).deletingLastPathComponent, vaultDir.path)
     }
 
     // MARK: - Metadata setters

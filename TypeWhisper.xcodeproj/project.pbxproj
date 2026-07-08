@@ -244,6 +244,7 @@
 		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
 		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
 		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
+		MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000602 /* MeetingFolderTests.swift */; };
 		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
 		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
 		MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */; };
@@ -825,6 +826,7 @@
 		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
 		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
 		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000602 /* MeetingFolderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerLabelSuppressionTests.swift; sourceTree = "<group>"; };
@@ -2691,6 +2693,7 @@
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
 				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
+				MEF0000000000000000602 /* MeetingFolderTests.swift */,
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
 				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
@@ -4220,6 +4223,7 @@
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
 				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
+				MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */,
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
 				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
