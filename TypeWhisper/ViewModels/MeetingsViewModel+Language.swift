@@ -45,4 +45,33 @@ extension MeetingsViewModel {
             return nil
         }
     }
+
+    // MARK: - Detection (M2, plan D5)
+
+    /// Kick off a user-initiated Detect / Re-detect from the Language chip. Clears any standing
+    /// `.rule`/`.detected` value and enqueues a `.userInitiated` detection job (plan D1). A no-op when
+    /// the language is a `.manual` pick — the UI disables the control with a "clear first" hint
+    /// (Decision 3 / owner-veto 3), and this is the programmatic backstop.
+    func detectMeetingLanguage(for meeting: Meeting) {
+        languageService.requestUserDetection(for: meeting)
+    }
+
+    /// Whether the chip's Detect / Re-detect action is enabled: only when the language is unset or was
+    /// set by a rule/detection (never over a manual pick — clear it first).
+    func canDetectLanguage(for meeting: Meeting) -> Bool {
+        meeting.languageProvenance != .manual
+    }
+
+    /// Whether a language-detection job is in flight for this meeting — drives the chip's spinner and
+    /// disabled state. Meeting-scoped (via the job queue) so it does not follow navigation.
+    func isDetectingLanguage(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(kind: .languageDetection, meetingID: meeting.id)
+    }
+
+    /// The "Detect" (unset) vs "Re-detect" (already has a value) button title for the chip popover.
+    func detectActionTitle(for meeting: Meeting) -> String {
+        meeting.languageCode == nil
+            ? String(localized: "meetingdoc.language.detect")
+            : String(localized: "meetingdoc.language.redetect")
+    }
 }

@@ -131,6 +131,26 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    /// Clear every segment's speaker label/confidence **and** the meeting's speaker map in one
+    /// transaction (speaker-recognition amendment, Fix B). Called when capture is *restarted* on a
+    /// previously-labeled meeting: the restart stitches a second recording onto the timeline, which
+    /// makes the whole meeting a `.timelineMismatch` for labeling (it can never be honestly
+    /// re-verified/completed), so the pre-restart labels must not persist as a permanent partial
+    /// attribution. Idempotent: a no-op when nothing is labeled.
+    func clearSpeakerLabels(for meeting: Meeting) {
+        let hasLabels = meeting.segments.contains { $0.speakerLabel != nil || $0.speakerConfidence != nil }
+        let hasMap = !meeting.speakerMap.isEmpty
+        guard hasLabels || hasMap else { return }
+        for segment in meeting.segments {
+            segment.speakerLabel = nil
+            segment.speakerConfidence = nil
+        }
+        meeting.speakerMap = [:]
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     /// Persist the `SPEAKER_xx → attendee name` map edited in the speaker-mapping editor (plan M9).
     /// Empty/whitespace names are dropped so a segment falls back to rendering its raw label.
     func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {
@@ -446,13 +466,33 @@ final class MeetingService: ObservableObject {
     /// — it outranks an inference but **never** overwrites an explicit per-meeting `.manual` pick.
     /// Single-writer on the MainActor with no `await` between the ladder check and the write.
     func seedRuleLanguage(_ code: String, for meeting: Meeting) {
-        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return }
+        // M2 (M1-review fix): the rule language field is free text, and `LanguageSelection(storedValue:)`
+        // maps *any* non-empty value to `.exact(value)` — so a rule value like "german" or garbage would
+        // otherwise be persisted verbatim as a meeting language code. Normalize/validate it here through
+        // the same catalog detection uses: a recognizable value (ISO code or language name, "german" →
+        // "de") normalizes to a canonical lowercased code; **unrecognizable garbage is silently skipped**
+        // (seeds nothing) rather than becoming a bogus `languageCode`.
+        guard let normalized = MeetingLanguageCatalog.normalize(code) else { return }
         // Never over a manual pick.
         if meeting.languageProvenance == .manual { return }
         guard meeting.languageCode != normalized || meeting.languageProvenance != .rule else { return }
         meeting.languageCode = normalized
         meeting.languageProvenance = .rule
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Persist an auto-detected language (plan D1/D5, M2). Writes `.detected` **only when the meeting
+    /// has no language yet** — a manual or rule value always wins. The `languageCode == nil` guard is
+    /// re-checked here, on the MainActor, with no `await` between the check and the write, so a manual
+    /// pick that lands while a detection job is in flight is never clobbered by the finishing job.
+    func setDetectedLanguage(_ code: String, for meeting: Meeting) {
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        guard meeting.languageCode == nil else { return }
+        meeting.languageCode = normalized
+        meeting.languageProvenance = .detected
         meeting.updatedAt = Date()
         save()
         fetchMeetings()

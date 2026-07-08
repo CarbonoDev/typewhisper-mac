@@ -5,9 +5,15 @@ import SwiftUI
 /// standalone window arrive in later milestones.
 struct MeetingsSettingsView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [M2] Language-detection provider selection, resolved per-call by the detector; empty = "Use
+    // prompt provider" (inherit the current prompt-provider selection).
+    @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     // [Track A] AD5 dictation bridge toggle — defaults OFF. Self-contained UserDefaults binding so
     // no shared view-model edit is required.
     @AppStorage(UserDefaultsKeys.meetingsBridgeToDictationEvents) private var bridgeToDictationEvents = false
+    // [M2] Per-meeting language-detection provider/model (plan D5). Empty provider ⇒ prompt provider.
+    @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionProviderId) private var detectionProviderId = ""
+    @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionModel) private var detectionModel = ""
 
     var body: some View {
         ScrollView {
@@ -35,6 +41,11 @@ struct MeetingsSettingsView: View {
                 Divider()
 
                 FinalRetranscriptionSettingsView()
+
+                Divider()
+
+                // [M2] Per-meeting language detection provider (plan D5).
+                languageDetectionSection
 
                 Divider()
 
@@ -113,6 +124,43 @@ struct MeetingsSettingsView: View {
                     Text(String(localized: "meetings.plugins.bridge.subtitle"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// [M2] Language-detection provider picker (plan D5). The default row "Use prompt provider" maps to
+    /// an empty stored value, which the detector resolves per call to the current prompt-provider
+    /// selection (`providerOverride: nil`). A specific provider optionally pins a model.
+    private var languageDetectionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.language.sectionTitle"))
+                .font(.headline)
+            Text(String(localized: "meetings.language.section.subtitle"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker(String(localized: "meetings.language.provider.label"), selection: $detectionProviderId) {
+                Text(String(localized: "meetings.language.provider.usePromptProvider")).tag("")
+                ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
+                    Text(provider.displayName).tag(provider.id)
+                }
+            }
+            .onChange(of: detectionProviderId) { _, _ in
+                // Switching provider invalidates a model pinned to the previous one.
+                detectionModel = ""
+            }
+
+            if !detectionProviderId.isEmpty {
+                let models = promptProcessingService.modelsForProvider(detectionProviderId)
+                if !models.isEmpty {
+                    Picker(String(localized: "meetings.language.model.label"), selection: $detectionModel) {
+                        Text(String(localized: "meetings.language.model.default")).tag("")
+                        ForEach(models, id: \.id) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
                 }
             }
         }

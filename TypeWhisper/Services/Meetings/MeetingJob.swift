@@ -6,6 +6,7 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     case summary
     case extendedAnalysis
     case brief
+    case languageDetection
     case finalTranscription
     case audioImport
     case diarization
@@ -15,7 +16,10 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     /// work, and I/O each get their own lane so they never contend across categories.
     var lane: MeetingJobLane {
         switch self {
-        case .summary, .extendedAnalysis, .brief:
+        case .summary, .extendedAnalysis, .brief, .languageDetection:
+            // Language detection is a single-turn LLM call (plan D5) — it shares the cap-1 `llm` lane so
+            // it is never concurrent with a user generation and a `.background` detection yields to a
+            // `.userInitiated` summary.
             return .llm
         case .finalTranscription, .audioImport, .diarization:
             return .transcription
@@ -101,6 +105,7 @@ extension MeetingJobKind {
         case .summary: return String(localized: "meetings.jobs.kind.summary")
         case .extendedAnalysis: return String(localized: "meetings.jobs.kind.extendedAnalysis")
         case .brief: return String(localized: "meetings.jobs.kind.brief")
+        case .languageDetection: return String(localized: "meetings.jobs.kind.languageDetection")
         case .finalTranscription: return String(localized: "meetings.jobs.kind.finalTranscription")
         case .audioImport: return String(localized: "meetings.jobs.kind.audioImport")
         case .diarization: return String(localized: "meetings.jobs.kind.diarization")

@@ -14,7 +14,15 @@ struct MeetingTranscriptPanel: View {
     let meeting: Meeting
 
     private var bubbles: [MeetingsViewModel.TranscriptBubble] {
-        let all = MeetingsViewModel.transcriptBubbles(segments: meeting.segments, speakerMap: meeting.speakerMap)
+        // Speaker-recognition amendment, Fix A: while THIS meeting is capturing, suppress all speaker
+        // attribution at the render choke point so stale labels on preserved/restarted segments never
+        // appear on the live transcript.
+        let suppressSpeakers = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
+        let all = MeetingsViewModel.transcriptBubbles(
+            segments: meeting.segments,
+            speakerMap: meeting.speakerMap,
+            suppressSpeakers: suppressSpeakers
+        )
         return MeetingsViewModel.filterTranscriptBubbles(all, query: model.transcriptSearch)
     }
 

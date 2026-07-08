@@ -91,6 +91,10 @@ final class MeetingsViewModel: ObservableObject {
     let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
     private let llmService: MeetingLLMService
+    // [M2] Per-meeting language detection (plan D5). `internal` so `MeetingsViewModel+Language.swift`
+    // (extension-file discipline) reaches it for the chip's Detect / Re-detect action and the
+    // post-import auto-detect enqueue.
+    let languageService: MeetingLanguageService
     private let vaultService: ObsidianVaultService
     private let briefService: MeetingBriefService
     private let exporter: MeetingObsidianExporter
@@ -116,6 +120,7 @@ final class MeetingsViewModel: ObservableObject {
         captureService: MeetingCaptureService,
         startNotificationService: MeetingStartNotificationService,
         llmService: MeetingLLMService,
+        languageService: MeetingLanguageService, // [M2]
         vaultService: ObsidianVaultService,
         briefService: MeetingBriefService,
         exporter: MeetingObsidianExporter,
@@ -134,6 +139,7 @@ final class MeetingsViewModel: ObservableObject {
         self.captureService = captureService
         self.startNotificationService = startNotificationService
         self.llmService = llmService
+        self.languageService = languageService // [M2]
         self.vaultService = vaultService
         self.briefService = briefService
         self.exporter = exporter
@@ -702,7 +708,11 @@ final class MeetingsViewModel: ObservableObject {
     func importTranscriptFile(at url: URL) -> Meeting? {
         importErrorMessage = nil
         do {
-            return try importService.importTranscriptFile(at: url)
+            let meeting = try importService.importTranscriptFile(at: url)
+            // [M2] Transcript-ready choke point (plan D5): a transcript-file import creates a meeting
+            // with content but no language — auto-enqueue a background detection.
+            languageService.enqueueAutoDetection(for: meeting)
+            return meeting
         } catch {
             importErrorMessage = error.localizedDescription
             return nil
@@ -734,6 +744,10 @@ final class MeetingsViewModel: ObservableObject {
             guard let importService else { return }
             do {
                 let meeting = try await importService.importAudioFile(at: url, languageCode: languageCode)
+                // [M2] Transcript-ready choke point (plan D5): auto-enqueue a background detection when
+                // the import was left on Auto (a chosen language persists `.manual`, so the enqueue's own
+                // `languageCode == nil` guard makes this a no-op there).
+                self?.languageService.enqueueAutoDetection(for: meeting)
                 onImported(meeting)
             } catch {
                 self?.importErrorMessage = error.localizedDescription

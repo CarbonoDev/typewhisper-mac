@@ -179,6 +179,14 @@ enum UserDefaultsKeys {
     /// Override cloud model id when the global mode is "engine".
     static let meetingsFinalPassModel = "meetings.finalPass.model"
 
+    // MARK: - Meetings · Language detection (plan D5, M2)
+    /// LLM provider id used for per-meeting language detection. Empty/unset ⇒ inherit the current
+    /// prompt-provider selection (the "Use prompt provider" default).
+    static let meetingsLanguageDetectionProviderId = "meetings.language.detectionProviderId"
+    /// Cloud model id for language detection when a specific detection provider is chosen. Empty/unset
+    /// ⇒ the provider default.
+    static let meetingsLanguageDetectionModel = "meetings.language.detectionModel"
+
     // [Track D] Automatic pre-meeting briefs (plan AD9).
     /// Whether pre-meeting briefs are generated automatically (default ON).
     static let meetingsAutoBriefEnabled = "meetings.brief.auto.enabled"

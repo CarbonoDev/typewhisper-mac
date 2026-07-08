@@ -99,6 +99,12 @@ final class MeetingCaptureService: ObservableObject {
     private let engineAvailabilityCheck: (String) -> Bool
     /// Whether a final-pass override engine id is a metered/cloud engine.
     private let engineIsCloudCheck: (String) -> Bool
+    /// [M2] Invoked once the final transcript is ready (after the final pass replaces live segments and
+    /// the meeting is marked `.completed`). ServiceContainer wires this to enqueue a `.background`
+    /// language-detection job so an unset meeting language fills itself in (plan D5). Optional so the
+    /// capture service has no hard dependency on the language service (constructed later) and tests are
+    /// unaffected when left nil.
+    var onTranscriptReady: (@MainActor (Meeting) -> Void)?
 
     // MARK: - Session bookkeeping
 
@@ -223,6 +229,16 @@ final class MeetingCaptureService: ObservableObject {
         )
         sessionTimeOffset = meeting.segments.map(\.end).max() ?? 0
         lastSegmentEnd = sessionTimeOffset
+
+        // Speaker-recognition amendment, Fix B: restarting capture on a non-empty (previously-labeled)
+        // meeting stitches a second recording onto the timeline, making the whole meeting a
+        // `.timelineMismatch` for labeling — the pre-restart labels can never be honestly completed or
+        // extended across the stitched timeline, so clear stale segment labels + the speaker map now
+        // rather than let them persist as a permanent partial attribution. Idempotent (no-op for a
+        // fresh meeting with no labels).
+        if !meeting.segments.isEmpty {
+            meetingService.clearSpeakerLabels(for: meeting)
+        }
 
         meeting.state = .live
         meetingService.update(meeting)
@@ -403,6 +419,11 @@ final class MeetingCaptureService: ObservableObject {
 
         meeting.state = .completed
         meetingService.update(meeting)
+
+        // [M2] Transcript-ready choke point: auto-enqueue background language detection for an unset
+        // meeting (plan D5). Idempotent by the job queue's `(languageDetection, meetingID)` dedupe and
+        // guarded again inside the detector (`languageCode == nil`); a no-op when the language is set.
+        onTranscriptReady?(meeting)
 
         // AD4 emission point 4/5: capture session ended.
         eventEmitter.emit(.ended(MeetingEndedPayload(

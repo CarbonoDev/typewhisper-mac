@@ -27658,6 +27658,198 @@
           }
         }
       }
+    },
+    "meetings.jobs.kind.languageDetection": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracherkennung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language detection"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.detectingLanguage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache wird erkannt…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detecting language…"
+          }
+        }
+      }
+    },
+    "meetings.language.detect.error.unrecognized": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sprache des Meetings konnte nicht bestimmt werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't determine the meeting's language."
+          }
+        }
+      }
+    },
+    "meetingdoc.language.detect": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache erkennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detect language"
+          }
+        }
+      }
+    },
+    "meetingdoc.language.redetect": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache erneut erkennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-detect language"
+          }
+        }
+      }
+    },
+    "meetingdoc.language.detect.manualHint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache zuerst löschen, um sie erneut zu erkennen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear the language first to re-detect."
+          }
+        }
+      }
+    },
+    "meetings.language.sectionTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracherkennung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language Detection"
+          }
+        }
+      }
+    },
+    "meetings.language.section.subtitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcher Anbieter die Sprache eines Meetings bestimmt, wenn sie nicht manuell oder per Regel festgelegt ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which provider infers a meeting's language when it isn't set manually or by a rule."
+          }
+        }
+      }
+    },
+    "meetings.language.provider.label": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkennungsanbieter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detection provider"
+          }
+        }
+      }
+    },
+    "meetings.language.provider.usePromptProvider": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt-Anbieter verwenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use prompt provider"
+          }
+        }
+      }
+    },
+    "meetings.language.model.label": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkennungsmodell"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detection model"
+          }
+        }
+      }
+    },
+    "meetings.language.model.default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

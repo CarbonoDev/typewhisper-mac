@@ -53,6 +53,7 @@ final class ServiceContainer: ObservableObject {
     let meetingContextRuleService: MeetingContextRuleService
     let meetingStartNotificationService: MeetingStartNotificationService
     let meetingLLMService: MeetingLLMService
+    let meetingLanguageService: MeetingLanguageService // [M2]
     let obsidianVaultService: ObsidianVaultService
     let meetingBriefService: MeetingBriefService
     let meetingObsidianExporter: MeetingObsidianExporter
@@ -187,6 +188,22 @@ final class ServiceContainer: ObservableObject {
             vaultService: obsidianVaultService,
             processor: promptProcessingService
         )
+        // [M2] Per-meeting language detection (plan D5). Runs a single-turn LLM call over a transcript
+        // sample and persists a `.detected` language; enqueues on the shared job queue's cap-1 `llm`
+        // lane. Depends on `meetingService`, the `promptProcessingService` single-turn seam, and the
+        // job queue. Provider/model are resolved per call from UserDefaults ("Use prompt provider" by
+        // default), so nothing is snapshotted here.
+        meetingLanguageService = MeetingLanguageService(
+            meetingService: meetingService,
+            processor: promptProcessingService,
+            jobQueue: meetingJobQueue
+        )
+        // Auto-detect at the capture transcript-ready choke point (plan D5): once a final pass completes
+        // and the meeting is unset, enqueue a background detection. Wired as a closure so the capture
+        // service (constructed earlier) needs no hard dependency on the language service.
+        meetingCaptureService.onTranscriptReady = { [weak meetingLanguageService] meeting in
+            meetingLanguageService?.enqueueAutoDetection(for: meeting)
+        }
         // Pre-meeting brief (plan M5). The brief service depends on `meetingService` (prior
         // meetings), `obsidianVaultService` (KB passages), and the `promptProcessingService`
         // single-turn seam.
@@ -330,6 +347,7 @@ final class ServiceContainer: ObservableObject {
             captureService: meetingCaptureService,
             startNotificationService: meetingStartNotificationService,
             llmService: meetingLLMService,
+            languageService: meetingLanguageService, // [M2]
             vaultService: obsidianVaultService,
             briefService: meetingBriefService,
             exporter: meetingObsidianExporter,

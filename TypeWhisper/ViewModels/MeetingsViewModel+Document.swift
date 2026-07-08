@@ -151,10 +151,18 @@ extension MeetingsViewModel {
     /// segments, and a timestamp separator inserted wherever a silence of at least `gapThreshold`
     /// seconds separates two consecutive segments. Pure + order-stable so it is unit-testable
     /// (`TranscriptBubbleModelTests`) without SwiftUI.
+    ///
+    /// `suppressSpeakers` (speaker-recognition amendment, Fix A) forces every bubble to render with no
+    /// speaker attribution (`speakerLabel: nil, displayName: nil, isMe: false`) regardless of what the
+    /// segments carry. The panel passes `true` while **this** meeting is capturing, which is the single
+    /// render choke point that guarantees the live transcript never shows a speaker — even for a
+    /// resumed/restarted meeting whose preserved segments still carry labels from an earlier pass
+    /// (the "labels appeared randomly live" defect). Independent of any writer.
     nonisolated static func transcriptBubbles(
         segments: [MeetingSegment],
         speakerMap: [String: String],
-        gapThreshold: Double = transcriptGapThreshold
+        gapThreshold: Double = transcriptGapThreshold,
+        suppressSpeakers: Bool = false
     ) -> [TranscriptBubble] {
         // Read the SwiftData-persisted `.order` once per segment (each access faults the property)
         // instead of on every comparison during the sort — this runs inside `body` on every publish.
@@ -181,14 +189,14 @@ extension MeetingsViewModel {
                     )
                 )
             }
-            let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = suppressSpeakers ? nil : segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             let isMe = (label == MeetingDiarizationEnricher.micSpeakerLabel)
             bubbles.append(
                 TranscriptBubble(
                     id: "speech-\(segment.id.uuidString)",
                     kind: .speech,
                     speakerLabel: (label?.isEmpty == false) ? label : nil,
-                    displayName: MeetingTranscriptPanel.speakerName(for: segment, speakerMap: speakerMap),
+                    displayName: suppressSpeakers ? nil : MeetingTranscriptPanel.speakerName(for: segment, speakerMap: speakerMap),
                     isMe: isMe,
                     text: segment.text,
                     start: segment.start,

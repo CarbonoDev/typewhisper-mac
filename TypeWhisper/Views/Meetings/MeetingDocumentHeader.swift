@@ -249,9 +249,9 @@ struct MeetingDocumentHeader: View {
     }
 }
 
-/// The per-meeting language picker popover (plan D9 / M1): a searchable list with the app's featured
-/// languages ranked first, the current provenance tag, and a Clear action. Detect / Re-detect are
-/// intentionally absent until M2 (detection). Setting a language records it as `.manual`.
+/// The per-meeting language picker popover (plan D9): a searchable list with the app's featured
+/// languages ranked first, the current provenance tag, a Detect / Re-detect action (plan D5, M2), and
+/// a Clear action. Setting a language from the list records it as `.manual`.
 private struct MeetingLanguagePickerPopover: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     let meeting: Meeting
@@ -328,6 +328,12 @@ private struct MeetingLanguagePickerPopover: View {
             }
             .frame(maxHeight: 240)
 
+            Divider()
+
+            // Detect / Re-detect (plan D5, M2). Disabled while a detection is in flight, and disabled
+            // with a "clear first" hint when the language is a manual pick (Decision 3 / owner-veto 3).
+            detectSection
+
             if meeting.languageCode != nil {
                 Divider()
                 Button(role: .destructive) {
@@ -341,5 +347,34 @@ private struct MeetingLanguagePickerPopover: View {
         }
         .padding(16)
         .frame(width: 300)
+    }
+
+    @ViewBuilder
+    private var detectSection: some View {
+        let isDetecting = viewModel.isDetectingLanguage(for: meeting)
+        let canDetect = viewModel.canDetectLanguage(for: meeting)
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                viewModel.detectMeetingLanguage(for: meeting)
+                isPresented = false
+            } label: {
+                HStack(spacing: 6) {
+                    if isDetecting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "sparkles")
+                    }
+                    Text(viewModel.detectActionTitle(for: meeting))
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canDetect || isDetecting)
+
+            if !canDetect {
+                Text(String(localized: "meetingdoc.language.detect.manualHint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
