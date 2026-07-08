@@ -56,7 +56,11 @@ final class MeetingBriefService: ObservableObject {
         }
 
         let context = assembleContext(meeting: meeting, priorBlock: priorBlock, kbBlock: kbBlock)
-        let systemPrompt = String(localized: "meetings.brief.systemPrompt")
+        // Plan D4: the brief is a final output — honor the meeting's language via a prompt directive.
+        let systemPrompt = MeetingLanguageDirective.appending(
+            for: meeting.languageCode,
+            to: String(localized: "meetings.brief.systemPrompt")
+        )
         let content = try await processor.process(
             prompt: systemPrompt,
             text: context,

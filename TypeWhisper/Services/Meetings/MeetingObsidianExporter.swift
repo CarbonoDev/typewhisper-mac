@@ -198,6 +198,11 @@ final class MeetingObsidianExporter: ObservableObject {
             lines.append("series: \(yamlScalar(series))")
         }
 
+        if let language = meeting.languageCode?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !language.isEmpty {
+            lines.append("language: \(yamlScalar(language))")
+        }
+
         let tags = meeting.obsidianTags
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }

@@ -10,6 +10,19 @@ final class MeetingBriefSchedulerTests: XCTestCase {
     /// settle on `await jobQueue.drain()`.
     private let jobQueue = JobQueueService()
 
+    /// [J3 QA carry-over] This shared queue outlives each test's temp `MeetingService`. Any job still
+    /// active when a test's `addTeardownBlock` deletes its store keeps firing `store.save()` against a
+    /// now-missing file, spraying CoreData "No such file or directory" errors across the rest of the
+    /// suite. Cancel every lingering job and drain the lane workers before the store dirs are removed
+    /// (this override runs before the registered teardown blocks).
+    override func tearDown() async throws {
+        for job in jobQueue.jobs where job.state.isActive {
+            jobQueue.cancel(job.id)
+        }
+        await jobQueue.drain()
+        try await super.tearDown()
+    }
+
     // MARK: - Stub brief generator
 
     @MainActor

@@ -16,6 +16,10 @@ struct MeetingImportView: View {
     /// Called with the created meeting so the window can select it.
     var onImported: (Meeting) -> Void = { _ in }
 
+    /// Optional language for an audio import (plan M1/D9). `nil` = Auto (detect); a chosen code drives
+    /// transcription and is persisted `.manual` on the created meeting.
+    @State private var audioLanguageCode: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(String(localized: "meetings.import.title"))
@@ -39,6 +43,34 @@ struct MeetingImportView: View {
                     Label(String(localized: "meetings.import.audioButton"), systemImage: "waveform")
                 }
                 .disabled(viewModel.isImporting())
+
+                HStack(spacing: 8) {
+                    Text(String(localized: "meetings.import.language.label"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Menu {
+                        Button {
+                            audioLanguageCode = nil
+                        } label: {
+                            languageMenuRow(
+                                title: String(localized: "meetings.import.language.auto"),
+                                isSelected: audioLanguageCode == nil
+                            )
+                        }
+                        Divider()
+                        ForEach(viewModel.meetingLanguageOptions, id: \.code) { option in
+                            Button {
+                                audioLanguageCode = option.code
+                            } label: {
+                                languageMenuRow(title: option.name, isSelected: audioLanguageCode == option.code)
+                            }
+                        }
+                    } label: {
+                        Text(selectedLanguageTitle)
+                    }
+                    .fixedSize()
+                    .disabled(viewModel.isImporting())
+                }
 
                 if let meeting = mergeTarget {
                     Divider()
@@ -93,9 +125,23 @@ struct MeetingImportView: View {
         guard let url = openPanel(extensions: viewModel.audioFileExtensions) else { return }
         // [Track J] Audio import is now a queued `.audioImport` job; the sheet stays open showing the
         // spinner (`isImporting()`) until the job's completion selects the created meeting and dismisses.
-        viewModel.importAudioFile(at: url) { meeting in
+        viewModel.importAudioFile(at: url, languageCode: audioLanguageCode) { meeting in
             onImported(meeting)
             dismiss()
+        }
+    }
+
+    private var selectedLanguageTitle: String {
+        guard let audioLanguageCode else { return String(localized: "meetings.import.language.auto") }
+        return localizedAppLanguageName(for: audioLanguageCode)
+    }
+
+    @ViewBuilder
+    private func languageMenuRow(title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
         }
     }
 

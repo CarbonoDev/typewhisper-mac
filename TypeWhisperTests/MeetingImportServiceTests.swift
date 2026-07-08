@@ -10,11 +10,16 @@ final class MeetingImportServiceTests: XCTestCase {
         var result: TranscriptionResult
         var errorToThrow: Error?
         private(set) var receivedSampleCount = 0
+        private(set) var receivedLanguageSelection: LanguageSelection?
 
         init(result: TranscriptionResult) { self.result = result }
 
-        func transcribeImportedAudio(samples: [Float]) async throws -> TranscriptionResult {
+        func transcribeImportedAudio(
+            samples: [Float],
+            languageSelection: LanguageSelection
+        ) async throws -> TranscriptionResult {
             receivedSampleCount = samples.count
+            receivedLanguageSelection = languageSelection
             if let errorToThrow { throw errorToThrow }
             return result
         }
@@ -25,7 +30,10 @@ final class MeetingImportServiceTests: XCTestCase {
     @MainActor
     private final class BlockingTranscriber: MeetingAudioTranscribing {
         private(set) var started = false
-        func transcribeImportedAudio(samples: [Float]) async throws -> TranscriptionResult {
+        func transcribeImportedAudio(
+            samples: [Float],
+            languageSelection: LanguageSelection
+        ) async throws -> TranscriptionResult {
             started = true
             try await Task.sleep(nanoseconds: 5_000_000_000)
             return TranscriptionResult(

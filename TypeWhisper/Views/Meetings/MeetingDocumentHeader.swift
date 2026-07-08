@@ -10,6 +10,8 @@ struct MeetingDocumentHeader: View {
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
 
+    @State private var isPresentingLanguagePicker = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             titleBlock
@@ -87,8 +89,25 @@ struct MeetingDocumentHeader: View {
     @ViewBuilder
     private var chips: some View {
         outputSelectorChip
+        languageChip
         folderTagsChip
         exportChip
+    }
+
+    // MARK: - Language chip (plan D9; Detect wired in M2)
+
+    private var languageChip: some View {
+        Button {
+            isPresentingLanguagePicker = true
+        } label: {
+            let text = viewModel.languageDisplayName(for: meeting)
+                ?? String(localized: "meetingdoc.language.chip.unset")
+            chipLabel(icon: "globe", text: text)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresentingLanguagePicker, arrowEdge: .bottom) {
+            MeetingLanguagePickerPopover(meeting: meeting, isPresented: $isPresentingLanguagePicker)
+        }
     }
 
     private var outputSelectorChip: some View {
@@ -227,5 +246,100 @@ struct MeetingDocumentHeader: View {
             return kind
         }
         return model.selectedOutputKind
+    }
+}
+
+/// The per-meeting language picker popover (plan D9 / M1): a searchable list with the app's featured
+/// languages ranked first, the current provenance tag, and a Clear action. Detect / Re-detect are
+/// intentionally absent until M2 (detection). Setting a language records it as `.manual`.
+private struct MeetingLanguagePickerPopover: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    let meeting: Meeting
+    @Binding var isPresented: Bool
+
+    @State private var query = ""
+
+    private var options: [LocalizedAppLanguageOption] {
+        let all = viewModel.meetingLanguageOptions
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return all }
+        return all.filter { option in
+            localizedAppLanguageSearchTerms(for: option.code, preferredDisplayName: option.name)
+                .contains { $0.localizedCaseInsensitiveContains(trimmed) }
+        }
+    }
+
+    /// Featured languages first (by app rank), then the rest alphabetically — only when not
+    /// searching, mirroring `LanguageSelectionEditor`.
+    private var orderedOptions: [LocalizedAppLanguageOption] {
+        let filtered = options
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return filtered.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+        let featured = filtered
+            .compactMap { option -> (rank: Int, option: LocalizedAppLanguageOption)? in
+                guard let rank = featuredAppLanguageRank(for: option.code) else { return nil }
+                return (rank, option)
+            }
+            .sorted { $0.rank != $1.rank ? $0.rank < $1.rank : $0.option.name.localizedCaseInsensitiveCompare($1.option.name) == .orderedAscending }
+            .map(\.option)
+        let featuredCodes = Set(featured.map(\.code))
+        let rest = filtered
+            .filter { !featuredCodes.contains($0.code) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return featured + rest
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "meetingdoc.language.picker.title"))
+                .font(.headline)
+
+            if let provenance = viewModel.languageProvenanceLabel(for: meeting) {
+                Text(provenance)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField(String(localized: "meetingdoc.language.picker.search"), text: $query)
+                .textFieldStyle(.roundedBorder)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(orderedOptions, id: \.code) { option in
+                        Button {
+                            viewModel.setMeetingLanguage(option.code, for: meeting)
+                            isPresented = false
+                        } label: {
+                            HStack {
+                                Text(option.name)
+                                Spacer()
+                                if option.code == meeting.languageCode {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 240)
+
+            if meeting.languageCode != nil {
+                Divider()
+                Button(role: .destructive) {
+                    viewModel.clearMeetingLanguage(for: meeting)
+                    isPresented = false
+                } label: {
+                    Label(String(localized: "meetingdoc.language.picker.clear"), systemImage: "xmark.circle")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
     }
 }

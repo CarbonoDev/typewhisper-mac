@@ -96,7 +96,15 @@ final class MeetingLLMService: ObservableObject {
             notesBlock = ""
         }
 
-        let content = try await runMapReduce(template: template, transcript: transcript, notes: notesBlock)
+        // Plan D4: the meeting's output language is enforced by a prompt directive appended to the
+        // final-output prompt (direct path + reduce step), never the extractive map step.
+        let languageDirective = MeetingLanguageDirective.instruction(for: meeting.languageCode)
+        let content = try await runMapReduce(
+            template: template,
+            transcript: transcript,
+            notes: notesBlock,
+            languageDirective: languageDirective
+        )
 
         return meetingService.addOutput(
             to: meeting,
@@ -164,7 +172,11 @@ final class MeetingLLMService: ObservableObject {
             charBudget: charBudget
         )
 
-        let systemPrompt = String(localized: "meetings.qa.systemPrompt")
+        // Plan D4: the answer is the final output — append the meeting's language directive.
+        let systemPrompt = MeetingLanguageDirective.appending(
+            for: meeting.languageCode,
+            to: String(localized: "meetings.qa.systemPrompt")
+        )
         let answer = try await processor.process(
             prompt: systemPrompt,
             text: userText,
@@ -179,18 +191,30 @@ final class MeetingLLMService: ObservableObject {
 
     // MARK: - Map / reduce
 
-    private func runMapReduce(template: PromptAction, transcript: String, notes: String) async throws -> String {
+    private func runMapReduce(
+        template: PromptAction,
+        transcript: String,
+        notes: String,
+        languageDirective: String?
+    ) async throws -> String {
         let chunks = TranscriptContextBuilder.chunk(transcript, charBudget: charBudget)
 
-        // Direct path: the transcript fits a single chunk — one call through the template prompt.
+        // Direct path: the transcript fits a single chunk — one call through the template prompt
+        // (carrying the language directive, plan D4).
         guard chunks.count > 1 else {
             let userText = TranscriptContextBuilder.assemble(transcript: chunks.first ?? transcript, notes: notes)
-            return try await run(template: template, prompt: template.prompt, text: userText)
+            return try await run(
+                template: template,
+                prompt: MeetingLanguageDirective.appending(languageDirective, to: template.prompt),
+                text: userText
+            )
         }
 
         // Map: faithfully condense each chunk. The map instruction is deliberately extractive so
         // the reduce step (which applies the actual template) is not summarizing a summary of a
-        // rephrase. Notes are attached only to the reduce input, never duplicated per chunk.
+        // rephrase. Notes are attached only to the reduce input, never duplicated per chunk. The
+        // language directive is deliberately withheld here (plan D4 / owner-veto 4) — translating at
+        // the map stage would make the reduce input a lossy translation.
         let mapPrompt = String(localized: "meetings.output.mapPrompt")
         var partials: [String] = []
         partials.reserveCapacity(chunks.count)
@@ -216,7 +240,12 @@ final class MeetingLLMService: ObservableObject {
             notes: notes,
             charBudget: charBudget
         )
-        return try await run(template: template, prompt: template.prompt, text: reduceInput)
+        // Reduce is the final-output producer — it carries the language directive (plan D4).
+        return try await run(
+            template: template,
+            prompt: MeetingLanguageDirective.appending(languageDirective, to: template.prompt),
+            text: reduceInput
+        )
     }
 
     private func run(template: PromptAction, prompt: String, text: String) async throws -> String {

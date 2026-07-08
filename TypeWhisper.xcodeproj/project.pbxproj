@@ -238,6 +238,9 @@
 		AA00000000000000000412 /* MeetingDiarizationEnricher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000412 /* MeetingDiarizationEnricher.swift */; };
 		AA00000000000000000411 /* MeetingImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000411 /* MeetingImportView.swift */; };
 		AA00000000000000000413 /* SpeakerMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000413 /* SpeakerMappingView.swift */; };
+		AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000501 /* MeetingLanguageDirective.swift */; };
+		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
+		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
@@ -810,6 +813,9 @@
 		BB00000000000000000412 /* MeetingDiarizationEnricher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDiarizationEnricher.swift; sourceTree = "<group>"; };
 		BB00000000000000000411 /* MeetingImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingImportView.swift; sourceTree = "<group>"; };
 		BB00000000000000000413 /* SpeakerMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerMappingView.swift; sourceTree = "<group>"; };
+		BB00000000000000000501 /* MeetingLanguageDirective.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDirective.swift; sourceTree = "<group>"; };
+		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
+		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
@@ -1847,6 +1853,7 @@
 				DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */,
 				TCF0000000000000000004 /* HomeFeedViewModel.swift */,
 				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
+				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1978,6 +1985,7 @@
 				BB00000000000000000409 /* MeetingImportService.swift */,
 				BB00000000000000000410 /* TranscriptMerger.swift */,
 				BB00000000000000000412 /* MeetingDiarizationEnricher.swift */,
+				BB00000000000000000501 /* MeetingLanguageDirective.swift */,
 				JQF0000000000000000001 /* MeetingJob.swift */,
 				JQF0000000000000000003 /* MeetingJobClock.swift */,
 				JQF0000000000000000002 /* JobQueueService.swift */,
@@ -2666,6 +2674,7 @@
 				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
 				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
+				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
 				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
 				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
@@ -4191,6 +4200,7 @@
 				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
 				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
+				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
 				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
 				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,
@@ -4375,6 +4385,8 @@
 				AA00000000000000000412 /* MeetingDiarizationEnricher.swift in Sources */,
 				AA00000000000000000411 /* MeetingImportView.swift in Sources */,
 				AA00000000000000000413 /* SpeakerMappingView.swift in Sources */,
+				AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */,
+				CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
 				AAB0000000000000000B01 /* PromptSurface.swift in Sources */,
 				AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */,

@@ -42,6 +42,17 @@ enum MeetingOutputKind: String, CaseIterable, Codable, Sendable {
     case brief
 }
 
+/// How a `Meeting`'s language (`Meeting.languageCode`) was decided (plan D1). Stored on the model
+/// as a raw `String` (`Meeting.languageProvenanceRaw`) so the schema stays additive-safe under the
+/// destructive-reset persistence policy. Ordered as a precedence ladder: an explicit per-meeting
+/// pick (`.manual`) outranks standing rule configuration (`.rule`), which outranks an inference
+/// (`.detected`). The single-writer setters on `MeetingService` enforce this ordering.
+enum MeetingLanguageProvenance: String, CaseIterable, Codable, Sendable {
+    case manual
+    case rule
+    case detected
+}
+
 /// The provenance of an individual transcript segment.
 enum MeetingSegmentSource: String, CaseIterable, Codable, Sendable {
     case liveCapture

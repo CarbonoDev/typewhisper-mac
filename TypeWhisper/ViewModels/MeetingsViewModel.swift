@@ -717,7 +717,14 @@ final class MeetingsViewModel: ObservableObject {
     /// the same local compute. A new-meeting import has no meeting id (`nil` dedupe key), so two
     /// different files both import. Cancelling the job creates no meeting (transcription is awaited
     /// before `createFromImport` runs). Failures surface via `importErrorMessage`.
-    func importAudioFile(at url: URL, onImported: @escaping (Meeting) -> Void = { _ in }) {
+    ///
+    /// `languageCode` (plan M1): an optional language chosen in the import sheet's picker. A specific
+    /// code drives transcription and is persisted `.manual` on the created meeting; `nil` = Auto.
+    func importAudioFile(
+        at url: URL,
+        languageCode: String? = nil,
+        onImported: @escaping (Meeting) -> Void = { _ in }
+    ) {
         importErrorMessage = nil
         jobQueue.enqueue(
             kind: .audioImport,
@@ -726,7 +733,7 @@ final class MeetingsViewModel: ObservableObject {
         ) { [weak importService, weak self] in
             guard let importService else { return }
             do {
-                let meeting = try await importService.importAudioFile(at: url)
+                let meeting = try await importService.importAudioFile(at: url, languageCode: languageCode)
                 onImported(meeting)
             } catch {
                 self?.importErrorMessage = error.localizedDescription

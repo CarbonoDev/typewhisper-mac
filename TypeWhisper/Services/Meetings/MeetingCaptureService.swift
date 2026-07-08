@@ -83,7 +83,7 @@ final class MeetingCaptureService: ObservableObject {
     /// Test seam (plan J2): overrides the full-buffer final re-transcription so the success /
     /// keep-live / cancellation paths can be exercised without a loaded transcription plugin. Nil in
     /// production (uses `modelManager.transcribe`). Mirrors `AudioRecorderService`'s override hooks.
-    var finalizeTranscribeOverrideForTesting: (@MainActor (_ samples: [Float]) async throws -> TranscriptionResult)?
+    var finalizeTranscribeOverrideForTesting: (@MainActor (_ samples: [Float], _ languageSelection: LanguageSelection) async throws -> TranscriptionResult)?
     /// Interval (seconds) between durable stable-segment flushes during capture (plan D2 ≤ 5 s).
     private let flushIntervalSeconds: TimeInterval
     /// Publishes `MeetingEvent`s to plugins (addendum AD4). Defaulted no-op so v1 call sites/tests
@@ -492,12 +492,23 @@ final class MeetingCaptureService: ObservableObject {
             streamPrompt: "",
             engineOverrideId: providerId,
             selectedProviderId: selectedProviderId,
-            languageSelection: sessionLanguageOverride ?? .auto,
+            languageSelection: liveLanguageSelection(),
             task: .transcribe,
             cloudModelOverride: cloudModelOverride,
             allowLiveTranscription: true,
             stateCheck: { [weak self] in self?.isCapturing == true }
         )
+    }
+
+    /// Resolve the live-capture engine language for the active meeting (plan D2/D3): the meeting's
+    /// persisted language wins (manual > rule > detected, all folded into the one column), else the
+    /// session rule override (which survives only for non-`.exact` rule values, e.g. `.hints`), else
+    /// `.auto`.
+    private func liveLanguageSelection() -> LanguageSelection {
+        if let meeting = activeMeeting, meeting.languageCode != nil {
+            return meetingService.transcriptionLanguageSelection(for: meeting)
+        }
+        return sessionLanguageOverride ?? .auto
     }
 
     /// Ingest a stabilized transcript snapshot from the streaming handler: update the preview and,
@@ -590,6 +601,9 @@ final class MeetingCaptureService: ObservableObject {
         // AD8: resolve the final re-transcription policy (per-meeting → rule → global → sameEngine)
         // and apply the availability + cloud-ceiling guards.
         let policy = resolveFinalRetranscriptionPolicy(for: meeting, sessionRulePolicy: sessionRulePolicy)
+        // Both final-pass paths honor the meeting's persisted language (plan D3, table rows 2/3):
+        // `.exact(code)` when set, else `.auto`.
+        let languageSelection = meetingService.transcriptionLanguageSelection(for: meeting)
         let durationSeconds = Double(buffer.count) / MeetingCaptureService.sampleRate
         let plan = FinalRetranscriptionPolicy.plan(
             for: policy,
@@ -604,11 +618,17 @@ final class MeetingCaptureService: ObservableObject {
             // `.off`: skip re-transcription entirely; the persisted `.liveCapture` segments stand.
             return (nil, plan.degraded)
         case .sameEngine:
-            let segments = await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+            let segments = await runSameEngineFinalize(
+                liveSessionResult: liveSessionResult, buffer: buffer, languageSelection: languageSelection
+            )
             return (segments, plan.degraded)
         case .engine(let id, let model):
             let outcome = await runOverrideEngineFinalize(
-                liveSessionResult: liveSessionResult, buffer: buffer, engineId: id, model: model
+                liveSessionResult: liveSessionResult,
+                buffer: buffer,
+                engineId: id,
+                model: model,
+                languageSelection: languageSelection
             )
             return (outcome.segments, plan.degraded || outcome.degraded)
         }
@@ -635,7 +655,8 @@ final class MeetingCaptureService: ObservableObject {
     /// the full buffer with the Recorder's engine defaults; keep live segments on failure.
     private func runSameEngineFinalize(
         liveSessionResult: TranscriptionResult?,
-        buffer: [Float]
+        buffer: [Float],
+        languageSelection: LanguageSelection
     ) async -> [TranscriptionSegment]? {
         if let liveSessionResult, !liveSessionResult.segments.isEmpty {
             return liveSessionResult.segments
@@ -654,11 +675,11 @@ final class MeetingCaptureService: ObservableObject {
             // cancellation paths are exercisable without a loaded transcription plugin (plan J2).
             let result: TranscriptionResult
             if let finalizeTranscribeOverrideForTesting {
-                result = try await finalizeTranscribeOverrideForTesting(buffer)
+                result = try await finalizeTranscribeOverrideForTesting(buffer, languageSelection)
             } else {
                 result = try await modelManager.transcribe(
                     audioSamples: buffer,
-                    languageSelection: .auto,
+                    languageSelection: languageSelection,
                     task: .transcribe,
                     engineOverrideId: providerId,
                     cloudModelOverride: cloudModelOverride,
@@ -684,13 +705,14 @@ final class MeetingCaptureService: ObservableObject {
         liveSessionResult: TranscriptionResult?,
         buffer: [Float],
         engineId: String,
-        model: String?
+        model: String?,
+        languageSelection: LanguageSelection
     ) async -> (segments: [TranscriptionSegment]?, degraded: Bool) {
         guard buffer.count > 8_000 else { return (nil, false) }
         do {
             let result = try await modelManager.transcribe(
                 audioSamples: buffer,
-                languageSelection: .auto,
+                languageSelection: languageSelection,
                 task: .transcribe,
                 engineOverrideId: engineId,
                 cloudModelOverride: model,
@@ -704,7 +726,9 @@ final class MeetingCaptureService: ObservableObject {
         }
         // Override produced nothing usable — degrade one step (never lose content). Prefer the
         // already-computed live-session segments before paying for a second full-buffer pass.
-        let segments = await runSameEngineFinalize(liveSessionResult: liveSessionResult, buffer: buffer)
+        let segments = await runSameEngineFinalize(
+            liveSessionResult: liveSessionResult, buffer: buffer, languageSelection: languageSelection
+        )
         return (segments, true)
     }
 
@@ -780,7 +804,14 @@ final class MeetingCaptureService: ObservableObject {
             sessionLiveModelOverride = model
         }
         if let language = actions.languageSelection {
-            sessionLanguageOverride = LanguageSelection(storedValue: language, nilBehavior: .auto)
+            let resolved = LanguageSelection(storedValue: language, nilBehavior: .auto)
+            sessionLanguageOverride = resolved
+            // Plan D2: a rule whose language resolves to a single exact code *seeds* the meeting
+            // language (`.rule`, ladder-checked so it never clobbers a manual pick). Non-`.exact`
+            // rule values (`.hints`, auto) persist nothing — they stay session-only overrides.
+            if case .exact(let code) = resolved {
+                meetingService.seedRuleLanguage(code, for: meeting)
+            }
         }
         sessionRulePolicy = actions.finalRetranscription
         activeMeetingDefaultTemplateID = actions.defaultOutputTemplateID

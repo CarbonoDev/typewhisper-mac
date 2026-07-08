@@ -9,14 +9,20 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// without the plugin graph. `ModelManagerService` conforms via the extension below.
 @MainActor
 protocol MeetingAudioTranscribing: AnyObject {
-    func transcribeImportedAudio(samples: [Float]) async throws -> TranscriptionResult
+    func transcribeImportedAudio(
+        samples: [Float],
+        languageSelection: LanguageSelection
+    ) async throws -> TranscriptionResult
 }
 
 extension ModelManagerService: MeetingAudioTranscribing {
-    func transcribeImportedAudio(samples: [Float]) async throws -> TranscriptionResult {
+    func transcribeImportedAudio(
+        samples: [Float],
+        languageSelection: LanguageSelection
+    ) async throws -> TranscriptionResult {
         try await transcribe(
             audioSamples: samples,
-            languageSelection: .auto,
+            languageSelection: languageSelection,
             task: .transcribe,
             onProgress: { _ in true }
         )
@@ -92,14 +98,24 @@ final class MeetingImportService: ObservableObject {
     /// `.importedAudio` meeting with timestamped segments. A **copy** of the source audio is adopted
     /// into `meetings-audio/` (the user's original file is never moved). Throws when transcription
     /// yields no segments.
+    ///
+    /// `languageCode` (plan D1/M1): when the import sheet's optional language picker selects a
+    /// specific language, its code drives transcription (`.exact`) **and** is persisted `.manual` on
+    /// the created meeting so every downstream consumer honors it. `nil` = Auto (`.auto`
+    /// transcription; the meeting is left language-unset for M2 detection).
     @discardableResult
-    func importAudioFile(at url: URL, title: String? = nil) async throws -> Meeting {
+    func importAudioFile(at url: URL, title: String? = nil, languageCode: String? = nil) async throws -> Meeting {
         guard !isImporting else { throw ImportError.alreadyImporting }
         isImporting = true
         defer { isImporting = false }
 
+        let normalizedCode = languageCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let selection: LanguageSelection = (normalizedCode?.isEmpty == false)
+            ? .exact(normalizedCode!)
+            : .auto
+
         let samples = try await audioFileService.loadAudioSamples(from: url)
-        let result = try await transcriber.transcribeImportedAudio(samples: samples)
+        let result = try await transcriber.transcribeImportedAudio(samples: samples, languageSelection: selection)
         guard !result.segments.isEmpty else { throw ImportError.emptyAudioTranscription }
 
         // Adopt a copy so the original is untouched; `adoptAudioFile` moves, so stage a temp copy.
@@ -111,6 +127,10 @@ final class MeetingImportService: ObservableObject {
             segmentSource: .importedAudio,
             audioFileURL: audioURL
         )
+        // Persist the chosen language as an explicit `.manual` pick (a user selection in the sheet).
+        if let normalizedCode, !normalizedCode.isEmpty {
+            meetingService.setLanguage(normalizedCode, for: meeting)
+        }
         return meeting
     }
 

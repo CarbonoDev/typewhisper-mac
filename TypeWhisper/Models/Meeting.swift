@@ -27,6 +27,14 @@ final class Meeting {
     /// nil = inherit the matched rule / global default / `.sameEngine`).
     var finalRetranscriptionRaw: String?
     var notesIncludedInOutputs: Bool
+    /// The meeting's spoken/output language as a BCP-47 / ISO-639-1 code, lowercased ("en", "de",
+    /// "pt-br"); `nil` = unset (plan D1, additive). Read on hot paths — engine config, every LLM
+    /// call, export frontmatter — so it is a directly-queryable column, not a JSON blob.
+    var languageCode: String?
+    /// How `languageCode` was decided: `"manual" | "rule" | "detected"` (see
+    /// `MeetingLanguageProvenance`). `nil` whenever `languageCode` is `nil`. Additive column;
+    /// written only by the single-writer setters on `MeetingService`.
+    var languageProvenanceRaw: String?
     var obsidianFolder: String?
     /// JSON-encoded `[String]` (see `obsidianTags`).
     var obsidianTagsJSON: String?
@@ -63,6 +71,8 @@ final class Meeting {
         audioFileName: String? = nil,
         finalRetranscriptionRaw: String? = nil,
         notesIncludedInOutputs: Bool = true,
+        languageCode: String? = nil,
+        languageProvenanceRaw: String? = nil,
         obsidianFolder: String? = nil,
         obsidianTagsJSON: String? = nil,
         lastObsidianExportAt: Date? = nil,
@@ -82,6 +92,8 @@ final class Meeting {
         self.audioFileName = audioFileName
         self.finalRetranscriptionRaw = finalRetranscriptionRaw
         self.notesIncludedInOutputs = notesIncludedInOutputs
+        self.languageCode = languageCode
+        self.languageProvenanceRaw = languageProvenanceRaw
         self.obsidianFolder = obsidianFolder
         self.obsidianTagsJSON = obsidianTagsJSON
         self.lastObsidianExportAt = lastObsidianExportAt
@@ -103,6 +115,17 @@ final class Meeting {
     var source: MeetingSource {
         get { MeetingSource(rawValue: sourceRaw) ?? .adHoc }
         set { sourceRaw = newValue.rawValue }
+    }
+
+    /// How `languageCode` was decided (plan D1). `nil` when no language is set; otherwise decoded
+    /// from `languageProvenanceRaw`. Never written directly by call sites — the `MeetingService`
+    /// setters own the ladder.
+    var languageProvenance: MeetingLanguageProvenance? {
+        get {
+            guard let languageProvenanceRaw else { return nil }
+            return MeetingLanguageProvenance(rawValue: languageProvenanceRaw)
+        }
+        set { languageProvenanceRaw = newValue?.rawValue }
     }
 
     // MARK: - JSON column accessors

@@ -455,7 +455,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         let meetingService = MeetingService(appSupportDirectory: dir)
         let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
         let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
-        capture.finalizeTranscribeOverrideForTesting = { _ in self.result("Final clean transcript.") }
+        capture.finalizeTranscribeOverrideForTesting = { _, _ in self.result("Final clean transcript.") }
 
         let meeting = meetingService.createMeeting(title: "Proc", source: .adHoc, state: .scheduled)
         try await capture.start(meeting: meeting)
@@ -477,7 +477,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         let meetingService = MeetingService(appSupportDirectory: dir)
         let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
         let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
-        capture.finalizeTranscribeOverrideForTesting = { _ in self.result("Final clean transcript.") }
+        capture.finalizeTranscribeOverrideForTesting = { _, _ in self.result("Final clean transcript.") }
 
         let meeting = meetingService.createMeeting(title: "Success", source: .adHoc, state: .scheduled)
         try await capture.start(meeting: meeting)
@@ -499,7 +499,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
         // Blocks long enough that the test cancels it first; the cancelled sleep throws, so the
         // override's result is never used and the keep-live fallback fires.
-        capture.finalizeTranscribeOverrideForTesting = { _ in
+        capture.finalizeTranscribeOverrideForTesting = { _, _ in
             try await Task.sleep(nanoseconds: 5_000_000_000)
             return self.result("SHOULD_NOT_BE_USED")
         }
