@@ -31,8 +31,16 @@ protocol MeetingBriefGenerating: AnyObject {
     func generateBrief(for meeting: Meeting) async throws -> MeetingOutput
 }
 
+/// Related-docs discovery seam (Amendment 2, DB6). `MeetingRelatedDocsService` conforms; tests inject a
+/// stub that never touches an LLM.
+@MainActor
+protocol MeetingRelatedDiscovering: AnyObject {
+    func discoverRelated(for meeting: Meeting) async throws
+}
+
 extension MeetingService: MeetingBriefSchedulerStore {}
 extension MeetingBriefService: MeetingBriefGenerating {}
+extension MeetingRelatedDocsService: MeetingRelatedDiscovering {}
 
 /// Automatic pre-meeting briefs (plan AD9 / job-queue plan J2). Hooked into the existing calendar
 /// poll: on each `tick(events:now:)` it looks for calendar events entering the pre-meeting lead window
@@ -50,6 +58,12 @@ final class MeetingBriefScheduler: ObservableObject {
     private let briefService: MeetingBriefGenerating
     private let jobQueue: JobQueueService
     private let defaults: UserDefaults
+    /// Related-docs discovery (Amendment 2, DB6). Optional so predating call sites/tests construct the
+    /// scheduler without it — a nil service means no auto-discovery is enqueued (briefs are unaffected).
+    private let relatedDocsService: MeetingRelatedDiscovering?
+    /// Whether a vault is connected (Amendment 2, DB6 gate). A closure so the scheduler needs no hard
+    /// dependency on `ObsidianVaultService`; defaults to "not connected" (no discovery).
+    private let isVaultConnected: () -> Bool
 
     /// Calendar-event ids whose backing `Meeting` this scheduler pre-created as an auto-brief
     /// placeholder (no user action). These must NOT be treated as "already handled" by the
@@ -72,12 +86,16 @@ final class MeetingBriefScheduler: ObservableObject {
         store: MeetingBriefSchedulerStore,
         briefService: MeetingBriefGenerating,
         jobQueue: JobQueueService,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        relatedDocsService: MeetingRelatedDiscovering? = nil,
+        isVaultConnected: @escaping () -> Bool = { false }
     ) {
         self.store = store
         self.briefService = briefService
         self.jobQueue = jobQueue
         self.defaults = defaults
+        self.relatedDocsService = relatedDocsService
+        self.isVaultConnected = isVaultConnected
     }
 
     // MARK: - Config (plan AD9 keys)
@@ -127,6 +145,10 @@ final class MeetingBriefScheduler: ObservableObject {
             guard !failedEventIDs.contains(event.id) else { continue }
             let meeting = resolveMeeting(for: event)
             if hasFreshBrief(for: meeting, freshnessHours: config.freshnessHours, now: now) { continue }
+            // Amendment 2 (DB6): enqueue a gated `.background` `relatedDiscovery` *ahead* of the brief on
+            // the same cap-1 llm lane so it runs first (FIFO within priority) and the brief consumes fresh
+            // related docs. A fail-closed discovery just means the brief falls back to folder scope.
+            enqueueRelatedDiscoveryIfNeeded(meeting: meeting, freshnessHours: config.freshnessHours, now: now)
             enqueueBrief(meeting: meeting, eventID: event.id)
         }
     }
@@ -210,5 +232,40 @@ final class MeetingBriefScheduler: ObservableObject {
     /// lead window (the queue does not auto-retry; only a J3 user Retry does).
     private func recordAutoBriefFailure(eventID: String) {
         failedEventIDs.insert(eventID)
+    }
+
+    // MARK: - Auto related-docs discovery (Amendment 2, DB6)
+
+    /// Enqueue a gated `.background` `relatedDiscovery` for `meeting` when: a discovery service + vault
+    /// are present; the meeting has a folder path *or* a non-trivial wider-vault query; and no *fresh*
+    /// discovery exists (`relatedDiscoveryAt` within the brief freshness window). Deduped by
+    /// `(relatedDiscovery, meetingID)`, so repeated ticks never stack a second one.
+    private func enqueueRelatedDiscoveryIfNeeded(meeting: Meeting, freshnessHours: Int, now: Date) {
+        guard let relatedDocsService, isVaultConnected() else { return }
+        let hasFolder = !MeetingService.folderComponents(meeting.folderPath).isEmpty
+        let query = discoveryQuery(for: meeting)
+        guard hasFolder || !query.isEmpty else { return }
+
+        if let lastRun = meeting.relatedDiscoveryAt {
+            let cutoff = now.addingTimeInterval(-TimeInterval(freshnessHours * 3600))
+            if lastRun >= cutoff { return }
+        }
+
+        jobQueue.enqueue(
+            kind: .relatedDiscovery,
+            meetingID: meeting.id,
+            priority: .background,
+            progressLabel: String(localized: "meetings.jobs.progress.findingRelated")
+        ) { [weak relatedDocsService] in
+            try await relatedDocsService?.discoverRelated(for: meeting)
+        }
+    }
+
+    /// The wider-vault query used to decide whether discovery is worthwhile: title + attendee names
+    /// (mirrors `MeetingRelatedDocsService.retrievalQuery`).
+    private func discoveryQuery(for meeting: Meeting) -> String {
+        var terms = [meeting.title]
+        terms.append(contentsOf: meeting.attendees.map(\.name))
+        return terms.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

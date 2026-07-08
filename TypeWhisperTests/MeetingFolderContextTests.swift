@@ -71,6 +71,28 @@ final class MeetingFolderMetadataStoreTests: XCTestCase {
         XCTAssertEqual(store.config(for: "Clients/Acme2").description, "lookalike", "look-alike untouched")
     }
 
+    /// M7 minor: a rename that collides with a config already at the destination **merges** instead of
+    /// silently overwriting it — union attachments, keep the destination's non-empty description, OR the
+    /// noVaultContext flags — so no configuration is lost.
+    func testHandleFolderRewriteMergesOnDestinationCollision() {
+        let store = MeetingFolderMetadataStore(defaults: makeDefaults())
+        // Source (moving) folder.
+        store.setDescription("source desc", for: "Clients/Acme")
+        store.attachNotes(["Notes/Source.md"], to: "Clients/Acme")
+        store.setNoVaultContext(true, for: "Clients/Acme")
+        // Pre-existing destination folder with its own config.
+        store.setDescription("dest desc", for: "Clients/AcmeCorp")
+        store.attachNotes(["Notes/Dest.md"], to: "Clients/AcmeCorp")
+
+        store.handleFolderRewrite(from: "Clients/Acme", to: "Clients/AcmeCorp")
+
+        let merged = store.config(for: "Clients/AcmeCorp")
+        XCTAssertEqual(merged.description, "dest desc", "destination's non-empty description kept")
+        XCTAssertEqual(Set(merged.attachedNotePaths), ["Notes/Dest.md", "Notes/Source.md"], "attachments unioned")
+        XCTAssertTrue(merged.noVaultContext, "noVaultContext OR-ed from the source")
+        XCTAssertTrue(store.config(for: "Clients/Acme").isEmpty, "source key gone")
+    }
+
     /// A folder delete drops the config and every descendant config; look-alike untouched — the M4
     /// `onFolderDeleted` seam.
     func testHandleFolderDeletedDropsKeyAndDescendants() {

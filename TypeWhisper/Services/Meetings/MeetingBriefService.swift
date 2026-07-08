@@ -152,10 +152,11 @@ final class MeetingBriefService: ObservableObject {
     /// nothing matches.
     private func knowledgeBaseBlock(for meeting: Meeting) -> String {
         guard vaultService.isConnected else { return "" }
-        // Amendment 1 (DA5): the meeting's folder config scopes vault retrieval. `.none` (the folder's
-        // "No vault context" toggle) ⇒ an empty KB block (brief falls back to prior meetings only);
-        // no folder config / no attachments ⇒ `.wholeVault` (today's behavior).
-        let scope = folderMetadataStore?.retrievalScope(forFolderPath: meeting.folderPath) ?? .wholeVault
+        // Amendment 1 (DA5) + Amendment 2 (DB5): the meeting's curated related notes ∪ its folder
+        // config scope vault retrieval. `.none` (the folder's "No vault context" toggle, absolute) ⇒
+        // an empty KB block (brief falls back to prior meetings only); no curated set / no folder
+        // attachments ⇒ `.wholeVault` (today's behavior).
+        let scope = retrievalScope(for: meeting)
         if case .none = scope { return "" }
         let query = retrievalQuery(for: meeting)
         guard !query.isEmpty else { return "" }
@@ -167,6 +168,18 @@ final class MeetingBriefService: ObservableObject {
                 return "### \(passage.title)\(tagSuffix)\n\(passage.content)"
             }
             .joined(separator: "\n\n")
+    }
+
+    /// The DB5 consumption scope for a meeting: curated related notes (discovered ∪ manual, minus
+    /// exclusions) unioned with the folder's live attachment scope, `noVaultContext` absolute
+    /// (Amendment 2, DB5). A nil folder store keeps whole-vault behavior (predating call sites/tests).
+    private func retrievalScope(for meeting: Meeting) -> VaultRetrievalScope {
+        guard let folderMetadataStore else { return .wholeVault }
+        return folderMetadataStore.retrievalScope(
+            forFolderPath: meeting.folderPath,
+            curatedNotePaths: meeting.relatedNotePaths.map(\.path),
+            excludedNotePaths: meeting.excludedNotePaths
+        )
     }
 
     /// The lexical query used to find relevant vault notes: the meeting title plus attendee names.

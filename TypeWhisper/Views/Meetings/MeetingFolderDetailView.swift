@@ -24,8 +24,15 @@ struct MeetingFolderDetailView: View {
         MeetingService.folderComponents(folderPath).last ?? folderPath
     }
 
+    /// The folder's meetings, honoring the coordinator's active **tag** filter (M7 minor): the sidebar
+    /// keeps the tag row highlighted while this view is open, so the rendered list must compose the same
+    /// folder + tag AND filter (plan D8) rather than ignoring the active tag.
     private var folderMeetings: [Meeting] {
-        viewModel.meetings(inFolder: folderPath)
+        MeetingsViewModel.filteredMeetings(
+            viewModel.meetings,
+            folder: folderPath,
+            tag: coordinator.activeTag
+        )
     }
 
     var body: some View {

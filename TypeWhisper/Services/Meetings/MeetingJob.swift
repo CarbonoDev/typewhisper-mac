@@ -7,6 +7,8 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     case extendedAnalysis
     case brief
     case languageDetection
+    /// Agentic related-vault-document discovery (Amendment 2, DB1): one single-turn LLM judge call.
+    case relatedDiscovery
     case finalTranscription
     case audioImport
     case diarization
@@ -16,10 +18,10 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     /// work, and I/O each get their own lane so they never contend across categories.
     var lane: MeetingJobLane {
         switch self {
-        case .summary, .extendedAnalysis, .brief, .languageDetection:
-            // Language detection is a single-turn LLM call (plan D5) — it shares the cap-1 `llm` lane so
-            // it is never concurrent with a user generation and a `.background` detection yields to a
-            // `.userInitiated` summary.
+        case .summary, .extendedAnalysis, .brief, .languageDetection, .relatedDiscovery:
+            // Language detection and related-docs discovery are single-turn LLM calls (plan D5;
+            // Amendment 2, DB1) — they share the cap-1 `llm` lane so they are never concurrent with a
+            // user generation, and a discovery enqueued ahead of an auto-brief runs first (DB6).
             return .llm
         case .finalTranscription, .audioImport, .diarization:
             return .transcription
@@ -106,6 +108,7 @@ extension MeetingJobKind {
         case .extendedAnalysis: return String(localized: "meetings.jobs.kind.extendedAnalysis")
         case .brief: return String(localized: "meetings.jobs.kind.brief")
         case .languageDetection: return String(localized: "meetings.jobs.kind.languageDetection")
+        case .relatedDiscovery: return String(localized: "meetings.jobs.kind.relatedDiscovery")
         case .finalTranscription: return String(localized: "meetings.jobs.kind.finalTranscription")
         case .audioImport: return String(localized: "meetings.jobs.kind.audioImport")
         case .diarization: return String(localized: "meetings.jobs.kind.diarization")

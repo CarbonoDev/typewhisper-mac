@@ -42,6 +42,17 @@ final class Meeting {
     /// `nil` until the meeting has actually been exported at least once; this is the source of truth
     /// for the "In vault" badge (never the mere presence of an `obsidianFolder` path).
     var lastObsidianExportAt: Date?
+    /// JSON-encoded `[RelatedNote]` — the per-meeting explicit related vault notes *beyond* folder
+    /// scope: judge-kept wider-vault suggestions (`discovered`) and user picks (`manual`) (Amendment 2,
+    /// DB4). Additive/optional ⇒ no migration. Folder-attached notes are NOT stored here (they stay
+    /// live folder scope, DB5). Written only by the single-writer setters on `MeetingService`.
+    var relatedNotePathsJSON: String?
+    /// JSON-encoded `[String]` of vault-relative paths the user removed (Amendment 2, DB4). A removal
+    /// suppresses a path **everywhere** (curated *and* folder-derived) so it "never resurrects."
+    var excludedNotePathsJSON: String?
+    /// Timestamp of the last successful related-docs discovery run (Amendment 2, DB4); backs the
+    /// auto-trigger freshness gate (DB6). `nil` until discovery has succeeded at least once.
+    var relatedDiscoveryAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -76,6 +87,9 @@ final class Meeting {
         obsidianFolder: String? = nil,
         obsidianTagsJSON: String? = nil,
         lastObsidianExportAt: Date? = nil,
+        relatedNotePathsJSON: String? = nil,
+        excludedNotePathsJSON: String? = nil,
+        relatedDiscoveryAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -97,6 +111,9 @@ final class Meeting {
         self.obsidianFolder = obsidianFolder
         self.obsidianTagsJSON = obsidianTagsJSON
         self.lastObsidianExportAt = lastObsidianExportAt
+        self.relatedNotePathsJSON = relatedNotePathsJSON
+        self.excludedNotePathsJSON = excludedNotePathsJSON
+        self.relatedDiscoveryAt = relatedDiscoveryAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.segments = []
@@ -169,6 +186,21 @@ final class Meeting {
         set { finalRetranscriptionRaw = newValue?.jsonString }
     }
 
+    /// The per-meeting curated related notes beyond folder scope (Amendment 2, DB4): `discovered`
+    /// (judge-kept) and `manual` (user picks). Never written directly by call sites — the
+    /// `MeetingService` single-writer setters own the provenance rules.
+    var relatedNotePaths: [RelatedNote] {
+        get { Meeting.decode([RelatedNote].self, from: relatedNotePathsJSON) ?? [] }
+        set { relatedNotePathsJSON = Meeting.encode(newValue) }
+    }
+
+    /// Vault-relative paths the user removed (Amendment 2, DB4). A removal suppresses a path
+    /// everywhere and is never resurrected by a later discovery run.
+    var excludedNotePaths: [String] {
+        get { Meeting.decode([String].self, from: excludedNotePathsJSON) ?? [] }
+        set { excludedNotePathsJSON = Meeting.encode(newValue) }
+    }
+
     // MARK: - Codable helpers
 
     static func encode<T: Encodable>(_ value: T) -> String? {
@@ -180,4 +212,36 @@ final class Meeting {
         guard let json, let data = json.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
+}
+
+/// One per-meeting curated related note (Amendment 2, DB4). Persisted as a `[RelatedNote]` JSON blob
+/// on `Meeting.relatedNotePathsJSON`. `provenanceRaw` is stored (not the enum) so an unknown value
+/// decoded from a future version degrades to `nil` rather than failing the whole decode.
+struct RelatedNote: Codable, Equatable, Sendable {
+    /// Vault-relative `.md` path.
+    var path: String
+    /// `"discovered"` (judge-kept wider-vault suggestion) or `"manual"` (user pick).
+    var provenanceRaw: String
+
+    init(path: String, provenanceRaw: String) {
+        self.path = path
+        self.provenanceRaw = provenanceRaw
+    }
+
+    init(path: String, provenance: RelatedNoteProvenance) {
+        self.path = path
+        self.provenanceRaw = provenance.rawValue
+    }
+
+    var provenance: RelatedNoteProvenance? {
+        RelatedNoteProvenance(rawValue: provenanceRaw)
+    }
+}
+
+/// How a `RelatedNote` entered the per-meeting set (Amendment 2, DB4).
+enum RelatedNoteProvenance: String, Sendable {
+    /// Kept by the LLM relevance judge from wider-vault lexical candidates.
+    case discovered
+    /// Added by the user via the vault picker.
+    case manual
 }

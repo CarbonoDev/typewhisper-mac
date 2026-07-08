@@ -371,4 +371,58 @@ final class MeetingBriefServiceTests: XCTestCase {
         XCTAssertEqual(output.providerUsed, "anthropic")
         XCTAssertEqual(output.modelUsed, "claude-3")
     }
+
+    // MARK: - M8: curated related-docs consumption (Amendment 2, DB5)
+
+    /// A connected vault with three equally query-matching "Acme" notes, each carrying a unique marker
+    /// so the assembled KB block reveals exactly which notes were retrieved.
+    private func makeCuratedVault(defaults: UserDefaults) throws -> ObsidianVaultService {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingBriefCuratedVault")
+        addTeardownBlock { TestSupport.remove(dir) }
+        func write(_ name: String, marker: String) throws {
+            try """
+            # \(name)
+            Background on the acme sync roadmap. \(marker)
+            """.write(to: dir.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8)
+        }
+        try write("Acme One", marker: "CURATED_ONE")
+        try write("Acme Two", marker: "CURATED_TWO")
+        try write("Acme Three", marker: "UNCURATED_THREE")
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: dir.path)
+        return service
+    }
+
+    /// The brief's KB block draws **only** from the meeting's curated related notes (discovered ∪
+    /// manual, minus exclusions) threaded into `retrievalScope`, never the whole vault (Amendment 2,
+    /// DB5). Curates two notes and excludes one, then asserts only the surviving curated note reaches
+    /// the `text` argument — a non-curated vault note and the excluded one are both absent. This
+    /// exercises the `curatedNotePaths`/`excludedNotePaths` wiring that a whole-vault fallback would
+    /// silently pass.
+    func testBriefKnowledgeBaseDrawsOnlyFromCuratedNotesHonoringExclusions() async throws {
+        let defaults = makeDefaults()
+        let service = try makeService()
+        let vault = try makeCuratedVault(defaults: defaults)
+        let folderStore = MeetingFolderMetadataStore(defaults: defaults)
+        let stub = StubProcessor()
+        let brief = MeetingBriefService(
+            meetingService: service,
+            vaultService: vault,
+            processor: stub,
+            folderMetadataStore: folderStore
+        )
+
+        let target = service.createMeeting(title: "Acme Sync", source: .adHoc, state: .scheduled)
+        // Curate One and Two, then remove Two → curated = {One}, excluded = {Two}.
+        service.addManualRelatedNote("Acme One.md", for: target)
+        service.addManualRelatedNote("Acme Two.md", for: target)
+        service.removeRelatedNote("Acme Two.md", for: target)
+
+        _ = try await brief.generateBrief(for: target)
+
+        let call = try XCTUnwrap(stub.calls.first)
+        XCTAssertTrue(call.text.contains("CURATED_ONE"))
+        XCTAssertFalse(call.text.contains("CURATED_TWO"), "an excluded curated note must not be retrieved")
+        XCTAssertFalse(call.text.contains("UNCURATED_THREE"), "a non-curated vault note must not leak in")
+    }
 }

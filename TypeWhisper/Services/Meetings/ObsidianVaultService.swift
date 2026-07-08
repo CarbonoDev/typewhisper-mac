@@ -197,6 +197,71 @@ final class ObsidianVaultService: ObservableObject {
         }
     }
 
+    // MARK: - Related-docs candidate generation (Amendment 2, DB2)
+
+    /// A wider-vault lexical candidate for the relevance judge (Amendment 2, DB2): a ranked note with a
+    /// bounded excerpt. Cheaper to feed the judge than a full `VaultPassage` — the excerpt is capped by
+    /// the caller's budget (DB7).
+    struct VaultCandidate: Sendable, Equatable {
+        let path: String
+        let title: String
+        let folderPath: String
+        let excerpt: String
+    }
+
+    /// Rank the wider vault against `query` and return the top `limit` candidates, **excluding** every
+    /// already-covered path — stage-(a) folder notes + existing manual/excluded paths (`excludingPaths`)
+    /// and every attached folder prefix (`excludingFolderPrefixes`, component-wise so `Acme` never
+    /// covers `Acme2`) (Amendment 2, DB2). Reuses the same enumerator + `LexicalRetriever` as `retrieve`;
+    /// each excerpt is truncated to `excerptCap` (DB7). Empty when no vault is connected.
+    func candidateNotes(
+        query: String,
+        limit: Int,
+        excludingPaths: Set<String>,
+        excludingFolderPrefixes: [String],
+        excerptCap: Int
+    ) -> [VaultCandidate] {
+        guard let vaultPath else { return [] }
+        guard limit > 0 else { return [] }
+        // Reuse the tested scope predicate to identify covered paths (a note is covered iff it is an
+        // excluded/attached path or sits under an attached folder prefix).
+        let covered = VaultRetrievalScope.restricted(
+            notePaths: excludingPaths,
+            folderPrefixes: excludingFolderPrefixes
+        )
+        let notes = enumerateNotes(in: vaultPath).filter { !covered.includes($0.id) }
+        guard !notes.isEmpty else { return [] }
+
+        let documents = notes.map { note in
+            LexicalRetriever.Document(
+                id: note.id,
+                text: ([note.title] + note.tags + [note.body]).joined(separator: " ")
+            )
+        }
+        let ranked = LexicalRetriever.rank(query: query, documents: documents, limit: limit)
+        let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        return ranked.compactMap { result in
+            guard let note = byID[result.id] else { return nil }
+            return VaultCandidate(
+                path: note.id,
+                title: note.title,
+                folderPath: (note.id as NSString).deletingLastPathComponent,
+                excerpt: TranscriptContextBuilder.truncateWords(note.body, to: excerptCap)
+            )
+        }
+    }
+
+    /// Whether a vault-relative `.md` path resolves to an existing file (Amendment 2, DB4 —
+    /// show-as-missing). `false` when no vault is connected or the path is a directory / gone.
+    func noteExists(_ relativePath: String) -> Bool {
+        guard let vaultPath else { return false }
+        let rel = MeetingService.normalizeVaultRelPath(relativePath)
+        guard !rel.isEmpty else { return false }
+        let url = URL(fileURLWithPath: vaultPath, isDirectory: true).appendingPathComponent(rel)
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && !isDirectory.boolValue
+    }
+
     // MARK: - Read-only listing (Amendment 1, DA8 — shared vault-enumeration primitive)
 
     /// Every note and folder in the vault as lightweight `VaultEntry` values — no body parse (cheaper

@@ -376,4 +376,56 @@ final class MeetingLLMServiceTests: XCTestCase {
         XCTAssertFalse(llm.answeringMeetingIDs.contains(a.id), "the id clears when the answer settles")
         XCTAssertEqual(a.qaTurns.count, 1)
     }
+
+    // MARK: - M8: curated related-docs consumption in Q&A (Amendment 2, DB5)
+
+    /// A connected vault with two equally query-matching notes, each carrying a unique marker.
+    private func makeCuratedVault() throws -> ObsidianVaultService {
+        let suite = "MeetingLLMServiceTests-Vault-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingLLMCuratedVault")
+        addTeardownBlock { TestSupport.remove(dir) }
+        func write(_ name: String, marker: String) throws {
+            try """
+            # \(name)
+            Acme roadmap discussion notes. \(marker)
+            """.write(to: dir.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8)
+        }
+        try write("Acme Curated", marker: "QA_CURATED_MARKER")
+        try write("Acme Other", marker: "QA_OTHER_MARKER")
+        let vault = ObsidianVaultService(defaults: defaults)
+        vault.connect(to: dir.path)
+        return vault
+    }
+
+    /// In-meeting Q&A retrieval honors the same curated related-docs scope as the brief (Amendment 2,
+    /// DB5): the composed user text pulls only the curated note, not an equally query-matching vault
+    /// note. Without the `curatedNotePaths` wiring the whole-vault fallback would surface both.
+    func testQARetrievalDrawsOnlyFromCuratedNotes() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let service = MeetingService(appSupportDirectory: dir)
+        let vault = try makeCuratedVault()
+        let folderSuite = "MeetingLLMServiceTests-Folder-\(UUID().uuidString)"
+        let folderStore = MeetingFolderMetadataStore(defaults: UserDefaults(suiteName: folderSuite)!)
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: folderSuite) }
+        let stub = StubProcessor()
+        let llm = MeetingLLMService(
+            meetingService: service,
+            vaultService: vault,
+            processor: stub,
+            folderMetadataStore: folderStore
+        )
+
+        let meeting = makeMeeting(on: service, segmentTexts: ["Acme roadmap discussion."])
+        service.addManualRelatedNote("Acme Curated.md", for: meeting)
+
+        _ = try await llm.answerQuestion(for: meeting, question: "acme roadmap")
+
+        let call = try XCTUnwrap(stub.calls.first)
+        XCTAssertTrue(call.text.contains("QA_CURATED_MARKER"))
+        XCTAssertFalse(call.text.contains("QA_OTHER_MARKER"), "a non-curated vault note must not leak into Q&A")
+    }
 }

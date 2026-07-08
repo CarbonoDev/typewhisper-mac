@@ -56,6 +56,8 @@ final class ServiceContainer: ObservableObject {
     let meetingLanguageService: MeetingLanguageService // [M2]
     let obsidianVaultService: ObsidianVaultService
     let meetingBriefService: MeetingBriefService
+    // [M8] Agentic related-document discovery (Amendment 2).
+    let meetingRelatedDocsService: MeetingRelatedDocsService
     let meetingObsidianExporter: MeetingObsidianExporter
     let meetingImportService: MeetingImportService
     let meetingDiarizationEnricher: MeetingDiarizationEnricher
@@ -241,6 +243,16 @@ final class ServiceContainer: ObservableObject {
             // [M7] The meeting's folder config scopes brief knowledge-base retrieval (Amendment 1, DA5).
             folderMetadataStore: meetingFolderMetadataStore
         )
+        // [M8] Agentic related-document discovery (Amendment 2). Searches the vault folder-first then
+        // wider (LLM-judge junk-filtered) to curate per-meeting related notes; writes only through
+        // `meetingService`'s single-writer setters. Reuses the same vault enumerator + folder config as
+        // the brief, and the `promptProcessingService` single-turn judge seam.
+        meetingRelatedDocsService = MeetingRelatedDocsService(
+            meetingService: meetingService,
+            vaultService: obsidianVaultService,
+            folderMetadataStore: meetingFolderMetadataStore,
+            processor: promptProcessingService
+        )
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).
         // Reads the meetings root folder (plan D7/M4) from the shared defaults so exports nest under
@@ -265,7 +277,11 @@ final class ServiceContainer: ObservableObject {
         meetingBriefScheduler = MeetingBriefScheduler(
             store: meetingService,
             briefService: meetingBriefService,
-            jobQueue: meetingJobQueue
+            jobQueue: meetingJobQueue,
+            // [M8] Enqueue a gated related-docs discovery ahead of the auto-brief (Amendment 2, DB6) so
+            // its brief is already scoped; only when a vault is connected.
+            relatedDocsService: meetingRelatedDocsService,
+            isVaultConnected: { [weak obsidianVaultService] in obsidianVaultService?.isConnected ?? false }
         )
         // Let the start-notification body mention a ready brief (plan AD9) without depending on the
         // scheduler at construction time (it is created after the notification service).
@@ -381,6 +397,7 @@ final class ServiceContainer: ObservableObject {
             languageService: meetingLanguageService, // [M2]
             vaultService: obsidianVaultService,
             briefService: meetingBriefService,
+            relatedDocsService: meetingRelatedDocsService, // [M8]
             folderMetadataStore: meetingFolderMetadataStore, // [M7]
             exporter: meetingObsidianExporter,
             importService: meetingImportService,
@@ -411,6 +428,7 @@ final class ServiceContainer: ObservableObject {
         JobQueueService._shared = meetingJobQueue // [Track J]
         MeetingOrganizationIndex._shared = meetingOrganizationIndex // [M3]
         MeetingFolderMetadataStore._shared = meetingFolderMetadataStore // [M7]
+        MeetingRelatedDocsService._shared = meetingRelatedDocsService // [M8]
 
         // License
         LicenseService.shared = licenseService

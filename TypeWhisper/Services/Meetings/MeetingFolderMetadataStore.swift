@@ -159,12 +159,37 @@ final class MeetingFolderMetadataStore: ObservableObject {
             guard comps.count >= oldComps.count, Array(comps.prefix(oldComps.count)) == oldComps else { continue }
             let newKey = (newComps + comps.dropFirst(oldComps.count)).joined(separator: "/")
             updated.removeValue(forKey: key)
-            updated[newKey] = value
+            // M7 minor: a rename can collide with a config already present at the destination (a
+            // pre-existing sibling folder renamed onto). Silently overwriting would drop the
+            // destination's attachments/description — **merge** instead so no configuration is lost.
+            if let existing = updated[newKey] {
+                updated[newKey] = Self.merge(source: value, into: existing)
+            } else {
+                updated[newKey] = value
+            }
             changed = true
         }
         guard changed else { return }
         configs = updated
         persist()
+    }
+
+    /// Merge a moved-from config into a config already present at the destination (M7 minor): union
+    /// the attachments (destination order first, then any new source paths), keep the destination's
+    /// non-empty description (else adopt the source's), and OR the `noVaultContext` flags.
+    static func merge(source: FolderContextConfig, into destination: FolderContextConfig) -> FolderContextConfig {
+        var result = destination
+        if result.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            result.description = source.description
+        }
+        for path in source.attachedNotePaths where !result.attachedNotePaths.contains(path) {
+            result.attachedNotePaths.append(path)
+        }
+        for path in source.attachedFolderPaths where !result.attachedFolderPaths.contains(path) {
+            result.attachedFolderPaths.append(path)
+        }
+        result.noVaultContext = result.noVaultContext || source.noVaultContext
+        return result
     }
 
     /// Drop the config for a deleted folder and every descendant config. Wired to
@@ -183,21 +208,39 @@ final class MeetingFolderMetadataStore: ObservableObject {
 
     // MARK: - Scope computation (DA5) — shared by brief + Q&A
 
-    /// Resolve a meeting's vault-retrieval scope from its folder config (Amendment 1, DA5): the
-    /// `noVaultContext` toggle ⇒ `.none`; no attachments ⇒ `.wholeVault` (today's behavior); otherwise
-    /// `.restricted` to the attached notes + folder prefixes. The vault service stays a pure reader —
-    /// the scope is computed here and passed to `retrieve`.
-    func retrievalScope(forFolderPath folderPath: String?) -> VaultRetrievalScope {
-        guard let folderPath, !MeetingService.folderComponents(folderPath).isEmpty else {
+    /// Resolve a meeting's vault-retrieval scope (Amendment 1, DA5; **extended** for Amendment 2, DB5).
+    /// The precedence ladder:
+    /// 1. Folder `noVaultContext` ⇒ `.none` — **absolute** (owner constraint).
+    /// 2. Otherwise the **curated union**: per-meeting `curatedNotePaths` (discovered ∪ manual, minus
+    ///    exclusions) ∪ the folder's live `attachedNotePaths` / `attachedFolderPaths`. If that union is
+    ///    non-empty ⇒ `.restricted(...)` carrying `excludedNotePaths` so a removal is honored even
+    ///    inside a live folder prefix.
+    /// 3. Otherwise ⇒ `.wholeVault` (unchanged behavior for a meeting with no context configured).
+    ///
+    /// The zero-curated defaults keep every Amendment-1 caller/test valid (folder-only scope).
+    func retrievalScope(
+        forFolderPath folderPath: String?,
+        curatedNotePaths: [String] = [],
+        excludedNotePaths: [String] = []
+    ) -> VaultRetrievalScope {
+        var config = FolderContextConfig()
+        if let folderPath, !MeetingService.folderComponents(folderPath).isEmpty {
+            config = self.config(for: folderPath)
+        }
+        if config.noVaultContext { return .none }
+
+        let excluded = Set(excludedNotePaths)
+        let curated = Set(curatedNotePaths).subtracting(excluded)
+        let folderNotes = Set(config.attachedNotePaths)
+        let folderPrefixes = config.attachedFolderPaths
+
+        if curated.isEmpty && folderNotes.isEmpty && folderPrefixes.isEmpty {
             return .wholeVault
         }
-        let config = config(for: folderPath)
-        if config.noVaultContext { return .none }
-        guard config.hasAttachments else { return .wholeVault }
         return .restricted(
-            notePaths: Set(config.attachedNotePaths),
-            folderPrefixes: config.attachedFolderPaths,
-            excludedPaths: []
+            notePaths: curated.union(folderNotes),
+            folderPrefixes: folderPrefixes,
+            excludedPaths: excluded
         )
     }
 

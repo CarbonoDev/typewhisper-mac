@@ -36,6 +36,9 @@ struct MeetingDocumentBody: View {
             MeetingBriefView(meeting: meeting)
 
             Divider()
+            MeetingRelatedDocsSection(meeting: meeting)
+
+            Divider()
             importAffordance
 
             if meeting.state == .scheduled || meeting.state == .live {
@@ -81,6 +84,9 @@ struct MeetingDocumentBody: View {
 
             Divider()
             MeetingBriefView(meeting: meeting)
+
+            Divider()
+            MeetingRelatedDocsSection(meeting: meeting)
 
             if !meeting.segments.isEmpty {
                 Divider()

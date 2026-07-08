@@ -165,9 +165,10 @@ final class MeetingLLMService: ObservableObject {
             .map { MeetingQAComposer.PriorTurn(question: $0.question, answer: $0.answer) }
 
         // Knowledge-base passages only when a vault is connected (shared retriever with M5). Amendment 1
-        // (DA6/F1): the meeting's folder config scopes retrieval identically to the brief — `.none`
-        // yields no passages, attachments restrict, no config keeps whole-vault behavior.
-        let scope = folderMetadataStore?.retrievalScope(forFolderPath: meeting.folderPath) ?? .wholeVault
+        // (DA6/F1) + Amendment 2 (DB5): the meeting's curated related notes ∪ folder config scope
+        // retrieval identically to the brief — `.none` yields no passages, the curated union restricts,
+        // no context keeps whole-vault behavior.
+        let scope = retrievalScope(for: meeting)
         let passages = vaultService.isConnected
             ? vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: scope)
             : []
@@ -196,6 +197,17 @@ final class MeetingLLMService: ObservableObject {
         )
 
         return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: answer)
+    }
+
+    /// The DB5 consumption scope for a meeting's Q&A retrieval — identical to the brief (Amendment 2,
+    /// DB5): curated related notes ∪ folder attachment scope, `noVaultContext` absolute.
+    private func retrievalScope(for meeting: Meeting) -> VaultRetrievalScope {
+        guard let folderMetadataStore else { return .wholeVault }
+        return folderMetadataStore.retrievalScope(
+            forFolderPath: meeting.folderPath,
+            curatedNotePaths: meeting.relatedNotePaths.map(\.path),
+            excludedNotePaths: meeting.excludedNotePaths
+        )
     }
 
     // MARK: - Map / reduce

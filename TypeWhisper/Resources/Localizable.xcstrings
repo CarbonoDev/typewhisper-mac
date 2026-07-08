@@ -28682,6 +28682,326 @@
           }
         }
       }
+    },
+    "meetings.jobs.kind.relatedDiscovery": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related documents"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwandte Dokumente"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.findingRelated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding related documents…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwandte Dokumente werden gesucht …"
+          }
+        }
+      }
+    },
+    "meetings.related.judge.systemPrompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You decide which of the candidate documents are genuinely related to the meeting described below. A document is related only if it is about the same topic, project, people, or account — not merely sharing a common word. Reply with ONLY the numbers of the related documents, separated by commas or new lines (for example: 2, 5, 9). If none are related, reply with exactly NONE. Do not add any other text."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entscheide, welche der Kandidatendokumente wirklich mit der unten beschriebenen Besprechung zusammenhängen. Ein Dokument ist nur dann verwandt, wenn es dasselbe Thema, Projekt, dieselben Personen oder denselben Account betrifft — nicht bloß ein gemeinsames Wort teilt. Antworte NUR mit den Nummern der verwandten Dokumente, getrennt durch Kommas oder Zeilenumbrüche (zum Beispiel: 2, 5, 9). Wenn keines verwandt ist, antworte genau mit NONE. Füge keinen weiteren Text hinzu."
+          }
+        }
+      }
+    },
+    "meetings.related.judge.candidatesHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CANDIDATE DOCUMENTS"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KANDIDATENDOKUMENTE"
+          }
+        }
+      }
+    },
+    "meetings.related.error.unparseable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The relevance check returned an unreadable result, so nothing was saved. Try again."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Relevanzprüfung lieferte ein unlesbares Ergebnis; es wurde nichts gespeichert. Bitte erneut versuchen."
+          }
+        }
+      }
+    },
+    "meetings.brief.context.folderLabel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner:"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related documents"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwandte Dokumente"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.find": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find related"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwandte finden"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.refresh": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.notConnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect a vault to find related documents."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde einen Tresor, um verwandte Dokumente zu finden."
+          }
+        }
+      }
+    },
+    "meetingdoc.related.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No related documents yet — Find related to search your vault, or add notes manually."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine verwandten Dokumente – „Verwandte finden“, um deinen Tresor zu durchsuchen, oder Notizen manuell hinzufügen."
+          }
+        }
+      }
+    },
+    "meetingdoc.related.add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add notes…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen hinzufügen …"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.remove": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.failedHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last search couldn’t complete."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die letzte Suche konnte nicht abgeschlossen werden."
+          }
+        }
+      }
+    },
+    "meetingdoc.related.noVaultContextHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault context is turned off for this folder, so these aren’t used in briefs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Tresor-Kontext ist für diesen Ordner deaktiviert, daher werden diese nicht in Briefings verwendet."
+          }
+        }
+      }
+    },
+    "meetingdoc.related.folderScopeHint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Managed in folder settings"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In den Ordnereinstellungen verwaltet"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.provenance.folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From folder"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Ordner"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.provenance.suggested": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggested"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgeschlagen"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.provenance.manual": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added by you"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von dir hinzugefügt"
+          }
+        }
+      }
+    },
+    "meetingdoc.related.provenance.missing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlt"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

@@ -99,6 +99,10 @@ final class MeetingsViewModel: ObservableObject {
     // folder detail view's read-only vault search (attachment picker).
     let vaultService: ObsidianVaultService
     private let briefService: MeetingBriefService
+    // [M8] Agentic related-document discovery (Amendment 2). `internal` so
+    // `MeetingsViewModel+RelatedDocs.swift` reaches it for the meeting document's Related Documents
+    // section (Find related, manual add/remove, resolved-union rows).
+    let relatedDocsService: MeetingRelatedDocsService
     // [M7] Per-folder context config store (Amendment 1, DA4). `internal` so the folder-context
     // extension routes description/attachment/toggle writes through the single-writer store; the
     // folder detail view observes `MeetingFolderMetadataStore.shared` directly for live updates.
@@ -129,6 +133,7 @@ final class MeetingsViewModel: ObservableObject {
         languageService: MeetingLanguageService, // [M2]
         vaultService: ObsidianVaultService,
         briefService: MeetingBriefService,
+        relatedDocsService: MeetingRelatedDocsService, // [M8]
         folderMetadataStore: MeetingFolderMetadataStore, // [M7]
         exporter: MeetingObsidianExporter,
         importService: MeetingImportService,
@@ -149,6 +154,7 @@ final class MeetingsViewModel: ObservableObject {
         self.languageService = languageService // [M2]
         self.vaultService = vaultService
         self.briefService = briefService
+        self.relatedDocsService = relatedDocsService // [M8]
         self.folderMetadataStore = folderMetadataStore // [M7]
         self.exporter = exporter
         self.importService = importService

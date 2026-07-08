@@ -25,6 +25,25 @@ final class MeetingBriefSchedulerTests: XCTestCase {
 
     // MARK: - Stub brief generator
 
+    /// Shared run-order log so a discovery-vs-brief ordering assertion can observe both stubs (DB6).
+    @MainActor
+    private final class OrderLog {
+        private(set) var events: [String] = []
+        func record(_ event: String) { events.append(event) }
+    }
+
+    /// Related-docs discovery stub (Amendment 2, DB6) — never touches an LLM.
+    @MainActor
+    private final class StubDiscovery: MeetingRelatedDiscovering {
+        private(set) var calls: [UUID] = []
+        var log: OrderLog?
+        func discoverRelated(for meeting: Meeting) async throws {
+            await Task.yield()
+            calls.append(meeting.id)
+            log?.record("discovery")
+        }
+    }
+
     @MainActor
     private final class StubBriefGenerator: MeetingBriefGenerating {
         private let store: MeetingService
@@ -32,6 +51,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         private(set) var maxConcurrent = 0
         private var active = 0
         var errorToThrow: Error?
+        var log: OrderLog?
         /// When true, a successful call persists a real `.brief` so freshness dedupe reflects it.
         var addsBriefOnSuccess = true
 
@@ -45,6 +65,7 @@ final class MeetingBriefSchedulerTests: XCTestCase {
             // overlap and `maxConcurrent` would exceed 1.
             await Task.yield()
             calls.append(meeting.id)
+            log?.record("brief")
             defer { active -= 1 }
             if let errorToThrow { throw errorToThrow }
             let content = "AUTO_BRIEF"
@@ -399,6 +420,87 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         let userIdx = try XCTUnwrap(stub.calls.firstIndex(of: userMeeting.id))
         let autoIdx = try XCTUnwrap(stub.calls.firstIndex(of: autoMeeting.id))
         XCTAssertLessThan(userIdx, autoIdx, "a user-initiated brief must run before a queued auto-brief")
+    }
+
+    // MARK: - [M8] Auto related-docs discovery before a scheduled auto-brief (Amendment 2, DB6)
+
+    /// A gated `.background` `relatedDiscovery` is enqueued **ahead** of the auto-brief on the cap-1 llm
+    /// lane, so discovery runs first and the brief consumes fresh related docs.
+    func testAutoBriefEnqueuesRelatedDiscoveryAheadOfBrief() async throws {
+        let store = try makeStore()
+        let log = OrderLog()
+        let stub = StubBriefGenerator(store: store)
+        stub.addsBriefOnSuccess = false
+        stub.log = log
+        let discovery = StubDiscovery()
+        discovery.log = log
+        let scheduler = MeetingBriefScheduler(
+            store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults(),
+            relatedDocsService: discovery, isVaultConnected: { true }
+        )
+        let now = Date()
+        let evt = event(now: now)
+
+        scheduler.tick(events: [evt], now: now)
+        let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
+
+        // Both jobs are enqueued for the meeting; discovery is background.
+        let discoveryJobs = jobQueue.jobs.filter { $0.kind == .relatedDiscovery && $0.meetingID == meeting.id }
+        let briefJobs = jobQueue.jobs.filter { $0.kind == .brief && $0.meetingID == meeting.id }
+        XCTAssertEqual(discoveryJobs.count, 1)
+        XCTAssertEqual(discoveryJobs.first?.priority, .background)
+        XCTAssertEqual(briefJobs.count, 1)
+
+        await jobQueue.drain()
+        XCTAssertEqual(discovery.calls, [meeting.id])
+        XCTAssertEqual(stub.calls, [meeting.id])
+        XCTAssertEqual(log.events, ["discovery", "brief"], "discovery must run before the brief")
+    }
+
+    /// The freshness gate suppresses auto-discovery when a discovery already ran within the window
+    /// (idempotent per freshness window), while the brief still enqueues.
+    func testAutoDiscoverySuppressedWhenFresh() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        stub.addsBriefOnSuccess = false
+        let discovery = StubDiscovery()
+        let scheduler = MeetingBriefScheduler(
+            store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults(),
+            relatedDocsService: discovery, isVaultConnected: { true }
+        )
+        let now = Date()
+        let evt = event(now: now)
+
+        // Pre-create the backing meeting with a fresh discovery (1 h ago < 6 h default freshness).
+        let meeting = store.createMeeting(
+            title: "Acme Sync", source: .calendar, state: .scheduled,
+            startDate: evt.startDate, calendarEventID: evt.id
+        )
+        meeting.relatedDiscoveryAt = now.addingTimeInterval(-3600)
+
+        scheduler.tick(events: [evt], now: now)
+        XCTAssertTrue(jobQueue.jobs.filter { $0.kind == .relatedDiscovery }.isEmpty, "fresh discovery is not re-run")
+        XCTAssertEqual(jobQueue.jobs.filter { $0.kind == .brief && $0.meetingID == meeting.id }.count, 1)
+        await jobQueue.drain()
+        XCTAssertTrue(discovery.calls.isEmpty)
+    }
+
+    /// With no vault connected (default), discovery is never enqueued (regression guard for existing
+    /// scheduler tests that construct without a discovery service).
+    func testNoDiscoveryWhenVaultDisconnected() async throws {
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        stub.addsBriefOnSuccess = false
+        let discovery = StubDiscovery()
+        let scheduler = MeetingBriefScheduler(
+            store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults(),
+            relatedDocsService: discovery, isVaultConnected: { false }
+        )
+        let now = Date()
+        scheduler.tick(events: [event(now: now)], now: now)
+        XCTAssertTrue(jobQueue.jobs.filter { $0.kind == .relatedDiscovery }.isEmpty)
+        await jobQueue.drain()
+        XCTAssertTrue(discovery.calls.isEmpty)
     }
 
     // MARK: - Fake calendar provider (no live EKEventStore)

@@ -7,6 +7,11 @@ import SwiftUI
 struct VaultContextPickerView: View {
     /// Called with the chosen entries on confirm.
     let onSelect: ([VaultEntry]) -> Void
+    /// When `true`, folders are hidden so only notes can be picked. The per-meeting Related Documents
+    /// section uses this: it records explicit note-path picks (`addManualRelatedNote`) and cannot
+    /// consume a folder (folder-level scope is a separate tier), so offering folders there would be a
+    /// silent no-op. The folder detail view leaves this `false` (it attaches notes *and* folders).
+    var notesOnly: Bool = false
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var viewModel = MeetingsViewModel.shared
@@ -14,9 +19,11 @@ struct VaultContextPickerView: View {
     @State private var query = ""
     @State private var selectedIDs: Set<String> = []
 
-    /// Live search results; a blank query lists the leading entries.
+    /// Live search results; a blank query lists the leading entries. Folders are dropped in
+    /// `notesOnly` mode so an explicit selection can never be silently discarded downstream.
     private var results: [VaultEntry] {
-        viewModel.searchVaultEntries(query)
+        let entries = viewModel.searchVaultEntries(query)
+        return notesOnly ? entries.filter { !$0.isDirectory } : entries
     }
 
     var body: some View {
