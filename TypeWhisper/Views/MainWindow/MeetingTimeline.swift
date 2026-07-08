@@ -8,6 +8,7 @@ struct MeetingTimeline: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
+    @ObservedObject private var jobQueue = JobQueueService.shared
 
     var body: some View {
         let groups = homeViewModel.timelineGroups(from: viewModel.meetings)
@@ -82,10 +83,37 @@ struct MeetingTimeline: View {
                     tint: .red
                 )
             }
+            // Transient "working" badge derived from the queue's *running* jobs for this meeting (plan
+            // J3). Leading (before the persisted-fact badges) and reflecting the correct meeting no
+            // matter which document is open, since it is sourced from `jobs(for:)`.
+            if let badge = workingBadge(for: meeting) {
+                workingBadgeCapsule(text: badge.text)
+            }
             ForEach(homeViewModel.badges(for: meeting), id: \.self) { badge in
                 badgeCapsule(text: badge.displayName, systemImage: badge.systemImage, tint: badge.tint)
             }
         }
+    }
+
+    private func workingBadge(for meeting: Meeting) -> MeetingActivityBadge? {
+        let runningKinds = jobQueue.jobs(for: meeting.id)
+            .filter { $0.state == .running }
+            .map(\.kind)
+        return MeetingsViewModel.homeActivityBadge(runningKinds: runningKinds)
+    }
+
+    private func workingBadgeCapsule(text: String) -> some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(text)
+        }
+        .font(.caption2)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.accentColor.opacity(0.15), in: Capsule())
+        .foregroundStyle(Color.accentColor)
+        .accessibilityLabel(Text(String(localized: "meetings.jobs.badge.working")))
     }
 
     private func badgeCapsule(text: String, systemImage: String, tint: Color) -> some View {

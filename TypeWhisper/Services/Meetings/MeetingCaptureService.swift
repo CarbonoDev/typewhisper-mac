@@ -311,6 +311,19 @@ final class MeetingCaptureService: ObservableObject {
         // `runFinalization` never throws: on transcription success it replaces the live segments; on
         // failure *or* cancellation it keeps the live segments; in every case it marks the meeting
         // `.completed`, so a stopped meeting is never stuck in `.processing` (plan J2).
+        //
+        // QUEUED-CANCEL INVARIANT (J2 review finding 1): the J3 activity popover exposes Cancel. A
+        // *running* final pass is safe to cancel — the awaited transcribe throws, `runFinalization`
+        // keeps the live segments and still marks the meeting `.completed`. But a *queued* final pass
+        // that were cancelled would be marked `.cancelled` by the generic queue *without ever running
+        // `runFinalization`*, permanently stranding this meeting in `.processing`. Resolved at the UI
+        // layer (`MeetingJobPresentation.canCancel`), which withholds Cancel for a queued
+        // `.finalTranscription` (with a localized hint) so no code path ever cancels it while queued.
+        // The transcription lane is cap-1 and this job is `.userInitiated`, so the un-cancellable
+        // queued window is short (it only ever waits behind another transcription job). Chosen over
+        // the "run the keep-live path on queued-cancel" option because that would violate the queue's
+        // generic `testCancelQueuedNeverRunsOperation` contract (a queued cancel must never run the
+        // operation) — the UI-guard keeps `JobQueueService` free of any kind-specific cancel semantics.
         jobQueue.enqueue(
             kind: .finalTranscription,
             meetingID: meeting.id,

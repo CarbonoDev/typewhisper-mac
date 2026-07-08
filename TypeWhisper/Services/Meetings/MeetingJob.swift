@@ -77,7 +77,10 @@ struct MeetingJob: Identifiable, Sendable {
     /// `nil` only for a new-meeting `audioImport` (no meeting exists yet). All J1 kinds carry one.
     let meetingID: UUID?
     var state: MeetingJobState
-    let priority: MeetingJobPriority
+    /// `var` (not `let`) so the queue can promote a queued `.background` job to `.userInitiated` when
+    /// a user-initiated enqueue dedupes against it (J2 review finding 2 / plan §0.4-0.5): the user
+    /// must not wait behind background work that produces the same output.
+    var priority: MeetingJobPriority
     let createdAt: Date
     var startedAt: Date?
     var finishedAt: Date?
@@ -86,4 +89,75 @@ struct MeetingJob: Identifiable, Sendable {
     var dedupeKey: MeetingJobDedupeKey?
 
     var lane: MeetingJobLane { kind.lane }
+}
+
+// MARK: - Presentation (job-queue plan J3)
+
+extension MeetingJobKind {
+    /// The localized, user-facing label for this kind of work, shown in the activity popover and on
+    /// the Home timeline "working" badge (plan J3 §EN+DE key table).
+    var displayName: String {
+        switch self {
+        case .summary: return String(localized: "meetings.jobs.kind.summary")
+        case .extendedAnalysis: return String(localized: "meetings.jobs.kind.extendedAnalysis")
+        case .brief: return String(localized: "meetings.jobs.kind.brief")
+        case .finalTranscription: return String(localized: "meetings.jobs.kind.finalTranscription")
+        case .audioImport: return String(localized: "meetings.jobs.kind.audioImport")
+        case .diarization: return String(localized: "meetings.jobs.kind.diarization")
+        case .export: return String(localized: "meetings.jobs.kind.export")
+        }
+    }
+}
+
+/// The activity popover's grouped view of the queue: running first, then queued, then recently-failed
+/// (plan J3). A pure value derived from a `[MeetingJob]` snapshot so the sectioning and ordering are
+/// unit-testable without SwiftUI.
+struct MeetingJobSections {
+    var running: [MeetingJob]
+    var queued: [MeetingJob]
+    var failed: [MeetingJob]
+
+    var isEmpty: Bool { running.isEmpty && queued.isEmpty && failed.isEmpty }
+}
+
+/// Pure presentation logic for background jobs (plan J3). Lives off the view so the popover sectioning,
+/// kind labels, and cancellability rules are deterministic and testable.
+enum MeetingJobPresentation {
+    /// Section a job snapshot into running / queued / recently-failed groups. Running is ordered by
+    /// start time (oldest first); queued mirrors the driver's own order (`userInitiated` before
+    /// `background`, then FIFO by `createdAt`); failed is newest-first so the most recent failure is
+    /// on top.
+    static func sections(from jobs: [MeetingJob]) -> MeetingJobSections {
+        let running = jobs
+            .filter { $0.state == .running }
+            .sorted { ($0.startedAt ?? $0.createdAt) < ($1.startedAt ?? $1.createdAt) }
+        let queued = jobs
+            .filter { $0.state == .queued }
+            .sorted { lhs, rhs in
+                if lhs.priority.rawValue != rhs.priority.rawValue {
+                    return lhs.priority.rawValue > rhs.priority.rawValue
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
+        let failed = jobs
+            .filter { if case .failed = $0.state { return true } else { return false } }
+            .sorted { ($0.finishedAt ?? $0.createdAt) > ($1.finishedAt ?? $1.createdAt) }
+        return MeetingJobSections(running: running, queued: queued, failed: failed)
+    }
+
+    /// Whether the activity popover may offer a Cancel button for an active job.
+    ///
+    /// Two kinds are non-cancellable from the popover:
+    /// - `.export` runs inline on the `io` lane and completes instantly — there is nothing to cancel.
+    /// - a **queued** `.finalTranscription` (J2 review finding 1): cancelling a queued final pass would
+    ///   mark the job `.cancelled` *without ever running `runFinalization`*, stranding the meeting in
+    ///   `.processing` forever. A *running* final pass is cancellable (its `runFinalization` keeps the
+    ///   live segments and still completes the meeting). While queued the button is withheld with a
+    ///   localized hint; the transcription lane is cap-1 so the queued window is short.
+    static func canCancel(_ job: MeetingJob) -> Bool {
+        guard job.state.isActive else { return false }
+        if job.kind == .export { return false }
+        if job.kind == .finalTranscription && job.state == .queued { return false }
+        return true
+    }
 }

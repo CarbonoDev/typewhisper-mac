@@ -508,6 +508,13 @@ final class MeetingsViewModel: ObservableObject {
         // Three-way kind mapping so a `.brief` template enqueues as `.brief` (not `.summary`): the
         // auto-brief dedupe on `(brief, meetingID)` and the brief-scoped spinner depend on the job
         // carrying the correct kind. `.extended` → `.extendedAnalysis`; everything else → `.summary`.
+        //
+        // DEDUPE-PRIORITY (J2 review finding 2): a user-selected `.brief` template shares the
+        // `(brief, meetingID)` dedupe key with the auto-brief scheduler's `.background` jobs. Sharing
+        // the key is intentional — both produce the same brief output — but this enqueue is
+        // `.userInitiated` (the default), so if it dedupes against a still-`.queued` background
+        // auto-brief, `JobQueueService.enqueue` promotes that queued job to `.userInitiated` and the
+        // user no longer waits behind background work. See the promotion note in `JobQueueService`.
         let kind: MeetingJobKind
         switch template.meetingKind {
         case .extended: kind = .extendedAnalysis

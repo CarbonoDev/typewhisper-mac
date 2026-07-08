@@ -177,6 +177,8 @@
 		JQB0000000000000000003 /* MeetingJobClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000003 /* MeetingJobClock.swift */; };
 		JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000004 /* MeetingActivityIndicator.swift */; };
 		JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000005 /* JobQueueServiceTests.swift */; };
+		JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000006 /* MeetingActivityPopover.swift */; };
+		JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000007 /* MeetingJobPresentationTests.swift */; };
 		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
 		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
 		TCB0000000000000000001 /* ComingUpCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000001 /* ComingUpCard.swift */; };
@@ -747,6 +749,8 @@
 		JQF0000000000000000003 /* MeetingJobClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingJobClock.swift; sourceTree = "<group>"; };
 		JQF0000000000000000004 /* MeetingActivityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityIndicator.swift; sourceTree = "<group>"; };
 		JQF0000000000000000005 /* JobQueueServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JobQueueServiceTests.swift; sourceTree = "<group>"; };
+		JQF0000000000000000006 /* MeetingActivityPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityPopover.swift; sourceTree = "<group>"; };
+		JQF0000000000000000007 /* MeetingJobPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingJobPresentationTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
 		TCF0000000000000000001 /* ComingUpCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComingUpCard.swift; sourceTree = "<group>"; };
@@ -1908,6 +1912,7 @@
 				MWF0000000000000000005 /* MainWindowSidebar.swift */,
 				MWF0000000000000000006 /* LiveRecordingBand.swift */,
 				JQF0000000000000000004 /* MeetingActivityIndicator.swift */,
+				JQF0000000000000000006 /* MeetingActivityPopover.swift */,
 				MWF0000000000000000007 /* MeetingsListView.swift */,
 				MWF0000000000000000008 /* HomeFeedView.swift */,
 				TCF0000000000000000001 /* ComingUpCard.swift */,
@@ -2677,6 +2682,7 @@
 				MEF0000000000000000010 /* MeetingBriefServiceTests.swift */,
 				DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */,
 				JQF0000000000000000005 /* JobQueueServiceTests.swift */,
+				JQF0000000000000000007 /* MeetingJobPresentationTests.swift */,
 				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
 				MEF0000000000000000011 /* MeetingQAComposerTests.swift */,
 				MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */,
@@ -4201,6 +4207,7 @@
 				MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */,
 				DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */,
 				JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */,
+				JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */,
 				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
 				MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */,
 				MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */,
@@ -4286,6 +4293,7 @@
 				JQB0000000000000000003 /* MeetingJobClock.swift in Sources */,
 				JQB0000000000000000002 /* JobQueueService.swift in Sources */,
 				JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */,
+				JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */,
 				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
 				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,
 				TCB0000000000000000001 /* ComingUpCard.swift in Sources */,

@@ -39,6 +39,9 @@ final class JobQueueService: ObservableObject {
     private var laneWorkers: [MeetingJobLane: Task<Void, Never>] = [:]
     /// Injected time source (fake in tests) so timestamps are deterministic (plan §0.2).
     private let clock: any MeetingJobClock
+    /// Cap on retained `.succeeded`/`.cancelled` jobs (plan J3). `.failed` jobs are exempt (kept until
+    /// dismissed or retried). Comfortably larger than any realistic in-flight burst.
+    private let settledHistoryLimit = 20
 
     init(clock: any MeetingJobClock = SystemJobClock()) {
         self.clock = clock
@@ -61,9 +64,19 @@ final class JobQueueService: ObservableObject {
     ) -> UUID {
         let key = dedupe ?? meetingID.map { MeetingJobDedupeKey(kind: kind, meetingID: $0) }
 
-        if let key, let existing = jobs.first(where: { $0.dedupeKey == key && $0.state.isActive }) {
+        if let key, let existingIndex = jobs.firstIndex(where: { $0.dedupeKey == key && $0.state.isActive }) {
             logger.debug("Deduped enqueue for \(kind.rawValue, privacy: .public); returning existing job")
-            return existing.id
+            // Priority promotion on a dedupe hit (J2 review finding 2): when a user-initiated request
+            // collides with a still-`.queued` `.background` job (e.g. a user picks a brief template
+            // while the auto-brief scheduler already queued one under the shared `(brief, meetingID)`
+            // key), promote the queued job so the user is not stuck behind background work. Both
+            // enqueues produce the same output, so sharing the key is correct; only the priority of the
+            // surviving job is raised. A `.running` job is never preempted (promoting it is moot).
+            if jobs[existingIndex].state == .queued,
+               priority.rawValue > jobs[existingIndex].priority.rawValue {
+                jobs[existingIndex].priority = priority
+            }
+            return jobs[existingIndex].id
         }
 
         let id = UUID()
@@ -102,12 +115,14 @@ final class JobQueueService: ObservableObject {
     }
 
     /// Re-enqueue a settled job's retained operation as a fresh `.queued` job in the same lane with
-    /// the same dedupe key (plan §0.2). No-op for an active job or one whose operation is gone.
+    /// the same dedupe key (plan §0.2 / J3 popover Retry). No-op for an active job or one whose
+    /// operation is gone. The source (failed) row is cleared once re-queued — a failed job is retained
+    /// only "until dismissed or retried" (plan J3).
     @discardableResult
     func retry(_ jobID: UUID) -> UUID? {
         guard let job = jobs.first(where: { $0.id == jobID }), !job.state.isActive,
               let operation = operations[jobID] else { return nil }
-        return enqueue(
+        let newID = enqueue(
             kind: job.kind,
             meetingID: job.meetingID,
             priority: job.priority,
@@ -115,6 +130,19 @@ final class JobQueueService: ObservableObject {
             progressLabel: job.progressLabel,
             operation: operation
         )
+        if newID != jobID {
+            jobs.removeAll { $0.id == jobID }
+            operations[jobID] = nil
+        }
+        return newID
+    }
+
+    /// Clear a settled (succeeded/failed/cancelled) job from the list — the popover's Dismiss action
+    /// (plan J3). No-op for an active job (cancel it first).
+    func dismiss(_ jobID: UUID) {
+        guard let job = jobs.first(where: { $0.id == jobID }), !job.state.isActive else { return }
+        jobs.removeAll { $0.id == jobID }
+        operations[jobID] = nil
     }
 
     /// Pure, meeting-scoped filter (navigation-proof): the jobs belonging to one meeting.
@@ -135,6 +163,11 @@ final class JobQueueService: ObservableObject {
 
     var runningCount: Int { jobs.reduce(0) { $0 + ($1.state == .running ? 1 : 0) } }
     var queuedCount: Int { jobs.reduce(0) { $0 + ($1.state == .queued ? 1 : 0) } }
+
+    /// Whether any settled `.failed` job is currently retained — drives the popover's failure dot.
+    var hasFailedJob: Bool {
+        jobs.contains { if case .failed = $0.state { return true } else { return false } }
+    }
 
     // MARK: - Testing seam
 
@@ -239,6 +272,28 @@ final class JobQueueService: ObservableObject {
             job.finishedAt = clock.now
         }
         handles[jobID] = nil
+        pruneSettledHistory()
+    }
+
+    /// Bound the retained settled-job history (plan J3): `.failed` jobs are kept until dismissed or
+    /// retried (the popover needs their message + Retry). `.succeeded`/`.cancelled` jobs are pruned to
+    /// the most recent `settledHistoryLimit`, evicting the oldest beyond that so a long session does
+    /// not accumulate them unboundedly. Active jobs are never touched.
+    private func pruneSettledHistory() {
+        let prunable = jobs.filter { job in
+            switch job.state {
+            case .succeeded, .cancelled: return true
+            case .queued, .running, .failed: return false
+            }
+        }
+        guard prunable.count > settledHistoryLimit else { return }
+        let excessCount = prunable.count - settledHistoryLimit
+        let oldestFirst = prunable
+            .sorted { ($0.finishedAt ?? .distantPast) < ($1.finishedAt ?? .distantPast) }
+            .prefix(excessCount)
+        let idsToRemove = Set(oldestFirst.map(\.id))
+        jobs.removeAll { idsToRemove.contains($0.id) }
+        for id in idsToRemove { operations[id] = nil }
     }
 
     private func updateJob(_ jobID: UUID, _ mutate: (inout MeetingJob) -> Void) {

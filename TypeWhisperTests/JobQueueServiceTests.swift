@@ -356,6 +356,108 @@ final class JobQueueServiceTests: XCTestCase {
         XCTAssertTrue(queue.jobs.allSatisfy { !$0.state.isActive })
     }
 
+    // MARK: - Dedupe priority promotion (J2 review finding 2 / plan J3)
+
+    func testUserInitiatedDedupePromotesQueuedBackgroundJob() async throws {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        let gate = Gate()
+        let meetingID = UUID()
+
+        // A user-initiated job holds the (cap-1) llm lane so the briefs below stay `.queued`.
+        queue.enqueue(kind: .summary, meetingID: UUID(),
+                      operation: op("holder", recorder: recorder, gate: gate))
+        await waitUntil({ queue.runningCount == 1 }, "holder should be running")
+
+        // The auto-brief scheduler queues a background brief first.
+        let bgID = queue.enqueue(kind: .brief, meetingID: meetingID, priority: .background,
+                                 operation: op("brief", recorder: recorder))
+        XCTAssertEqual(queue.jobs.first { $0.id == bgID }?.priority, .background)
+
+        // The user then picks the brief template: it dedupes on the shared (brief, meetingID) key and
+        // must PROMOTE the queued background job to userInitiated (finding 2), returning its id.
+        let dupID = queue.enqueue(kind: .brief, meetingID: meetingID, priority: .userInitiated,
+                                  operation: op("brief-dup", recorder: recorder))
+        XCTAssertEqual(dupID, bgID, "user brief dedupes against the queued auto-brief")
+        XCTAssertEqual(queue.jobs.first { $0.id == bgID }?.priority, .userInitiated,
+                       "the queued background job is promoted so the user isn't stuck behind it")
+        XCTAssertEqual(queue.jobs.count, 2, "no second brief job is created")
+
+        gate.open()
+        await queue.drain()
+        // Only the original (deduped) operation ever runs — exactly once.
+        XCTAssertEqual(recorder.started.filter { $0.hasPrefix("brief") }, ["brief"])
+        XCTAssertTrue(recorder.committed.contains("brief"))
+        XCTAssertFalse(recorder.started.contains("brief-dup"))
+    }
+
+    // MARK: - Settled-job history (plan J3)
+
+    func testDismissRemovesSettledJob() async throws {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        let id = queue.enqueue(kind: .summary, meetingID: UUID(),
+                               operation: op("boom", recorder: recorder, throwing: Boom()))
+        await queue.drain()
+        XCTAssertEqual(queue.jobs.first { $0.id == id }?.state, .failed(message: "kaboom"))
+
+        queue.dismiss(id)
+        XCTAssertNil(queue.jobs.first { $0.id == id }, "dismiss removes a settled job from the list")
+    }
+
+    func testDismissIsNoOpForAnActiveJob() async {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        let gate = Gate()
+        let id = queue.enqueue(kind: .summary, meetingID: UUID(),
+                               operation: op("holder", recorder: recorder, gate: gate))
+        await waitUntil({ queue.runningCount == 1 }, "holder should be running")
+
+        queue.dismiss(id)
+        XCTAssertNotNil(queue.jobs.first { $0.id == id }, "an active job cannot be dismissed")
+
+        gate.open()
+        await queue.drain()
+    }
+
+    func testSucceededJobsPrunedFromHistory() async {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        // 25 succeeded jobs on the cap-1 llm lane (serial). The retained history is bounded at 20, so
+        // the oldest succeeded jobs are evicted while every job still runs.
+        for i in 0..<25 {
+            queue.enqueue(kind: .summary, meetingID: UUID(), operation: op("\(i)", recorder: recorder))
+        }
+        await queue.drain()
+
+        XCTAssertEqual(recorder.finished.count, 25, "all 25 jobs still ran")
+        let succeeded = queue.jobs.filter { $0.state == .succeeded }
+        XCTAssertEqual(succeeded.count, 20, "succeeded history is pruned to the bound")
+    }
+
+    func testFailedJobRetainedUntilDismissedOrRetried() async throws {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        // A single failed job, then a burst of succeeded jobs that would exceed the history bound.
+        let failID = queue.enqueue(kind: .summary, meetingID: UUID(),
+                                   operation: op("boom", recorder: recorder, throwing: Boom()))
+        await queue.drain()
+        for i in 0..<25 {
+            queue.enqueue(kind: .summary, meetingID: UUID(), operation: op("s\(i)", recorder: recorder))
+        }
+        await queue.drain()
+
+        // Failed jobs are exempt from succeeded/cancelled pruning — the popover needs them for Retry.
+        XCTAssertEqual(queue.jobs.first { $0.id == failID }?.state, .failed(message: "kaboom"),
+                       "a failed job survives pruning of succeeded jobs")
+
+        // Retrying clears the source failed row (retained only until dismissed or retried).
+        let retryID = try XCTUnwrap(queue.retry(failID))
+        XCTAssertNotEqual(retryID, failID)
+        XCTAssertNil(queue.jobs.first { $0.id == failID }, "retry clears the source failed job")
+        await queue.drain()
+    }
+
     // MARK: - Routing (queue → real MeetingLLMService → stub processor; no real LLM)
 
     /// The `PromptProcessing` seam, blocked on a gate so the test can observe the meeting-scoped

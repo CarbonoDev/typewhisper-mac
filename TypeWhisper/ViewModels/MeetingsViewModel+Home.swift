@@ -71,6 +71,16 @@ enum MeetingBadge: Hashable {
     }
 }
 
+/// A transient "working" badge overlaid on a Home timeline row while the queue has a *running* job
+/// for that meeting (plan J3). Kept separate from the persisted-fact `MeetingBadge` set so in-flight
+/// state never pollutes the durable badges, and sourced from `jobs(for: meetingID)` so it reflects
+/// the correct meeting regardless of which document is open (retiring the last navigation-following
+/// surface). Carries only the localized text; the view renders the spinner.
+struct MeetingActivityBadge: Equatable {
+    /// The localized kind label of the in-flight work (e.g. "Summary", "Final transcription").
+    var text: String
+}
+
 /// The plain facts a meeting contributes to its badge set. Extracted from a `Meeting` (+ the
 /// running-long seam) so `badges(for:)` stays a pure, container-free function that tests can drive
 /// with literal values.
@@ -145,6 +155,19 @@ extension MeetingsViewModel {
         if facts.hasExtended { badges.append(.extended) }
         if facts.isInVault { badges.append(.inVault) }
         return badges
+    }
+
+    /// Derive the transient "working" badge for a Home row from the *running* job kinds of one meeting
+    /// (plan J3). Returns `nil` when nothing is running for the meeting. When several kinds run at once
+    /// the most blocking one wins by a fixed precedence (transcription/import/diarization before the
+    /// LLM outputs before export), so the label is deterministic and testable without SwiftUI.
+    static func homeActivityBadge(runningKinds: [MeetingJobKind]) -> MeetingActivityBadge? {
+        let precedence: [MeetingJobKind] = [
+            .finalTranscription, .audioImport, .diarization,
+            .summary, .extendedAnalysis, .brief, .export,
+        ]
+        guard let kind = precedence.first(where: { runningKinds.contains($0) }) else { return nil }
+        return MeetingActivityBadge(text: kind.displayName)
     }
 
     /// Extract the badge facts from a live `Meeting`. `isRunningLong` comes from the seam
