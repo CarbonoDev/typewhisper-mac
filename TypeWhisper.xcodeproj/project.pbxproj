@@ -181,6 +181,9 @@
 		SPAB000000000000000002 /* SpeakerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000002 /* SpeakerSection.swift */; };
 		SPAB000000000000000003 /* SpeakerSourcePlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */; };
 		SPAB000000000000000004 /* MeetingTwoPersonSpeakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */; };
+		SPBB000000000000000001 /* SpeakerTimingAligner.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000001 /* SpeakerTimingAligner.swift */; };
+		SPBB000000000000000002 /* SpeakerTimingAlignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */; };
+		SPBB000000000000000003 /* MeetingTimingRepassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000003 /* MeetingTimingRepassTests.swift */; };
 		SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */; };
 		JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000006 /* MeetingActivityPopover.swift */; };
 		JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000007 /* MeetingJobPresentationTests.swift */; };
@@ -778,6 +781,9 @@
 		SPAF000000000000000002 /* SpeakerSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSection.swift; sourceTree = "<group>"; };
 		SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerSourcePlanTests.swift; sourceTree = "<group>"; };
 		SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTwoPersonSpeakerTests.swift; sourceTree = "<group>"; };
+		SPBF000000000000000001 /* SpeakerTimingAligner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTimingAligner.swift; sourceTree = "<group>"; };
+		SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerTimingAlignerTests.swift; sourceTree = "<group>"; };
+		SPBF000000000000000003 /* MeetingTimingRepassTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTimingRepassTests.swift; sourceTree = "<group>"; };
 		SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsFailureBannerTests.swift; sourceTree = "<group>"; };
 		JQF0000000000000000006 /* MeetingActivityPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityPopover.swift; sourceTree = "<group>"; };
 		JQF0000000000000000007 /* MeetingJobPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingJobPresentationTests.swift; sourceTree = "<group>"; };
@@ -2040,6 +2046,7 @@
 				JQF0000000000000000001 /* MeetingJob.swift */,
 				JQF0000000000000000003 /* MeetingJobClock.swift */,
 				SPAF000000000000000001 /* SpeakerSourcePlan.swift */,
+				SPBF000000000000000001 /* SpeakerTimingAligner.swift */,
 				JQF0000000000000000002 /* JobQueueService.swift */,
 			);
 			path = Meetings;
@@ -2756,6 +2763,8 @@
 				JQF0000000000000000005 /* JobQueueServiceTests.swift */,
 				SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */,
 				SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */,
+				SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */,
+				SPBF000000000000000003 /* MeetingTimingRepassTests.swift */,
 				SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */,
 				JQF0000000000000000007 /* MeetingJobPresentationTests.swift */,
 				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
@@ -4292,6 +4301,8 @@
 				JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */,
 				SPAB000000000000000003 /* SpeakerSourcePlanTests.swift in Sources */,
 				SPAB000000000000000004 /* MeetingTwoPersonSpeakerTests.swift in Sources */,
+				SPBB000000000000000002 /* SpeakerTimingAlignerTests.swift in Sources */,
+				SPBB000000000000000003 /* MeetingTimingRepassTests.swift in Sources */,
 				SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */,
 				JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */,
 				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
@@ -4378,6 +4389,7 @@
 				JQB0000000000000000001 /* MeetingJob.swift in Sources */,
 				JQB0000000000000000003 /* MeetingJobClock.swift in Sources */,
 				SPAB000000000000000001 /* SpeakerSourcePlan.swift in Sources */,
+				SPBB000000000000000001 /* SpeakerTimingAligner.swift in Sources */,
 				SPAB000000000000000002 /* SpeakerSection.swift in Sources */,
 				JQB0000000000000000002 /* JobQueueService.swift in Sources */,
 				JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */,

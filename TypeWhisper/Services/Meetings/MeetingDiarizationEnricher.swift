@@ -225,17 +225,25 @@ final class MeetingDiarizationEnricher: ObservableObject {
     private let provider: DiarizationProvider
     private let audioInspector: MeetingAudioInspecting
     private let numSpeakersProvider: @MainActor () -> Int?
+    /// The reference-transcription seam for the keep-live timing re-pass (speaker-recognition
+    /// amendment M9-SPK-B / D-A6). Mirrors the capture service's `finalizeTranscribeOverrideForTesting`
+    /// seam: production wires `ModelManagerService` (via `MeetingAudioTranscribing`), tests stub it, and
+    /// `nil` disables the re-pass entirely (so a meeting keeps its coarse times — the pre-M9-SPK-B
+    /// behavior, which the M9-SPK-A enricher tests rely on).
+    private let transcriber: MeetingAudioTranscribing?
 
     init(
         meetingService: MeetingService,
         provider: DiarizationProvider = LocalDiarizationService.shared.provider,
         audioInspector: MeetingAudioInspecting = AVAudioFileInspector(),
-        numSpeakersProvider: @escaping @MainActor () -> Int? = { LocalDiarizationService.shared.numSpeakers }
+        numSpeakersProvider: @escaping @MainActor () -> Int? = { LocalDiarizationService.shared.numSpeakers },
+        transcriber: MeetingAudioTranscribing? = nil
     ) {
         self.meetingService = meetingService
         self.provider = provider
         self.audioInspector = audioInspector
         self.numSpeakersProvider = numSpeakersProvider
+        self.transcriber = transcriber
     }
 
     // MARK: - Availability
@@ -272,10 +280,22 @@ final class MeetingDiarizationEnricher: ObservableObject {
         isEnriching = true
         defer { isEnriching = false }
 
-        let segments = meeting.segments.sorted { $0.order < $1.order }
-        guard !segments.isEmpty else { return .noTranscript }
+        guard !meeting.segments.isEmpty else { return .noTranscript }
         guard let url = meetingService.audioFileURL(for: meeting) else { return .noAudio }
 
+        // [M9-SPK-B / D-A6] Keep-live timing re-pass. When the segments still carry coarse live
+        // timestamps (`timestampsRefined != true`) and a reference transcriber is wired, refine each
+        // kept segment's start/end from a timing-only reference transcription BEFORE diarization, so
+        // overlap assignment keys on real speech times rather than batch-boundary spans (G7). The text
+        // is never changed — only the times. A cancelled re-pass throws before any write (times/labels
+        // persist only on success), so the meeting is never left half-mutated.
+        if meeting.timestampsRefined != true, let transcriber {
+            try await refineTimings(for: meeting, url: url, transcriber: transcriber)
+        }
+
+        // Re-read after the (possible) times-only write above, so overlap assignment uses the refined
+        // timeline.
+        let segments = meeting.segments.sorted { $0.order < $1.order }
         let ranges = segments.map { MeetingSegmentTimeRange(id: $0.id, start: $0.start, end: $0.end) }
         let allowSeparateTrack = Self.isLiveCaptured(meeting)
 
@@ -354,6 +374,58 @@ final class MeetingDiarizationEnricher: ObservableObject {
             let distinct = Set(assignments.map(\.label))
             return .labeled(speakerCount: distinct.count)
         }
+    }
+
+    // MARK: - Keep-live timing re-pass (M9-SPK-B / D-A6)
+
+    /// Refine a keep-live meeting's coarse per-segment timings from a timing-only reference
+    /// transcription, keeping the live text byte-identical (D-A6). Runs a reference transcription of the
+    /// meeting's audio (via the injected seam), transfers refined start/end onto the kept segments with
+    /// the pure `SpeakerTimingAligner`, writes **times only** through `MeetingService`, and marks
+    /// `timestampsRefined`. Throws on cancellation/transcription failure **before** any write, so a
+    /// cancelled pass leaves the segments untouched. A silent recording or an empty reference simply
+    /// keeps the coarse times (no-op) and does not mark the meeting refined, so a later Identify retries.
+    private func refineTimings(for meeting: Meeting, url: URL, transcriber: MeetingAudioTranscribing) async throws {
+        let live = meeting.segments
+            .sorted { $0.order < $1.order }
+            .map { SpeakerTimingAligner.LiveSegment(id: $0.id, text: $0.text, start: $0.start, end: $0.end) }
+        guard !live.isEmpty else { return }
+
+        // Decode mono samples off-main for the reference transcription. A decode failure is not fatal —
+        // fall back to the coarse timeline (the diarization pass still runs).
+        let samples: [Float]
+        do {
+            samples = try await Self.loadMonoSamples(inspector: audioInspector, url: url)
+        } catch {
+            logger.warning("Timing re-pass skipped (audio decode failed): \(error.localizedDescription)")
+            return
+        }
+        guard !samples.isEmpty else { return }
+
+        let selection = meetingService.transcriptionLanguageSelection(for: meeting)
+        let result = try await transcriber.transcribeImportedAudio(samples: samples, languageSelection: selection)
+        // A cancellation that lands after the transcription resolves must still write nothing.
+        try Task.checkCancellation()
+
+        let referenceSegments = result.segments.map { (text: $0.text, start: $0.start, end: $0.end) }
+        let referenceTokens = SpeakerTimingAligner.referenceTokens(from: referenceSegments)
+        guard !referenceTokens.isEmpty else { return }
+
+        let refined = SpeakerTimingAligner.transfer(live: live, reference: referenceTokens)
+        try Task.checkCancellation()
+
+        let timings = refined.map { (id: $0.id, start: $0.start, end: $0.end) }
+        meetingService.updateSegmentTimings(timings, for: meeting)
+        meetingService.setTimestampsRefined(true, for: meeting)
+    }
+
+    /// Decode `url` to a single mono `[Float]` track off the main actor (value-typed I/O only), for the
+    /// timing reference transcription. Empty when the file has no frames.
+    private nonisolated static func loadMonoSamples(inspector: MeetingAudioInspecting, url: URL) async throws -> [Float] {
+        let audio = try inspector.load(at: url)
+        let frames = audio.channels.map(\.count).max() ?? 0
+        guard frames > 0 else { return [] }
+        return downmixToMono(audio.channels, frames: frames)
     }
 
     // MARK: - Separate-track heuristic

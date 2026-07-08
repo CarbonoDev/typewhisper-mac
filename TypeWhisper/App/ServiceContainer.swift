@@ -269,7 +269,14 @@ final class ServiceContainer: ObservableObject {
         // Opt-in post-finalize speaker diarization (plan M9): labels a completed meeting's segments
         // via the local pyannote sidecar (or an offline separate-track heuristic) and persists a
         // SPEAKER_xx → attendee-name map. Depends only on `meetingService`.
-        meetingDiarizationEnricher = MeetingDiarizationEnricher(meetingService: meetingService)
+        // [M9-SPK-B / D-A6] The `transcriber` seam drives the keep-live timing re-pass: when Identify
+        // runs on a coarse-timed keep-live meeting, a timing-only reference transcription (via
+        // `ModelManagerService`) refines per-segment timings before diarization. Wiring it here enables
+        // the re-pass in production; unit tests stub it or pass `nil` to disable it.
+        meetingDiarizationEnricher = MeetingDiarizationEnricher(
+            meetingService: meetingService,
+            transcriber: modelManagerService
+        )
         // [Speaker-recognition amendment, M9-SPK-A] Automatic post-stop speaker labeling (D-A2/D-A4):
         // at the end of finalization, adopt provider labels when present, else label a two-person call
         // by audio channel — zero user action for the common 1:1 call. Wired as a closure so the

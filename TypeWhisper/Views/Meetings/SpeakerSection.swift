@@ -110,10 +110,17 @@ struct SpeakerSection: View {
                     }
                 }
             case .pyannote:
+                // [M9-SPK-B / D-A6] Disclose the timing re-pass in the button copy, but only when it
+                // will actually run (the meeting still carries coarse live timestamps).
                 Button {
                     viewModel.identifySpeakers(for: meeting)
                 } label: {
-                    Label(String(localized: "meetings.diarization.identify"), systemImage: "person.wave.2")
+                    Label(
+                        String(localized: viewModel.pyannoteIdentifyRefinesTimingFirst(for: meeting)
+                            ? "meetings.speakers.identify.refinesTiming"
+                            : "meetings.diarization.identify"),
+                        systemImage: "person.wave.2"
+                    )
                 }
             case .cloud:
                 if hasSpeakerLabels {

@@ -180,6 +180,29 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    /// Apply refined per-segment start/end times from the keep-live timing re-pass (speaker-recognition
+    /// amendment M9-SPK-B / D-A6) and **nothing else**: `text`, `speakerLabel`, `speakerConfidence`,
+    /// `order`, and `source` are deliberately left untouched, so the kept live text stays byte-identical
+    /// while its timing snaps to real speech. Ids not present on the meeting are ignored; a no-op when
+    /// no time actually changes. Single-writer on the MainActor.
+    func updateSegmentTimings(_ timings: [(id: UUID, start: Double, end: Double)], for meeting: Meeting) {
+        guard !timings.isEmpty else { return }
+        let byID = Dictionary(timings.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var didChange = false
+        for segment in meeting.segments {
+            guard let timing = byID[segment.id] else { continue }
+            if segment.start != timing.start || segment.end != timing.end {
+                segment.start = timing.start
+                segment.end = timing.end
+                didChange = true
+            }
+        }
+        guard didChange else { return }
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     /// Persist the `SPEAKER_xx → attendee name` map edited in the speaker-mapping editor (plan M9).
     /// Empty/whitespace names are dropped so a segment falls back to rendering its raw label.
     func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {

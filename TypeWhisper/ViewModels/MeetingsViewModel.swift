@@ -812,20 +812,40 @@ final class MeetingsViewModel: ObservableObject {
         // 2-person meeting that fell through to the sidecar (correlated channels) — or any exact-count
         // meeting — pins the right number of speakers instead of the global default.
         let numSpeakersHint = SpeakerSourcePlan.effectiveParticipantCount(for: meeting)
+        // [M9-SPK-B / D-A6] When the meeting still carries coarse live timestamps, Identify first runs a
+        // timing-only reference transcription (inside the same job) to refine per-segment timing, so the
+        // spinner label discloses the extra work rather than showing a bare "identifying speakers".
+        let refinesTimingFirst = pyannoteIdentifyRefinesTimingFirst(for: meeting)
+        let progressLabel = refinesTimingFirst
+            ? String(localized: "meetings.speakers.progress.refiningTiming")
+            : String(localized: "meetings.jobs.progress.diarizing")
         jobQueue.enqueue(
             kind: .diarization,
             meetingID: meeting.id,
-            progressLabel: String(localized: "meetings.jobs.progress.diarizing")
+            progressLabel: progressLabel
         ) { [weak diarizationEnricher, weak self] in
             guard let diarizationEnricher else { return }
             do {
                 let outcome = try await diarizationEnricher.enrich(meeting, numSpeakersHint: numSpeakersHint)
                 self?.recordDiarizationOutcome(outcome)
+            } catch is CancellationError {
+                // A cancelled re-pass/diarization wrote nothing (times and labels persist only on
+                // success); surface no error — the job settles `.cancelled` and the meeting is unchanged.
+                throw CancellationError()
             } catch {
                 self?.diarizationErrorMessage = error.localizedDescription
                 throw error
             }
         }
+    }
+
+    /// Whether pressing Identify on `meeting` will first run the keep-live timing re-pass (M9-SPK-B /
+    /// D-A6): true when the segments still carry coarse live timestamps (`timestampsRefined != true`).
+    /// Drives the "(refines timing first)" button copy on the pyannote path so the extra transcription
+    /// cost is disclosed only when it will actually be paid. A meeting whose times were already refined
+    /// by a final pass or a prior re-pass reads `false` and shows the plain "Identify speakers" copy.
+    func pyannoteIdentifyRefinesTimingFirst(for meeting: Meeting) -> Bool {
+        meeting.timestampsRefined != true
     }
 
     /// Whether provider (cloud) speaker labels are preferred over local diarization (D-A2/D-A7).
