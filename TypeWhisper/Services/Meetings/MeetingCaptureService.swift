@@ -105,6 +105,14 @@ final class MeetingCaptureService: ObservableObject {
     /// capture service has no hard dependency on the language service (constructed later) and tests are
     /// unaffected when left nil.
     var onTranscriptReady: (@MainActor (Meeting) -> Void)?
+    /// [Speaker-recognition amendment, M9-SPK-A] Invoked at the end of finalization to run the
+    /// automatic speaker-labeling pass (cloud adoption, else the two-person channel fast path — D-A2/
+    /// D-A4). ServiceContainer wires this to the diarization enricher's `autoAssignSpeakers`; the
+    /// common 1:1 call is labeled with zero user action. Optional so the capture service has no hard
+    /// dependency on the enricher and tests are unaffected when left nil. Runs *after* the meeting is
+    /// marked `.completed` (so it labels the final segments, and `isCapturing` is already false so the
+    /// live-render suppression never hides the freshly-written labels).
+    var onFinalizeSpeakerLabeling: (@MainActor (Meeting) async -> Void)?
 
     // MARK: - Session bookkeeping
 
@@ -408,6 +416,9 @@ final class MeetingCaptureService: ObservableObject {
                 with: offsetSegments,
                 preservingSegmentIDs: priorLiveCaptureSegmentIDs
             )
+            // A genuine final re-transcription refined the per-segment timings (D-A6): mark it so
+            // Identify does not later pay for the M9-SPK-B timing re-pass on already-accurate times.
+            meetingService.setTimestampsRefined(true, for: meeting)
         }
 
         // AD4 emission point 3/5: final transcript is ready (after live segments were replaced).
@@ -423,6 +434,12 @@ final class MeetingCaptureService: ObservableObject {
 
         meeting.state = .completed
         meetingService.update(meeting)
+
+        // [Speaker-recognition amendment, M9-SPK-A] Automatic speaker labeling with zero user action
+        // (D-A2/D-A4): adopt provider labels when present, else label a two-person call by audio
+        // channel. Runs now that the meeting is `.completed` and `isCapturing` is false, so the
+        // freshly-written labels are not hidden by the live-render suppression. No-op when nil (tests).
+        await onFinalizeSpeakerLabeling?(meeting)
 
         // [M2] Transcript-ready choke point: auto-enqueue background language detection for an unset
         // meeting (plan D5). Idempotent by the job queue's `(languageDetection, meetingID)` dedupe and

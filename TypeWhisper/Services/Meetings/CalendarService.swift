@@ -371,7 +371,12 @@ final class EventKitCalendarProvider: CalendarEventProviding {
     private static func attendees(from event: EKEvent) -> [Attendee] {
         guard let participants = event.attendees else { return [] }
         return participants.map { participant in
-            Attendee(name: participant.name ?? "", email: email(from: participant))
+            // Speaker-recognition amendment (D-A8): carry `isCurrentUser` additively so the two-person
+            // channel path can name `SPEAKER_OTHERS` from the single non-self attendee. Stored only
+            // when the participant *is* the current user (`true`); a non-self participant stays `nil`
+            // so "indeterminate self" and "known other" both read as `isSelf != true`.
+            let isSelf: Bool? = participant.isCurrentUser ? true : nil
+            return Attendee(name: participant.name ?? "", email: email(from: participant), isSelf: isSelf)
         }
     }
 

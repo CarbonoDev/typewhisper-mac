@@ -53,6 +53,17 @@ final class Meeting {
     /// Timestamp of the last successful related-docs discovery run (Amendment 2, DB4); backs the
     /// auto-trigger freshness gate (DB6). `nil` until discovery has succeeded at least once.
     var relatedDiscoveryAt: Date?
+    /// Ad-hoc/attendee-less override marking this as a two-person call (speaker-recognition amendment,
+    /// D-A4). Additive/optional ⇒ no migration. Only consulted when the meeting has no attendees to
+    /// count; a calendar meeting derives its participant count from `attendees` and ignores this. When
+    /// `true` the automatic two-person channel labeling fast path becomes eligible.
+    var twoPersonCall: Bool?
+    /// Whether the transcript's per-segment timestamps have been refined by a genuine final
+    /// re-transcription (speaker-recognition amendment, D-A6). Set `true` after `runFinalization`
+    /// actually replaces the live segments (and, post-M9-SPK-B, after a timing re-pass). `nil`/`false`
+    /// for keep-live meetings whose segments still carry coarse batch-boundary times; Identify then
+    /// offers/needs the timing re-pass. Additive/optional ⇒ no migration.
+    var timestampsRefined: Bool?
     var createdAt: Date
     var updatedAt: Date
 
@@ -90,6 +101,8 @@ final class Meeting {
         relatedNotePathsJSON: String? = nil,
         excludedNotePathsJSON: String? = nil,
         relatedDiscoveryAt: Date? = nil,
+        twoPersonCall: Bool? = nil,
+        timestampsRefined: Bool? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -114,6 +127,8 @@ final class Meeting {
         self.relatedNotePathsJSON = relatedNotePathsJSON
         self.excludedNotePathsJSON = excludedNotePathsJSON
         self.relatedDiscoveryAt = relatedDiscoveryAt
+        self.twoPersonCall = twoPersonCall
+        self.timestampsRefined = timestampsRefined
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.segments = []

@@ -270,6 +270,16 @@ final class ServiceContainer: ObservableObject {
         // via the local pyannote sidecar (or an offline separate-track heuristic) and persists a
         // SPEAKER_xx → attendee-name map. Depends only on `meetingService`.
         meetingDiarizationEnricher = MeetingDiarizationEnricher(meetingService: meetingService)
+        // [Speaker-recognition amendment, M9-SPK-A] Automatic post-stop speaker labeling (D-A2/D-A4):
+        // at the end of finalization, adopt provider labels when present, else label a two-person call
+        // by audio channel — zero user action for the common 1:1 call. Wired as a closure so the
+        // capture service (constructed earlier) needs no hard dependency on the enricher.
+        meetingCaptureService.onFinalizeSpeakerLabeling = { [weak meetingDiarizationEnricher] meeting in
+            let prefer = UserDefaults.standard.object(
+                forKey: UserDefaultsKeys.meetingsPreferProviderSpeakerLabels
+            ) as? Bool ?? true
+            await meetingDiarizationEnricher?.autoAssignSpeakers(for: meeting, preferProviderLabels: prefer)
+        }
 
         // [Track D] Automatic pre-meeting briefs (plan AD9). Hooked into the calendar poll via the
         // meetings view model; pre-creates backing meetings and generates briefs for events entering

@@ -58,11 +58,25 @@ extension MeetingsViewModel {
 
     /// Whether the last settled `relatedDiscovery` job for this meeting failed (fail-closed judge or an
     /// LLM error). Drives the "Last search couldn't complete" hint (DB8); Retry lives in the J3 popover.
+    ///
+    /// M8 carried minor: a failed row is retained until dismissed, so a failure followed by a
+    /// *successful* re-run would otherwise keep showing the failure banner (any `.failed` row matches).
+    /// Consider **only the most recently settled** `relatedDiscovery` job (max by `finishedAt`): a
+    /// later success supersedes the earlier failure and clears the banner.
     func lastRelatedDiscoveryFailed(for meeting: Meeting) -> Bool {
-        jobQueue.jobs(for: meeting.id).contains { job in
-            guard job.kind == .relatedDiscovery, case .failed = job.state else { return false }
-            return true
-        }
+        Self.lastSettledJobFailed(jobQueue.jobs(for: meeting.id), kind: .relatedDiscovery)
+    }
+
+    /// Pure: whether the most recently *settled* (finished — not queued/running) job of `kind` failed.
+    /// The most recent is `max` by `finishedAt`, so a later success/cancel supersedes an earlier
+    /// failure. Returns `false` when no settled job of that kind exists. Unit-testable without the VM.
+    static func lastSettledJobFailed(_ jobs: [MeetingJob], kind: MeetingJobKind) -> Bool {
+        let settled = jobs.filter { $0.kind == kind && !$0.state.isActive }
+        guard let latest = settled.max(by: {
+            ($0.finishedAt ?? .distantPast) < ($1.finishedAt ?? .distantPast)
+        }) else { return false }
+        if case .failed = latest.state { return true }
+        return false
     }
 
     // MARK: - Manual edits (DB4)

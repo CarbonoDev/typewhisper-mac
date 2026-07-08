@@ -17,6 +17,9 @@ struct MeetingsSettingsView: View {
     // [M4] Vault-relative root folder that meeting exports nest under (plan D7). Default "Meetings";
     // empty exports to the vault root.
     @AppStorage(UserDefaultsKeys.meetingsObsidianRootFolder) private var obsidianRootFolder = "Meetings"
+    // [Speaker-recognition amendment, D-A7] Prefer provider (cloud) speaker labels over local
+    // diarization when a speaker-capable engine returns them. Registered default ON.
+    @AppStorage(UserDefaultsKeys.meetingsPreferProviderSpeakerLabels) private var preferProviderSpeakerLabels = true
 
     var body: some View {
         ScrollView {
@@ -44,6 +47,11 @@ struct MeetingsSettingsView: View {
                 Divider()
 
                 FinalRetranscriptionSettingsView()
+
+                Divider()
+
+                // [Speaker-recognition amendment, D-A7] Speaker labeling preference.
+                speakerSection
 
                 Divider()
 
@@ -178,6 +186,35 @@ struct MeetingsSettingsView: View {
                         }
                     }
                 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// [Speaker-recognition amendment, D-A7] A tiny speaker block: prefer provider labels when a
+    /// speaker-capable engine returns them (drives cloud adoption + the path-aware Identify UI). The
+    /// two-person channel path and the global diarization / numSpeakers controls live elsewhere.
+    private var speakerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.speakers.sectionTitle"))
+                .font(.headline)
+            Toggle(isOn: $preferProviderSpeakerLabels) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "meetings.speakers.preferProvider.title"))
+                    Text(String(localized: "meetings.speakers.preferProvider.subtitle"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // [O1] Adoption is adopt-only: the meeting pref never reaches into a plugin's settings, so
+            // it does nothing unless the selected cloud engine has its own speaker-labels option turned
+            // on (e.g. AssemblyAI's `speaker_labels`, default off). Surface that so the setting is not
+            // silently inert.
+            if preferProviderSpeakerLabels {
+                Label(String(localized: "meetings.speakers.preferProvider.hint"), systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -808,6 +808,10 @@ final class MeetingsViewModel: ObservableObject {
     func identifySpeakers(for meeting: Meeting) {
         diarizationErrorMessage = nil
         diarizationStatusMessage = nil
+        // [Speaker-recognition amendment, D-A5] Hint pyannote with the known participant count so a
+        // 2-person meeting that fell through to the sidecar (correlated channels) — or any exact-count
+        // meeting — pins the right number of speakers instead of the global default.
+        let numSpeakersHint = SpeakerSourcePlan.effectiveParticipantCount(for: meeting)
         jobQueue.enqueue(
             kind: .diarization,
             meetingID: meeting.id,
@@ -815,12 +819,81 @@ final class MeetingsViewModel: ObservableObject {
         ) { [weak diarizationEnricher, weak self] in
             guard let diarizationEnricher else { return }
             do {
-                let outcome = try await diarizationEnricher.enrich(meeting)
+                let outcome = try await diarizationEnricher.enrich(meeting, numSpeakersHint: numSpeakersHint)
                 self?.recordDiarizationOutcome(outcome)
             } catch {
                 self?.diarizationErrorMessage = error.localizedDescription
                 throw error
             }
+        }
+    }
+
+    /// Whether provider (cloud) speaker labels are preferred over local diarization (D-A2/D-A7).
+    /// Registered default ON; read from UserDefaults so the setting drives both adoption and the
+    /// path-aware Identify UI.
+    var preferProviderSpeakerLabels: Bool {
+        UserDefaults.standard.object(forKey: UserDefaultsKeys.meetingsPreferProviderSpeakerLabels) as? Bool ?? true
+    }
+
+    /// The speaker-labeling source that *will* run for a meeting (D-A2/D-A7), so the Identify UI can
+    /// state the path (cloud / channel / pyannote) rather than being a mystery. Async because the
+    /// track availability comes from a cheap audio-header probe.
+    func plannedSpeakerSource(for meeting: Meeting) async -> SpeakerSource {
+        let availability = await diarizationEnricher.availability(for: meeting)
+        // Only *provider*-originated labels feed the cloud rung. A meeting the app already labeled
+        // locally — the two-person channel path (SPEAKER_ME/OTHERS) or local pyannote (SPEAKER_00…) —
+        // must NOT resolve `.cloud`, or it would lose its channel Undo/Redo affordance and hide the
+        // pyannote Identify button (finding). The vocabulary test is shared with the finalization
+        // adoption check so the two paths always agree.
+        let labeled = meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
+        return SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
+            segmentsAlreadyLabeled: labeled,
+            preferProviderLabels: preferProviderSpeakerLabels,
+            effectiveParticipantCount: SpeakerSourcePlan.effectiveParticipantCount(for: meeting),
+            trackAvailability: availability
+        ))
+    }
+
+    /// Whether the two-person-call toggle should be offered for a meeting (D-A4): only for
+    /// attendee-less (ad-hoc) meetings, where the participant count is otherwise unknown. Calendar
+    /// meetings derive their count from attendees and never show the toggle.
+    func showsTwoPersonToggle(for meeting: Meeting) -> Bool {
+        meeting.attendees.isEmpty
+    }
+
+    /// The current state of the two-person-call toggle (D-A4).
+    func isTwoPersonCall(_ meeting: Meeting) -> Bool {
+        meeting.twoPersonCall == true
+    }
+
+    /// Persist the ad-hoc two-person-call override (D-A4).
+    func setTwoPersonCall(_ enabled: Bool, for meeting: Meeting) {
+        meetingService.setTwoPersonCall(enabled ? true : nil, for: meeting)
+    }
+
+    /// Undo speaker labels (D-A4): clear every segment label + the speaker map. Also the escape hatch
+    /// for an automatic labeling the user disagrees with.
+    func clearSpeakerLabels(for meeting: Meeting) {
+        diarizationStatusMessage = nil
+        diarizationErrorMessage = nil
+        meetingService.clearSpeakerLabels(for: meeting)
+    }
+
+    /// Redo / re-run the two-person channel labeling (D-A4), e.g. after an Undo. Enqueued on the
+    /// transcription lane like Identify so it serializes with other audio work; a no-op when the
+    /// recording is not separate-track.
+    func relabelByChannel(for meeting: Meeting) {
+        diarizationErrorMessage = nil
+        diarizationStatusMessage = nil
+        let otherName = SpeakerSourcePlan.otherPartyName(for: meeting)
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.diarizing")
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            let outcome = await diarizationEnricher.autoLabelTwoPersonChannel(meeting, otherPartyName: otherName)
+            self?.recordDiarizationOutcome(outcome)
         }
     }
 

@@ -204,4 +204,9 @@ enum UserDefaultsKeys {
     static let meetingsAutoBriefFreshnessHours = "meetings.brief.auto.freshnessHours"
     /// Minimum attendee count for an event to auto-generate a brief (default 1).
     static let meetingsAutoBriefMinAttendees = "meetings.brief.auto.minAttendees"
+
+    // MARK: - Meetings · Speaker labels (speaker-recognition amendment, M9-SPK-A)
+    /// Whether provider (cloud) speaker labels are adopted when a speaker-capable engine returns them,
+    /// taking precedence over local diarization (D-A2/D-A7). Registered default ON.
+    static let meetingsPreferProviderSpeakerLabels = "meetings.speakers.preferProviderLabels"
 }

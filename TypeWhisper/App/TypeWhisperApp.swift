@@ -581,7 +581,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
             // Meetings export root folder (plan D7/M4): meeting notes nest under "Meetings" in the
             // vault by default; clearing the field restores pre-root paths (the escape hatch).
-            UserDefaultsKeys.meetingsObsidianRootFolder: "Meetings"
+            UserDefaultsKeys.meetingsObsidianRootFolder: "Meetings",
+            // Speaker-recognition amendment (D-A7): adopt provider speaker labels by default.
+            UserDefaultsKeys.meetingsPreferProviderSpeakerLabels: true
         ])
     }
 

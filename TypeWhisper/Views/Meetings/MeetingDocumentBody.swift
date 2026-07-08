@@ -16,8 +16,6 @@ struct MeetingDocumentBody: View {
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
 
-    @State private var diarizationAvailability: MeetingDiarizationEnricher.Availability?
-
     var body: some View {
         switch presentation.bodyMode {
         case .scheduledEmpty:
@@ -93,7 +91,7 @@ struct MeetingDocumentBody: View {
                 MeetingQAView(meeting: meeting)
 
                 Divider()
-                diarizationSection
+                SpeakerSection(meeting: meeting)
 
                 Divider()
                 mergeAffordance
@@ -209,58 +207,6 @@ struct MeetingDocumentBody: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: - Speaker diarization (re-hosted from the retired MeetingDetailView, plan M9)
-
-    @ViewBuilder
-    private var diarizationSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(String(localized: "meetings.diarization.title"))
-                    .font(.headline)
-                Spacer()
-                identifyButton
-            }
-
-            if let status = viewModel.diarizationStatusMessage {
-                Label(status, systemImage: "info.circle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            if let error = viewModel.diarizationErrorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-            }
-
-            if hasSpeakerLabels {
-                SpeakerMappingView(meeting: meeting)
-            }
-        }
-        .task(id: meeting.id) {
-            diarizationAvailability = await viewModel.diarizationAvailability(for: meeting)
-        }
-    }
-
-    private var hasSpeakerLabels: Bool {
-        meeting.segments.contains { ($0.speakerLabel?.isEmpty == false) }
-    }
-
-    @ViewBuilder
-    private var identifyButton: some View {
-        if let availability = diarizationAvailability, availability != .unavailable {
-            Button {
-                viewModel.identifySpeakers(for: meeting)
-            } label: {
-                if viewModel.isEnriching(for: meeting) {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label(String(localized: "meetings.diarization.identify"), systemImage: "person.wave.2")
-                }
-            }
-            .disabled(viewModel.isEnriching(for: meeting))
-        }
     }
 
     // MARK: - Notes (read-only list in the resting state)

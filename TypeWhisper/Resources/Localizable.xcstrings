@@ -29002,6 +29002,182 @@
           }
         }
       }
+    },
+    "meetings.speakers.sectionTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecherbezeichnungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker labels"
+          }
+        }
+      }
+    },
+    "meetings.speakers.preferProvider.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn verfügbar, Sprecherbezeichnungen des Anbieters bevorzugen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prefer provider speaker labels when available"
+          }
+        }
+      }
+    },
+    "meetings.speakers.preferProvider.subtitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecherbezeichnungen eines Cloud-Dienstes übernehmen, statt Sprecher lokal zu erkennen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adopt speaker labels from a cloud engine that returns them, instead of identifying speakers locally."
+          }
+        }
+      }
+    },
+    "meetings.speakers.preferProvider.hint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgewählte Cloud-Dienst muss seine eigene Option für Sprecherbezeichnungen aktiviert haben (z. B. „Speaker labels“ bei AssemblyAI), damit Bezeichnungen übernommen werden können."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected cloud engine must have its own speaker-labels option enabled (e.g. AssemblyAI’s “Speaker labels”) for labels to be adopted."
+          }
+        }
+      }
+    },
+    "meetings.speakers.path.cloud": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher von deinem Transkriptionsdienst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speakers from your transcription provider"
+          }
+        }
+      }
+    },
+    "meetings.speakers.path.channel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher anhand der Audiokanäle deines Gesprächs"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speakers labeled by your call's audio channels"
+          }
+        }
+      }
+    },
+    "meetings.speakers.path.pyannote": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher aus der Aufnahme erkennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identify speakers from the recording"
+          }
+        }
+      }
+    },
+    "meetings.speakers.undo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecherbezeichnungen entfernen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear speaker labels"
+          }
+        }
+      }
+    },
+    "meetings.speakers.redo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher zuordnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Label speakers"
+          }
+        }
+      }
+    },
+    "meetings.speakers.twoPerson.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dies ist ein Gespräch zu zweit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a two-person call"
+          }
+        }
+      }
+    },
+    "meetings.speakers.twoPerson.subtitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher automatisch anhand des Audiokanals zuordnen (du und die andere Person)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Label speakers automatically by audio channel (you vs. the other person)."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

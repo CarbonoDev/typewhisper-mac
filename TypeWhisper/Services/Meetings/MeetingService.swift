@@ -159,6 +159,27 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    /// Set the additive two-person-call override (speaker-recognition amendment, D-A4). Surfaced only
+    /// for attendee-less meetings; enables the automatic two-person channel labeling fast path. `nil`
+    /// clears it. Single-writer on the MainActor.
+    func setTwoPersonCall(_ enabled: Bool?, for meeting: Meeting) {
+        guard meeting.twoPersonCall != enabled else { return }
+        meeting.twoPersonCall = enabled
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Mark whether the meeting's per-segment timestamps have been refined by a genuine final
+    /// re-transcription / timing re-pass (speaker-recognition amendment, D-A6). Single-writer.
+    func setTimestampsRefined(_ refined: Bool, for meeting: Meeting) {
+        guard meeting.timestampsRefined != refined else { return }
+        meeting.timestampsRefined = refined
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     /// Persist the `SPEAKER_xx → attendee name` map edited in the speaker-mapping editor (plan M9).
     /// Empty/whitespace names are dropped so a segment falls back to rendering its raw label.
     func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {

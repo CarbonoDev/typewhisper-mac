@@ -257,8 +257,13 @@ final class MeetingDiarizationEnricher: ObservableObject {
 
     /// Diarize `meeting`'s stored audio and persist speaker labels onto its segments. Returns an
     /// explicit `Outcome`; throws only on a hard error (audio decode / provider failure).
+    ///
+    /// `numSpeakersHint` (speaker-recognition amendment, D-A5) pins pyannote's speaker count when the
+    /// participant count is known (e.g. `2` for a two-person meeting that fell through to the sidecar,
+    /// or any exact attendee count for a 3+ meeting), improving reliability over the global default.
+    /// `nil` uses the injected `numSpeakersProvider` (the global setting) as before.
     @discardableResult
-    func enrich(_ meeting: Meeting) async throws -> Outcome {
+    func enrich(_ meeting: Meeting, numSpeakersHint: Int? = nil) async throws -> Outcome {
         guard !isEnriching else { throw EnrichError.alreadyEnriching }
         // Claim the flag *synchronously*, before any `await`, so two user-triggered passes can't both
         // slip past the guard (the availability/prefix probes below suspend) and run concurrent
@@ -332,7 +337,7 @@ final class MeetingDiarizationEnricher: ObservableObject {
                 diarSegments = try await Self.runDiarization(
                     provider: provider,
                     wavData: wavData,
-                    numSpeakers: numSpeakersProvider()
+                    numSpeakers: numSpeakersHint ?? numSpeakersProvider()
                 )
             } catch {
                 logger.error("Meeting diarization failed: \(error.localizedDescription, privacy: .public)")
@@ -358,7 +363,8 @@ final class MeetingDiarizationEnricher: ObservableObject {
     /// `assignments` already happened off-main in `prepare`.
     private func applySeparateTrackAssignments(
         _ assignments: [MeetingSpeakerAssignment],
-        to meeting: Meeting
+        to meeting: Meeting,
+        otherPartyName: String? = nil
     ) -> Outcome {
         guard !assignments.isEmpty else { return .noSpeakersDetected }
 
@@ -368,7 +374,12 @@ final class MeetingDiarizationEnricher: ObservableObject {
             map[Self.micSpeakerLabel] = String(localized: "meetings.diarization.speaker.me")
         }
         if used.contains(Self.systemSpeakerLabel), (map[Self.systemSpeakerLabel] ?? "").isEmpty {
-            map[Self.systemSpeakerLabel] = String(localized: "meetings.diarization.speaker.others")
+            // Speaker-recognition amendment (D-A4/D-A8): name the "other" side from the single non-self
+            // attendee when it can be identified, else the localized "Them" (the user can rename).
+            let resolved = otherPartyName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            map[Self.systemSpeakerLabel] = (resolved?.isEmpty == false)
+                ? resolved!
+                : String(localized: "meetings.diarization.speaker.others")
         }
 
         meetingService.applySpeakerLabels(assignments, speakerMap: map, to: meeting)
@@ -579,5 +590,91 @@ final class MeetingDiarizationEnricher: ObservableObject {
         numSpeakers: Int?
     ) async throws -> [SpeakerSegment] {
         try await provider.diarize(wavData: wavData, numSpeakers: numSpeakers)
+    }
+
+    // MARK: - Automatic post-finalization labeling (speaker-recognition amendment, D-A2/D-A4)
+
+    /// Whether the meeting's transcript already carries at least one provider (cloud) speaker label
+    /// (D-A3). Delegates to the shared vocabulary test (`SpeakerSourcePlan.isProviderOriginatedLabel`)
+    /// so the finalization adoption path and the UI's planned-source resolution never disagree: a label
+    /// the app wrote locally (channel `SPEAKER_ME/OTHERS`, or pyannote `SPEAKER_00…`) is not a provider
+    /// label. At finalization/import this is doubly safe — only the provider's own diarization can have
+    /// written labels before any local pass ran (G4).
+    func hasProviderSpeakerLabels(_ meeting: Meeting) -> Bool {
+        meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
+    }
+
+    /// Automatic post-finalization speaker labeling (D-A2/D-A4). Runs with zero user action at the end
+    /// of a capture's finalization:
+    ///
+    /// 1. **Cloud adoption** — if the transcript already carries provider labels and the "prefer
+    ///    provider labels" policy is on, adopt them and skip local labeling (returns `.cloud`).
+    /// 2. **Two-person channel** — else, for a meeting with exactly two effective participants and a
+    ///    genuinely separate-track recording, label deterministically by channel (returns `.channel`).
+    /// 3. Otherwise a no-op (returns `.none`); the user can run pyannote on demand via Identify.
+    ///
+    /// Never touches the sidecar, so it is cheap and cannot block. Restart-stitched audio is excluded
+    /// by the existing `.timelineMismatch` guard inside `prepare` (nothing is written).
+    @discardableResult
+    func autoAssignSpeakers(for meeting: Meeting, preferProviderLabels: Bool) async -> SpeakerSource {
+        if preferProviderLabels, hasProviderSpeakerLabels(meeting) {
+            // Adopt: skip local diarization entirely. The provider labels are already persisted verbatim
+            // on the segments (G4), and the mapping editor derives its rows from those segment labels
+            // (`MeetingsViewModel.speakerLabels(in:)`), so there is nothing further to seed here.
+            return .cloud
+        }
+        guard SpeakerSourcePlan.effectiveParticipantCount(for: meeting) == 2 else { return .none }
+        let otherName = SpeakerSourcePlan.otherPartyName(for: meeting)
+        let outcome = await autoLabelTwoPersonChannel(meeting, otherPartyName: otherName)
+        if case .labeled = outcome { return .channel }
+        return .none
+    }
+
+    /// The automatic two-person **channel-only** labeling pass (D-A4): a cheap, local, no-sidecar RMS
+    /// assignment of mic (L) = Me / system (R) = the other participant. Reuses the existing
+    /// decorrelation-gated `prepare`/separate-track path, so a mixed-mode capture (correlated channels)
+    /// falls through and **writes nothing** (returns `.unavailable`, no misfire), and restart-stitched
+    /// audio is excluded by the `.timelineMismatch` guard. Idempotent; only runs for live captures.
+    @discardableResult
+    func autoLabelTwoPersonChannel(_ meeting: Meeting, otherPartyName: String? = nil) async -> Outcome {
+        guard !isEnriching else { return .unavailable }
+        isEnriching = true
+        defer { isEnriching = false }
+
+        let segments = meeting.segments.sorted { $0.order < $1.order }
+        guard !segments.isEmpty else { return .noTranscript }
+        // Only a live capture can carry genuinely separate mic/system tracks (imported audio never does).
+        guard Self.isLiveCaptured(meeting) else { return .unavailable }
+        guard let url = meetingService.audioFileURL(for: meeting) else { return .noAudio }
+
+        let ranges = segments.map { MeetingSegmentTimeRange(id: $0.id, start: $0.start, end: $0.end) }
+        let preparation: Preparation
+        do {
+            preparation = try await Self.prepare(
+                inspector: audioInspector,
+                url: url,
+                ranges: ranges,
+                allowSeparateTrack: true,
+                timelineTolerance: Self.timelineToleranceSeconds,
+                decorrelationThreshold: Self.decorrelationThreshold
+            )
+        } catch {
+            logger.warning("Two-person channel labeling skipped (audio load failed): \(error.localizedDescription)")
+            return .unavailable
+        }
+
+        switch preparation {
+        case .separateTrack(let assignments):
+            return applySeparateTrackAssignments(assignments, to: meeting, otherPartyName: otherPartyName)
+        case .timelineMismatch:
+            // Restart-stitched timeline (G5) → labeling would be wrong; write nothing.
+            return .timelineMismatch
+        case .noAudio:
+            return .noAudio
+        case .mono:
+            // Correlated channels (mixed-mode) → not genuinely separate-track; the auto path no-ops
+            // rather than pin arbitrary Me/Others labels. Pyannote via Identify handles this case.
+            return .unavailable
+        }
     }
 }
