@@ -14,15 +14,38 @@ final class MainWindowCoordinator: ObservableObject {
 
     @Published var route: MainWindowRoute = .home
 
+    /// The active first-party **tag** filter (plan D8, M3). Held here (not on `MeetingsViewModel`,
+    /// whose stored state is off-limits under the extension-file discipline) so the filtered
+    /// `MeetingsListView` and the sidebar highlight read one source of truth. `nil` = no tag filter.
+    /// Folders (`activeFolder`) join this in M4; the two compose (AND) then.
+    @Published private(set) var activeTag: String?
+
     /// Focus a specific meeting document. Used by the focus bridge (menu bar / notifications) and
     /// by Home / list rows.
     func openMeeting(id: UUID) {
         route = .meeting(id)
     }
 
-    /// Navigate to an arbitrary route.
+    /// Navigate to an arbitrary route. Selecting anything other than the tag-filtered list clears the
+    /// active tag filter so a stale filter never bleeds across destinations.
     func show(_ route: MainWindowRoute) {
+        if case let .tag(tag) = route {
+            activeTag = tag
+        } else {
+            activeTag = nil
+        }
         self.route = route
+    }
+
+    /// Filter the meetings list by a first-party tag (plan D8, M3). Sets `activeTag` and routes to the
+    /// filtered list; Home stays the unfiltered landing surface (owner-veto 5).
+    func showTag(_ tag: String) {
+        show(.tag(tag))
+    }
+
+    /// Clear the active tag filter and return to the unfiltered meetings list.
+    func clearTagFilter() {
+        show(.meetings)
     }
 
     /// Pure bridge from the existing `MeetingsViewModel.pendingFocusMeetingID` mechanism to a route.

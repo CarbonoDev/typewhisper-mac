@@ -56,7 +56,9 @@ struct MainWindowView: View {
         switch coordinator.route {
         case .home:
             HomeFeedView()
-        case .meetings:
+        case .meetings, .tag:
+            // Both render the same list; `MeetingsListView` applies the coordinator's `activeTag`
+            // filter (nil under `.meetings`, set under `.tag`) and shows the Clear header (plan D8).
             MeetingsListView()
         case let .meeting(id):
             if let meeting = viewModel.meetings.first(where: { $0.id == id }) {

@@ -5,6 +5,12 @@ import SwiftUI
 /// live-recording band, and a Settings gear that opens the Settings scene.
 struct MainWindowSidebar: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
+    @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+
+    /// Non-nil while the rename sheet is up for a tag (its case-folded key), driving the text field.
+    @State private var renamingTag: MeetingTagCount?
+    @State private var renameText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,10 +38,29 @@ struct MainWindowSidebar: View {
                     ) { coordinator.show(.meetings) }
                 }
 
+                // First-party TAGS (plan D9/M3): a flat, count-annotated list derived in
+                // `MeetingOrganizationIndex`; rows filter the meetings list, context menus rename/delete
+                // in bulk.
+                tagsSection
+
                 // Phase 2 — Track E injects the `SPACE · OBSIDIAN` section here (hidden until then).
                 spaceSection
             }
             .listStyle(.sidebar)
+            .alert(String(localized: "mainwindow.tags.rename.title"), isPresented: isRenamingBinding) {
+                TextField(String(localized: "mainwindow.tags.rename.placeholder"), text: $renameText)
+                Button(String(localized: "mainwindow.tags.rename.cancel"), role: .cancel) {
+                    renamingTag = nil
+                }
+                Button(String(localized: "mainwindow.tags.rename.confirm")) {
+                    if let renamingTag {
+                        viewModel.renameTag(renamingTag.name, to: renameText)
+                    }
+                    renamingTag = nil
+                }
+            } message: {
+                Text(String(localized: "mainwindow.tags.rename.message"))
+            }
 
             Spacer(minLength: 0)
 
@@ -59,13 +84,69 @@ struct MainWindowSidebar: View {
         .frame(minWidth: 220)
     }
 
-    /// True for the meetings list and any single meeting document (both live under "Meetings").
+    /// True for the meetings list and any single meeting document (both live under "Meetings"), but
+    /// **not** the tag-filtered list — a tag route highlights its own sidebar row instead.
     private var isMeetingsRoute: Bool {
         switch coordinator.route {
         case .meetings, .meeting:
             return true
         default:
             return false
+        }
+    }
+
+    /// Bridges the optional `renamingTag` to the `.alert(isPresented:)` API.
+    private var isRenamingBinding: Binding<Bool> {
+        Binding(
+            get: { renamingTag != nil },
+            set: { if !$0 { renamingTag = nil } }
+        )
+    }
+
+    /// The flat TAGS section (plan D9/M3). Hidden entirely when no meeting carries a tag, so the
+    /// sidebar stays clean on a fresh install.
+    @ViewBuilder
+    private var tagsSection: some View {
+        let tags = organizationIndex.tagCounts
+        if !tags.isEmpty {
+            Section(String(localized: "mainwindow.tags.section")) {
+                ForEach(tags) { tag in
+                    tagRow(tag)
+                }
+            }
+        }
+    }
+
+    private func tagRow(_ tag: MeetingTagCount) -> some View {
+        let isSelected: Bool = {
+            if case let .tag(active) = coordinator.route { return active.lowercased() == tag.key }
+            return false
+        }()
+        return Button {
+            coordinator.showTag(tag.key)
+        } label: {
+            HStack(spacing: 6) {
+                Label("#\(tag.name)", systemImage: "tag")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(tag.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .fontWeight(isSelected ? .semibold : .regular)
+        .contextMenu {
+            Button {
+                renameText = tag.name
+                renamingTag = tag
+            } label: {
+                Label(String(localized: "mainwindow.tags.rename"), systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                viewModel.deleteTag(tag.name)
+            } label: {
+                Label(String(localized: "mainwindow.tags.delete"), systemImage: "trash")
+            }
         }
     }
 

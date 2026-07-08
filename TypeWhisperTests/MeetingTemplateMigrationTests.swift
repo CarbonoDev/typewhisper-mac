@@ -116,6 +116,57 @@ final class MeetingTemplateMigrationTests: XCTestCase {
         XCTAssertEqual(briefs.first?.meetingKind, .brief)
     }
 
+    /// Plan M6 regression: renaming the seeded `.brief` template must NOT cause a per-launch backfill
+    /// to re-insert a pristine duplicate. The backfill guard is kind-aware, so a renamed brief still
+    /// resolves as the one brief template on the next relaunch-simulated migration.
+    func testRenamedBriefIsNotReinsertedOnRelaunch() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let defaults = makeDefaults()
+
+        // First launch: seed presets, then the user renames the brief template.
+        let service = PromptActionService(appSupportDirectory: dir, defaults: defaults)
+        service.migrateMeetingTemplatesIfNeeded(legacyTemplates: [])
+        let brief = try XCTUnwrap(service.meetingTemplates(ofKind: .brief).first)
+        service.updateMeetingTemplate(
+            brief,
+            with: PromptTemplateSpec(
+                surface: .meeting,
+                name: "My Renamed Brief",
+                prompt: brief.prompt,
+                meetingKind: .brief
+            )
+        )
+        XCTAssertEqual(service.meetingTemplates(ofKind: .brief).count, 1)
+
+        // Relaunch: a fresh service on the same store re-runs the per-launch backfill.
+        let reopened = PromptActionService(appSupportDirectory: dir, defaults: defaults)
+        reopened.migrateMeetingTemplatesIfNeeded(legacyTemplates: [])
+
+        let briefs = reopened.meetingTemplates(ofKind: .brief)
+        XCTAssertEqual(briefs.count, 1, "renamed brief must not be duplicated by backfill")
+        XCTAssertEqual(briefs.first?.name, "My Renamed Brief", "the user's renamed brief must survive")
+    }
+
+    /// Plan M6/DA2: when every brief template is deleted, the kind-aware backfill still restores the
+    /// starter on the next relaunch (the deleted-state fallback path stays reachable).
+    func testDeletedBriefIsRestoredOnRelaunch() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let defaults = makeDefaults()
+
+        let service = PromptActionService(appSupportDirectory: dir, defaults: defaults)
+        service.migrateMeetingTemplatesIfNeeded(legacyTemplates: [])
+        for brief in service.meetingTemplates(ofKind: .brief) {
+            service.deleteMeetingTemplate(brief)
+        }
+        XCTAssertTrue(service.meetingTemplates(ofKind: .brief).isEmpty)
+
+        let reopened = PromptActionService(appSupportDirectory: dir, defaults: defaults)
+        reopened.migrateMeetingTemplatesIfNeeded(legacyTemplates: [])
+        XCTAssertEqual(reopened.meetingTemplates(ofKind: .brief).count, 1, "a deleted brief is restored")
+    }
+
     func testSecondRunIsNoOp() throws {
         let dir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(dir) }

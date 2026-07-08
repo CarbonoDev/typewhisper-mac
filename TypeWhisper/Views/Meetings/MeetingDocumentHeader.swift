@@ -11,6 +11,7 @@ struct MeetingDocumentHeader: View {
     let presentation: MeetingsViewModel.DocumentPresentation
 
     @State private var isPresentingLanguagePicker = false
+    @State private var isPresentingTagsEditor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -90,8 +91,31 @@ struct MeetingDocumentHeader: View {
     private var chips: some View {
         outputSelectorChip
         languageChip
+        tagsChip
         folderTagsChip
         exportChip
+    }
+
+    // MARK: - Tags chip (plan D9/M3 — token editor with index autocomplete)
+
+    private var tagsChip: some View {
+        Button {
+            isPresentingTagsEditor = true
+        } label: {
+            let tags = meeting.tags
+            let text = tags.isEmpty
+                ? String(localized: "meetingdoc.tags.chip.empty")
+                : tags.prefix(2).map { "#\($0)" }.joined(separator: " ")
+            chipLabel(
+                icon: "tag",
+                text: text,
+                trailingCount: tags.count > 2 ? tags.count : 0
+            )
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresentingTagsEditor, arrowEdge: .bottom) {
+            MeetingTagsEditorPopover(meeting: meeting)
+        }
     }
 
     // MARK: - Language chip (plan D9; Detect wired in M2)
@@ -155,7 +179,9 @@ struct MeetingDocumentHeader: View {
             let text = (folder?.isEmpty == false)
                 ? folder!
                 : String(localized: "meetingdoc.chip.noFolder")
-            chipLabel(icon: "folder", text: text, trailingCount: meeting.obsidianTags.count)
+            // Tags moved to their own chip (M3); this remains the folder/export entry point (M4
+            // finalizes folder editing).
+            chipLabel(icon: "folder", text: text)
         }
         .buttonStyle(.plain)
     }
@@ -374,6 +400,110 @@ private struct MeetingLanguagePickerPopover: View {
                 Text(String(localized: "meetingdoc.language.detect.manualHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// The per-meeting Tags token editor popover (plan D9/M3): existing tags as removable capsules, a
+/// text field that commits on Return, and autocomplete suggestions drawn from the shared
+/// `MeetingOrganizationIndex`. All writes go through the view model → the single-writer
+/// `MeetingService.setObsidianTags`, so the sidebar, timeline capsules, and index refresh together.
+private struct MeetingTagsEditorPopover: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
+    let meeting: Meeting
+
+    @State private var draft = ""
+
+    private var suggestions: [String] {
+        MeetingsViewModel.tagSuggestions(
+            from: organizationIndex.tagCounts,
+            query: draft,
+            excluding: meeting
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "meetingdoc.tags.editor.title"))
+                .font(.headline)
+
+            if !meeting.tags.isEmpty {
+                FlowingTagCapsules(tags: meeting.tags) { tag in
+                    viewModel.removeMeetingTag(tag, from: meeting)
+                }
+            }
+
+            TextField(String(localized: "meetingdoc.tags.editor.add"), text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(commitDraft)
+
+            if !suggestions.isEmpty {
+                Divider()
+                Text(String(localized: "meetingdoc.tags.editor.suggestions"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(suggestions, id: \.self) { suggestion in
+                            Button {
+                                viewModel.addMeetingTag(suggestion, to: meeting)
+                                draft = ""
+                            } label: {
+                                Label("#\(suggestion)", systemImage: "tag")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .padding(.vertical, 3)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 160)
+            }
+        }
+        .padding(16)
+        .frame(width: 280)
+    }
+
+    private func commitDraft() {
+        // Allow comma-separated entry ("hiring, q3") in one commit.
+        let parts = draft.split(separator: ",").map { String($0) }
+        for part in parts {
+            viewModel.addMeetingTag(part, to: meeting)
+        }
+        draft = ""
+    }
+}
+
+/// A wrapping row of removable tag capsules for the tags editor. Kept simple (an `HStack` per line
+/// via `ViewThatFits` would over-engineer this popover), it lays capsules out with `WrapLayout`-free
+/// flow using a `LazyVGrid`-style adaptive column.
+private struct FlowingTagCapsules: View {
+    let tags: [String]
+    let onRemove: (String) -> Void
+
+    private let columns = [GridItem(.adaptive(minimum: 70), spacing: 6, alignment: .leading)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
+                HStack(spacing: 4) {
+                    Text("#\(tag)")
+                        .lineLimit(1)
+                    Button {
+                        onRemove(tag)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.secondary.opacity(0.15), in: Capsule())
             }
         }
     }

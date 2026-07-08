@@ -240,7 +240,10 @@
 		AA00000000000000000413 /* SpeakerMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000413 /* SpeakerMappingView.swift */; };
 		AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000501 /* MeetingLanguageDirective.swift */; };
 		AA00000000000000000502 /* MeetingLanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000502 /* MeetingLanguageService.swift */; };
+		AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000601 /* MeetingOrganizationIndex.swift */; };
 		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
+		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
+		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
 		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
 		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
 		MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */; };
@@ -818,7 +821,10 @@
 		BB00000000000000000413 /* SpeakerMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerMappingView.swift; sourceTree = "<group>"; };
 		BB00000000000000000501 /* MeetingLanguageDirective.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDirective.swift; sourceTree = "<group>"; };
 		BB00000000000000000502 /* MeetingLanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageService.swift; sourceTree = "<group>"; };
+		BB00000000000000000601 /* MeetingOrganizationIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndex.swift; sourceTree = "<group>"; };
 		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
+		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
+		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerLabelSuppressionTests.swift; sourceTree = "<group>"; };
@@ -1860,6 +1866,7 @@
 				TCF0000000000000000004 /* HomeFeedViewModel.swift */,
 				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
 				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
+				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1993,6 +2000,7 @@
 				BB00000000000000000412 /* MeetingDiarizationEnricher.swift */,
 				BB00000000000000000501 /* MeetingLanguageDirective.swift */,
 				BB00000000000000000502 /* MeetingLanguageService.swift */,
+				BB00000000000000000601 /* MeetingOrganizationIndex.swift */,
 				JQF0000000000000000001 /* MeetingJob.swift */,
 				JQF0000000000000000003 /* MeetingJobClock.swift */,
 				JQF0000000000000000002 /* JobQueueService.swift */,
@@ -2682,6 +2690,7 @@
 				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
 				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
+				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
 				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
@@ -4210,6 +4219,7 @@
 				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
 				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
+				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
 				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
@@ -4398,7 +4408,9 @@
 				AA00000000000000000413 /* SpeakerMappingView.swift in Sources */,
 				AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */,
 				AA00000000000000000502 /* MeetingLanguageService.swift in Sources */,
+				AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */,
 				CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */,
+				CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
 				AAB0000000000000000B01 /* PromptSurface.swift in Sources */,
 				AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */,

@@ -62,6 +62,8 @@ final class ServiceContainer: ObservableObject {
     let meetingBriefScheduler: MeetingBriefScheduler // [Track D]
     // [Track J] Central in-memory background-job queue for per-meeting long-running work (J1).
     let meetingJobQueue: JobQueueService
+    // [M3] Derived, in-memory tag/organization index over `meetingService.$meetings` (plan D6).
+    let meetingOrganizationIndex: MeetingOrganizationIndex
 
     // HTTP API
     let httpServer: HTTPServer
@@ -162,6 +164,10 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService
         )
         calendarService = CalendarService()
+        // [M3] Derived tag/organization index (plan D6). Subscribes to `meetingService.$meetings`, so
+        // it is constructed right after the service; publishes low-cardinality tag counts the sidebar,
+        // chips, and filters observe. `_shared` assigned below beside the view models.
+        meetingOrganizationIndex = MeetingOrganizationIndex(meetingService: meetingService)
         // [Track J] Central background-job queue (plan J1). Depends on nothing; constructed early so
         // the view model can enqueue through it and leaf views can `@ObservedObject` the singleton.
         meetingJobQueue = JobQueueService(clock: SystemJobClock())
@@ -380,6 +386,7 @@ final class ServiceContainer: ObservableObject {
         MeetingsViewModel._shared = meetingsViewModel
         HomeFeedViewModel._shared = homeFeedViewModel // [Track C]
         JobQueueService._shared = meetingJobQueue // [Track J]
+        MeetingOrganizationIndex._shared = meetingOrganizationIndex // [M3]
 
         // License
         LicenseService.shared = licenseService

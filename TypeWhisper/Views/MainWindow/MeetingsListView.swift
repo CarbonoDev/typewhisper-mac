@@ -11,6 +11,13 @@ struct MeetingsListView: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @State private var isPresentingImport = false
 
+    /// The meetings shown after applying the coordinator's active tag filter (plan D8). `nil`
+    /// `activeTag` = the full list.
+    private var displayedMeetings: [Meeting] {
+        guard let tag = coordinator.activeTag else { return viewModel.meetings }
+        return viewModel.meetings(taggedWith: tag)
+    }
+
     var body: some View {
         List {
             if let error = viewModel.captureErrorMessage {
@@ -18,10 +25,13 @@ struct MeetingsListView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            if viewModel.meetings.isEmpty {
+            if let tag = coordinator.activeTag {
+                filterHeader(tag: tag)
+            }
+            if displayedMeetings.isEmpty {
                 emptyState
             } else {
-                ForEach(viewModel.meetings, id: \.id) { meeting in
+                ForEach(displayedMeetings, id: \.id) { meeting in
                     Button {
                         coordinator.openMeeting(id: meeting.id)
                     } label: {
@@ -82,6 +92,30 @@ struct MeetingsListView: View {
         } label: {
             Label(String(localized: "meetings.newMeeting"), systemImage: "plus")
         }
+    }
+
+    /// The "Filtered by #tag ✕ Clear" header shown above the list when a tag filter is active (plan
+    /// D8). Clear resets the filter and returns to the unfiltered list.
+    private func filterHeader(tag: String) -> some View {
+        HStack(spacing: 8) {
+            Label {
+                Text(String(localized: "mainwindow.meetings.filteredBy"))
+                Text("#\(tag)")
+                    .fontWeight(.semibold)
+            } icon: {
+                Image(systemName: "tag")
+            }
+            .font(.callout)
+            Spacer()
+            Button {
+                coordinator.clearTagFilter()
+            } label: {
+                Label(String(localized: "mainwindow.meetings.filter.clear"), systemImage: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 
     private var emptyState: some View {

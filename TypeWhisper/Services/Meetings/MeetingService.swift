@@ -525,15 +525,79 @@ final class MeetingService: ObservableObject {
     /// Persist the per-meeting Obsidian frontmatter tags, trimming blanks and de-duplicating while
     /// preserving order.
     func setObsidianTags(_ tags: [String], for meeting: Meeting) {
-        var seen = Set<String>()
-        let cleaned = tags
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
+        let cleaned = Self.normalizedTags(tags)
         guard meeting.obsidianTags != cleaned else { return }
         meeting.obsidianTags = cleaned
         meeting.updatedAt = Date()
         save()
         fetchMeetings()
+    }
+
+    // MARK: - First-party tags (plan D6, M3)
+
+    /// Bulk-rename a tag across every meeting that carries it, in a **single** `save()` +
+    /// `fetchMeetings()` (plan D6 — not O(n) per-meeting `update()` calls). Case-folded match; the
+    /// replacement is re-run through the trim/dedupe policy so a rename onto a tag a meeting already
+    /// has **merges** (no case-variant duplicate). No-op when the source is blank, the target trims
+    /// empty, or nothing carries the tag.
+    func renameTag(_ tag: String, to newName: String) {
+        let fromKey = tag.trimmingCharacters(in: .whitespaces).lowercased()
+        let trimmedNew = newName.trimmingCharacters(in: .whitespaces)
+        guard !fromKey.isEmpty, !trimmedNew.isEmpty else { return }
+
+        var didChange = false
+        for meeting in meetings {
+            let current = meeting.obsidianTags
+            guard current.contains(where: { $0.lowercased() == fromKey }) else { continue }
+            // Replace the matched tag with the new name, then dedupe case-insensitively (preserving
+            // the first occurrence) so a rename that collides with an existing tag merges instead of
+            // leaving `["Recruiting", "recruiting"]`.
+            let replaced = current.map { $0.lowercased() == fromKey ? trimmedNew : $0 }
+            let cleaned = Self.caseFoldedDedupe(replaced)
+            guard cleaned != current else { continue }
+            meeting.obsidianTags = cleaned
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Bulk-delete a tag from every meeting that carries it, in a single save (plan D6). Case-folded.
+    func deleteTag(_ tag: String) {
+        let key = tag.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !key.isEmpty else { return }
+
+        var didChange = false
+        for meeting in meetings {
+            let current = meeting.obsidianTags
+            guard current.contains(where: { $0.lowercased() == key }) else { continue }
+            meeting.obsidianTags = current.filter { $0.lowercased() != key }
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Trim blanks and drop exact-string duplicates while preserving order (the canonical tag policy
+    /// shared by `setObsidianTags`).
+    static func normalizedTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// Trim blanks and drop **case-insensitive** duplicates, keeping the first occurrence's casing.
+    /// Used by `renameTag` so a rename merge never yields a case-variant twin.
+    private static func caseFoldedDedupe(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
     }
 
     // MARK: - Templates (plan AD6 — unified into `promptActions.store`)

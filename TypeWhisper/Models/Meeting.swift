@@ -145,6 +145,15 @@ final class Meeting {
         set { obsidianTagsJSON = Meeting.encode(newValue) }
     }
 
+    /// First-party alias over the canonical `obsidianTags` store (plan D6, M3). A **computed forward**
+    /// — zero schema delta, since renaming the stored property would be a non-additive schema change.
+    /// Obsidian export keeps reading `obsidianTags` unchanged; first-party tag surfaces read/write
+    /// `tags`.
+    var tags: [String] {
+        get { obsidianTags }
+        set { obsidianTags = newValue }
+    }
+
     /// Per-meeting final re-transcription override (addendum AD8). `nil` = inherit.
     var finalRetranscriptionPolicy: FinalRetranscriptionPolicy? {
         get { FinalRetranscriptionPolicy(jsonString: finalRetranscriptionRaw) }

@@ -58,6 +58,7 @@ struct MeetingTimeline: View {
                         }
                         badges(for: meeting, isLive: isLive)
                     }
+                    tagCapsules(for: meeting)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
@@ -93,6 +94,37 @@ struct MeetingTimeline: View {
                 badgeCapsule(text: badge.displayName, systemImage: badge.systemImage, tint: badge.tint)
             }
         }
+    }
+
+    /// First-party tag capsules on a timeline row (plan D9/M3), capped so a heavily-tagged meeting
+    /// can't blow out the row; the remainder collapses into a "+N" capsule. Display-only — the whole
+    /// row is already a navigation Button (filtering lives on the sidebar TAGS section), so nested
+    /// interactive capsules are deliberately avoided.
+    @ViewBuilder
+    private func tagCapsules(for meeting: Meeting) -> some View {
+        let tags = meeting.tags
+        if !tags.isEmpty {
+            let maxVisible = 4
+            let visible = tags.prefix(maxVisible)
+            HStack(spacing: 6) {
+                ForEach(Array(visible), id: \.self) { tag in
+                    tagCapsule("#\(tag)")
+                }
+                if tags.count > maxVisible {
+                    tagCapsule("+\(tags.count - maxVisible)")
+                }
+            }
+        }
+    }
+
+    private func tagCapsule(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15), in: Capsule())
+            .foregroundStyle(.secondary)
     }
 
     private func workingBadge(for meeting: Meeting) -> MeetingActivityBadge? {

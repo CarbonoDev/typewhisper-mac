@@ -350,6 +350,12 @@ class PromptActionService: ObservableObject {
         var insertedNames = existingNames
         var didInsert = false
 
+        // Kind-aware brief tracking (plan M6/DA2): true if any `.brief`-kind row already exists OR is
+        // inserted during the legacy pass below. The backfill skips the brief preset whenever this is
+        // set — see the loop comment.
+        let briefKindRaw = MeetingOutputKind.brief.rawValue
+        var hasBriefTemplate = meetingActions.contains { $0.meetingKind == .brief }
+
         let migrationDone = defaults.bool(forKey: Self.migrationCompletedKey)
         if !migrationDone {
             for snapshot in legacyTemplates {
@@ -362,6 +368,7 @@ class PromptActionService: ObservableObject {
                 context.insert(MeetingTemplateMigration.makePromptAction(from: snapshot))
                 insertedIDs.insert(snapshot.id)
                 insertedNames.insert(snapshot.name)
+                if snapshot.kindRaw == briefKindRaw { hasBriefTemplate = true }
                 didInsert = true
             }
         }
@@ -369,7 +376,20 @@ class PromptActionService: ObservableObject {
         // Backfill any preset missing by name (fresh install, or a preset deleted pre-upgrade). A
         // backfilled preset keeps its own curated sort order; ties are broken arbitrarily by the
         // fetch and are cosmetic.
-        for preset in MeetingTemplateMigration.presetSnapshots() where !insertedNames.contains(preset.name) {
+        //
+        // The `.brief` preset is special-cased **kind-aware** (plan M6/DA2): its backfill is skipped
+        // whenever ANY `.brief`-kind template already exists (from a prior launch or this migration's
+        // legacy pass) — not just when a row of the same *name* exists. A name-scoped check would
+        // re-insert a pristine duplicate every launch once the user renames the seeded brief, and
+        // `meetingTemplates(ofKind: .brief).first` could then nondeterministically resolve the stock
+        // prompt instead of the user's edit. When every brief template has been deleted,
+        // `hasBriefTemplate` is false and the starter is still restored (the runtime default-prompt
+        // fallback in MeetingBriefService stays reachable meanwhile).
+        for preset in MeetingTemplateMigration.presetSnapshots() {
+            let alreadyPresent = preset.kindRaw == briefKindRaw
+                ? hasBriefTemplate
+                : insertedNames.contains(preset.name)
+            guard !alreadyPresent else { continue }
             context.insert(MeetingTemplateMigration.makePromptAction(from: preset))
             insertedNames.insert(preset.name)
             didInsert = true
