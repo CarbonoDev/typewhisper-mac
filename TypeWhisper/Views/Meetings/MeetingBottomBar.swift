@@ -6,6 +6,9 @@ import SwiftUI
 /// (`MeetingsViewModel.DocumentContextAction`).
 struct MeetingBottomBar: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [Track J] Observe the queue directly so the meeting-scoped Generate spinner reacts to job
+    // state changes (the VM does not republish on queue mutations — plan J1 §CC7).
+    @ObservedObject private var jobQueue = JobQueueService.shared
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
@@ -117,7 +120,7 @@ struct MeetingBottomBar: View {
             ? String(localized: "meetingdoc.generate.regenerate")
             : String(localized: "meetingdoc.generate")
 
-        if viewModel.isGeneratingOutput {
+        if viewModel.isGeneratingOutput(for: meeting) {
             ProgressView().controlSize(.small)
         } else if templates.isEmpty {
             Text(String(localized: "meetingdoc.generate.noTemplates"))
@@ -127,7 +130,7 @@ struct MeetingBottomBar: View {
             Menu {
                 ForEach(templates, id: \.id) { template in
                     Button {
-                        Task { await viewModel.generateOutput(for: meeting, using: template) }
+                        viewModel.generateOutput(for: meeting, using: template)
                     } label: {
                         if template.id == preselected?.id {
                             Label(template.name, systemImage: "checkmark")
@@ -140,7 +143,7 @@ struct MeetingBottomBar: View {
                 Label(label, systemImage: "sparkles")
             } primaryAction: {
                 if let preselected {
-                    Task { await viewModel.generateOutput(for: meeting, using: preselected) }
+                    viewModel.generateOutput(for: meeting, using: preselected)
                 }
             }
             .menuStyle(.borderlessButton)

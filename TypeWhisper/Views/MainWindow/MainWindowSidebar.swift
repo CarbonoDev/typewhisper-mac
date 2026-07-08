@@ -39,6 +39,9 @@ struct MainWindowSidebar: View {
 
             Spacer(minLength: 0)
 
+            // [Track J] Count-only background-activity pill (plan J1); renders nothing when idle.
+            MeetingActivityIndicator()
+
             LiveRecordingBand()
 
             Divider()

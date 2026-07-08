@@ -21711,6 +21711,70 @@
         }
       }
     },
+    "meetings.jobs.indicator.accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background activity"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrundaktivität"
+          }
+        }
+      }
+    },
+    "meetings.jobs.indicator.queued": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d queued"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d in Warteschlange"
+          }
+        }
+      }
+    },
+    "meetings.jobs.indicator.running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d running"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d aktiv"
+          }
+        }
+      }
+    },
+    "meetings.jobs.progress.generating": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird erstellt…"
+          }
+        }
+      }
+    },
     "meetings.diarization.status.noSpeakers": {
       "localizations": {
         "en": {

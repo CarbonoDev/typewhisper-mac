@@ -59,6 +59,8 @@ final class ServiceContainer: ObservableObject {
     let meetingImportService: MeetingImportService
     let meetingDiarizationEnricher: MeetingDiarizationEnricher
     let meetingBriefScheduler: MeetingBriefScheduler // [Track D]
+    // [Track J] Central in-memory background-job queue for per-meeting long-running work (J1).
+    let meetingJobQueue: JobQueueService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -159,6 +161,9 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService
         )
         calendarService = CalendarService()
+        // [Track J] Central background-job queue (plan J1). Depends on nothing; constructed early so
+        // the view model can enqueue through it and leaf views can `@ObservedObject` the singleton.
+        meetingJobQueue = JobQueueService(clock: SystemJobClock())
         // [Track C] Capture-context rules constructed after `meetingService` (addendum AD7); the
         // matcher feeds `meetingCaptureService.start()` and the rules UI in the view model.
         let meetingContextRuleService = MeetingContextRuleService()
@@ -330,7 +335,8 @@ final class ServiceContainer: ObservableObject {
             diarizationEnricher: meetingDiarizationEnricher,
             // [Track C]
             contextRuleService: meetingContextRuleService,
-            briefScheduler: meetingBriefScheduler // [Track D]
+            briefScheduler: meetingBriefScheduler, // [Track D]
+            jobQueue: meetingJobQueue // [Track J]
         )
         homeFeedViewModel = HomeFeedViewModel() // [Track C]
 
@@ -350,6 +356,7 @@ final class ServiceContainer: ObservableObject {
         WatchFolderViewModel._shared = watchFolderViewModel
         MeetingsViewModel._shared = meetingsViewModel
         HomeFeedViewModel._shared = homeFeedViewModel // [Track C]
+        JobQueueService._shared = meetingJobQueue // [Track J]
 
         // License
         LicenseService.shared = licenseService

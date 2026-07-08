@@ -15,7 +15,6 @@ final class MeetingsViewModel: ObservableObject {
 
     // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
     @Published private(set) var templates: [PromptAction] = []
-    @Published private(set) var isGeneratingOutput = false
     @Published var outputErrorMessage: String?
     /// Set alongside `outputErrorMessage` when the failure is specifically "no LLM provider
     /// configured", so the document body can offer a deep link into Settings › Library › Prompts.
@@ -99,6 +98,9 @@ final class MeetingsViewModel: ObservableObject {
     let contextRuleService: MeetingContextRuleService
     // [Track D] Auto pre-meeting briefs (plan AD9). Internal so `MeetingsViewModel+AutoBrief` reaches it.
     let briefScheduler: MeetingBriefScheduler
+    // [Track J] Central background-job queue (plan J1). Output generation is routed through it so the
+    // Generate spinner is meeting-scoped (does not follow navigation) and double-clicks are deduped.
+    private let jobQueue: JobQueueService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -116,9 +118,11 @@ final class MeetingsViewModel: ObservableObject {
         diarizationEnricher: MeetingDiarizationEnricher,
         // [Track C]
         contextRuleService: MeetingContextRuleService,
-        briefScheduler: MeetingBriefScheduler // [Track D]
+        briefScheduler: MeetingBriefScheduler, // [Track D]
+        jobQueue: JobQueueService // [Track J]
     ) {
         self.contextRuleService = contextRuleService
+        self.jobQueue = jobQueue // [Track J]
         self.meetingService = meetingService
         self.promptActionService = promptActionService
         self.calendarService = calendarService
@@ -154,10 +158,9 @@ final class MeetingsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        llmService.$isGenerating
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isGeneratingOutput = value }
-            .store(in: &cancellables)
+        // [Track J] `isGeneratingOutput` is no longer a VM mirror of `llmService.$isGenerating` — the
+        // Generate spinner is now meeting-scoped, derived from the job queue via
+        // `isGeneratingOutput(for:)`, so it stays on the originating meeting across navigation (J1).
         llmService.$isAnswering
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isAnswering = value }
@@ -498,17 +501,44 @@ final class MeetingsViewModel: ObservableObject {
     }
 
     /// Generate (or regenerate) an output for a meeting from a template. Regeneration inserts a
-    /// new row; the detail view shows the newest per kind. Surfaces failures via
-    /// `outputErrorMessage`.
-    func generateOutput(for meeting: Meeting, using template: PromptAction) async {
+    /// new row; the detail view shows the newest per kind. Surfaces failures via `outputErrorMessage`.
+    ///
+    /// [Track J] Routed through the job queue (plan J1): the actual LLM call runs on the `llm` lane
+    /// (cap 1) as a `summary`/`extendedAnalysis` job. Enqueue is synchronous — the button no longer
+    /// awaits — and a second click while the job is queued/running is deduped by `(kind, meetingID)`,
+    /// so exactly one `MeetingOutput` is produced. A thrown error is recorded for the document's
+    /// "needs provider" deep link *and* rethrown so the job is marked `.failed` for the J3 popover.
+    func generateOutput(for meeting: Meeting, using template: PromptAction) {
         outputErrorMessage = nil
         outputErrorNeedsProvider = false
-        do {
-            try await llmService.generateOutput(for: meeting, using: template)
-        } catch {
-            outputErrorMessage = error.localizedDescription
-            outputErrorNeedsProvider = needsProviderSetup(error)
+        let kind: MeetingJobKind = (template.meetingKind == .extended) ? .extendedAnalysis : .summary
+        jobQueue.enqueue(
+            kind: kind,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.generating")
+        ) { [weak llmService, weak self] in
+            guard let llmService else { return }
+            do {
+                _ = try await llmService.generateOutput(for: meeting, using: template)
+            } catch {
+                self?.recordOutputError(error)
+                throw error
+            }
         }
+    }
+
+    /// Publish an output-generation failure for the document body (the "needs provider" deep link).
+    /// Split out of `generateOutput` so the job-queue closure can record it before rethrowing.
+    private func recordOutputError(_ error: Error) {
+        outputErrorMessage = error.localizedDescription
+        outputErrorNeedsProvider = needsProviderSetup(error)
+    }
+
+    /// Whether an LLM-lane job (summary/extended today; brief once J2 routes it) is in flight for
+    /// this meeting — drives the bottom bar's Generate spinner. Meeting-scoped so it does not follow
+    /// navigation (the bug J1 targets).
+    func isGeneratingOutput(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(inLane: .llm, meetingID: meeting.id)
     }
 
     /// Toggle whether in-meeting notes are folded into generated outputs.
