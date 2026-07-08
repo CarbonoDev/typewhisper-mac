@@ -64,6 +64,7 @@ final class ServiceContainer: ObservableObject {
     let meetingJobQueue: JobQueueService
     // [M3] Derived, in-memory tag/organization index over `meetingService.$meetings` (plan D6).
     let meetingOrganizationIndex: MeetingOrganizationIndex
+    let meetingFolderMetadataStore: MeetingFolderMetadataStore // [M7]
 
     // HTTP API
     let httpServer: HTTPServer
@@ -168,6 +169,21 @@ final class ServiceContainer: ObservableObject {
         // it is constructed right after the service; publishes low-cardinality tag counts the sidebar,
         // chips, and filters observe. `_shared` assigned below beside the view models.
         meetingOrganizationIndex = MeetingOrganizationIndex(meetingService: meetingService)
+        // [M7] Per-folder context config store (Amendment 1, DA4). UserDefaults-backed; attaches to
+        // M4's folder-mutator seams so a folder's config follows a rename and dies with the folder,
+        // and feeds the organization index's union point so configured-but-empty folders appear in the
+        // tree. Threaded into the brief + LLM services below to scope vault retrieval.
+        let meetingFolderMetadataStore = MeetingFolderMetadataStore()
+        self.meetingFolderMetadataStore = meetingFolderMetadataStore
+        meetingService.onFolderPathRewrite = { [weak meetingFolderMetadataStore] old, new in
+            meetingFolderMetadataStore?.handleFolderRewrite(from: old, to: new)
+        }
+        meetingService.onFolderDeleted = { [weak meetingFolderMetadataStore] path in
+            meetingFolderMetadataStore?.handleFolderDeleted(path)
+        }
+        meetingOrganizationIndex.configuredFolderPathsProvider = { [weak meetingFolderMetadataStore] in
+            meetingFolderMetadataStore?.configuredFolderPaths() ?? []
+        }
         // [Track J] Central background-job queue (plan J1). Depends on nothing; constructed early so
         // the view model can enqueue through it and leaf views can `@ObservedObject` the singleton.
         meetingJobQueue = JobQueueService(clock: SystemJobClock())
@@ -192,7 +208,9 @@ final class ServiceContainer: ObservableObject {
         meetingLLMService = MeetingLLMService(
             meetingService: meetingService,
             vaultService: obsidianVaultService,
-            processor: promptProcessingService
+            processor: promptProcessingService,
+            // [M7] Q&A honors the same per-folder vault scope as the brief (Amendment 1, DA6).
+            folderMetadataStore: meetingFolderMetadataStore
         )
         // [M2] Per-meeting language detection (plan D5). Runs a single-turn LLM call over a transcript
         // sample and persists a `.detected` language; enqueues on the shared job queue's cap-1 `llm`
@@ -219,7 +237,9 @@ final class ServiceContainer: ObservableObject {
             processor: promptProcessingService,
             // Plan M6 (amendment DA2): the brief prompt is the editable `.brief` template resolved
             // from the unified prompt store.
-            promptActionService: promptActionService
+            promptActionService: promptActionService,
+            // [M7] The meeting's folder config scopes brief knowledge-base retrieval (Amendment 1, DA5).
+            folderMetadataStore: meetingFolderMetadataStore
         )
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).
@@ -361,6 +381,7 @@ final class ServiceContainer: ObservableObject {
             languageService: meetingLanguageService, // [M2]
             vaultService: obsidianVaultService,
             briefService: meetingBriefService,
+            folderMetadataStore: meetingFolderMetadataStore, // [M7]
             exporter: meetingObsidianExporter,
             importService: meetingImportService,
             diarizationEnricher: meetingDiarizationEnricher,
@@ -389,6 +410,7 @@ final class ServiceContainer: ObservableObject {
         HomeFeedViewModel._shared = homeFeedViewModel // [Track C]
         JobQueueService._shared = meetingJobQueue // [Track J]
         MeetingOrganizationIndex._shared = meetingOrganizationIndex // [M3]
+        MeetingFolderMetadataStore._shared = meetingFolderMetadataStore // [M7]
 
         // License
         LicenseService.shared = licenseService

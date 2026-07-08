@@ -225,6 +225,11 @@
 		AA00000000000000000401 /* LexicalRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000401 /* LexicalRetriever.swift */; };
 		AA00000000000000000402 /* ObsidianVaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000402 /* ObsidianVaultService.swift */; };
 		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
+		M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */; };
+		M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000002 /* MeetingFolderDetailView.swift */; };
+		M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000003 /* VaultContextPickerView.swift */; };
+		M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */; };
+		M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000005 /* MeetingFolderContextTests.swift */; };
 		DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000001 /* MeetingBriefScheduler.swift */; };
 		DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */; };
 		DDB0000000000000000003 /* AutoBriefSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000003 /* AutoBriefSettingsView.swift */; };
@@ -807,6 +812,11 @@
 		BB00000000000000000401 /* LexicalRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalRetriever.swift; sourceTree = "<group>"; };
 		BB00000000000000000402 /* ObsidianVaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianVaultService.swift; sourceTree = "<group>"; };
 		BB00000000000000000403 /* MeetingBriefService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefService.swift; sourceTree = "<group>"; };
+		M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderMetadataStore.swift; sourceTree = "<group>"; };
+		M7F0000000000000000002 /* MeetingFolderDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderDetailView.swift; sourceTree = "<group>"; };
+		M7F0000000000000000003 /* VaultContextPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultContextPickerView.swift; sourceTree = "<group>"; };
+		M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+FolderContext.swift"; sourceTree = "<group>"; };
+		M7F0000000000000000005 /* MeetingFolderContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderContextTests.swift; sourceTree = "<group>"; };
 		DDF0000000000000000001 /* MeetingBriefScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefScheduler.swift; sourceTree = "<group>"; };
 		DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+AutoBrief.swift"; sourceTree = "<group>"; };
 		DDF0000000000000000003 /* AutoBriefSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoBriefSettingsView.swift; sourceTree = "<group>"; };
@@ -1869,6 +1879,7 @@
 				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
 				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
 				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
+				M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1994,6 +2005,7 @@
 				BB00000000000000000401 /* LexicalRetriever.swift */,
 				BB00000000000000000402 /* ObsidianVaultService.swift */,
 				BB00000000000000000403 /* MeetingBriefService.swift */,
+				M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */,
 				DDF0000000000000000001 /* MeetingBriefScheduler.swift */,
 				BB00000000000000000406 /* MeetingObsidianExporter.swift */,
 				BB00000000000000000408 /* TranscriptFileParser.swift */,
@@ -2038,6 +2050,8 @@
 				MWF0000000000000000015 /* MarkdownDocumentView.swift */,
 				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
 				BB00000000000000000404 /* MeetingBriefView.swift */,
+				M7F0000000000000000002 /* MeetingFolderDetailView.swift */,
+				M7F0000000000000000003 /* VaultContextPickerView.swift */,
 				BB00000000000000000405 /* MeetingQAView.swift */,
 				BB00000000000000000407 /* MeetingExportView.swift */,
 				BB00000000000000000411 /* MeetingImportView.swift */,
@@ -2694,6 +2708,7 @@
 				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
 				MEF0000000000000000602 /* MeetingFolderTests.swift */,
+				M7F0000000000000000005 /* MeetingFolderContextTests.swift */,
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
 				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
@@ -4224,6 +4239,7 @@
 				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
 				MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */,
+				M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */,
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
 				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
@@ -4397,6 +4413,10 @@
 				AA00000000000000000401 /* LexicalRetriever.swift in Sources */,
 				AA00000000000000000402 /* ObsidianVaultService.swift in Sources */,
 				AA00000000000000000403 /* MeetingBriefService.swift in Sources */,
+				M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */,
+				M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */,
+				M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */,
+				M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */,
 				DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */,
 				DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */,
 				DDB0000000000000000003 /* AutoBriefSettingsView.swift in Sources */,

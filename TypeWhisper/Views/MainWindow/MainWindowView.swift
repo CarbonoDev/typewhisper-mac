@@ -56,11 +56,14 @@ struct MainWindowView: View {
         switch coordinator.route {
         case .home:
             HomeFeedView()
-        case .meetings, .tag, .folder:
-            // All render the same list; `MeetingsListView` applies the coordinator's `activeFolder`
+        case .meetings, .tag:
+            // Both render the same list; `MeetingsListView` applies the coordinator's `activeFolder`
             // and `activeTag` filters (which compose AND) and shows the combined Clear header (D8).
-            // (M7 re-targets `.folder` to a dedicated detail view.)
             MeetingsListView()
+        case let .folder(path):
+            // M7 (Amendment 1, DA7): the `.folder` route re-targets a Granola-style detail view —
+            // description, the folder's meetings, and the attached vault-context section.
+            MeetingFolderDetailView(folderPath: path)
         case let .meeting(id):
             if let meeting = viewModel.meetings.first(where: { $0.id == id }) {
                 MeetingDocumentView(meeting: meeting)

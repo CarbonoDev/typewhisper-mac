@@ -44,17 +44,23 @@ final class MeetingLLMService: ObservableObject {
     private let meetingService: MeetingService
     private let vaultService: ObsidianVaultService
     private let processor: any PromptProcessing
+    /// Source of the per-folder `VaultRetrievalScope` (Amendment 1, DA6/F1): in-meeting Q&A honors the
+    /// same folder scope as the brief so the two stay consistent. Optional so predating call sites/tests
+    /// construct the service without it — a nil store keeps whole-vault retrieval (today's behavior).
+    private let folderMetadataStore: MeetingFolderMetadataStore?
     private let charBudget: Int
 
     init(
         meetingService: MeetingService,
         vaultService: ObsidianVaultService,
         processor: any PromptProcessing,
+        folderMetadataStore: MeetingFolderMetadataStore? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
         self.vaultService = vaultService
         self.processor = processor
+        self.folderMetadataStore = folderMetadataStore
         self.charBudget = charBudget
     }
 
@@ -158,9 +164,12 @@ final class MeetingLLMService: ObservableObject {
             .sorted { $0.createdAt < $1.createdAt }
             .map { MeetingQAComposer.PriorTurn(question: $0.question, answer: $0.answer) }
 
-        // Knowledge-base passages only when a vault is connected (shared retriever with M5).
+        // Knowledge-base passages only when a vault is connected (shared retriever with M5). Amendment 1
+        // (DA6/F1): the meeting's folder config scopes retrieval identically to the brief — `.none`
+        // yields no passages, attachments restrict, no config keeps whole-vault behavior.
+        let scope = folderMetadataStore?.retrievalScope(forFolderPath: meeting.folderPath) ?? .wholeVault
         let passages = vaultService.isConnected
-            ? vaultService.retrieve(query: trimmedQuestion, limit: 3)
+            ? vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: scope)
             : []
 
         let userText = MeetingQAComposer.compose(

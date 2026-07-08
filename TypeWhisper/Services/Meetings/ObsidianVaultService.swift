@@ -14,6 +14,49 @@ struct VaultPassage: Sendable, Equatable {
     let content: String
 }
 
+/// How a `retrieve` call is scoped over the vault (Amendment 1, DA5; Amendment 2, DB5/G6). The scope
+/// is **computed by the services** (from a meeting's folder config) — the vault stays a pure reader.
+enum VaultRetrievalScope: Equatable, Sendable {
+    /// No restriction — rank every note (today's behavior; the default keeps existing callers valid).
+    case wholeVault
+    /// Retrieve nothing (the folder's "No vault context" toggle).
+    case none
+    /// Restrict to explicitly attached note paths plus every `.md` under an attached folder prefix,
+    /// minus any individually excluded path. Folder prefixes match **component-wise** so `Acme` never
+    /// matches `Acme2`. `excludedPaths` (Amendment 2, DB5/G6; default `[]`) subtracts a note even when
+    /// it sits under a live folder prefix.
+    case restricted(notePaths: Set<String>, folderPrefixes: [String], excludedPaths: Set<String> = [])
+
+    /// Whether a vault-relative note path is in scope. Component-wise folder matching: a prefix `p`
+    /// covers `rel` iff `rel == p` or `rel` starts with `p + "/"`.
+    func includes(_ relativePath: String) -> Bool {
+        switch self {
+        case .wholeVault:
+            return true
+        case .none:
+            return false
+        case let .restricted(notePaths, folderPrefixes, excludedPaths):
+            if excludedPaths.contains(relativePath) { return false }
+            if notePaths.contains(relativePath) { return true }
+            return folderPrefixes.contains { prefix in
+                let trimmed = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+                guard !trimmed.isEmpty else { return false }
+                return relativePath == trimmed || relativePath.hasPrefix(trimmed + "/")
+            }
+        }
+    }
+}
+
+/// A vault entry (note or folder) for the read-only context picker (Amendment 1, DA8). Cheaper than
+/// `VaultPassage` — no body parse; just the relative path and a display name.
+struct VaultEntry: Identifiable, Sendable, Equatable {
+    let relativePath: String
+    let displayName: String
+    let isDirectory: Bool
+
+    var id: String { (isDirectory ? "d:" : "f:") + relativePath }
+}
+
 /// First-party vault READING service (plan D9): the `ObsidianPlugin` bundle is untouched and its
 /// helpers are private, so core re-implements the ~20-line `obsidian.json` vault detection plus
 /// markdown enumeration, frontmatter/tag parsing, and lexical retrieval in-process. The chosen
@@ -125,9 +168,13 @@ final class ObsidianVaultService: ObservableObject {
     /// Rank the vault's markdown notes against `query`, returning at most `limit` bounded passages,
     /// most-relevant first. Empty when no vault is connected or nothing matches. Pure lexical
     /// ranking (offline, deterministic — plan D7).
-    func retrieve(query: String, limit: Int = 3) -> [VaultPassage] {
+    func retrieve(query: String, limit: Int = 3, scope: VaultRetrievalScope = .wholeVault) -> [VaultPassage] {
         guard let vaultPath else { return [] }
-        let notes = enumerateNotes(in: vaultPath)
+        if case .none = scope { return [] }
+        // Filter the fresh enumeration by scope *before* ranking (Amendment 1, DA5): a folder
+        // attachment resolves to "all `.md` under it, live at retrieval time" precisely because this
+        // filters over a fresh enumeration on every call (no snapshot).
+        let notes = enumerateNotes(in: vaultPath).filter { scope.includes($0.id) }
         guard !notes.isEmpty else { return [] }
 
         let documents = notes.map { note in
@@ -147,6 +194,65 @@ final class ObsidianVaultService: ObservableObject {
                 tags: note.tags,
                 content: TranscriptContextBuilder.truncateWords(note.body, to: passageCharBudget)
             )
+        }
+    }
+
+    // MARK: - Read-only listing (Amendment 1, DA8 — shared vault-enumeration primitive)
+
+    /// Every note and folder in the vault as lightweight `VaultEntry` values — no body parse (cheaper
+    /// than `retrieve`/`enumerateNotes`). Deterministic (folders first, then notes, each sorted by
+    /// path) and bounded. Empty when no vault is connected. This is the single vault-enumeration
+    /// primitive the attachment picker uses (and Track E's Space browser will reuse — plan §4).
+    func listEntries() -> [VaultEntry] {
+        guard let vaultPath else { return [] }
+        return enumerateEntries(in: vaultPath)
+    }
+
+    /// Case-insensitive search over note/folder path + display name, bounded to `limit`. Powers the
+    /// search-as-you-type context picker (DA8). A blank query returns the leading `limit` entries.
+    func searchEntries(_ query: String, limit: Int = 50) -> [VaultEntry] {
+        let entries = listEntries()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered: [VaultEntry]
+        if trimmed.isEmpty {
+            filtered = entries
+        } else {
+            filtered = entries.filter {
+                $0.relativePath.localizedCaseInsensitiveContains(trimmed)
+                    || $0.displayName.localizedCaseInsensitiveContains(trimmed)
+            }
+        }
+        return Array(filtered.prefix(limit))
+    }
+
+    private func enumerateEntries(in vaultPath: String) -> [VaultEntry] {
+        let root = URL(fileURLWithPath: vaultPath, isDirectory: true)
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+
+        var entries: [VaultEntry] = []
+        for case let url as URL in enumerator {
+            guard entries.count < maxFilesScanned else { break }
+            let rel = relativePath(of: url, under: root)
+            guard !rel.isEmpty else { continue }
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                entries.append(VaultEntry(relativePath: rel, displayName: url.lastPathComponent, isDirectory: true))
+            } else if url.pathExtension.lowercased() == "md" {
+                entries.append(VaultEntry(
+                    relativePath: rel,
+                    displayName: url.deletingPathExtension().lastPathComponent,
+                    isDirectory: false
+                ))
+            }
+        }
+        // Deterministic: folders before notes, each sorted case-insensitively by relative path.
+        return entries.sorted { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+            return lhs.relativePath.localizedCaseInsensitiveCompare(rhs.relativePath) == .orderedAscending
         }
     }
 

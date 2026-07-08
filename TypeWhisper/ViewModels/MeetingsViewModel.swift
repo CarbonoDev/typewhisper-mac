@@ -95,8 +95,14 @@ final class MeetingsViewModel: ObservableObject {
     // (extension-file discipline) reaches it for the chip's Detect / Re-detect action and the
     // post-import auto-detect enqueue.
     let languageService: MeetingLanguageService
-    private let vaultService: ObsidianVaultService
+    // [M7] `internal` (not private) so `MeetingsViewModel+FolderContext.swift` reaches it for the
+    // folder detail view's read-only vault search (attachment picker).
+    let vaultService: ObsidianVaultService
     private let briefService: MeetingBriefService
+    // [M7] Per-folder context config store (Amendment 1, DA4). `internal` so the folder-context
+    // extension routes description/attachment/toggle writes through the single-writer store; the
+    // folder detail view observes `MeetingFolderMetadataStore.shared` directly for live updates.
+    let folderMetadataStore: MeetingFolderMetadataStore
     private let exporter: MeetingObsidianExporter
     private let importService: MeetingImportService
     private let diarizationEnricher: MeetingDiarizationEnricher
@@ -123,6 +129,7 @@ final class MeetingsViewModel: ObservableObject {
         languageService: MeetingLanguageService, // [M2]
         vaultService: ObsidianVaultService,
         briefService: MeetingBriefService,
+        folderMetadataStore: MeetingFolderMetadataStore, // [M7]
         exporter: MeetingObsidianExporter,
         importService: MeetingImportService,
         diarizationEnricher: MeetingDiarizationEnricher,
@@ -142,6 +149,7 @@ final class MeetingsViewModel: ObservableObject {
         self.languageService = languageService // [M2]
         self.vaultService = vaultService
         self.briefService = briefService
+        self.folderMetadataStore = folderMetadataStore // [M7]
         self.exporter = exporter
         self.importService = importService
         self.diarizationEnricher = diarizationEnricher

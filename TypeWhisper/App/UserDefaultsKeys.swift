@@ -166,6 +166,10 @@ enum UserDefaultsKeys {
     /// default `"Meetings"`; an empty value collapses to exporting at the vault root (the escape
     /// hatch). The exporter prepends its sanitized components before the per-meeting `folderPath`.
     static let meetingsObsidianRootFolder = "meetings.obsidianRootFolder"
+    /// JSON-encoded `[folderPath: FolderContextConfig]` map (Amendment 1, DA4): per-folder description,
+    /// attached vault notes/folders, and the "No vault context" toggle that scope brief/Q&A retrieval.
+    /// Absent/empty ⇒ no folder has context configured (every meeting retrieves whole-vault).
+    static let meetingsFolderContextConfigs = "meetings.folderContextConfigs"
     /// Opt-in bridge (addendum AD5, default OFF): when true, finishing a meeting also emits a
     /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
     /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.

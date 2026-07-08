@@ -133,13 +133,13 @@ struct MainWindowSidebar: View {
     private func commitTagRename() {
         guard let renamingTag else { return }
         let trimmedNew = renameText.trimmingCharacters(in: .whitespaces)
+        // A blank rename is a no-op in `renameTag`, so mirror `commitFolderRename`'s guard and bail
+        // out *before* touching the filter — otherwise the active tag filter is cleared even though
+        // the tag itself is unchanged (M4 minor).
+        guard !trimmedNew.isEmpty else { self.renamingTag = nil; return }
         viewModel.renameTag(renamingTag.name, to: renameText)
         if coordinator.activeTag?.lowercased() == renamingTag.key {
-            if trimmedNew.isEmpty {
-                coordinator.clearTagFilter()
-            } else {
-                coordinator.showTag(trimmedNew)
-            }
+            coordinator.showTag(trimmedNew)
         }
         self.renamingTag = nil
     }

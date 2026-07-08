@@ -28410,6 +28410,278 @@
           }
         }
       }
+    },
+    "meetingfolder.detail.description.placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a description…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beschreibung hinzufügen …"
+          }
+        }
+      }
+    },
+    "meetingfolder.detail.meetings.header": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meetings"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechungen"
+          }
+        }
+      }
+    },
+    "meetingfolder.detail.meetings.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No meetings in this folder yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Besprechungen in diesem Ordner."
+          }
+        }
+      }
+    },
+    "meetingfolder.context.header": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontext"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attach vault notes or folders to scope this folder's briefs and Q&A."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge Notizen oder Ordner aus dem Tresor hinzu, um Briefings und Fragen dieses Ordners einzugrenzen."
+          }
+        }
+      }
+    },
+    "meetingfolder.context.add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add files for context"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien als Kontext hinzufügen"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No context attached — briefs use the whole vault."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Kontext angehängt – Briefings nutzen den gesamten Tresor."
+          }
+        }
+      }
+    },
+    "meetingfolder.context.noVaultToggle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No vault context"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Tresor-Kontext"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.noVaultCaption": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefs and Q&A ignore the vault for this folder."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Briefings und Fragen ignorieren den Tresor für diesen Ordner."
+          }
+        }
+      }
+    },
+    "meetingfolder.context.notConnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect a vault to attach context."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde einen Tresor, um Kontext anzuhängen."
+          }
+        }
+      }
+    },
+    "meetingfolder.context.remove": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add context"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontext hinzufügen"
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.search.placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search notes and folders…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen und Ordner suchen …"
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.empty": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is empty."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Tresor ist leer."
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.noResults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matches."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Treffer."
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.add": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld hinzufügen"
+          }
+        }
+      }
+    },
+    "meetingfolder.picker.cancel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

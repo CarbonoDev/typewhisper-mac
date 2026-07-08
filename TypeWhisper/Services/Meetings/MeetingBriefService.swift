@@ -24,6 +24,11 @@ final class MeetingBriefService: ObservableObject {
     /// any call site that predates templating construct the service without a prompt store; a nil
     /// store (or no `.brief` template) falls back to the built-in `meetings.brief.systemPrompt`.
     private let promptActionService: PromptActionService?
+    /// Source of the per-folder `VaultRetrievalScope` (Amendment 1, DA5): the meeting's folder config
+    /// restricts brief knowledge-base retrieval to attached notes/folders (or disables it). Optional so
+    /// tests/call sites that predate folder context construct the service without it — a nil store
+    /// keeps whole-vault retrieval (today's behavior).
+    private let folderMetadataStore: MeetingFolderMetadataStore?
     private let charBudget: Int
 
     /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
@@ -35,12 +40,14 @@ final class MeetingBriefService: ObservableObject {
         vaultService: ObsidianVaultService,
         processor: any PromptProcessing,
         promptActionService: PromptActionService? = nil,
+        folderMetadataStore: MeetingFolderMetadataStore? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
         self.vaultService = vaultService
         self.processor = processor
         self.promptActionService = promptActionService
+        self.folderMetadataStore = folderMetadataStore
         self.charBudget = charBudget
     }
 
@@ -145,9 +152,14 @@ final class MeetingBriefService: ObservableObject {
     /// nothing matches.
     private func knowledgeBaseBlock(for meeting: Meeting) -> String {
         guard vaultService.isConnected else { return "" }
+        // Amendment 1 (DA5): the meeting's folder config scopes vault retrieval. `.none` (the folder's
+        // "No vault context" toggle) ⇒ an empty KB block (brief falls back to prior meetings only);
+        // no folder config / no attachments ⇒ `.wholeVault` (today's behavior).
+        let scope = folderMetadataStore?.retrievalScope(forFolderPath: meeting.folderPath) ?? .wholeVault
+        if case .none = scope { return "" }
         let query = retrievalQuery(for: meeting)
         guard !query.isEmpty else { return "" }
-        let passages = vaultService.retrieve(query: query, limit: 3)
+        let passages = vaultService.retrieve(query: query, limit: 3, scope: scope)
         guard !passages.isEmpty else { return "" }
         return passages
             .map { passage in
