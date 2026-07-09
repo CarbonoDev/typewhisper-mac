@@ -17,13 +17,14 @@ struct MeetingsListView: View {
         MeetingsViewModel.filteredMeetings(
             viewModel.meetings,
             folder: coordinator.activeFolder,
-            tag: coordinator.activeTag
+            tag: coordinator.activeTag,
+            unfiledOnly: coordinator.unfiledOnly
         )
     }
 
-    /// True while either filter is active (drives the combined header + filter-specific empty state).
+    /// True while any filter is active (drives the combined header + filter-specific empty state).
     private var isFiltered: Bool {
-        coordinator.activeFolder != nil || coordinator.activeTag != nil
+        coordinator.activeFolder != nil || coordinator.activeTag != nil || coordinator.unfiledOnly
     }
 
     var body: some View {
@@ -115,6 +116,11 @@ struct MeetingsListView: View {
                     .font(.callout)
                 if let folder = coordinator.activeFolder {
                     facet(icon: "folder", text: folder) { coordinator.clearFolderFilter() }
+                }
+                if coordinator.unfiledOnly {
+                    facet(icon: "tray", text: String(localized: "mainwindow.folders.unfiled")) {
+                        coordinator.clearUnfiledFilter()
+                    }
                 }
                 if let tag = coordinator.activeTag {
                     facet(icon: "tag", text: "#\(tag)") { coordinator.clearTagFilter() }

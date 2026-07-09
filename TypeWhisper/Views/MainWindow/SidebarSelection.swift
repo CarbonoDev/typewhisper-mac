@@ -42,6 +42,15 @@ enum SidebarSelection {
         return MeetingService.normalizedFolderPath(activeFolder) == MeetingService.normalizedFolderPath(nodePath)
     }
 
+    /// The **Unfiled** row is highlighted while the "meetings with no folder" filter is active. Like the
+    /// folder/tag rows it reads the coordinator's filter state (not the route), so it stays lit under
+    /// unfiled+tag AND composition and when a single meeting is opened from the filtered list. It is
+    /// independent of `isFolderSelected` — Unfiled is not a folder path; the two verticals are mutually
+    /// exclusive, so only one is ever lit at a time.
+    static func isUnfiledSelected(unfiledOnly: Bool) -> Bool {
+        unfiledOnly
+    }
+
     /// A **tag** row is highlighted when it is the active tag filter. The comparison is case-folded so
     /// the row stays selected regardless of the casing the filter was set from (the sidebar sets tags
     /// by display name, the coordinator stores that name verbatim).

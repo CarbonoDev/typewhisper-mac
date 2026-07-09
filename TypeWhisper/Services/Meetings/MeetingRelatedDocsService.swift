@@ -107,8 +107,19 @@ final class MeetingRelatedDocsService: ObservableObject {
             skipMemoryInjection: true
         )
 
-        // Fail-closed parse (DB3): a throw here persists nothing and marks the job `.failed`.
-        let keptIndices = try Self.parseJudgeReply(reply, candidateCount: candidates.count)
+        // Fail-closed parse (DB3): a throw here persists nothing and marks the job `.failed`. Log the
+        // truncated raw reply first so a prose-hallucination failure is diagnosable without the reply
+        // being available anywhere else (the persisted job only carries the localized error message).
+        // The reply is redacted (default `.private`): on this failure path it is hallucinated prose that
+        // can quote candidate note excerpts, meeting titles, or attendee names — user-vault content that
+        // must not persist unredacted in the unified system log. Only the length is non-derived metadata.
+        let keptIndices: [Int]
+        do {
+            keptIndices = try Self.parseJudgeReply(reply, candidateCount: candidates.count)
+        } catch {
+            logger.error("Related-docs judge reply unparseable (fail-closed); raw reply length \(reply.count, privacy: .public), prefix: \(Self.truncatedForLog(reply))")
+            throw error
+        }
         let keptPaths = keptIndices.map { candidates[$0].path }
         meetingService.setDiscoveredRelatedNotes(keptPaths, for: meeting)
     }
@@ -214,6 +225,19 @@ final class MeetingRelatedDocsService: ObservableObject {
             kept.append(value - 1)
         }
         return kept
+    }
+
+    /// A bounded, single-line rendering of a raw judge reply for diagnostic logging: newlines collapsed
+    /// to spaces and clipped to the first ~200 characters (an `…` marks truncation). The cap keeps a
+    /// runaway reply from spilling candidate/transcript-derived content into the log — it is a failure
+    /// diagnostic, not a full dump.
+    static func truncatedForLog(_ reply: String, limit: Int = 200) -> String {
+        let flattened = reply
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if flattened.count <= limit { return flattened }
+        return String(flattened.prefix(limit)) + "…"
     }
 
     /// Every maximal run of digits parsed as an `Int` (order-preserving).

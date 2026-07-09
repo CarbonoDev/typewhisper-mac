@@ -73,4 +73,28 @@ final class MeetingRelatedDocsFailureBannerTests: XCTestCase {
         ]
         XCTAssertFalse(MeetingsViewModel.lastSettledJobFailed(jobs, kind: .relatedDiscovery))
     }
+
+    // MARK: - Specific failure reason surfaced inline (banner diagnosis)
+
+    func testFailureMessageSurfacesLatestReason() {
+        let jobs = [
+            job(.relatedDiscovery, .failed(message: "old reason"), finishedAt: t1),
+            job(.relatedDiscovery, .failed(message: "newest reason"), finishedAt: t2)
+        ]
+        XCTAssertEqual(MeetingsViewModel.lastSettledFailureMessage(jobs, kind: .relatedDiscovery),
+                       "newest reason", "the most recently settled failure's message wins")
+    }
+
+    func testFailureMessageNilWhenLatestSucceeded() {
+        let jobs = [
+            job(.relatedDiscovery, .failed(message: "boom"), finishedAt: t1),
+            job(.relatedDiscovery, .succeeded, finishedAt: t2) // later → supersedes
+        ]
+        XCTAssertNil(MeetingsViewModel.lastSettledFailureMessage(jobs, kind: .relatedDiscovery))
+    }
+
+    func testFailureMessageNilWhenNoSettledJobs() {
+        let jobs = [job(.relatedDiscovery, .queued, finishedAt: nil)]
+        XCTAssertNil(MeetingsViewModel.lastSettledFailureMessage(jobs, kind: .relatedDiscovery))
+    }
 }

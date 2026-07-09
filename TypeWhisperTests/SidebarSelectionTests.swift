@@ -39,6 +39,26 @@ final class SidebarSelectionTests: XCTestCase {
         XCTAssertFalse(SidebarSelection.isFolderSelected("Clients/Acme", activeFolder: nil))
     }
 
+    // MARK: - Unfiled row (owner request)
+
+    func testUnfiledSelectedTracksFlag() {
+        XCTAssertTrue(SidebarSelection.isUnfiledSelected(unfiledOnly: true))
+        XCTAssertFalse(SidebarSelection.isUnfiledSelected(unfiledOnly: false))
+        // Unfiled is a vertical filter, not a destination: a `.meeting` route opened from the unfiled
+        // list keeps it lit (via the persisted flag) without lighting Home.
+        XCTAssertFalse(SidebarSelection.isHomeSelected(route: .unfiled))
+        XCTAssertFalse(SidebarSelection.isMeetingsSelected(route: .unfiled),
+                       "the Unfiled row highlights itself, not Meetings")
+    }
+
+    func testUnfiledAndTagHighlightIndependently() {
+        // Unfiled + a tag: the Unfiled row and the tag row are both lit; neither folder, Home, nor
+        // Meetings is (unfiled and folder are mutually exclusive verticals).
+        XCTAssertTrue(SidebarSelection.isUnfiledSelected(unfiledOnly: true))
+        XCTAssertTrue(SidebarSelection.isTagSelected("hiring", activeTag: "Hiring"))
+        XCTAssertFalse(SidebarSelection.isFolderSelected("Clients", activeFolder: nil))
+    }
+
     // MARK: - Tag rows (case-folded)
 
     func testTagSelectedIsCaseFolded() {

@@ -71,12 +71,27 @@ extension MeetingsViewModel {
     /// The most recent is `max` by `finishedAt`, so a later success/cancel supersedes an earlier
     /// failure. Returns `false` when no settled job of that kind exists. Unit-testable without the VM.
     static func lastSettledJobFailed(_ jobs: [MeetingJob], kind: MeetingJobKind) -> Bool {
+        lastSettledFailureMessage(jobs, kind: kind) != nil
+    }
+
+    /// The specific (localized) failure reason of the most recently settled `relatedDiscovery` job, so
+    /// the section's failure banner can surface *why* the last search couldn't complete without opening
+    /// the activity popover. `nil` when the latest settled discovery didn't fail (or there is none).
+    func lastRelatedDiscoveryFailureReason(for meeting: Meeting) -> String? {
+        Self.lastSettledFailureMessage(jobQueue.jobs(for: meeting.id), kind: .relatedDiscovery)
+    }
+
+    /// Pure: the `.failed(message:)` payload of the most recently *settled* job of `kind` (`max` by
+    /// `finishedAt`, so a later success/cancel supersedes an earlier failure), or `nil` when the latest
+    /// settled job didn't fail / none exists. The message is `error.localizedDescription` captured by
+    /// the queue, i.e. the localized `LocalizedError` reason. Unit-testable without the VM.
+    static func lastSettledFailureMessage(_ jobs: [MeetingJob], kind: MeetingJobKind) -> String? {
         let settled = jobs.filter { $0.kind == kind && !$0.state.isActive }
         guard let latest = settled.max(by: {
             ($0.finishedAt ?? .distantPast) < ($1.finishedAt ?? .distantPast)
-        }) else { return false }
-        if case .failed = latest.state { return true }
-        return false
+        }) else { return nil }
+        if case let .failed(message) = latest.state { return message }
+        return nil
     }
 
     // MARK: - Manual edits (DB4)

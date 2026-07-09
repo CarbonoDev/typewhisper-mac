@@ -219,6 +219,29 @@ final class MeetingFolderFilterTests: XCTestCase {
         XCTAssertEqual(none.count, 3)
     }
 
+    /// Unfiled filter selects exactly the meetings with no folder (blank/whitespace ⇒ unfiled), matching
+    /// the sidebar count predicate, and composes (AND) with a tag.
+    func testUnfiledFilterAndTagComposition() {
+        let meetings = [
+            makeMeeting("a", folder: nil, tags: ["hiring"]),
+            makeMeeting("b", folder: "   ", tags: ["roadmap"]),
+            makeMeeting("c", folder: "Clients/Acme", tags: ["hiring"]),
+            makeMeeting("d", folder: nil)
+        ]
+        let unfiled = MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil, unfiledOnly: true)
+        XCTAssertEqual(Set(unfiled.map(\.title)), ["a", "b", "d"], "blank folder counts as unfiled")
+
+        let unfiledAndTag = MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: "hiring", unfiledOnly: true)
+        XCTAssertEqual(unfiledAndTag.map(\.title), ["a"], "unfiled AND tag compose — c is filed, so excluded")
+
+        // unfiledOnly wins over a (defensively) supplied folder — the two verticals are exclusive.
+        let unfiledWins = MeetingsViewModel.filteredMeetings(meetings, folder: "Clients/Acme", tag: nil, unfiledOnly: true)
+        XCTAssertEqual(Set(unfiledWins.map(\.title)), ["a", "b", "d"])
+
+        // Default (unfiledOnly: false) is unchanged — the whole list passes through.
+        XCTAssertEqual(MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil).count, 4)
+    }
+
     /// Folder suggestions: all tree paths (depth-first), filtered by case-insensitive substring.
     func testFolderSuggestions() {
         let tree = MeetingOrganizationIndex.folderTree(from: [
@@ -296,5 +319,69 @@ final class MeetingFolderNavigationTests: XCTestCase {
         XCTAssertNil(coordinator.activeFolder)
         XCTAssertNil(coordinator.activeTag)
         XCTAssertEqual(coordinator.route, .meetings)
+    }
+
+    // MARK: - Unfiled vertical facet (owner request)
+
+    func testShowUnfiledSetsFlagAndRoute() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showUnfiled()
+        XCTAssertTrue(coordinator.unfiledOnly)
+        XCTAssertEqual(coordinator.route, .unfiled)
+        XCTAssertNil(coordinator.activeFolder)
+    }
+
+    func testUnfiledAndFolderAreMutuallyExclusive() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showUnfiled()
+        coordinator.showFolder("Clients/Acme")
+        XCTAssertFalse(coordinator.unfiledOnly, "selecting a folder clears unfiled")
+        XCTAssertEqual(coordinator.activeFolder, "Clients/Acme")
+
+        coordinator.showUnfiled()
+        XCTAssertNil(coordinator.activeFolder, "selecting unfiled clears the folder")
+        XCTAssertTrue(coordinator.unfiledOnly)
+    }
+
+    func testShowUnfiledPreservesTagAndComposes() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showTag("hiring")
+        coordinator.showUnfiled()
+        XCTAssertTrue(coordinator.unfiledOnly)
+        XCTAssertEqual(coordinator.activeTag, "hiring", "tag preserved — unfiled+tag AND compose")
+
+        // Selecting a tag while unfiled is active preserves unfiled.
+        coordinator.showTag("roadmap")
+        XCTAssertTrue(coordinator.unfiledOnly)
+        XCTAssertEqual(coordinator.activeTag, "roadmap")
+    }
+
+    func testClearUnfiledFilterKeepsTag() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showUnfiled()
+        coordinator.showTag("hiring")
+        coordinator.clearUnfiledFilter()
+        XCTAssertFalse(coordinator.unfiledOnly)
+        XCTAssertEqual(coordinator.activeTag, "hiring")
+        XCTAssertEqual(coordinator.route, .tag("hiring"), "route falls back to the surviving tag filter")
+    }
+
+    func testClearTagFilterKeepsUnfiled() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showUnfiled()
+        coordinator.showTag("hiring")
+        coordinator.clearTagFilter()
+        XCTAssertNil(coordinator.activeTag)
+        XCTAssertTrue(coordinator.unfiledOnly)
+        XCTAssertEqual(coordinator.route, .unfiled, "route falls back to the surviving unfiled filter")
+    }
+
+    func testNavigatingAwayClearsUnfiled() {
+        let coordinator = MainWindowCoordinator()
+        coordinator.showUnfiled()
+        coordinator.showTag("hiring")
+        coordinator.show(.home)
+        XCTAssertFalse(coordinator.unfiledOnly)
+        XCTAssertNil(coordinator.activeTag)
     }
 }

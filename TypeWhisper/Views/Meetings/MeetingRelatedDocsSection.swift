@@ -69,9 +69,17 @@ struct MeetingRelatedDocsSection: View {
     @ViewBuilder
     private var connectedBody: some View {
         if viewModel.lastRelatedDiscoveryFailed(for: meeting) {
-            Label(String(localized: "meetingdoc.related.failedHint"), systemImage: "exclamationmark.triangle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            Label {
+                Text(relatedFailureText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
+            .font(.caption)
+            .foregroundStyle(.orange)
+            // The banner truncates to one line; the full reason stays available on hover for diagnosis.
+            .help(relatedFailureText)
         }
 
         if viewModel.relatedDocsNoVaultContext(for: meeting) {
@@ -147,6 +155,18 @@ struct MeetingRelatedDocsSection: View {
         .padding(.vertical, 3)
         .padding(.horizontal, 8)
         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// The failure banner text: the generic "last search couldn't complete" hint followed by the
+    /// specific localized reason from the failed job when one is present, so diagnosis doesn't require
+    /// opening the activity popover. Falls back to the generic hint alone when no reason is recorded.
+    private var relatedFailureText: String {
+        let generic = String(localized: "meetingdoc.related.failedHint")
+        guard let reason = viewModel.lastRelatedDiscoveryFailureReason(for: meeting)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty else {
+            return generic
+        }
+        return "\(generic) \(reason)"
     }
 
     private func provenanceCaption(for row: MeetingsViewModel.RelatedDocRow) -> String {

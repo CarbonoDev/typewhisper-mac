@@ -159,6 +159,16 @@ final class MeetingRelatedDocsServiceTests: XCTestCase {
         }
     }
 
+    /// The diagnostic log rendering (fail-closed path) flattens newlines and clips to the cap so a
+    /// runaway reply can't spill unbounded content into the log.
+    func testTruncatedForLogFlattensAndClips() {
+        XCTAssertEqual(MeetingRelatedDocsService.truncatedForLog("  keep\nthis  "), "keep this")
+        let long = String(repeating: "x", count: 500)
+        let clipped = MeetingRelatedDocsService.truncatedForLog(long, limit: 200)
+        XCTAssertEqual(clipped.count, 201, "200 chars + the ellipsis")
+        XCTAssertTrue(clipped.hasSuffix("…"))
+    }
+
     // MARK: - Judge output contract (DB3) — end-to-end persistence
 
     func testKeptCandidatesPersistedAsDiscovered() async throws {

@@ -23,25 +23,37 @@ final class MainWindowCoordinator: ObservableObject {
     /// folders are vertical, tags horizontal. `nil` = no folder filter.
     @Published private(set) var activeFolder: String?
 
+    /// Whether the **Unfiled** filter (meetings with no folder) is active (owner request). A second
+    /// vertical facet: it composes (AND) with `activeTag` exactly like `activeFolder`, and is mutually
+    /// exclusive with `activeFolder` (an invariant `show(_:)` maintains). `false` = not filtering.
+    @Published private(set) var unfiledOnly = false
+
     /// Focus a specific meeting document. Used by the focus bridge (menu bar / notifications) and
     /// by Home / list rows.
     func openMeeting(id: UUID) {
         route = .meeting(id)
     }
 
-    /// Navigate to an arbitrary route. The folder and tag filters **compose (AND)** (plan D8):
-    /// navigating to `.tag` sets `activeTag` while preserving `activeFolder`, `.folder` sets
-    /// `activeFolder` while preserving `activeTag`, and any other destination clears both so a stale
-    /// filter never bleeds across surfaces (Home stays the unfiltered landing surface, owner-veto 5).
+    /// Navigate to an arbitrary route. The vertical (folder / unfiled) and horizontal (tag) filters
+    /// **compose (AND)** (plan D8): `.tag` sets `activeTag` while preserving the active vertical filter,
+    /// `.folder` sets `activeFolder` (clearing `unfiledOnly` — the two verticals are mutually exclusive)
+    /// while preserving `activeTag`, `.unfiled` sets `unfiledOnly` (clearing `activeFolder`) while
+    /// preserving `activeTag`, and any other destination clears all three so a stale filter never bleeds
+    /// across surfaces (Home stays the unfiltered landing surface, owner-veto 5).
     func show(_ route: MainWindowRoute) {
         switch route {
         case let .tag(tag):
             activeTag = tag
         case let .folder(folder):
             activeFolder = folder
+            unfiledOnly = false
+        case .unfiled:
+            unfiledOnly = true
+            activeFolder = nil
         default:
             activeTag = nil
             activeFolder = nil
+            unfiledOnly = false
         }
         self.route = route
     }
@@ -58,12 +70,20 @@ final class MainWindowCoordinator: ObservableObject {
         show(.folder(folder))
     }
 
-    /// Clear only the tag filter, keeping any active folder filter (plan D8 AND composition). Routes
-    /// back to the folder-filtered list when a folder is still active, else the unfiltered list.
+    /// Filter the meetings list to the Unfiled set (owner request). Sets `unfiledOnly` and routes to the
+    /// filtered list; the active tag (if any) is preserved so the two compose.
+    func showUnfiled() {
+        show(.unfiled)
+    }
+
+    /// Clear only the tag filter, keeping any active vertical filter (plan D8 AND composition). Routes
+    /// back to the folder- or unfiled-filtered list when one is still active, else the unfiltered list.
     func clearTagFilter() {
         activeTag = nil
         if let folder = activeFolder {
             route = .folder(folder)
+        } else if unfiledOnly {
+            route = .unfiled
         } else {
             route = .meetings
         }
@@ -79,10 +99,22 @@ final class MainWindowCoordinator: ObservableObject {
         }
     }
 
-    /// Clear both filters and return to the unfiltered meetings list (the combined header's Clear).
+    /// Clear only the Unfiled filter, keeping any active tag filter (plan D8 AND composition). Routes
+    /// back to the tag-filtered list when a tag is still active, else the unfiltered list.
+    func clearUnfiledFilter() {
+        unfiledOnly = false
+        if let tag = activeTag {
+            route = .tag(tag)
+        } else {
+            route = .meetings
+        }
+    }
+
+    /// Clear every filter and return to the unfiltered meetings list (the combined header's Clear).
     func clearAllFilters() {
         activeTag = nil
         activeFolder = nil
+        unfiledOnly = false
         route = .meetings
     }
 

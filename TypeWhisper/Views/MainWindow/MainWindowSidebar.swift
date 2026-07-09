@@ -287,15 +287,24 @@ struct MainWindowSidebar: View {
         }
     }
 
+    /// The Unfiled row: a filter button (parallel to `folderLabel`) that scopes the meetings list to
+    /// meetings with no folder so the owner can organize them. Highlights from the coordinator's
+    /// `unfiledOnly` flag (not the route), staying lit under unfiled+tag AND composition.
     private func unfiledRow(count: Int) -> some View {
-        HStack(spacing: 6) {
-            Label(String(localized: "mainwindow.folders.unfiled"), systemImage: "tray")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(.secondary)
-            Text("\(count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        let isSelected = SidebarSelection.isUnfiledSelected(unfiledOnly: coordinator.unfiledOnly)
+        return Button {
+            coordinator.showUnfiled()
+        } label: {
+            HStack(spacing: 6) {
+                Label(String(localized: "mainwindow.folders.unfiled"), systemImage: "tray")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .buttonStyle(.plain)
+        .fontWeight(isSelected ? .semibold : .regular)
     }
 
     private func destinationButton(

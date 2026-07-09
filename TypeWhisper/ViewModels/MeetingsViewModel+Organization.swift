@@ -95,15 +95,27 @@ extension MeetingsViewModel {
         Self.meetings(meetings, inFolder: folder)
     }
 
-    /// Compose the coordinator's active folder (vertical) and active tag (horizontal) filters — the
-    /// two AND together (plan D8). `nil` inputs pass through. Pure so the list view and tests share it.
+    /// Meetings with **no** first-party folder (the Unfiled set). Uses the exact predicate the sidebar's
+    /// count uses (`MeetingOrganizationIndex.unfiledCount`), so the row's count and this filtered list
+    /// never disagree. Pure over a meetings snapshot.
+    static func unfiledMeetings(_ meetings: [Meeting]) -> [Meeting] {
+        meetings.filter { MeetingService.folderComponents($0.folderPath).isEmpty }
+    }
+
+    /// Compose the coordinator's vertical filter (a folder path, or `unfiledOnly` — the two are mutually
+    /// exclusive) with the active tag (horizontal) — they AND together (plan D8). `nil`/`false` inputs
+    /// pass through. `unfiledOnly` wins over `folder` when both are (defensively) supplied. Pure so the
+    /// list view and tests share it.
     static func filteredMeetings(
         _ meetings: [Meeting],
         folder: String?,
-        tag: String?
+        tag: String?,
+        unfiledOnly: Bool = false
     ) -> [Meeting] {
         var result = meetings
-        if let folder, !MeetingService.folderComponents(folder).isEmpty {
+        if unfiledOnly {
+            result = Self.unfiledMeetings(result)
+        } else if let folder, !MeetingService.folderComponents(folder).isEmpty {
             result = Self.meetings(result, inFolder: folder)
         }
         if let tag, !tag.trimmingCharacters(in: .whitespaces).isEmpty {

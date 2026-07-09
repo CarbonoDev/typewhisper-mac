@@ -56,9 +56,10 @@ struct MainWindowView: View {
         switch coordinator.route {
         case .home:
             HomeFeedView()
-        case .meetings, .tag:
-            // Both render the same list; `MeetingsListView` applies the coordinator's `activeFolder`
-            // and `activeTag` filters (which compose AND) and shows the combined Clear header (D8).
+        case .meetings, .tag, .unfiled:
+            // All render the same list; `MeetingsListView` applies the coordinator's `activeFolder`,
+            // `unfiledOnly`, and `activeTag` filters (which compose AND) and shows the combined Clear
+            // header (D8). `.unfiled` scopes to meetings with no folder so they can be organized.
             MeetingsListView()
         case let .folder(path):
             // M7 (Amendment 1, DA7): the `.folder` route re-targets a Granola-style detail view —
