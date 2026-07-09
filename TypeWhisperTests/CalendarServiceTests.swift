@@ -303,4 +303,91 @@ final class CalendarServiceTests: XCTestCase {
             XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "de").isEmpty, "DE missing for \(key)")
         }
     }
+
+    // MARK: - Link-to-past-event (requirement 3)
+
+    func testEventsAroundQueriesSymmetricWindowViaFakeProvider() {
+        let provider = FakeCalendarProvider(authorizationStatus: .authorized, events: [])
+        let window: TimeInterval = 7 * 24 * 60 * 60
+        _ = provider.events(around: now, window: window)
+
+        let queried = provider.lastQueryWindow
+        XCTAssertNotNil(queried)
+        XCTAssertEqual(queried?.start, now.addingTimeInterval(-window))
+        XCTAssertEqual(queried?.end, now.addingTimeInterval(window))
+    }
+
+    func testLinkCandidatesFiltersCalendarSelectionAndAllDay() {
+        let selected = CalendarEventDTO(
+            id: "sel", title: "Selected", startDate: now, endDate: now.addingTimeInterval(3600),
+            calendarID: "cal-A"
+        )
+        let deselected = CalendarEventDTO(
+            id: "des", title: "Deselected", startDate: now, endDate: now.addingTimeInterval(3600),
+            calendarID: "cal-B"
+        )
+        let allDay = CalendarEventDTO(
+            id: "allday", title: "All day", startDate: now, endDate: now.addingTimeInterval(3600),
+            isAllDay: true, calendarID: "cal-A"
+        )
+        let provider = FakeCalendarProvider(authorizationStatus: .authorized, events: [selected, deselected, allDay])
+        let selectionStore = InMemoryCalendarSelectionStore(deselected: ["cal-B"])
+        let service = CalendarService(provider: provider, selectionStore: selectionStore)
+
+        let candidates = service.linkCandidates(around: now, window: 24 * 60 * 60)
+        XCTAssertEqual(candidates.map(\.id), ["sel"])
+    }
+
+    func testRankedLinkCandidatesFavorsTitleSimilarityThenProximity() {
+        let target = now
+        let window: TimeInterval = 7 * 24 * 60 * 60
+        // Exact title match, but 3 days away.
+        let exactTitleFar = event("exact", title: "Weekly Sync", startOffset: -3 * 24 * 60 * 60, endOffset: -3 * 24 * 60 * 60 + 3600)
+        // Unrelated title, happening at the exact target minute.
+        let unrelatedClose = event("close", title: "Dentist Appointment", startOffset: 0, endOffset: 3600)
+        // Partial title match, 1 day away.
+        let partialMid = event("partial", title: "Weekly Standup", startOffset: 24 * 60 * 60, endOffset: 24 * 60 * 60 + 3600)
+
+        let ranked = CalendarService.rankedLinkCandidates(
+            events: [unrelatedClose, partialMid, exactTitleFar],
+            targetTitle: "Weekly Sync",
+            targetDate: target,
+            window: window
+        )
+
+        // Title similarity dominates: exact match first, partial match second, unrelated last.
+        XCTAssertEqual(ranked.map(\.id), ["exact", "partial", "close"])
+    }
+
+    func testTitleSimilarityAndProximityBounds() {
+        XCTAssertEqual(CalendarService.titleSimilarity("Weekly Sync", "Weekly Sync"), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(CalendarService.titleSimilarity("", "Anything"), 0.0, accuracy: 0.0001)
+        // Jaccard of {weekly,sync} vs {weekly,standup} = 1/3.
+        XCTAssertEqual(CalendarService.titleSimilarity("Weekly Sync", "Weekly Standup"), 1.0 / 3.0, accuracy: 0.0001)
+
+        let window: TimeInterval = 1000
+        XCTAssertEqual(CalendarService.dateProximity(now, to: now, window: window), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(CalendarService.dateProximity(now.addingTimeInterval(500), to: now, window: window), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(CalendarService.dateProximity(now.addingTimeInterval(2000), to: now, window: window), 0.0, accuracy: 0.0001)
+    }
+
+    func testFilterLinkCandidatesSearchAsYouType() {
+        let a = event("a", title: "Weekly Sync", startOffset: 0, endOffset: 3600)
+        let b = event("b", title: "Design Review", startOffset: 0, endOffset: 3600)
+        XCTAssertEqual(CalendarService.filterLinkCandidates([a, b], query: "design").map(\.id), ["b"])
+        XCTAssertEqual(CalendarService.filterLinkCandidates([a, b], query: "  ").map(\.id), ["a", "b"])
+    }
+}
+
+/// Minimal in-memory selection store so link-candidate filtering can be exercised without touching
+/// `UserDefaults`. New/unknown calendars default selected; ids in `deselected` are excluded.
+@MainActor
+private final class InMemoryCalendarSelectionStore: CalendarSelectionStoring {
+    private var deselected: Set<String>
+    init(deselected: Set<String> = []) { self.deselected = deselected }
+    func isSelected(_ calendarID: String) -> Bool { !deselected.contains(calendarID) }
+    func setSelected(_ selected: Bool, for calendarID: String) {
+        if selected { deselected.remove(calendarID) } else { deselected.insert(calendarID) }
+    }
+    var deselectedCalendarIDs: Set<String> { deselected }
 }

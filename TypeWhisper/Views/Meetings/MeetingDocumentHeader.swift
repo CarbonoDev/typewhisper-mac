@@ -13,6 +13,11 @@ struct MeetingDocumentHeader: View {
     @State private var isPresentingLanguagePicker = false
     @State private var isPresentingTagsEditor = false
     @State private var isPresentingFolderEditor = false
+    @State private var isPresentingDateEditor = false
+    /// Inline title-edit draft (folder-description idiom): committed on submit and on focus loss, so
+    /// a rename never touches calendar linkage and never fetch-thrashes on every keystroke.
+    @State private var titleDraft = ""
+    @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -27,12 +32,31 @@ struct MeetingDocumentHeader: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(meeting.title)
-                .font(.largeTitle)
-                .fontDesign(.serif)
-                .bold()
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Inline, single-click-to-edit title (folder-description idiom). Renaming routes through
+            // the single-writer `MeetingService.setTitle`, which never clears calendar linkage.
+            TextField(
+                String(localized: "meetingdoc.title.placeholder"),
+                text: $titleDraft,
+                axis: .vertical
+            )
+            .textFieldStyle(.plain)
+            .font(.largeTitle)
+            .fontDesign(.serif)
+            .bold()
+            .lineLimit(1...3)
+            .focused($titleFieldFocused)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onSubmit { commitTitle() }
+            .onChange(of: titleFieldFocused) { _, focused in
+                if !focused { commitTitle() }
+            }
+            .onAppear { titleDraft = meeting.title }
+            .onChange(of: meeting.id) { _, _ in titleDraft = meeting.title }
+            .onChange(of: meeting.title) { _, newValue in
+                // Reflect external title changes (e.g. linking adopted the event title) when the
+                // field isn't being actively edited.
+                if !titleFieldFocused { titleDraft = newValue }
+            }
 
             HStack(spacing: 10) {
                 if presentation.showsLiveChip {
@@ -91,6 +115,10 @@ struct MeetingDocumentHeader: View {
     @ViewBuilder
     private var chips: some View {
         outputSelectorChip
+        if MeetingsViewModel.showsDateEditor(calendarEventID: meeting.calendarEventID) {
+            dateChip
+        }
+        calendarLinkChip
         languageChip
         tagsChip
         folderChip
@@ -111,6 +139,77 @@ struct MeetingDocumentHeader: View {
         }
         .buttonStyle(.plain)
         .help(String(localized: "meetingdoc.chip.import.help"))
+    }
+
+    // MARK: - Inline title editing (folder-description idiom)
+
+    private func commitTitle() {
+        viewModel.renameMeeting(meeting, to: titleDraft)
+        // Reflect normalization (trim) / rejected-blank back into the field.
+        titleDraft = meeting.title
+    }
+
+    // MARK: - Date chip (requirement 2 — unlinked meetings only)
+
+    /// An editable date chip shown only for meetings not linked to a calendar event. Opens a
+    /// popover with a date+time picker (and a Clear action). Writes go through the single-writer
+    /// `MeetingService.setMeetingDate`, updating the same `startDate` the timeline day-grouping,
+    /// prior-meeting matching, and related-docs signals read.
+    private var dateChip: some View {
+        Button {
+            isPresentingDateEditor = true
+        } label: {
+            chipLabel(icon: "calendar", text: dateChipText)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresentingDateEditor, arrowEdge: .bottom) {
+            MeetingDateEditorPopover(meeting: meeting, isPresented: $isPresentingDateEditor)
+        }
+    }
+
+    private var dateChipText: String {
+        guard let start = meeting.startDate else {
+            return String(localized: "meetingdoc.date.chip.unset")
+        }
+        return start.formatted(.dateTime.month().day().hour().minute())
+    }
+
+    // MARK: - Calendar link chip (requirement 3 — link/unlink to a past event)
+
+    /// A menu chip to link the meeting to a historical calendar event (opens the picker sheet) and,
+    /// when already linked, to change or remove that link. Linking sets `calendarEventID` /
+    /// `seriesID` / `attendees` and adopts the event's date; unlinking clears the linkage but keeps
+    /// all content.
+    private var calendarLinkChip: some View {
+        let isLinked = meeting.calendarEventID != nil
+        return Menu {
+            Button {
+                model.isPresentingLinkEvent = true
+            } label: {
+                Label(
+                    isLinked
+                        ? String(localized: "meetingdoc.link.change")
+                        : String(localized: "meetingdoc.link.link"),
+                    systemImage: "calendar.badge.plus"
+                )
+            }
+            if isLinked {
+                Button(role: .destructive) {
+                    viewModel.unlinkMeeting(meeting)
+                } label: {
+                    Label(String(localized: "meetingdoc.link.unlink"), systemImage: "calendar.badge.minus")
+                }
+            }
+        } label: {
+            chipLabel(
+                icon: isLinked ? "link" : "calendar.badge.plus",
+                text: isLinked
+                    ? String(localized: "meetingdoc.link.chip.linked")
+                    : String(localized: "meetingdoc.link.chip.unlinked")
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     // MARK: - Tags chip (plan D9/M3 — token editor with index autocomplete)
@@ -569,6 +668,54 @@ private struct MeetingFolderEditorPopover: View {
     private func commit() {
         viewModel.setMeetingFolder(draft, for: meeting)
         isPresented = false
+    }
+}
+
+/// The per-meeting date editor popover (requirement 2), shown only for meetings not linked to a
+/// calendar event. A graphical date+time picker plus Set/Clear actions; writes go through the view
+/// model → the single-writer `MeetingService.setMeetingDate`, so the timeline grouping and the
+/// header status line refresh together.
+private struct MeetingDateEditorPopover: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    let meeting: Meeting
+    @Binding var isPresented: Bool
+
+    @State private var draft = Date()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "meetingdoc.date.editor.title"))
+                .font(.headline)
+
+            DatePicker(
+                String(localized: "meetingdoc.date.editor.field"),
+                selection: $draft,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+
+            HStack {
+                if meeting.startDate != nil {
+                    Button(role: .destructive) {
+                        viewModel.setMeetingDate(nil, for: meeting)
+                        isPresented = false
+                    } label: {
+                        Label(String(localized: "meetingdoc.date.editor.clear"), systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Button(String(localized: "meetingdoc.date.editor.set")) {
+                    viewModel.setMeetingDate(draft, for: meeting)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 320)
+        .onAppear { draft = meeting.startDate ?? Date() }
     }
 }
 

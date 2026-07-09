@@ -194,4 +194,169 @@ final class MeetingServiceTests: XCTestCase {
             qaTurns: try context.fetchCount(FetchDescriptor<MeetingQATurn>())
         )
     }
+
+    // MARK: - Meeting identity: rename / date / linking
+
+    func testRenamePreservesCalendarLinkage() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+
+        let meeting = service.createMeeting(
+            title: "Weekly Sync",
+            source: .calendar,
+            state: .scheduled,
+            startDate: Date(timeIntervalSince1970: 1_000_000),
+            calendarEventID: "evt#123",
+            seriesID: "series-A",
+            attendees: [
+                Attendee(name: "Marco", email: "marco@example.com"),
+                Attendee(name: "Alex", email: "alex@example.com")
+            ]
+        )
+
+        service.setTitle("Renamed Sync", for: meeting)
+
+        XCTAssertEqual(meeting.title, "Renamed Sync")
+        // Linkage fields are untouched by a rename (owner requirement 1).
+        XCTAssertEqual(meeting.calendarEventID, "evt#123")
+        XCTAssertEqual(meeting.seriesID, "series-A")
+        XCTAssertEqual(meeting.attendees.count, 2)
+        XCTAssertEqual(Set(meeting.attendees.compactMap(\.email)), ["marco@example.com", "alex@example.com"])
+    }
+
+    func testRenameIgnoresBlankTitle() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Original")
+
+        service.setTitle("   ", for: meeting)
+        XCTAssertEqual(meeting.title, "Original")
+
+        service.setTitle("  Trimmed  ", for: meeting)
+        XCTAssertEqual(meeting.title, "Trimmed")
+    }
+
+    func testSetMeetingDateWritesStartDate() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Ad-hoc call", source: .adHoc)
+
+        let newDate = Date(timeIntervalSince1970: 2_000_000)
+        service.setMeetingDate(newDate, for: meeting)
+        XCTAssertEqual(meeting.startDate, newDate)
+
+        service.setMeetingDate(nil, for: meeting)
+        XCTAssertNil(meeting.startDate)
+    }
+
+    func testDateEditorHiddenForLinkedMeetings() {
+        XCTAssertTrue(MeetingsViewModel.showsDateEditor(calendarEventID: nil))
+        XCTAssertFalse(MeetingsViewModel.showsDateEditor(calendarEventID: "evt#1"))
+    }
+
+    func testLinkToCalendarEventSetsFieldsAndAdoptsDefaultTitle() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        // A default/imported title should be adopted from the event on link.
+        let defaultTitle = String(localized: "meetings.import.defaultTitle")
+        let meeting = service.createMeeting(title: defaultTitle, source: .importedTranscript)
+
+        let start = Date(timeIntervalSince1970: 1_500_000)
+        service.linkToCalendarEvent(
+            calendarEventID: "evt#999",
+            seriesID: "series-Z",
+            title: "Q3 Planning",
+            startDate: start,
+            endDate: start.addingTimeInterval(3600),
+            attendees: [Attendee(name: "Sam", email: "sam@example.com")],
+            for: meeting
+        )
+
+        XCTAssertEqual(meeting.calendarEventID, "evt#999")
+        XCTAssertEqual(meeting.seriesID, "series-Z")
+        XCTAssertEqual(meeting.startDate, start)
+        XCTAssertEqual(meeting.attendees.map(\.email), ["sam@example.com"])
+        XCTAssertEqual(meeting.title, "Q3 Planning") // default title adopted
+    }
+
+    func testLinkToCalendarEventNeverClobbersUserTitle() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "My Important Call", source: .adHoc)
+
+        let start = Date(timeIntervalSince1970: 1_500_000)
+        service.linkToCalendarEvent(
+            calendarEventID: "evt#1",
+            seriesID: nil,
+            title: "Some Calendar Title",
+            startDate: start,
+            endDate: nil,
+            attendees: [],
+            for: meeting
+        )
+
+        // Linkage adopted, but the user's title is preserved.
+        XCTAssertEqual(meeting.calendarEventID, "evt#1")
+        XCTAssertEqual(meeting.startDate, start)
+        XCTAssertEqual(meeting.title, "My Important Call")
+    }
+
+    func testUnlinkClearsLinkageKeepsContent() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let start = Date(timeIntervalSince1970: 1_500_000)
+        let meeting = service.createMeeting(
+            title: "Linked Meeting",
+            source: .calendar,
+            startDate: start,
+            calendarEventID: "evt#42",
+            seriesID: "series-42",
+            attendees: [Attendee(name: "Kim", email: "kim@example.com")]
+        )
+
+        service.unlinkCalendarEvent(for: meeting)
+
+        XCTAssertNil(meeting.calendarEventID)
+        XCTAssertNil(meeting.seriesID)
+        // Content is kept.
+        XCTAssertEqual(meeting.title, "Linked Meeting")
+        XCTAssertEqual(meeting.startDate, start)
+        XCTAssertEqual(meeting.attendees.map(\.email), ["kim@example.com"])
+    }
+
+    func testIsDefaultOrEmptyTitle() {
+        XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle(""))
+        XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle("   "))
+        XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle(String(localized: "meetings.adHoc.defaultTitle")))
+        XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle(String(localized: "meetings.import.defaultTitle")))
+        XCTAssertFalse(MeetingService.isDefaultOrEmptyTitle("Real Title"))
+    }
+
+    func testMeetingIdentityStringsHaveEnglishAndGermanEntries() throws {
+        let keys = [
+            "meetingdoc.title.placeholder",
+            "meetingdoc.date.chip.unset",
+            "meetingdoc.date.editor.title",
+            "meetingdoc.date.editor.set",
+            "meetingdoc.date.editor.clear",
+            "meetingdoc.link.link",
+            "meetingdoc.link.unlink",
+            "meetingdoc.link.chip.linked",
+            "meetingdoc.link.chip.unlinked",
+            "meetingdoc.link.picker.title",
+            "meetingdoc.link.picker.search",
+            "meetingdoc.link.picker.windowDays",
+            "meetingdoc.link.picker.empty.title"
+        ]
+        for key in keys {
+            XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "en").isEmpty, "EN missing for \(key)")
+            XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "de").isEmpty, "DE missing for \(key)")
+        }
+    }
 }

@@ -2344,4 +2344,46 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
     func testLegacyChatCompletionsKeepTemperature() {
         XCTAssertEqual(OpenAIPlugin.chatCompletionTemperature(for: "gpt-4o", reasoningEffort: nil), 0.3)
     }
+
+    // MARK: - Bundled vs external plugin precedence (requirement 4)
+
+    func testHigherExternalWins() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.2.0", bundledVersion: "1.1.0"),
+            .external
+        )
+    }
+
+    func testHigherBundledWins() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.0.3", bundledVersion: "1.1.0"),
+            .bundled
+        )
+    }
+
+    func testEqualVersionPrefersExternalForBackCompat() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.1.0", bundledVersion: "1.1.0"),
+            .external
+        )
+    }
+
+    func testClaudeBundledManifestVersionBumpedAboveShadowingRelease() throws {
+        // The dynamic-models update shipped without a version bump, so a stale external 1.0.3 could
+        // shadow the bundled copy. The bundled manifest must now sit strictly above 1.0.3 so the
+        // precedence rule loads the bundled copy.
+        let manifestURL = TestSupport.repoRoot
+            .appendingPathComponent("TypeWhisperPluginSDK/Plugins/ClaudePlugin/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+        XCTAssertEqual(
+            PluginRegistryService.compareVersions(manifest.version, "1.0.3"),
+            .orderedDescending,
+            "Bundled Claude manifest \(manifest.version) must be newer than the shadowing 1.0.3 release"
+        )
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.0.3", bundledVersion: manifest.version),
+            .bundled
+        )
+    }
 }

@@ -415,6 +415,74 @@ final class MeetingsViewModel: ObservableObject {
         return meeting
     }
 
+    // MARK: - Meeting identity: rename / date / calendar linking
+
+    /// Rename a meeting from the document header's inline title editor. Routes through the
+    /// single-writer `MeetingService.setTitle`, which never touches calendar linkage
+    /// (`calendarEventID` / `seriesID` / `attendees`), so the upcoming-list dedupe and prior-meeting
+    /// matching keep recognizing the renamed meeting (owner requirement 1).
+    func renameMeeting(_ meeting: Meeting, to title: String) {
+        meetingService.setTitle(title, for: meeting)
+    }
+
+    /// Whether the document should offer an editable date chip: only for meetings **not** linked to
+    /// a calendar event (ad-hoc + imported). A linked meeting's date is owned by its event. Pure so
+    /// the visibility rule is unit-testable without the full view model (owner requirement 2).
+    nonisolated static func showsDateEditor(calendarEventID: String?) -> Bool {
+        calendarEventID == nil
+    }
+
+    /// Set (or clear) an unlinked meeting's date via the single-writer `MeetingService.setMeetingDate`
+    /// — the same `startDate` the timeline day-grouping, prior-meeting matching, and related-docs
+    /// signals read (owner requirement 2). Callers gate on `showsDateEditor`.
+    func setMeetingDate(_ date: Date?, for meeting: Meeting) {
+        meetingService.setMeetingDate(date, for: meeting)
+    }
+
+    /// Ranked candidate events for the "Link to calendar event…" picker (owner requirement 3):
+    /// historical events within `± window` of the meeting's date, optionally narrowed by the search
+    /// field, ordered by title similarity + date proximity. Empty when calendar access is not
+    /// granted.
+    func linkCandidates(
+        for meeting: Meeting,
+        query: String = "",
+        window: TimeInterval = CalendarService.defaultLinkWindow
+    ) -> [CalendarEventDTO] {
+        let reference = meeting.startDate ?? meeting.createdAt
+        let raw = calendarService.linkCandidates(around: reference, window: window)
+        let filtered = CalendarService.filterLinkCandidates(raw, query: query)
+        return CalendarService.rankedLinkCandidates(
+            events: filtered,
+            targetTitle: meeting.title,
+            targetDate: reference,
+            window: window
+        )
+    }
+
+    /// Link a meeting to a chosen historical calendar event: adopt its id/series/attendees and
+    /// start date (title only if the meeting's is empty/default) via `MeetingService`, then refresh
+    /// the upcoming list so the newly-backed event drops out of it (owner requirement 3).
+    func linkMeeting(_ meeting: Meeting, to event: CalendarEventDTO) {
+        let projection = CalendarService.meetingProjection(for: event)
+        meetingService.linkToCalendarEvent(
+            calendarEventID: projection.calendarEventID,
+            seriesID: projection.seriesID,
+            title: projection.title,
+            startDate: projection.startDate,
+            endDate: projection.endDate,
+            attendees: projection.attendees,
+            for: meeting
+        )
+        loadUpcoming()
+    }
+
+    /// Unlink a meeting from its calendar event (keeps all content), then refresh the upcoming list
+    /// so the freed event can reappear as an upcoming/earlier candidate (owner requirement 3).
+    func unlinkMeeting(_ meeting: Meeting) {
+        meetingService.unlinkCalendarEvent(for: meeting)
+        loadUpcoming()
+    }
+
     // MARK: - Capture (M3)
 
     var canStartCapture: Bool { !isCapturing }

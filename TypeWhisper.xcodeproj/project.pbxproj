@@ -201,6 +201,7 @@
 		MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000009 /* MeetingDocumentView.swift */; };
 		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
 		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
+		MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MLE0000000000000000002 /* MeetingLinkEventView.swift */; };
 		MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000012 /* MeetingDocumentBody.swift */; };
 		MWB0000000000000000013 /* MeetingBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000013 /* MeetingBottomBar.swift */; };
 		MWB0000000000000000014 /* MeetingTranscriptPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000014 /* MeetingTranscriptPanel.swift */; };
@@ -804,6 +805,7 @@
 		MWF0000000000000000009 /* MeetingDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
+		MLE0000000000000000002 /* MeetingLinkEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkEventView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000012 /* MeetingDocumentBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentBody.swift; sourceTree = "<group>"; };
 		MWF0000000000000000013 /* MeetingBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBottomBar.swift; sourceTree = "<group>"; };
 		MWF0000000000000000014 /* MeetingTranscriptPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTranscriptPanel.swift; sourceTree = "<group>"; };
@@ -2081,6 +2083,7 @@
 				BB00000000000000000394 /* MeetingNotesPane.swift */,
 				MWF0000000000000000009 /* MeetingDocumentView.swift */,
 				MWF0000000000000000011 /* MeetingDocumentHeader.swift */,
+				MLE0000000000000000002 /* MeetingLinkEventView.swift */,
 				MWF0000000000000000012 /* MeetingDocumentBody.swift */,
 				MWF0000000000000000013 /* MeetingBottomBar.swift */,
 				MWF0000000000000000014 /* MeetingTranscriptPanel.swift */,
@@ -4416,6 +4419,7 @@
 				TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */,
 				MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */,
 				MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */,
+				MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */,
 				MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */,
 				MWB0000000000000000013 /* MeetingBottomBar.swift in Sources */,
 				MWB0000000000000000014 /* MeetingTranscriptPanel.swift in Sources */,

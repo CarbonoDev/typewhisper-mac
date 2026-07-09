@@ -286,6 +286,106 @@ final class CalendarService: ObservableObject {
             attendees: event.attendees
         )
     }
+
+    // MARK: - Link-to-past-event candidates (meeting-identity milestone, requirement 3)
+
+    /// Default half-window for the "Link to calendar event…" search: ± 7 days around the meeting's
+    /// date (the picker lets the user widen it).
+    static let defaultLinkWindow: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Candidate events for linking a meeting to a historical calendar event, within `± window` of
+    /// `date`, filtered by the user's calendar selection (the same choke point `republish` applies,
+    /// so a deselected calendar never offers link candidates). All-day events are dropped. Returns
+    /// the raw (unranked) set; `rankedLinkCandidates` orders them. Empty when access is not granted.
+    func linkCandidates(around date: Date, window: TimeInterval = defaultLinkWindow) -> [CalendarEventDTO] {
+        guard authorizationStatus == .authorized else { return [] }
+        return provider.events(around: date, window: window)
+            .filter { !$0.isAllDay }
+            .filter { event in
+                guard let id = event.calendarID else { return true }
+                return selectionStore.isSelected(id)
+            }
+    }
+
+    /// Word tokens of a title, lowercased and punctuation-stripped, for similarity scoring.
+    static func titleTokens(_ title: String) -> Set<String> {
+        let separators = CharacterSet.alphanumerics.inverted
+        let parts = title.lowercased().components(separatedBy: separators)
+        return Set(parts.filter { !$0.isEmpty })
+    }
+
+    /// Title similarity in `[0, 1]` — Jaccard overlap of word-token sets (order-independent, robust
+    /// to added/dropped words). Two blank titles score `0`. Pure + unit-testable.
+    static func titleSimilarity(_ a: String, _ b: String) -> Double {
+        let ta = titleTokens(a)
+        let tb = titleTokens(b)
+        guard !ta.isEmpty, !tb.isEmpty else { return 0 }
+        let intersection = ta.intersection(tb).count
+        let union = ta.union(tb).count
+        return union == 0 ? 0 : Double(intersection) / Double(union)
+    }
+
+    /// Date proximity in `[0, 1]`: `1` at the exact date, decaying linearly to `0` at the window
+    /// edge (and `0` beyond). Pure + unit-testable.
+    static func dateProximity(_ eventDate: Date, to target: Date, window: TimeInterval) -> Double {
+        let span = abs(window)
+        guard span > 0 else { return eventDate == target ? 1 : 0 }
+        let delta = abs(eventDate.timeIntervalSince(target))
+        return max(0, 1 - delta / span)
+    }
+
+    /// Combined link-candidate score: title similarity weighted above date proximity (the title is
+    /// the stronger identity signal), so an exact title match a few days off still outranks an
+    /// unrelated event happening at the same minute. Pure + unit-testable.
+    static func linkScore(
+        eventTitle: String,
+        eventDate: Date,
+        targetTitle: String,
+        targetDate: Date,
+        window: TimeInterval
+    ) -> Double {
+        let similarity = titleSimilarity(eventTitle, targetTitle)
+        let proximity = dateProximity(eventDate, to: targetDate, window: window)
+        return 0.65 * similarity + 0.35 * proximity
+    }
+
+    /// Rank candidate events for linking by `linkScore` (descending), tie-broken by date proximity
+    /// then title, so the picker leads with the most likely match. Pure + unit-testable.
+    static func rankedLinkCandidates(
+        events: [CalendarEventDTO],
+        targetTitle: String,
+        targetDate: Date,
+        window: TimeInterval
+    ) -> [CalendarEventDTO] {
+        events
+            .map { event -> (event: CalendarEventDTO, score: Double, proximity: Double) in
+                (
+                    event,
+                    linkScore(
+                        eventTitle: event.title,
+                        eventDate: event.startDate,
+                        targetTitle: targetTitle,
+                        targetDate: targetDate,
+                        window: window
+                    ),
+                    dateProximity(event.startDate, to: targetDate, window: window)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.proximity != rhs.proximity { return lhs.proximity > rhs.proximity }
+                return lhs.event.title.localizedCaseInsensitiveCompare(rhs.event.title) == .orderedAscending
+            }
+            .map(\.event)
+    }
+
+    /// Live search filter for the picker's search-as-you-type field: keep events whose title
+    /// contains `query` (case-insensitive); an empty query passes everything through unchanged.
+    static func filterLinkCandidates(_ events: [CalendarEventDTO], query: String) -> [CalendarEventDTO] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return events }
+        return events.filter { $0.title.localizedCaseInsensitiveContains(needle) }
+    }
 }
 
 /// Real `CalendarEventProviding` conformance over `EKEventStore`. Read-only, local store,

@@ -113,6 +113,91 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Title / date / calendar linking (meeting-identity milestone)
+
+    /// Rename a meeting's title **without touching any calendar linkage**. `calendarEventID`,
+    /// `seriesID`, and `attendees` identify the backing calendar event and drive the upcoming-list
+    /// dedupe/exclusion (keyed on `calendarEventID`, never the title) and prior-meeting matching
+    /// (attendees / `seriesID`), so a title edit must never clear them (owner requirement 1). Blank
+    /// titles are ignored — a meeting always keeps a title. Single-writer on the MainActor.
+    func setTitle(_ title: String, for meeting: Meeting) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, meeting.title != trimmed else { return }
+        meeting.title = trimmed
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Set (or clear) a meeting's date — the single `startDate` column that the timeline
+    /// day-grouping, prior-meeting matching, and related-docs signals all already read (owner
+    /// requirement 2). Surfaced only for meetings **not** linked to a calendar event (a linked
+    /// meeting's date is owned by its event); callers gate on `calendarEventID == nil`. `nil` clears
+    /// the date. Single-writer on the MainActor.
+    func setMeetingDate(_ date: Date?, for meeting: Meeting) {
+        guard meeting.startDate != date else { return }
+        meeting.startDate = date
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Link a meeting to a (typically historical) calendar event: adopt its `calendarEventID`,
+    /// `seriesID`, `attendees`, and start/end date so the calendar pipeline dedupes on it and
+    /// prior-meeting briefs can find it (owner requirement 3, powering the bulk archive import).
+    /// The title is adopted from the event **only when the meeting's current title is empty or a
+    /// generated default** (`isDefaultOrEmptyTitle`) — a user-chosen title is never clobbered.
+    /// Single-writer on the MainActor.
+    func linkToCalendarEvent(
+        calendarEventID: String,
+        seriesID: String?,
+        title eventTitle: String,
+        startDate: Date,
+        endDate: Date?,
+        attendees: [Attendee],
+        for meeting: Meeting
+    ) {
+        meeting.calendarEventID = calendarEventID
+        meeting.seriesID = seriesID
+        meeting.startDate = startDate
+        meeting.endDate = endDate
+        meeting.attendees = attendees
+        let trimmedEventTitle = eventTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if Self.isDefaultOrEmptyTitle(meeting.title), !trimmedEventTitle.isEmpty {
+            meeting.title = trimmedEventTitle
+        }
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Unlink a meeting from its calendar event: clear the linkage identifiers (`calendarEventID`,
+    /// `seriesID`) while keeping all content — title, date, attendees, transcript, outputs (owner
+    /// requirement 3). Attendees are retained deliberately (they are content the user may still want,
+    /// and prior-meeting matching can keep using them). Idempotent. Single-writer on the MainActor.
+    func unlinkCalendarEvent(for meeting: Meeting) {
+        guard meeting.calendarEventID != nil || meeting.seriesID != nil else { return }
+        meeting.calendarEventID = nil
+        meeting.seriesID = nil
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
+    /// Whether a title is empty or one of the app's generated default titles (ad-hoc / untitled
+    /// calendar event / import fallback). Used by `linkToCalendarEvent` to decide whether adopting
+    /// the event's title would clobber a real user title (it never should). Pure + static.
+    static func isDefaultOrEmptyTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        let defaults: Set<String> = [
+            String(localized: "meetings.adHoc.defaultTitle"),
+            String(localized: "meetings.calendar.untitledEvent"),
+            String(localized: "meetings.import.defaultTitle")
+        ]
+        return defaults.contains(trimmed)
+    }
+
     // MARK: - Speaker labels & mapping (M9)
 
     /// Apply diarization speaker labels to a meeting's segments (plan M9). Each assignment targets a

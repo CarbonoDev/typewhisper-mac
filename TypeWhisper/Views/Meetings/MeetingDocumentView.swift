@@ -42,6 +42,9 @@ struct MeetingDocumentView: View {
         .sheet(isPresented: $model.isPresentingExport) {
             exportSheet
         }
+        .sheet(isPresented: $model.isPresentingLinkEvent) {
+            MeetingLinkEventView(meeting: meeting, isPresented: $model.isPresentingLinkEvent)
+        }
     }
 
     private var documentColumn: some View {
@@ -104,6 +107,8 @@ final class MeetingDocumentModel: ObservableObject {
     @Published var askDraft = ""
     @Published var isPresentingImport = false
     @Published var isPresentingExport = false
+    /// The "Link to calendar event…" picker sheet (requirement 3).
+    @Published var isPresentingLinkEvent = false
 
     /// The meeting id the panel-open default was last applied for (prevents re-forcing the panel
     /// open after the user minimizes it).
@@ -115,6 +120,7 @@ final class MeetingDocumentModel: ObservableObject {
         transcriptSearch = ""
         noteDraft = ""
         askDraft = ""
+        isPresentingLinkEvent = false
         appliedPanelDefaultForMeetingID = nil
     }
 }

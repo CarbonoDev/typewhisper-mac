@@ -99,3 +99,16 @@ protocol CalendarEventProviding: AnyObject {
     /// (M11). Empty when access is not granted.
     func calendars() -> [CalendarInfo]
 }
+
+extension CalendarEventProviding {
+    /// Historical/proximity query used by the "Link to calendar event…" picker (owner requirement
+    /// 3): every event within `± window` of `date`. Defined as a default over the existing
+    /// `events(from:to:)` seam so the whole feature stays fakeable — a test provider only has to
+    /// implement `events(from:to:)` and this window arithmetic comes for free. Production
+    /// (`EventKitCalendarProvider`) inherits it too; the single EventKit predicate already spans an
+    /// arbitrary window, so no separate real implementation is needed.
+    func events(around date: Date, window: TimeInterval) -> [CalendarEventDTO] {
+        let span = abs(window)
+        return events(from: date.addingTimeInterval(-span), to: date.addingTimeInterval(span))
+    }
+}
