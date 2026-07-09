@@ -85,6 +85,48 @@ extension MeetingsViewModel {
         !meeting.segments.isEmpty || !meeting.outputs.isEmpty
     }
 
+    // MARK: - Import / merge affordance (merge-import default fix)
+
+    /// Which posture the import sheet presents. With a merge target the sheet leads with *merging*
+    /// the chosen transcript into that meeting (the natural, non-duplicating action); without one
+    /// (the list toolbar) it leads with *creating* a new meeting. Pure + `Equatable` so the posture
+    /// is unit-testable without SwiftUI (`MeetingImportSheetModeTests`).
+    enum ImportSheetMode: Equatable {
+        /// No merge target — the list-toolbar posture: create a new meeting from a file.
+        case createPrimary
+        /// A merge target — merging into `meetingTitle` is the primary action; create-new is demoted.
+        case mergePrimary(meetingTitle: String)
+    }
+
+    /// Resolve the import sheet's posture from the presence of a merge target's title.
+    nonisolated static func importSheetMode(mergeTargetTitle: String?) -> ImportSheetMode {
+        guard let title = mergeTargetTitle else { return .createPrimary }
+        return .mergePrimary(meetingTitle: title)
+    }
+
+    /// Whether the document surfaces an "import transcript into this meeting" action (requirement 1).
+    /// Reachable on any resting meeting that already has a transcript or is `.completed`; suppressed
+    /// while *this* meeting is actively capturing (a merge rewrites all segments and must never race
+    /// the live capture writer). Pure so reachability — including for completed meetings — is
+    /// unit-testable (`MeetingImportSheetModeTests`).
+    nonisolated static func showsImportMergeAction(
+        state: MeetingState,
+        isCapturingThisMeeting: Bool,
+        hasTranscript: Bool
+    ) -> Bool {
+        guard !isCapturingThisMeeting else { return false }
+        return hasTranscript || state == .completed
+    }
+
+    /// Live-state convenience for the header: whether to show the import/merge chip for `meeting`.
+    func showsImportMergeAction(for meeting: Meeting) -> Bool {
+        Self.showsImportMergeAction(
+            state: meeting.state,
+            isCapturingThisMeeting: isCapturing && activeMeeting?.id == meeting.id,
+            hasTranscript: !meeting.segments.isEmpty
+        )
+    }
+
     /// Resolve the live presentation for a meeting from current published capture state.
     func documentPresentation(for meeting: Meeting) -> DocumentPresentation {
         Self.documentPresentation(

@@ -4,6 +4,12 @@ import UniformTypeIdentifiers
 
 /// Import surface (plan M8): create a new meeting from an audio or transcript file, or merge a
 /// transcript file into an existing meeting. Presented as a sheet from the Meetings window.
+///
+/// The posture is driven by `mergeTarget` (merge-import default fix): when a merge target is set the
+/// sheet leads with **merging** the chosen transcript into that meeting (the natural, non-duplicating
+/// action), and demotes "create a separate meeting" to a clearly-labeled secondary option. Without a
+/// merge target (the list toolbar) it keeps the create-new posture. The posture decision itself lives
+/// in the pure, unit-tested `MeetingsViewModel.importSheetMode(mergeTargetTitle:)`.
 struct MeetingImportView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     // [Track J] Observe the queue directly so the import spinner reacts to `.audioImport` job state
@@ -11,79 +17,34 @@ struct MeetingImportView: View {
     @ObservedObject private var jobQueue = JobQueueService.shared
     @Environment(\.dismiss) private var dismiss
 
-    /// When non-nil, the merge-into-existing option targets this meeting.
+    /// When non-nil, merging into this meeting is the sheet's primary action.
     let mergeTarget: Meeting?
-    /// Called with the created meeting so the window can select it.
+    /// Called with the created/merged meeting so the window can select it.
     var onImported: (Meeting) -> Void = { _ in }
 
     /// Optional language for an audio import (plan M1/D9). `nil` = Auto (detect); a chosen code drives
     /// transcription and is persisted `.manual` on the created meeting.
     @State private var audioLanguageCode: String?
 
+    /// In merge-primary mode, whether the user expanded the demoted "create a separate meeting"
+    /// options. Kept collapsed by default so the primary (merge) action reads first.
+    @State private var showCreateNewOptions = false
+
+    private var mode: MeetingsViewModel.ImportSheetMode {
+        MeetingsViewModel.importSheetMode(mergeTargetTitle: mergeTarget?.title)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(String(localized: "meetings.import.title"))
-                .font(.headline)
-
-            Text(String(localized: "meetings.import.description"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Button {
-                    importTranscript()
-                } label: {
-                    Label(String(localized: "meetings.import.transcriptButton"), systemImage: "doc.text")
-                }
-                .disabled(viewModel.isImporting())
-
-                Button {
-                    importAudio()
-                } label: {
-                    Label(String(localized: "meetings.import.audioButton"), systemImage: "waveform")
-                }
-                .disabled(viewModel.isImporting())
-
-                HStack(spacing: 8) {
-                    Text(String(localized: "meetings.import.language.label"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Menu {
-                        Button {
-                            audioLanguageCode = nil
-                        } label: {
-                            languageMenuRow(
-                                title: String(localized: "meetings.import.language.auto"),
-                                isSelected: audioLanguageCode == nil
-                            )
-                        }
-                        Divider()
-                        ForEach(viewModel.meetingLanguageOptions, id: \.code) { option in
-                            Button {
-                                audioLanguageCode = option.code
-                            } label: {
-                                languageMenuRow(title: option.name, isSelected: audioLanguageCode == option.code)
-                            }
-                        }
-                    } label: {
-                        Text(selectedLanguageTitle)
-                    }
-                    .fixedSize()
-                    .disabled(viewModel.isImporting())
-                }
-
-                if let meeting = mergeTarget {
-                    Divider()
-                    Text(String(format: String(localized: "meetings.import.mergeInto"), meeting.title))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        mergeTranscript(into: meeting)
-                    } label: {
-                        Label(String(localized: "meetings.import.mergeButton"), systemImage: "arrow.triangle.merge")
-                    }
-                    .disabled(viewModel.isImporting())
-                }
+            switch mode {
+            case .createPrimary:
+                createPrimaryHeader
+                createNewOptions
+            case .mergePrimary(let title):
+                mergePrimaryHeader(title: title)
+                mergePrimaryAction
+                Divider()
+                createNewSecondary
             }
 
             if viewModel.isImporting() {
@@ -109,6 +70,108 @@ struct MeetingImportView: View {
         }
         .padding(20)
         .frame(width: 420)
+    }
+
+    // MARK: - Create-primary posture (no merge target — list toolbar)
+
+    private var createPrimaryHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.import.title"))
+                .font(.headline)
+            Text(String(localized: "meetings.import.description"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The create-a-new-meeting options (transcript file, audio file, and the audio language picker).
+    /// Shared by the create-primary posture and the demoted secondary in merge-primary mode.
+    private var createNewOptions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                importTranscript()
+            } label: {
+                Label(String(localized: "meetings.import.transcriptButton"), systemImage: "doc.text")
+            }
+            .disabled(viewModel.isImporting())
+
+            Button {
+                importAudio()
+            } label: {
+                Label(String(localized: "meetings.import.audioButton"), systemImage: "waveform")
+            }
+            .disabled(viewModel.isImporting())
+
+            HStack(spacing: 8) {
+                Text(String(localized: "meetings.import.language.label"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Menu {
+                    Button {
+                        audioLanguageCode = nil
+                    } label: {
+                        languageMenuRow(
+                            title: String(localized: "meetings.import.language.auto"),
+                            isSelected: audioLanguageCode == nil
+                        )
+                    }
+                    Divider()
+                    ForEach(viewModel.meetingLanguageOptions, id: \.code) { option in
+                        Button {
+                            audioLanguageCode = option.code
+                        } label: {
+                            languageMenuRow(title: option.name, isSelected: audioLanguageCode == option.code)
+                        }
+                    }
+                } label: {
+                    Text(selectedLanguageTitle)
+                }
+                .fixedSize()
+                .disabled(viewModel.isImporting())
+            }
+        }
+    }
+
+    // MARK: - Merge-primary posture (a merge target — document import)
+
+    private func mergePrimaryHeader(title: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(format: String(localized: "meetings.import.merge.title"), title))
+                .font(.headline)
+            Text(String(localized: "meetings.import.merge.description"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var mergePrimaryAction: some View {
+        if let meeting = mergeTarget {
+            Button {
+                mergeTranscript(into: meeting)
+            } label: {
+                Label(String(localized: "meetings.import.merge.primaryButton"), systemImage: "arrow.triangle.merge")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isImporting())
+        }
+    }
+
+    /// The demoted "create a separate meeting instead" affordance: a link that reveals the full
+    /// create-new options on demand, so the primary (merge) action stays visually dominant.
+    @ViewBuilder
+    private var createNewSecondary: some View {
+        if showCreateNewOptions {
+            Text(String(localized: "meetings.import.merge.createInstead"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            createNewOptions
+        } else {
+            Button(String(localized: "meetings.import.merge.createInstead")) {
+                showCreateNewOptions = true
+            }
+            .buttonStyle(.link)
+        }
     }
 
     // MARK: - Actions

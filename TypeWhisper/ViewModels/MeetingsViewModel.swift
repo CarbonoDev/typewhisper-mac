@@ -783,6 +783,11 @@ final class MeetingsViewModel: ObservableObject {
         importErrorMessage = nil
         do {
             try importService.mergeTranscriptFile(at: url, into: meeting)
+            // [M2] Transcript-ready choke point (plan D5): a merge adds transcript content, so a
+            // meeting that still has no language must auto-enqueue a background detection — same
+            // trigger as the new-meeting transcript import. No-op when the language is already set
+            // (the enqueue's own `languageCode == nil` guard).
+            languageService.enqueueAutoDetection(for: meeting)
             return true
         } catch {
             importErrorMessage = error.localizedDescription

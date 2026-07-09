@@ -6,7 +6,9 @@ import SwiftUI
 ///   #2), and the per-meeting final re-transcription override.
 /// - `.liveNotes` — editable, timeline-stamped notes plus in-meeting Q&A.
 /// - `.renderedOutput` — the selected output rendered as markdown, generate affordances, brief,
-///   Q&A, speaker diarization / mapping, notes, and a merge-into-this-meeting action.
+///   Q&A, speaker diarization / mapping, and notes. The merge-into-this-meeting entry point now
+///   lives in the header chip row (`MeetingDocumentHeader.importChip`) so it is discoverable on any
+///   meeting with a transcript or completed state, not buried at the bottom of the document.
 struct MeetingDocumentBody: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     // [Track J] Observe the queue directly so the meeting-scoped "Identify speakers" spinner reacts to
@@ -92,9 +94,6 @@ struct MeetingDocumentBody: View {
 
                 Divider()
                 SpeakerSection(meeting: meeting)
-
-                Divider()
-                mergeAffordance
             }
 
             if !meeting.notes.isEmpty {
@@ -190,23 +189,6 @@ struct MeetingDocumentBody: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    // MARK: - Merge affordance (owner requirement #2)
-
-    private var mergeAffordance: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.merge")
-                .foregroundStyle(.secondary)
-            Text(String(localized: "meetingdoc.merge.hint"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button(String(localized: "meetingdoc.merge.button")) {
-                model.isPresentingImport = true
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Notes (read-only list in the resting state)

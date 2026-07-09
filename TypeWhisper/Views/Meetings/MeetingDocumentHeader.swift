@@ -95,6 +95,22 @@ struct MeetingDocumentHeader: View {
         tagsChip
         folderChip
         exportChip
+        // Requirement 1 (merge-import default fix): a discoverable "import transcript into THIS
+        // meeting" entry, reachable on any meeting that already has a transcript or is completed —
+        // so a completed meeting no longer forces the user to the list toolbar's create-new import.
+        if viewModel.showsImportMergeAction(for: meeting) {
+            importChip
+        }
+    }
+
+    private var importChip: some View {
+        Button {
+            model.isPresentingImport = true
+        } label: {
+            chipLabel(icon: "square.and.arrow.down", text: String(localized: "meetingdoc.chip.import"))
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "meetingdoc.chip.import.help"))
     }
 
     // MARK: - Tags chip (plan D9/M3 — token editor with index autocomplete)

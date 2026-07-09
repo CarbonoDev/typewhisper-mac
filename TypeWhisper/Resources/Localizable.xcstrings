@@ -20175,6 +20175,38 @@
         }
       }
     },
+    "meetingdoc.chip.import": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import transcript"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript importieren"
+          }
+        }
+      }
+    },
+    "meetingdoc.chip.import.help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a transcript file into this meeting"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Transkriptdatei in diese Besprechung importieren"
+          }
+        }
+      }
+    },
     "meetingdoc.chip.noFolder": {
       "localizations": {
         "en": {
@@ -22907,6 +22939,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird importiert…"
+          }
+        }
+      }
+    },
+    "meetings.import.merge.createInstead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a separate meeting instead"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stattdessen eine separate Besprechung erstellen"
+          }
+        }
+      }
+    },
+    "meetings.import.merge.description": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a transcript file to time-align and merge into this meeting. Overlapping content is deduplicated."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle eine Transkriptdatei, die zeitlich ausgerichtet und in diese Besprechung zusammengeführt wird. Überschneidungen werden entfernt."
+          }
+        }
+      }
+    },
+    "meetings.import.merge.primaryButton": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Transcript File…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptdatei auswählen…"
+          }
+        }
+      }
+    },
+    "meetings.import.merge.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add transcript to “%@”"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript zu „%@“ hinzufügen"
           }
         }
       }
