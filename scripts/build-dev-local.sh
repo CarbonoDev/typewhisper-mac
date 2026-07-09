@@ -114,14 +114,27 @@ trash_stale_dev_apps() {
 
 quit_running_typewhisper
 
-xcodebuild build \
-  -project "$repo_root/TypeWhisper.xcodeproj" \
-  -scheme TypeWhisper \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath "$derived_data_path" \
-  CODE_SIGN_IDENTITY='-' \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO
+# With a CodeSigning.local.xcconfig present (DEVELOPMENT_TEAM = ...), sign with the
+# developer's identity so keychain items and TCC grants survive rebuilds. Without it,
+# fall back to ad-hoc signing (no setup required, but grants reset on every rebuild).
+if [[ -s "$repo_root/CodeSigning.local.xcconfig" ]]; then
+  log "signing with CodeSigning.local.xcconfig identity"
+  xcodebuild build \
+    -project "$repo_root/TypeWhisper.xcodeproj" \
+    -scheme TypeWhisper \
+    -destination 'platform=macOS,arch=arm64' \
+    -derivedDataPath "$derived_data_path" \
+    -allowProvisioningUpdates
+else
+  xcodebuild build \
+    -project "$repo_root/TypeWhisper.xcodeproj" \
+    -scheme TypeWhisper \
+    -destination 'platform=macOS,arch=arm64' \
+    -derivedDataPath "$derived_data_path" \
+    CODE_SIGN_IDENTITY='-' \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGNING_ALLOWED=NO
+fi
 
 "$repo_root/scripts/sync-dev-data-local.sh"
 
