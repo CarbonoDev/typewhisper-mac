@@ -676,6 +676,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioRecorderService: AudioRecorderService
         let textInsertionService: TextInsertionService
         let ttsProvider: MockTTSProviderPlugin
+        let meetingService: MeetingService
         private let retainedObjects: [AnyObject]
 
         init(
@@ -691,6 +692,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecorderService: AudioRecorderService,
             textInsertionService: TextInsertionService,
             ttsProvider: MockTTSProviderPlugin,
+            meetingService: MeetingService,
             retainedObjects: [AnyObject]
         ) {
             self.router = router
@@ -705,6 +707,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.audioRecorderService = audioRecorderService
             self.textInsertionService = textInsertionService
             self.ttsProvider = ttsProvider
+            self.meetingService = meetingService
             self.retainedObjects = retainedObjects
         }
     }
@@ -5073,7 +5076,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    private static func makeAPIContext(appSupportDirectory: URL, withMockTranscriptionPlugin: Bool = false) -> APIContext {
+    private static func makeAPIContext(
+        appSupportDirectory: URL,
+        withMockTranscriptionPlugin: Bool = false,
+        calendarProvider: CalendarEventProviding? = nil
+    ) -> APIContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         let ttsProvider = MockTTSProviderPlugin()
@@ -5176,6 +5183,22 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictionaryService: dictionaryService
         )
 
+        let meetingService = MeetingService(appSupportDirectory: appSupportDirectory)
+        let meetingImportService = MeetingImportService(
+            meetingService: meetingService,
+            audioFileService: audioFileService,
+            transcriber: modelManager
+        )
+        let calendarService: CalendarService? = calendarProvider.map { provider in
+            CalendarService(
+                provider: provider,
+                selectionStore: CalendarSelectionStore(
+                    defaults: UserDefaults(suiteName: UUID().uuidString)!,
+                    key: UUID().uuidString
+                )
+            )
+        }
+
         let router = APIRouter()
         let handlers = APIHandlers(
             modelManager: modelManager,
@@ -5185,7 +5208,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
-            audioRecorderViewModel: audioRecorderViewModel
+            audioRecorderViewModel: audioRecorderViewModel,
+            meetingService: meetingService,
+            meetingImportService: meetingImportService,
+            calendarService: calendarService
         )
         handlers.register(on: router)
 
@@ -5202,6 +5228,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecorderService: audioRecorderService,
             textInsertionService: textInsertionService,
             ttsProvider: ttsProvider,
+            meetingService: meetingService,
             retainedObjects: [
                 PluginManager.shared,
                 ttsProvider,
@@ -5227,6 +5254,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 settingsViewModel,
                 dictationViewModel,
                 audioRecorderViewModel,
+                meetingService,
+                meetingImportService,
                 router,
                 handlers
             ]
@@ -5562,6 +5591,396 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+
+    // MARK: - Meetings API
+
+    /// Minimal fake so `match_calendar` runs without a live EKEventStore. Returns its canned events
+    /// for any window and reports authorized.
+    private final class FakeMeetingsCalendarProvider: CalendarEventProviding {
+        var authorizationStatus: CalendarAuthorizationStatus = .authorized
+        var eventsToReturn: [CalendarEventDTO]
+
+        init(events: [CalendarEventDTO]) { self.eventsToReturn = events }
+
+        func requestAccess() async -> CalendarAuthorizationStatus { authorizationStatus }
+        func events(from start: Date, to end: Date) -> [CalendarEventDTO] { eventsToReturn }
+        func calendars() -> [CalendarInfo] { [] }
+    }
+
+    private static func iso8601(_ string: String) -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: string)!
+    }
+
+    private static func jsonBody(_ object: [String: Any]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: object)
+    }
+
+    func testImportMeetingTranscriptPersistsFolderTagsLanguage() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome to the sync.\nBob: Great to be here.",
+            "title": "Acme Sync",
+            "folder": "Clients/Acme",
+            "tags": ["sales", "q1"],
+            "language": "EN"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Acme Sync")
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+        let id = try XCTUnwrap(json["id"] as? String)
+
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertNotNil(meeting)
+            XCTAssertEqual(meeting?.folderPath, "Clients/Acme")
+            XCTAssertEqual(meeting?.tags, ["sales", "q1"])
+            XCTAssertEqual(meeting?.languageCode, "en") // normalized to lowercase
+            XCTAssertEqual(meeting?.segments.isEmpty, false)
+            XCTAssertEqual(meeting?.source, .importedTranscript)
+        }
+    }
+
+    func testImportMeetingTranscriptFromLocalFilePath() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let fileURL = appSupportDirectory.appendingPathComponent("archive.txt")
+        try "Alice: Opening remarks.\nBob: Closing remarks.".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let body = try Self.jsonBody(["path": fileURL.path])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "archive") // falls back to file name
+    }
+
+    func testImportMeetingTranscriptMatchCalendarLinksBestEvent() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "acme-event#1",
+                title: "Acme Sync",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800),
+                attendees: [Attendee(name: "Alice", email: "alice@acme.com")]
+            ),
+            CalendarEventDTO(
+                id: "unrelated#1",
+                title: "Dentist",
+                startDate: eventDate.addingTimeInterval(3600),
+                endDate: eventDate.addingTimeInterval(5400)
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome.\nBob: Thanks.",
+            "title": "Acme Sync",
+            "date": "2026-01-05T10:00:00Z",
+            "match_calendar": true
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let matched = try XCTUnwrap(json["matched_event"] as? [String: Any])
+        XCTAssertEqual(matched["id"] as? String, "acme-event#1")
+        XCTAssertEqual(matched["title"] as? String, "Acme Sync")
+
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.calendarEventID, "acme-event#1")
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.com")
+        }
+    }
+
+    func testImportMeetingTranscriptMatchCalendarReportsNullWhenNoConfidentMatch() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "unrelated#1",
+                title: "Completely Different Topic",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800)
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome.",
+            "title": "Acme Sync",
+            "date": "2026-01-05T10:00:00Z",
+            "match_calendar": true
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+    }
+
+    func testImportMeetingTranscriptInvalidDateReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody(["text": "Alice: Hi.", "date": "not-a-date"])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testImportMeetingTranscriptEmptyTranscriptReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody(["text": "   \n\n   "])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testImportMeetingTranscriptRawTextBodyWithQueryOptions() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: ["title": "Raw Import", "folder": "Inbox", "tags": "a,b"],
+            headers: ["content-type": "text/plain"],
+            body: Data("Alice: Raw body line.".utf8)
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Raw Import")
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.folderPath, "Inbox")
+            XCTAssertEqual(meeting?.tags, ["a", "b"])
+        }
+    }
+
+    func testListMeetingsFiltersByFolderTagAndDate() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        await MainActor.run {
+            let service = apiContext.meetingService
+            let m1 = service.createMeeting(title: "Acme One", startDate: Self.iso8601("2026-01-05T10:00:00Z"))
+            service.setFolder("Clients/Acme", for: m1)
+            service.setObsidianTags(["sales"], for: m1)
+
+            let m2 = service.createMeeting(title: "Beta Ops", startDate: Self.iso8601("2026-02-01T10:00:00Z"))
+            service.setFolder("Clients/Beta", for: m2)
+            service.setObsidianTags(["ops"], for: m2)
+
+            let m3 = service.createMeeting(title: "Acme Sub", startDate: Self.iso8601("2026-03-01T10:00:00Z"))
+            service.setFolder("Clients/Acme/Deep", for: m3)
+            service.setObsidianTags(["sales"], for: m3)
+        }
+
+        // Folder subtree match: Clients/Acme includes Clients/Acme/Deep.
+        let byFolder = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["folder": "Clients/Acme"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(byFolder["total"] as? Int, 2)
+
+        // Tag filter.
+        let byTag = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["tag": "ops"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual((byTag["meetings"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((byTag["meetings"] as? [[String: Any]])?.first?["title"] as? String, "Beta Ops")
+
+        // Date range filter.
+        let byDate = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["from": "2026-02-15"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(byDate["total"] as? Int, 1)
+        XCTAssertEqual((byDate["meetings"] as? [[String: Any]])?.first?["title"] as? String, "Acme Sub")
+
+        // Combined folder + date.
+        let combined = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings",
+            queryParams: ["folder": "Clients/Acme", "from": "2026-02-15"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(combined["total"] as? Int, 1)
+    }
+
+    func testListMeetingsInvalidFromDateReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["from": "garbage"], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testGetMeetingDetailIncludesTranscriptOnRequest() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let id: String = await MainActor.run {
+            let meeting = apiContext.meetingService.createFromImport(
+                title: "Detail Meeting",
+                source: .importedTranscript,
+                segments: [
+                    TranscriptionSegment(text: "First line.", start: 0, end: 1, speakerLabel: "Alice"),
+                    TranscriptionSegment(text: "Second line.", start: 1, end: 2, speakerLabel: "Bob")
+                ],
+                segmentSource: .importedTranscript
+            )
+            return meeting.id.uuidString
+        }
+
+        // Without include: no transcript text.
+        let plain = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(id)", queryParams: [:], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(plain["title"] as? String, "Detail Meeting")
+        XCTAssertEqual(plain["has_transcript"] as? Bool, true)
+        XCTAssertNil(plain["transcript"] as? String)
+
+        // With include=transcript.
+        let detailed = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(id)", queryParams: ["include": "transcript"], headers: [:], body: Data()
+        )))
+        let transcript = try XCTUnwrap(detailed["transcript"] as? String)
+        XCTAssertTrue(transcript.contains("Alice: First line."))
+        XCTAssertTrue(transcript.contains("Bob: Second line."))
+    }
+
+    func testGetMeetingUnknownIdReturns404AndInvalidIdReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let unknown = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(UUID().uuidString)", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(unknown.status, 404)
+
+        let invalid = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/not-a-uuid", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(invalid.status, 400)
     }
 
     @MainActor

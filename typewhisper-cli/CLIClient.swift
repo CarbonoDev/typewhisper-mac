@@ -167,6 +167,59 @@ struct CLIClient {
         return try await performRequest(request)
     }
 
+    // MARK: - Meetings
+
+    func importMeetingTranscript(
+        fileURL: URL,
+        title: String?,
+        date: String?,
+        folder: String?,
+        tags: [String],
+        language: String?,
+        matchCalendar: Bool
+    ) async throws -> Data {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CLIError.fileNotFound(fileURL.path)
+        }
+
+        // Direct handoff of the local file path (no bytes uploaded), like `transcribe`.
+        var payload: [String: Any] = ["path": fileURL.path]
+        if let title { payload["title"] = title }
+        if let date { payload["date"] = date }
+        if let folder { payload["folder"] = folder }
+        if !tags.isEmpty { payload["tags"] = tags }
+        if let language { payload["language"] = language }
+        if matchCalendar { payload["match_calendar"] = true }
+
+        let url = URL(string: "\(baseURL)/v1/meetings/import-transcript")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        request.timeoutInterval = 120
+
+        return try await performRequest(request)
+    }
+
+    func listMeetings(
+        folder: String?,
+        tag: String?,
+        from: String?,
+        to: String?
+    ) async throws -> Data {
+        var components = URLComponents(string: "\(baseURL)/v1/meetings")!
+        var items: [URLQueryItem] = []
+        if let folder { items.append(URLQueryItem(name: "folder", value: folder)) }
+        if let tag { items.append(URLQueryItem(name: "tag", value: tag)) }
+        if let from { items.append(URLQueryItem(name: "from", value: from)) }
+        if let to { items.append(URLQueryItem(name: "to", value: to)) }
+        if !items.isEmpty { components.queryItems = items }
+
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 30
+        return try await performRequest(request)
+    }
+
     // MARK: - Private
 
     private func transcribeLocalFile(

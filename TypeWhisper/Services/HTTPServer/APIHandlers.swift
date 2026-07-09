@@ -12,6 +12,11 @@ final class APIHandlers: @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
     private let audioRecorderViewModel: AudioRecorderViewModel
+    private let meetingService: MeetingService
+    private let meetingImportService: MeetingImportService
+    /// Used for the optional `match_calendar` auto-link on import. Optional so tests (and any
+    /// host without a calendar) can omit it; when nil, `match_calendar` reports `matched_event: null`.
+    private let calendarService: CalendarService?
 
     init(
         modelManager: ModelManagerService,
@@ -21,7 +26,10 @@ final class APIHandlers: @unchecked Sendable {
         workflowService: WorkflowService,
         dictionaryService: DictionaryService,
         dictationViewModel: DictationViewModel,
-        audioRecorderViewModel: AudioRecorderViewModel
+        audioRecorderViewModel: AudioRecorderViewModel,
+        meetingService: MeetingService,
+        meetingImportService: MeetingImportService,
+        calendarService: CalendarService?
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -31,6 +39,9 @@ final class APIHandlers: @unchecked Sendable {
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
         self.audioRecorderViewModel = audioRecorderViewModel
+        self.meetingService = meetingService
+        self.meetingImportService = meetingImportService
+        self.calendarService = calendarService
     }
 
     func register(on router: APIRouter) {
@@ -58,6 +69,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("GET", "/v1/dictionary/corrections", handler: handleGetDictionaryCorrections)
         router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
+        router.register("POST", "/v1/meetings/import-transcript", handler: handleImportMeetingTranscript)
+        router.register("GET", "/v1/meetings", handler: handleListMeetings)
+        router.register("GET", "/v1/meetings/{id}", handler: handleGetMeeting)
     }
 
     // MARK: - POST /v1/transcribe
@@ -1294,6 +1308,403 @@ final class APIHandlers: @unchecked Sendable {
             output_file: session.outputFile,
             error: session.error
         ))
+    }
+
+    // MARK: - POST /v1/meetings/import-transcript
+
+    private struct MeetingImportRequest: Decodable {
+        let path: String?
+        let text: String?
+        let title: String?
+        let date: String?
+        let folder: String?
+        let tags: [String]?
+        let language: String?
+        let matchCalendar: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case path, text, title, date, folder, tags, language
+            case matchCalendar = "match_calendar"
+        }
+    }
+
+    /// Resolved, mode-agnostic import inputs (JSON body or raw-text body).
+    private struct MeetingImportInputs {
+        var path: String?
+        var text: String?
+        var title: String?
+        var date: Date?
+        var folder: String?
+        var tags: [String]?
+        var language: String?
+        var matchCalendar: Bool
+    }
+
+    private struct MatchedEventResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date
+        let confidence: Double
+    }
+
+    private struct MeetingImportResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let matched_event: MatchedEventResponse?
+    }
+
+    private func handleImportMeetingTranscript(_ request: HTTPRequest) async -> HTTPResponse {
+        let inputs: MeetingImportInputs
+        switch parseImportInputs(request) {
+        case .use(let value): inputs = value
+        case .reject(let response): return response
+        }
+
+        let meetingService = self.meetingService
+        let importService = self.meetingImportService
+        let calendarService = self.calendarService
+
+        return await MainActor.run {
+            // 1) Create the meeting from a file (direct handoff) or raw text.
+            let meeting: Meeting
+            do {
+                if let path = inputs.path {
+                    let fileURL = URL(fileURLWithPath: path)
+                    guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                        return .error(status: 400, message: "File not found")
+                    }
+                    meeting = try importService.importTranscriptFile(at: fileURL, title: inputs.title)
+                } else {
+                    meeting = try importService.importTranscriptText(inputs.text ?? "", title: inputs.title)
+                }
+            } catch let error as MeetingImportService.ImportError {
+                switch error {
+                case .unsupportedTranscriptFile, .unreadableTranscriptFile, .emptyTranscript:
+                    return .error(status: 400, message: error.localizedDescription)
+                default:
+                    return .error(status: 500, message: error.localizedDescription)
+                }
+            } catch {
+                return .error(status: 500, message: "Import failed: \(error.localizedDescription)")
+            }
+
+            // 2) Apply optional metadata. Date is set before matching so the calendar query can use it.
+            if let date = inputs.date {
+                meetingService.setMeetingDate(date, for: meeting)
+            }
+            if let folder = inputs.folder {
+                meetingService.setFolder(folder, for: meeting)
+            }
+            if let tags = inputs.tags {
+                meetingService.setObsidianTags(tags, for: meeting)
+            }
+            if let language = inputs.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
+                meetingService.setLanguage(language, for: meeting)
+            }
+
+            // 3) Optional calendar matching: auto-link the best historical event above the confidence
+            //    threshold, so the imported meeting feeds prior-meeting briefs.
+            var matched: MatchedEventResponse?
+            if inputs.matchCalendar, let date = inputs.date, let calendarService,
+               let candidate = calendarService.bestAutoLinkCandidate(title: meeting.title, date: date) {
+                let projection = CalendarService.meetingProjection(for: candidate.event)
+                meetingService.linkToCalendarEvent(
+                    calendarEventID: projection.calendarEventID,
+                    seriesID: projection.seriesID,
+                    title: projection.title,
+                    startDate: projection.startDate,
+                    endDate: projection.endDate,
+                    attendees: projection.attendees,
+                    for: meeting
+                )
+                matched = MatchedEventResponse(
+                    id: candidate.event.id,
+                    title: projection.title,
+                    date: candidate.event.startDate,
+                    confidence: candidate.score
+                )
+            }
+
+            return .json(MeetingImportResponse(
+                id: meeting.id.uuidString,
+                title: meeting.title,
+                date: meeting.startDate,
+                matched_event: matched
+            ))
+        }
+    }
+
+    private func parseImportInputs(_ request: HTTPRequest) -> MeetingImportInputsResolution {
+        let contentType = request.headers["content-type"] ?? ""
+        var inputs = MeetingImportInputs(matchCalendar: false)
+
+        if contentType.contains("application/json") {
+            guard !request.body.isEmpty else {
+                return .reject(.error(status: 400, message: "Missing JSON body"))
+            }
+            let payload: MeetingImportRequest
+            do {
+                payload = try JSONDecoder().decode(MeetingImportRequest.self, from: request.body)
+            } catch {
+                if Self.hasInvalidJSONBooleanField("match_calendar", in: request.body) {
+                    return .reject(.error(status: 400, message: "Invalid 'match_calendar' value"))
+                }
+                return .reject(.error(status: 400, message: "Invalid JSON body"))
+            }
+
+            let path = payload.path?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let text = (payload.text?.isEmpty == false) ? payload.text : nil
+            guard path != nil || text != nil else {
+                return .reject(.error(status: 400, message: "Provide 'path' or 'text'"))
+            }
+            guard path == nil || text == nil else {
+                return .reject(.error(status: 400, message: "Use either 'path' or 'text', not both"))
+            }
+            inputs.path = path
+            inputs.text = text
+            inputs.title = payload.title
+            inputs.folder = payload.folder
+            inputs.tags = payload.tags
+            inputs.language = payload.language
+            inputs.matchCalendar = payload.matchCalendar ?? false
+
+            if let dateString = payload.date?.trimmingCharacters(in: .whitespacesAndNewlines), !dateString.isEmpty {
+                guard let date = Self.parseISO8601Date(dateString) else {
+                    return .reject(.error(status: 400, message: "Invalid 'date' value"))
+                }
+                inputs.date = date
+            }
+        } else {
+            guard !request.body.isEmpty, let text = String(data: request.body, encoding: .utf8), !text.isEmpty else {
+                return .reject(.error(status: 400, message: "Missing transcript text body"))
+            }
+            inputs.text = text
+            inputs.title = request.queryParams["title"]
+            inputs.folder = request.queryParams["folder"]
+            inputs.language = request.queryParams["language"]
+            inputs.tags = request.queryParams["tags"]?
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if let matchValue = request.queryParams["match_calendar"] {
+                guard let parsed = Self.parseBoolean(matchValue) else {
+                    return .reject(.error(status: 400, message: "Invalid 'match_calendar' value"))
+                }
+                inputs.matchCalendar = parsed
+            }
+
+            if let dateString = request.queryParams["date"]?.trimmingCharacters(in: .whitespacesAndNewlines), !dateString.isEmpty {
+                guard let date = Self.parseISO8601Date(dateString) else {
+                    return .reject(.error(status: 400, message: "Invalid 'date' value"))
+                }
+                inputs.date = date
+            }
+        }
+
+        return .use(inputs)
+    }
+
+    private enum MeetingImportInputsResolution {
+        case use(MeetingImportInputs)
+        case reject(HTTPResponse)
+    }
+
+    // MARK: - GET /v1/meetings
+
+    private struct MeetingRow: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let folder: String?
+        let tags: [String]
+        let language: String?
+        let has_transcript: Bool
+        let has_summary: Bool
+        let calendar_linked: Bool
+    }
+
+    private func handleListMeetings(_ request: HTTPRequest) async -> HTTPResponse {
+        let folder = request.queryParams["folder"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let tag = request.queryParams["tag"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let limit = min(Int(request.queryParams["limit"] ?? "") ?? 50, 200)
+        let offset = max(Int(request.queryParams["offset"] ?? "") ?? 0, 0)
+
+        var fromDate: Date?
+        if let fromString = request.queryParams["from"]?.trimmingCharacters(in: .whitespacesAndNewlines), !fromString.isEmpty {
+            guard let parsed = Self.parseISO8601Date(fromString) else {
+                return .error(status: 400, message: "Invalid 'from' value")
+            }
+            fromDate = parsed
+        }
+        var toDate: Date?
+        if let toString = request.queryParams["to"]?.trimmingCharacters(in: .whitespacesAndNewlines), !toString.isEmpty {
+            guard let parsed = Self.parseISO8601Date(toString) else {
+                return .error(status: 400, message: "Invalid 'to' value")
+            }
+            toDate = parsed
+        }
+
+        let tagKey = tag?.lowercased()
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            let folderComponents = folder.map { MeetingService.folderComponents($0) }
+            let filtered = meetingService.meetings.filter { meeting in
+                if let folderComponents, !folderComponents.isEmpty {
+                    let meetingComponents = MeetingService.folderComponents(meeting.folderPath)
+                    guard meetingComponents.count >= folderComponents.count,
+                          Array(meetingComponents.prefix(folderComponents.count)) == folderComponents else {
+                        return false
+                    }
+                }
+                if let tagKey {
+                    guard meeting.tags.contains(where: { $0.lowercased() == tagKey }) else { return false }
+                }
+                if let fromDate {
+                    guard let start = meeting.startDate, start >= fromDate else { return false }
+                }
+                if let toDate {
+                    guard let start = meeting.startDate, start <= toDate else { return false }
+                }
+                return true
+            }
+
+            let total = filtered.count
+            let sliceStart = min(offset, total)
+            let sliceEnd = min(offset + limit, total)
+            let page = Array(filtered[sliceStart..<sliceEnd])
+
+            struct MeetingsResponse: Encodable {
+                let meetings: [MeetingRow]
+                let total: Int
+                let limit: Int
+                let offset: Int
+            }
+
+            return .json(MeetingsResponse(
+                meetings: page.map { Self.meetingRow($0) },
+                total: total,
+                limit: limit,
+                offset: offset
+            ))
+        }
+    }
+
+    // MARK: - GET /v1/meetings/{id}
+
+    private func handleGetMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+        let includeTranscript = request.queryParams["include"]?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains("transcript") ?? false
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+
+            struct MeetingDetailResponse: Encodable {
+                let id: String
+                let title: String
+                let date: Date?
+                let end_date: Date?
+                let state: String
+                let source: String
+                let folder: String?
+                let tags: [String]
+                let language: String?
+                let calendar_linked: Bool
+                let calendar_event_id: String?
+                let has_transcript: Bool
+                let has_summary: Bool
+                let segment_count: Int
+                let attendees: [AttendeeRow]
+                let transcript: String?
+            }
+            struct AttendeeRow: Encodable {
+                let name: String
+                let email: String?
+            }
+
+            let row = Self.meetingRow(meeting)
+            let transcript: String? = includeTranscript ? Self.renderTranscript(meeting) : nil
+
+            return .json(MeetingDetailResponse(
+                id: row.id,
+                title: row.title,
+                date: row.date,
+                end_date: meeting.endDate,
+                state: meeting.state.rawValue,
+                source: meeting.source.rawValue,
+                folder: row.folder,
+                tags: row.tags,
+                language: row.language,
+                calendar_linked: row.calendar_linked,
+                calendar_event_id: meeting.calendarEventID,
+                has_transcript: row.has_transcript,
+                has_summary: row.has_summary,
+                segment_count: meeting.segments.count,
+                attendees: meeting.attendees.map { AttendeeRow(name: $0.name, email: $0.email) },
+                transcript: transcript
+            ))
+        }
+    }
+
+    // MARK: - Meeting helpers
+
+    @MainActor
+    private static func meetingRow(_ meeting: Meeting) -> MeetingRow {
+        let hasSummary = meeting.outputs.contains { $0.kind == .summary || $0.kind == .extended }
+        return MeetingRow(
+            id: meeting.id.uuidString,
+            title: meeting.title,
+            date: meeting.startDate,
+            folder: meeting.folderPath,
+            tags: meeting.tags,
+            language: meeting.languageCode,
+            has_transcript: !meeting.segments.isEmpty,
+            has_summary: hasSummary,
+            calendar_linked: meeting.calendarEventID != nil
+        )
+    }
+
+    /// Render a meeting's segments chronologically into newline-separated `Speaker: text` lines,
+    /// resolving `SPEAKER_xx` labels through the meeting's speaker map when present.
+    @MainActor
+    private static func renderTranscript(_ meeting: Meeting) -> String {
+        let speakerMap = meeting.speakerMap
+        return meeting.segments
+            .sorted { $0.order < $1.order }
+            .map { segment -> String in
+                let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+                    let name = speakerMap[label] ?? label
+                    return "\(name): \(text)"
+                }
+                return text
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private static func parseISO8601Date(_ string: String) -> Date? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFractional.date(from: trimmed) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        if let date = plain.date(from: trimmed) { return date }
+        let dateOnly = ISO8601DateFormatter()
+        dateOnly.formatOptions = [.withFullDate]
+        return dateOnly.date(from: trimmed)
     }
 
     // MARK: - Helpers

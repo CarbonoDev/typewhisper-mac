@@ -372,7 +372,10 @@ final class ServiceContainer: ObservableObject {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
-            audioRecorderViewModel: audioRecorderViewModel
+            audioRecorderViewModel: audioRecorderViewModel,
+            meetingService: meetingService,
+            meetingImportService: meetingImportService,
+            calendarService: calendarService
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)

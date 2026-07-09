@@ -379,6 +379,45 @@ final class CalendarService: ObservableObject {
             .map(\.event)
     }
 
+    /// Default half-window for *automatic* calendar matching (HTTP API / CLI bulk import): ± 1 day
+    /// around the imported meeting's date. Deliberately much narrower than the interactive picker's
+    /// `defaultLinkWindow`, so a weekly recurring meeting (same title every week) can never be
+    /// silently linked to the wrong occurrence — an off-by-a-week event falls outside the window.
+    static let defaultAutoLinkWindow: TimeInterval = 24 * 60 * 60
+
+    /// Minimum `linkScore` an event must clear to be auto-linked without user confirmation. Tuned so a
+    /// strong title match within a day passes, while a weak/ambiguous match is left unlinked (the
+    /// response then reports `matched_event: null`).
+    static let defaultAutoLinkConfidence: Double = 0.6
+
+    /// The single best historical event to auto-link an imported meeting to, or `nil` when none clears
+    /// `minimumConfidence` (meeting-identity milestone, powering the bulk archive import's calendar
+    /// matching). Ranks the in-window candidates by `linkScore` and returns the top one with its score
+    /// only when it is confident enough. Empty when calendar access is not granted.
+    func bestAutoLinkCandidate(
+        title: String,
+        date: Date,
+        window: TimeInterval = defaultAutoLinkWindow,
+        minimumConfidence: Double = defaultAutoLinkConfidence
+    ) -> (event: CalendarEventDTO, score: Double)? {
+        let raw = linkCandidates(around: date, window: window)
+        guard let best = Self.rankedLinkCandidates(
+            events: raw,
+            targetTitle: title,
+            targetDate: date,
+            window: window
+        ).first else { return nil }
+        let score = Self.linkScore(
+            eventTitle: best.title,
+            eventDate: best.startDate,
+            targetTitle: title,
+            targetDate: date,
+            window: window
+        )
+        guard score >= minimumConfidence else { return nil }
+        return (best, score)
+    }
+
     /// Live search filter for the picker's search-as-you-type field: keep events whose title
     /// contains `query` (case-insensitive); an empty query passes everything through unchanged.
     static func filterLinkCandidates(_ events: [CalendarEventDTO], query: String) -> [CalendarEventDTO] {

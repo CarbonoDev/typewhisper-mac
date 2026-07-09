@@ -26,20 +26,60 @@ final class APIRouter: Sendable {
 
         let registeredRoutes = routes.withLock { $0 }
 
-        for route in registeredRoutes {
+        // Exact-path routes win over `{placeholder}` patterns, so a literal like
+        // `/v1/meetings/import-transcript` is never shadowed by `/v1/meetings/{id}`.
+        for route in registeredRoutes where !route.path.contains("{") {
             if route.method == request.method && route.path == request.path {
-                guard isAuthorized(request) else {
-                    return .error(
-                        status: 401,
-                        message: "Missing or invalid API token",
-                        headers: ["WWW-Authenticate": "Bearer"]
-                    )
-                }
+                guard isAuthorized(request) else { return Self.unauthorized }
                 return await route.handler(request)
             }
         }
 
+        for route in registeredRoutes where route.path.contains("{") {
+            guard route.method == request.method,
+                  let pathParams = Self.matchPattern(route.path, path: request.path) else { continue }
+            guard isAuthorized(request) else { return Self.unauthorized }
+            let matched = HTTPRequest(
+                method: request.method,
+                path: request.path,
+                queryParams: request.queryParams,
+                headers: request.headers,
+                body: request.body,
+                pathParams: pathParams
+            )
+            return await route.handler(matched)
+        }
+
         return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
+    }
+
+    private static let unauthorized = HTTPResponse.error(
+        status: 401,
+        message: "Missing or invalid API token",
+        headers: ["WWW-Authenticate": "Bearer"]
+    )
+
+    /// Match a registered pattern like `/v1/meetings/{id}` against a concrete request path,
+    /// returning the captured placeholder values (`["id": "..."]`) or `nil` when it does not match.
+    /// Segment counts must be equal; literal segments must match exactly; each `{name}` segment
+    /// captures its (percent-decoded) value.
+    static func matchPattern(_ pattern: String, path: String) -> [String: String]? {
+        let patternSegments = pattern.split(separator: "/", omittingEmptySubsequences: false)
+        let pathSegments = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard patternSegments.count == pathSegments.count else { return nil }
+
+        var params: [String: String] = [:]
+        for (patternSegment, pathSegment) in zip(patternSegments, pathSegments) {
+            if patternSegment.hasPrefix("{") && patternSegment.hasSuffix("}") {
+                let name = String(patternSegment.dropFirst().dropLast())
+                let value = String(pathSegment)
+                guard !value.isEmpty else { return nil }
+                params[name] = value.removingPercentEncoding ?? value
+            } else if patternSegment != pathSegment {
+                return nil
+            }
+        }
+        return params
     }
 
     private func isAuthorized(_ request: HTTPRequest) -> Bool {

@@ -139,6 +139,42 @@ final class MeetingImportServiceTests: XCTestCase {
         }
     }
 
+    func testImportTranscriptTextCreatesNewMeetingWithSegments() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+
+        let meeting = try service.importTranscriptText(
+            "Alice: Welcome everyone.\nBob: Thanks, glad to be here.",
+            title: "Text Import"
+        )
+
+        XCTAssertEqual(meeting.source, .importedTranscript)
+        XCTAssertEqual(meeting.title, "Text Import")
+        let sorted = meeting.segments.sorted { $0.order < $1.order }
+        XCTAssertEqual(sorted.map(\.text), ["Welcome everyone.", "Thanks, glad to be here."])
+        XCTAssertEqual(sorted.map(\.speakerLabel), ["Alice", "Bob"])
+    }
+
+    func testImportTranscriptTextEmptyThrows() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+
+        XCTAssertThrowsError(try service.importTranscriptText("   \n\n  ")) { error in
+            XCTAssertEqual(error as? MeetingImportService.ImportError, .emptyTranscript)
+        }
+    }
+
     // MARK: - Audio file → new meeting (stubbed transcription)
 
     func testImportAudioFileCreatesNewMeetingWithSegmentsAndAdoptsAudio() async throws {

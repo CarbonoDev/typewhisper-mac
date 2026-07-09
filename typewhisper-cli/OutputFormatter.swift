@@ -81,6 +81,64 @@ enum OutputFormatter {
         return lines.joined(separator: "\n")
     }
 
+    static func formatMeetingImport(_ data: Data, json: Bool) -> String {
+        if json {
+            return prettyJSON(data)
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = obj["id"] as? String else {
+            return prettyJSON(data)
+        }
+        let title = obj["title"] as? String ?? "(untitled)"
+        var lines = ["Imported \"\(title)\" (\(id))"]
+        if let matched = obj["matched_event"] as? [String: Any],
+           let eventTitle = matched["title"] as? String {
+            lines.append("Linked to calendar event: \(eventTitle)")
+        } else {
+            lines.append("No calendar event linked.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func formatMeetingsList(_ data: Data, json: Bool) -> String {
+        if json {
+            return prettyJSON(data)
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let meetings = obj["meetings"] as? [[String: Any]] else {
+            return prettyJSON(data)
+        }
+
+        if meetings.isEmpty {
+            return "No meetings found."
+        }
+
+        var dateWidth = 4, titleWidth = 5
+        for meeting in meetings {
+            let date = (meeting["date"] as? String).map { String($0.prefix(10)) } ?? "-"
+            let title = meeting["title"] as? String ?? ""
+            dateWidth = max(dateWidth, date.count)
+            titleWidth = max(titleWidth, title.count)
+        }
+
+        var lines = [String]()
+        lines.append(
+            "DATE".padding(toLength: dateWidth, withPad: " ", startingAt: 0) + "  " +
+            "TITLE".padding(toLength: titleWidth, withPad: " ", startingAt: 0) + "  " +
+            "FOLDER"
+        )
+        for meeting in meetings {
+            let date = ((meeting["date"] as? String).map { String($0.prefix(10)) } ?? "-")
+                .padding(toLength: dateWidth, withPad: " ", startingAt: 0)
+            let title = (meeting["title"] as? String ?? "")
+                .padding(toLength: titleWidth, withPad: " ", startingAt: 0)
+            let folder = meeting["folder"] as? String ?? "-"
+            let linked = (meeting["calendar_linked"] as? Bool ?? false) ? " [cal]" : ""
+            lines.append("\(date)  \(title)  \(folder)\(linked)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func prettyJSON(_ data: Data) -> String {
         if let obj = try? JSONSerialization.jsonObject(with: data),
            let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),

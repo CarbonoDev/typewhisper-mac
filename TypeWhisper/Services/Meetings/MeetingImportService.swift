@@ -92,6 +92,22 @@ final class MeetingImportService: ObservableObject {
         return meeting
     }
 
+    /// Parse raw transcript **text** (not a file) into a new `.importedTranscript` meeting. Same
+    /// parser as `importTranscriptFile`, for callers that already hold the transcript in memory (the
+    /// HTTP API's raw-text body / bulk archive import). Throws `.emptyTranscript` when nothing
+    /// parseable is found.
+    @discardableResult
+    func importTranscriptText(_ text: String, title: String? = nil) throws -> Meeting {
+        let segments = TranscriptFileParser.parse(text)
+        guard !segments.isEmpty else { throw ImportError.emptyTranscript }
+        return meetingService.createFromImport(
+            title: resolvedTitle(title, fallbackText: text),
+            source: .importedTranscript,
+            segments: segments,
+            segmentSource: .importedTranscript
+        )
+    }
+
     // MARK: - New meeting from an audio file
 
     /// Decode an audio file, transcribe it through the file-transcription path, and create a new
@@ -170,6 +186,15 @@ final class MeetingImportService: ObservableObject {
         }
         let base = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.isEmpty { return base }
+        return String(localized: "meetings.import.defaultTitle")
+    }
+
+    /// Derive the title for a raw-text import from the explicit argument, else the localized default
+    /// (raw text has no file name to fall back to).
+    private func resolvedTitle(_ title: String?, fallbackText: String) -> String {
+        if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
+        }
         return String(localized: "meetings.import.defaultTitle")
     }
 

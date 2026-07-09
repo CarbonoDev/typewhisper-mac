@@ -436,6 +436,83 @@ Conflict and lookup behavior:
 - Polling with a missing or invalid `id` returns `400 Bad Request`.
 - Polling a valid but unknown session id returns `404 Not Found`.
 
+### Meetings
+
+Import an archive of existing transcripts as meetings and list them. Useful for bulk-importing old
+meeting transcripts (optionally driven by an external agent) so they feed prior-meeting briefs.
+
+```bash
+# Import a transcript file by local path (direct handoff, no bytes uploaded)
+curl -X POST http://localhost:8978/v1/meetings/import-transcript \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/Users/alex/archive/2026-01-05-sync.txt","date":"2026-01-05","folder":"Clients/Acme","tags":["sales"],"language":"en","match_calendar":true}'
+
+# Import raw transcript text (options via query parameters)
+curl -X POST "http://localhost:8978/v1/meetings/import-transcript?title=Kickoff&date=2026-01-05" \
+  -H "Content-Type: text/plain" \
+  --data-binary @sync.txt
+
+# List meetings with optional filters
+curl "http://localhost:8978/v1/meetings?folder=Clients/Acme&tag=sales&from=2026-01-01&to=2026-03-31&limit=50&offset=0"
+
+# Fetch one meeting, optionally including the transcript text
+curl "http://localhost:8978/v1/meetings/<uuid>?include=transcript"
+```
+
+`POST /v1/meetings/import-transcript` accepts either a JSON body with a `path` (a local transcript
+file handed to the app directly) or a `text` field, or a raw text body with options as query
+parameters. Optional fields: `title`, `date` (ISO 8601), `folder`, `tags[]`, `language`,
+`match_calendar`. Supported transcript formats are `.txt`, `.text`, `.md`, and `.markdown` (Google
+Meet exports, `Speaker:` turns, timestamped lines, and plain text).
+
+When `match_calendar` is `true` and a `date` is present, TypeWhisper searches historical calendar
+events near that date and, if the best candidate clears a confidence threshold, links the meeting to
+it automatically. The response reports the matched event or `null`:
+
+```json
+{
+  "id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+  "title": "Acme sync",
+  "date": "2026-01-05T10:00:00Z",
+  "matched_event": {
+    "id": "event-id#1767607200.0",
+    "title": "Acme sync",
+    "date": "2026-01-05T10:00:00Z",
+    "confidence": 0.87
+  }
+}
+```
+
+List rows are compact:
+
+```json
+{
+  "meetings": [
+    {
+      "id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+      "title": "Acme sync",
+      "date": "2026-01-05T10:00:00Z",
+      "folder": "Clients/Acme",
+      "tags": ["sales"],
+      "language": "en",
+      "has_transcript": true,
+      "has_summary": false,
+      "calendar_linked": true
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Behavior:
+- `GET /v1/meetings` filters: `folder` (matches the folder and its subfolders), `tag`, `from`/`to`
+  (ISO 8601), `limit` (default 50, max 200), `offset`.
+- `GET /v1/meetings/{id}` returns full detail; add `?include=transcript` for the rendered transcript
+  text. A missing or invalid id returns `400 Bad Request`; an unknown id returns `404 Not Found`.
+- An unsupported/empty transcript or an invalid `date` returns `400 Bad Request`.
+
 ## CLI Tool
 
 TypeWhisper includes a command-line tool for shell-friendly transcription. It is part of the advanced automation surface and connects to the running local API server.
@@ -450,6 +527,8 @@ Install via Settings > Advanced > CLI Tool > Install. This places the `typewhisp
 typewhisper status              # Show server status
 typewhisper models              # List available models
 typewhisper transcribe file.wav # Transcribe an audio file
+typewhisper meetings import-transcript notes.txt  # Import a transcript as a meeting
+typewhisper meetings list       # List meetings
 ```
 
 ### Options
@@ -463,6 +542,10 @@ typewhisper transcribe file.wav # Transcribe an audio file
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 | `--no-corrections` | Return raw transcription text without Dictionary Corrections |
+
+Meeting options for `meetings import-transcript`: `--title`, `--date <iso8601>`, `--folder`,
+`--tags a,b,c`, `--language`, `--match-calendar`. Filters for `meetings list`: `--folder`, `--tag`,
+`--from <iso8601>`, `--to <iso8601>`.
 
 ### Examples
 
@@ -478,6 +561,13 @@ cat audio.wav | typewhisper transcribe -
 
 # Use in a script
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
+
+# Import an old transcript and auto-link a matching calendar event
+typewhisper meetings import-transcript 2026-01-05-sync.txt --date 2026-01-05 --match-calendar
+
+# Import into a folder with tags, then list that folder
+typewhisper meetings import-transcript call.txt --folder Clients/Acme --tags sales,q1
+typewhisper meetings list --folder Clients/Acme --json
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
