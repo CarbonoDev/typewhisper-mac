@@ -28587,6 +28587,86 @@
         }
       }
     },
+    "meetingfolder.context.sheet.done": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.summary.attached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld attached"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld angehängt"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.summary.off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault context off"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tresor-Kontext aus"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.summary.wholeVault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole vault"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ganzer Tresor"
+          }
+        }
+      }
+    },
+    "meetingfolder.context.summary.notConnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault not connected"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tresor nicht verbunden"
+          }
+        }
+      }
+    },
     "meetingfolder.picker.title": {
       "localizations": {
         "en": {

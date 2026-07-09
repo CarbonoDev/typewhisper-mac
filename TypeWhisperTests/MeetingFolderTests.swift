@@ -385,3 +385,86 @@ final class MeetingFolderNavigationTests: XCTestCase {
         XCTAssertNil(coordinator.activeTag)
     }
 }
+
+// MARK: - Folder page date-grouping pipeline (M12 redesign)
+
+/// The folder detail page renders its meetings by composing the pure folder(+tag) filter with the Home
+/// day-grouping (`filteredMeetings` → `homeDayGroups`). These tests pin that exact pipeline with fixed
+/// dates so the meetings-first redesign groups correctly and the tag facet still composes — pure,
+/// container-free, no SwiftUI.
+@MainActor
+final class MeetingFolderTimelineGroupingTests: XCTestCase {
+    /// Fixed gregorian calendar in a stable time zone so day math is deterministic.
+    private var calendar: Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/New_York")!
+        return cal
+    }
+
+    /// 2026-07-07 14:00 local.
+    private var now: Date {
+        calendar.date(from: DateComponents(year: 2026, month: 7, day: 7, hour: 14))!
+    }
+
+    private func date(daysBefore days: Int, hour: Int) -> Date {
+        let day = calendar.date(byAdding: .day, value: -days, to: calendar.startOfDay(for: now))!
+        return calendar.date(byAdding: .hour, value: hour, to: day)!
+    }
+
+    private func meeting(_ title: String, folder: String?, at date: Date, tags: [String] = []) -> Meeting {
+        let m = Meeting(title: title, startDate: date)
+        m.folderPath = folder
+        m.tags = tags
+        return m
+    }
+
+    /// A folder's meetings, filtered then day-grouped, land in the right day buckets (newest day first,
+    /// newest-within-day first) and exclude meetings from other folders / look-alike siblings.
+    func testFolderMeetingsGroupByDayNewestFirst() {
+        let meetings = [
+            meeting("Acme AM", folder: "Clients/Acme", at: date(daysBefore: 0, hour: 9)),
+            meeting("Acme PM", folder: "Clients/Acme", at: date(daysBefore: 0, hour: 13)),
+            meeting("Acme child", folder: "Clients/Acme/Q3", at: date(daysBefore: 1, hour: 10)),
+            meeting("Acme old", folder: "Clients/Acme", at: date(daysBefore: 30, hour: 8)),
+            meeting("Lookalike", folder: "Clients/Acme2", at: date(daysBefore: 0, hour: 11)),
+            meeting("Other folder", folder: "Internal", at: date(daysBefore: 0, hour: 12)),
+        ]
+
+        let filtered = MeetingsViewModel.filteredMeetings(meetings, folder: "Clients/Acme", tag: nil)
+        // Descendant-inclusive, component-boundary-safe: the Q3 child is in, Acme2/Internal are out.
+        XCTAssertEqual(Set(filtered.map(\.title)), ["Acme AM", "Acme PM", "Acme child", "Acme old"])
+
+        let groups = MeetingsViewModel.homeDayGroups(from: filtered, calendar: calendar)
+        // Three days, newest first; within today the later meeting sorts first.
+        XCTAssertEqual(
+            groups.map { $0.meetings.map(\.title) },
+            [["Acme PM", "Acme AM"], ["Acme child"], ["Acme old"]]
+        )
+        XCTAssertTrue(groups.map(\.date) == groups.map(\.date).sorted(by: >), "days sorted newest first")
+    }
+
+    /// The active tag facet composes (AND) before grouping: only the folder's meetings carrying the tag
+    /// survive into the grouped list.
+    func testFolderPlusTagComposesBeforeGrouping() {
+        let meetings = [
+            meeting("Tagged today", folder: "Clients/Acme", at: date(daysBefore: 0, hour: 9), tags: ["hiring"]),
+            meeting("Untagged today", folder: "Clients/Acme", at: date(daysBefore: 0, hour: 10)),
+            meeting("Tagged yesterday", folder: "Clients/Acme", at: date(daysBefore: 1, hour: 9), tags: ["Hiring"]),
+        ]
+
+        let filtered = MeetingsViewModel.filteredMeetings(meetings, folder: "Clients/Acme", tag: "hiring")
+        let groups = MeetingsViewModel.homeDayGroups(from: filtered, calendar: calendar)
+        XCTAssertEqual(
+            groups.map { $0.meetings.map(\.title) },
+            [["Tagged today"], ["Tagged yesterday"]],
+            "case-folded tag AND folder, day-grouped"
+        )
+    }
+
+    /// A folder with no matching meetings produces no groups — the page falls back to its empty state.
+    func testEmptyFolderProducesNoGroups() {
+        let meetings = [meeting("Elsewhere", folder: "Internal", at: date(daysBefore: 0, hour: 9))]
+        let filtered = MeetingsViewModel.filteredMeetings(meetings, folder: "Clients/Acme", tag: nil)
+        XCTAssertTrue(MeetingsViewModel.homeDayGroups(from: filtered, calendar: calendar).isEmpty)
+    }
+}

@@ -1,32 +1,59 @@
 import SwiftUI
 
-/// The day-grouped meeting timeline on the Home feed (plan Track C / D6). Meetings are bucketed by
-/// day (Today / Yesterday / weekday / date) newest-first, each row carrying its state badges
-/// (Running long / Brief ready / Summary / Extended / In vault). Clicking any row routes to that
-/// meeting's document via the shared coordinator — the single navigation channel.
+/// The day-grouped meeting timeline on the Home feed (plan Track C / D6). A thin wrapper over the
+/// reusable `MeetingTimelineList`: it feeds the full `MeetingsViewModel.meetings` snapshot and owns
+/// only the Home-specific empty state. The row treatment (state badges, working badge, attendees,
+/// tags) lives in `MeetingTimelineList` so the folder detail page (M12) reuses the identical rows
+/// instead of a second lightweight list. Clicking any row routes to that meeting's document via the
+/// shared coordinator — the single navigation channel.
 struct MeetingTimeline: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+
+    var body: some View {
+        if viewModel.meetings.isEmpty {
+            emptyState
+        } else {
+            MeetingTimelineList(meetings: viewModel.meetings)
+        }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(String(localized: "home.timeline.empty.title"), systemImage: "calendar")
+        } description: {
+            Text(String(localized: "home.timeline.empty.message"))
+        }
+    }
+}
+
+/// The reusable day-grouped meeting list (M12): meetings are bucketed by day (Today / Yesterday /
+/// weekday / date) newest-first, each row carrying its state badges (Running long / Brief ready /
+/// Summary / Extended / In vault), a transient working badge, attendee count, and first-party tag
+/// capsules. Takes an explicit `meetings` snapshot so both the Home feed and the folder detail page
+/// render the same rows over their own (unfiltered / folder+tag-filtered) sets. Renders nothing when
+/// empty — the caller owns its empty state. Clicking any row routes to that meeting's document via
+/// the shared coordinator.
+struct MeetingTimelineList: View {
+    let meetings: [Meeting]
+
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
     @ObservedObject private var jobQueue = JobQueueService.shared
 
     var body: some View {
-        let groups = homeViewModel.timelineGroups(from: viewModel.meetings)
-        if groups.isEmpty {
-            emptyState
-        } else {
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(groups) { group in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(homeViewModel.groupTitle(for: group))
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+        let groups = homeViewModel.timelineGroups(from: meetings)
+        VStack(alignment: .leading, spacing: 20) {
+            ForEach(groups) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(homeViewModel.groupTitle(for: group))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
 
-                        VStack(spacing: 6) {
-                            ForEach(group.meetings, id: \.id) { meeting in
-                                row(meeting)
-                            }
+                    VStack(spacing: 6) {
+                        ForEach(group.meetings, id: \.id) { meeting in
+                            row(meeting)
                         }
                     }
                 }
@@ -56,6 +83,7 @@ struct MeetingTimeline: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        attendeeCount(for: meeting)
                         badges(for: meeting, isLive: isLive)
                     }
                     tagCapsules(for: meeting)
@@ -72,6 +100,19 @@ struct MeetingTimeline: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// A compact attendee count (people icon + number), shown only when the meeting has attendees, so
+    /// ad-hoc/attendee-less meetings stay clean. Placed with the time in the metadata line.
+    @ViewBuilder
+    private func attendeeCount(for meeting: Meeting) -> some View {
+        let count = meeting.attendees.count
+        if count > 0 {
+            Label("\(count)", systemImage: "person.2")
+                .labelStyle(.titleAndIcon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
@@ -156,13 +197,5 @@ struct MeetingTimeline: View {
             .padding(.vertical, 2)
             .background(tint.opacity(0.15), in: Capsule())
             .foregroundStyle(tint)
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label(String(localized: "home.timeline.empty.title"), systemImage: "calendar")
-        } description: {
-            Text(String(localized: "home.timeline.empty.message"))
-        }
     }
 }
