@@ -2047,6 +2047,9 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
 }
 
 final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
+    private static let callbackQuiescenceInterval: TimeInterval = 0.3
+    private static let callbackDrainRetryInterval: TimeInterval = 0.01
+
     final class RenderState: @unchecked Sendable {
         let audioUnit: AudioUnit
         let operations: CoreAudioHALInputOperating
@@ -2066,11 +2069,119 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         }
     }
 
-    private let audioUnit: AudioUnit
-    private let operations: CoreAudioHALInputOperating
-    private let renderState: RenderState
-    private let lock = NSLock()
-    private var isStopped = false
+    private final class CallbackLifetime: @unchecked Sendable {
+        private static let teardownQueue = DispatchQueue(
+            label: "com.typewhisper.coreaudio-hal-teardown",
+            qos: .utility
+        )
+        let audioUnit: AudioUnit
+        let operations: CoreAudioHALInputOperating
+        let renderState: RenderState
+        let callbackContext: OpaquePointer
+
+        private let lifecycleLock = NSLock()
+        private var teardownStarted = false
+        private var disposalStarted = false
+        private var finalized = false
+
+        init(
+            audioUnit: AudioUnit,
+            operations: CoreAudioHALInputOperating,
+            renderState: RenderState,
+            callbackContext: OpaquePointer
+        ) {
+            self.audioUnit = audioUnit
+            self.operations = operations
+            self.renderState = renderState
+            self.callbackContext = callbackContext
+        }
+
+        func openCallbackGate() -> Bool {
+            let canOpen = lifecycleLock.withLock { !teardownStarted }
+            guard canOpen else { return false }
+            return CoreAudioHALCallbackContextOpen(callbackContext)
+        }
+
+        func stop() {
+            let shouldStartTeardown = lifecycleLock.withLock { () -> Bool in
+                guard !teardownStarted else { return false }
+                teardownStarted = true
+                return true
+            }
+            guard shouldStartTeardown else { return }
+
+            // The C context is the only state the real-time callback may touch before
+            // this closes. From this point on, late callbacks return without allocating
+            // a buffer or rendering from the AudioUnit.
+            guard CoreAudioHALCallbackContextBeginTeardown(callbackContext) else { return }
+            operations.stop(audioUnit)
+            scheduleFinalization()
+        }
+
+        private func scheduleFinalization() {
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
+                finalizeWhenDrained()
+            }
+        }
+
+        private func finalizeWhenDrained() {
+            guard CoreAudioHALCallbackContextIsDrained(callbackContext) else {
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
+                    finalizeWhenDrained()
+                }
+                return
+            }
+
+            let shouldStartDisposal = lifecycleLock.withLock { () -> Bool in
+                guard teardownStarted, !disposalStarted else { return false }
+                disposalStarted = true
+                return true
+            }
+            guard shouldStartDisposal else { return }
+
+            operations.uninitialize(audioUnit)
+            operations.dispose(audioUnit)
+            sealCallbackContextWhenDrained()
+        }
+
+        private func sealCallbackContextWhenDrained() {
+            // The seal atomically verifies the last admitted callback has left and
+            // prevents another callback from entering the final drain-to-destroy gap.
+            guard CoreAudioHALCallbackContextSealForDestruction(callbackContext) else {
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
+                    sealCallbackContextWhenDrained()
+                }
+                return
+            }
+
+            // Keep the sealed refCon alive for one more quiescence window so a native
+            // callback that had not yet touched the atomic state can still reject safely.
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
+                destroySealedCallbackContext()
+            }
+        }
+
+        private func destroySealedCallbackContext() {
+            let shouldFinalize = lifecycleLock.withLock { () -> Bool in
+                guard disposalStarted, !finalized else { return false }
+                finalized = true
+                return true
+            }
+            guard shouldFinalize else { return }
+
+            CoreAudioHALCallbackContextDestroy(callbackContext)
+        }
+    }
+
+    private let callbackLifetime: CallbackLifetime
 
     init(
         deviceID: AudioDeviceID,
@@ -2080,8 +2191,6 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         operations: CoreAudioHALInputOperating,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws {
-        self.operations = operations
-
         let audioUnit: AudioUnit
         do {
             audioUnit = try operations.makeInputUnit()
@@ -2094,36 +2203,20 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             )
             throw error
         }
-        self.audioUnit = audioUnit
 
-        do {
-            let disabled: UInt32 = 0
-            let enabled: UInt32 = 1
-            try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
-            try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
-            try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
-
-            var streamDescription = try Self.streamDescription(for: format)
-            try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
-
-            let renderState = RenderState(
-                audioUnit: audioUnit,
-                operations: operations,
-                format: format,
-                onBuffer: onBuffer
+        let renderState = RenderState(
+            audioUnit: audioUnit,
+            operations: operations,
+            format: format,
+            onBuffer: onBuffer
+        )
+        guard let callbackContext = CoreAudioHALCallbackContextCreate(
+            Unmanaged.passUnretained(renderState).toOpaque()
+        ) else {
+            let error = CoreAudioHALInputOperationError(
+                operation: "\(label) create HAL callback context",
+                status: -1
             )
-            self.renderState = renderState
-            var callback = AURenderCallbackStruct(
-                inputProc: coreAudioHALInputRenderCallback,
-                inputProcRefCon: Unmanaged.passUnretained(renderState).toOpaque()
-            )
-            try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
-            try operations.initialize(audioUnit, label: label)
-            try operations.start(audioUnit, label: label)
-
-            AudioInputCaptureDiagnosticsStore.clear()
-            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
-        } catch {
             operations.stop(audioUnit)
             operations.uninitialize(audioUnit)
             operations.dispose(audioUnit)
@@ -2135,6 +2228,53 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             )
             throw error
         }
+        self.callbackLifetime = CallbackLifetime(
+            audioUnit: audioUnit,
+            operations: operations,
+            renderState: renderState,
+            callbackContext: callbackContext
+        )
+
+        do {
+            let disabled: UInt32 = 0
+            let enabled: UInt32 = 1
+            try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
+            try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
+            try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
+
+            var streamDescription = try Self.streamDescription(for: format)
+            try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
+
+            var callback = AURenderCallbackStruct(
+                inputProc: coreAudioHALInputRenderCallback,
+                inputProcRefCon: UnsafeMutableRawPointer(callbackContext)
+            )
+            try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
+            try operations.initialize(audioUnit, label: label)
+            guard callbackLifetime.openCallbackGate() else {
+                throw CoreAudioHALInputOperationError(
+                    operation: "\(label) open HAL callback gate",
+                    status: -1
+                )
+            }
+            try operations.start(audioUnit, label: label)
+
+            AudioInputCaptureDiagnosticsStore.clear()
+            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
+        } catch {
+            callbackLifetime.stop()
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
+            throw error
+        }
+    }
+
+    deinit {
+        callbackLifetime.stop()
     }
 
     static func captureFormat(for deviceID: AudioDeviceID) throws -> AVAudioFormat {
@@ -2155,15 +2295,7 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 
     func stop() {
-        let shouldStop = lock.withLock { () -> Bool in
-            guard !isStopped else { return false }
-            isStopped = true
-            return true
-        }
-        guard shouldStop else { return }
-        operations.stop(audioUnit)
-        operations.uninitialize(audioUnit)
-        operations.dispose(audioUnit)
+        callbackLifetime.stop()
     }
 
     private static func streamDescription(for format: AVAudioFormat) throws -> AudioStreamBasicDescription {
@@ -2185,8 +2317,16 @@ private func coreAudioHALInputRenderCallback(
     inNumberFrames: UInt32,
     ioData: UnsafeMutablePointer<AudioBufferList>?
 ) -> OSStatus {
+    let callbackContext = OpaquePointer(inRefCon)
+    var renderStatePointer: UnsafeMutableRawPointer?
+    guard CoreAudioHALCallbackContextEnter(callbackContext, &renderStatePointer) else {
+        return noErr
+    }
+    defer { CoreAudioHALCallbackContextLeave(callbackContext) }
+    guard let renderStatePointer else { return noErr }
+
     let renderState = Unmanaged<CoreAudioHALInputCaptureSession.RenderState>
-        .fromOpaque(inRefCon)
+        .fromOpaque(renderStatePointer)
         .takeUnretainedValue()
 
     guard let buffer = AVAudioPCMBuffer(
@@ -2845,6 +2985,53 @@ extension AudioDeviceService {
 extension CoreAudioHALInputCaptureSession {
     static func testingInputOnlyCaptureChannelCount(for hardwareChannelCount: AVAudioChannelCount) -> AVAudioChannelCount {
         inputOnlyCaptureChannelCount(for: hardwareChannelCount)
+    }
+
+    static var testingCallbackQuiescenceInterval: TimeInterval {
+        callbackQuiescenceInterval
+    }
+
+    static func testingCallbackContextSealTransitions() -> (
+        sealedWhileInFlight: Bool,
+        sealedAfterDrain: Bool,
+        enteredAfterSeal: Bool,
+        payloadAfterSealWasNil: Bool
+    ) {
+        var payloadStorage: UInt8 = 0
+        return withUnsafeMutablePointer(to: &payloadStorage) { payloadPointer in
+            guard let callbackContext = CoreAudioHALCallbackContextCreate(
+                UnsafeMutableRawPointer(payloadPointer)
+            ) else {
+                return (false, false, true, false)
+            }
+            defer { CoreAudioHALCallbackContextDestroy(callbackContext) }
+
+            guard CoreAudioHALCallbackContextOpen(callbackContext) else {
+                return (false, false, true, false)
+            }
+
+            var admittedPayload: UnsafeMutableRawPointer?
+            guard CoreAudioHALCallbackContextEnter(callbackContext, &admittedPayload) else {
+                return (false, false, true, false)
+            }
+            guard CoreAudioHALCallbackContextBeginTeardown(callbackContext) else {
+                CoreAudioHALCallbackContextLeave(callbackContext)
+                return (false, false, true, false)
+            }
+
+            let sealedWhileInFlight = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+            CoreAudioHALCallbackContextLeave(callbackContext)
+            let sealedAfterDrain = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+
+            var payloadAfterSeal: UnsafeMutableRawPointer?
+            let enteredAfterSeal = CoreAudioHALCallbackContextEnter(callbackContext, &payloadAfterSeal)
+            return (
+                sealedWhileInFlight,
+                sealedAfterDrain,
+                enteredAfterSeal,
+                payloadAfterSeal == nil
+            )
+        }
     }
 }
 #endif
