@@ -497,6 +497,103 @@ final class MeetingsViewModel: ObservableObject {
         loadUpcoming()
     }
 
+    // MARK: - Bulk / context-menu actions (plan LX-2, D4/D5/D6)
+
+    /// The multi-selected meetings — `selectedMeetingIDs` intersected with the list, in list order.
+    /// The bulk context-menu actions operate over this set.
+    func selectedMeetings() -> [Meeting] {
+        meetings.filter { selectedMeetingIDs.contains($0.id) }
+    }
+
+    /// Delete a single meeting (context-menu "Delete"), removing its audio blob, and drop it from the
+    /// selection. Callers gate on a confirmation dialog.
+    func deleteMeeting(_ meeting: Meeting) {
+        meetingService.deleteMeeting(meeting)
+        selectedMeetingIDs.remove(meeting.id)
+    }
+
+    /// Delete a set of meetings in one save (bulk "Delete N meetings"), dropping them from the
+    /// selection. Callers gate on a count-aware confirmation dialog. No-op on an empty set.
+    func deleteMeetings(_ meetings: [Meeting]) {
+        guard !meetings.isEmpty else { return }
+        meetingService.deleteMeetings(meetings)
+        selectedMeetingIDs.subtract(meetings.map(\.id))
+    }
+
+    /// Generate a summary for a meeting using its default summary template (context-menu "Generate
+    /// summary"). Enqueues an `llm`-lane `.summary` job via `generateOutput`; the queue's
+    /// `(kind, meetingID)` dedupe collapses a double-fire. Surfaces an error when no summary template
+    /// exists (the picker is normally seeded, so this is a defensive fallback).
+    func generateSummary(for meeting: Meeting) {
+        guard let template = defaultTemplate(ofKind: .summary, for: meeting) else {
+            outputErrorMessage = String(localized: "meetings.menu.generate.noTemplate")
+            outputErrorNeedsProvider = false
+            return
+        }
+        generateOutput(for: meeting, using: template)
+    }
+
+    /// Bulk "Generate summaries": one `.summary` llm-lane job per meeting. The cap-1 `llm` lane
+    /// serializes the provider and the `(summary, meetingID)` dedupe prevents doubles (plan LX-2 D6).
+    func generateSummaries(for meetings: [Meeting]) {
+        for meeting in meetings { generateSummary(for: meeting) }
+    }
+
+    /// Bulk "Generate briefs": one `.brief` llm-lane job per meeting, deduped on `(brief, meetingID)`
+    /// (plan LX-2 D6).
+    func generateBriefs(for meetings: [Meeting]) {
+        for meeting in meetings { generateBrief(for: meeting) }
+    }
+
+    /// Default export sections for a one-click (context-menu) export — the export sheet's defaults.
+    static let defaultExportSections: [MeetingExportSection] = [.summary, .transcript, .notes]
+
+    /// Export a single meeting to the connected vault via the `.export` job (context-menu "Export to
+    /// vault"). See `enqueueExport` — this is the first real use of the `.export` io lane (plan LX-2 D6).
+    func exportToVault(_ meeting: Meeting) {
+        enqueueExport([meeting])
+    }
+
+    /// Bulk "Export to vault": one `.export` io-lane job per meeting. The `io` lane is unbounded so the
+    /// exports run in parallel without blocking the UI; each records `recordObsidianExport` on success
+    /// so the "In vault" badge appears as each completes (plan LX-2 D6).
+    func exportToVault(_ meetings: [Meeting]) {
+        enqueueExport(meetings)
+    }
+
+    /// Enqueue a `.export` job per meeting on the `io` lane (plan LX-2 D6 — the first `.export`
+    /// enqueue; export was synchronous before). The operation runs the existing synchronous exporter
+    /// off the button, records a real export on success, and rethrows on failure so the job settles
+    /// `.failed` for the activity popover.
+    private func enqueueExport(
+        _ meetings: [Meeting],
+        sections: [MeetingExportSection] = MeetingsViewModel.defaultExportSections,
+        combined: Bool = false
+    ) {
+        exportErrorMessage = nil
+        for meeting in meetings {
+            jobQueue.enqueue(
+                kind: .export,
+                meetingID: meeting.id,
+                progressLabel: String(localized: "meetings.jobs.progress.exporting")
+            ) { [weak self] in
+                guard let self else { return }
+                do {
+                    // Off-main write: `exportOffMain` renders the meeting on the MainActor then hands
+                    // the file I/O to a detached task, so the unbounded io lane's bulk exports overlap
+                    // on disk instead of blocking the UI (plan LX-2 D6). Resumes on the MainActor.
+                    let urls = try await self.exporter.exportOffMain(meeting, sections: sections, combined: combined)
+                    if !urls.isEmpty {
+                        self.meetingService.recordObsidianExport(for: meeting)
+                    }
+                } catch {
+                    self.exportErrorMessage = error.localizedDescription
+                    throw error
+                }
+            }
+        }
+    }
+
     // MARK: - Capture (M3)
 
     var canStartCapture: Bool { !isCapturing }

@@ -825,6 +825,74 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Bulk mutators (plan LX-2, D5 — single-save, mirrors `renameTag`/`deleteTag`)
+
+    /// Set the folder of every meeting in `meetings` in a **single** `save()` + `fetchMeetings()`
+    /// (plan LX-2 D5 — not O(n) per-meeting `setFolder`/`update` calls). The path is normalized once;
+    /// meetings already at the target are skipped, and a `didChange` guard makes the whole call a no-op
+    /// when nothing moved. Empty/blank ⇒ Unfiled.
+    func setFolder(_ path: String?, for meetings: [Meeting]) {
+        let normalized = Self.normalizedFolderPath(path)
+        var didChange = false
+        for meeting in meetings where meeting.obsidianFolder != normalized {
+            meeting.obsidianFolder = normalized
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Add `tag` to every meeting in `meetings` in one save (plan LX-2 D5). Case-folded: a meeting
+    /// already carrying the tag (any casing) is skipped, and the result is re-run through the canonical
+    /// trim/dedupe policy. Blank tag or no change ⇒ no-op.
+    func addTag(_ tag: String, to meetings: [Meeting]) {
+        let trimmed = tag.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let key = trimmed.lowercased()
+        var didChange = false
+        for meeting in meetings {
+            guard !meeting.obsidianTags.contains(where: { $0.lowercased() == key }) else { continue }
+            meeting.obsidianTags = Self.normalizedTags(meeting.obsidianTags + [trimmed])
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Remove `tag` (case-folded) from every meeting in `meetings` in one save (plan LX-2 D5). A
+    /// meeting that does not carry the tag is skipped; no change ⇒ no-op.
+    func removeTag(_ tag: String, from meetings: [Meeting]) {
+        let key = tag.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !key.isEmpty else { return }
+        var didChange = false
+        for meeting in meetings {
+            let filtered = meeting.obsidianTags.filter { $0.lowercased() != key }
+            guard filtered.count != meeting.obsidianTags.count else { continue }
+            meeting.obsidianTags = filtered
+            meeting.updatedAt = Date()
+            didChange = true
+        }
+        guard didChange else { return }
+        save()
+        fetchMeetings()
+    }
+
+    /// Delete every meeting in `meetings` — each audio blob removed, each row deleted — in a single
+    /// save (plan LX-2 D5). No-op on an empty input.
+    func deleteMeetings(_ meetings: [Meeting]) {
+        guard !meetings.isEmpty else { return }
+        for meeting in meetings {
+            deleteAudioFile(for: meeting)
+            modelContext.delete(meeting)
+        }
+        save()
+        fetchMeetings()
+    }
+
     // MARK: - Templates (plan AD6 — unified into `promptActions.store`)
 
     /// No-op shim (plan AD6). Meeting templates are seeded/migrated into the unified

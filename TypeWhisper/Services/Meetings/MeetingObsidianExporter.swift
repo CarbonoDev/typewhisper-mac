@@ -42,7 +42,6 @@ enum MeetingExportSection: String, CaseIterable, Identifiable, Codable, Sendable
 final class MeetingObsidianExporter: ObservableObject {
     private let vaultService: ObsidianVaultService
     private let defaults: UserDefaults
-    private let fileManager = FileManager.default
 
     init(vaultService: ObsidianVaultService, defaults: UserDefaults = .standard) {
         self.vaultService = vaultService
@@ -53,8 +52,36 @@ final class MeetingObsidianExporter: ObservableObject {
     /// single note holds every non-empty section; otherwise one note is written per non-empty
     /// section. Empty sections (e.g. a not-yet-generated summary) are skipped. Returns the URLs of
     /// the files written (never overwriting existing notes — see `uniquePath`).
+    ///
+    /// Synchronous: renders and writes on the caller's actor (the MainActor). Used by the single
+    /// export sheet and the tests. Bulk io-lane jobs use `exportOffMain`, which keeps the file I/O
+    /// off the main thread.
     @discardableResult
     func export(_ meeting: Meeting, sections: [MeetingExportSection], combined: Bool) throws -> [URL] {
+        let plan = try makePlan(for: meeting, sections: sections, combined: combined)
+        return try Self.write(plan)
+    }
+
+    /// Off-main variant of `export`: render the meeting into a `Sendable` `ExportPlan` on the
+    /// MainActor (SwiftData `Meeting` is non-Sendable, so all model access stays here), then perform
+    /// the `createDirectory`/`write` file I/O on a detached task. The `await` is a real suspension
+    /// point, so the unbounded `io` lane's bulk `.export` jobs actually overlap on disk instead of
+    /// serializing file writes on the main thread (plan LX-2 D6 / review finding). Resumes on the
+    /// MainActor for the caller to record the export.
+    @discardableResult
+    func exportOffMain(_ meeting: Meeting, sections: [MeetingExportSection], combined: Bool) async throws -> [URL] {
+        let plan = try makePlan(for: meeting, sections: sections, combined: combined)
+        return try await Task.detached { try Self.write(plan) }.value
+    }
+
+    /// Render (on the MainActor) the meeting's selected, non-empty sections into a `Sendable` plan of
+    /// pre-built frontmatter/bodies/filenames plus the target folder — everything the off-main write
+    /// phase needs without touching the `Meeting` model again.
+    private func makePlan(
+        for meeting: Meeting,
+        sections: [MeetingExportSection],
+        combined: Bool
+    ) throws -> ExportPlan {
         guard let vaultPath = vaultService.vaultPath, !vaultPath.isEmpty else {
             throw MeetingExportError.noVaultConnected
         }
@@ -70,29 +97,46 @@ final class MeetingObsidianExporter: ObservableObject {
         guard !rendered.isEmpty else { throw MeetingExportError.noContent }
 
         let folderPath = resolveFolderPath(vaultPath: vaultPath, meeting: meeting)
-        do {
-            try fileManager.createDirectory(atPath: folderPath, withIntermediateDirectories: true)
-        } catch {
-            logger.error("Failed to create export folder: \(error.localizedDescription)")
-            throw MeetingExportError.writeFailed(error.localizedDescription)
-        }
-
         let frontmatter = buildFrontmatter(for: meeting)
         let baseName = sanitizedBaseName(for: meeting)
-        var written: [URL] = []
+        var notes: [ExportPlan.Note] = []
 
         if combined {
             var body = "# \(meeting.title)\n"
             for item in rendered {
                 body += "\n## \(item.section.displayName)\n\n\(item.content)\n"
             }
-            written.append(try writeNote(frontmatter: frontmatter, body: body, folderPath: folderPath, filename: baseName))
+            notes.append(ExportPlan.Note(filename: baseName, body: body))
         } else {
             for item in rendered {
                 let body = "# \(meeting.title) — \(item.section.displayName)\n\n\(item.content)\n"
                 let filename = "\(baseName) - \(item.section.filenameSuffix)"
-                written.append(try writeNote(frontmatter: frontmatter, body: body, folderPath: folderPath, filename: filename))
+                notes.append(ExportPlan.Note(filename: filename, body: body))
             }
+        }
+        return ExportPlan(folderPath: folderPath, frontmatter: frontmatter, notes: notes)
+    }
+
+    /// The off-main (nonisolated) write phase: create the target folder and write each planned note,
+    /// never overwriting an existing file (`uniquePath`). Operates only on the `Sendable` plan — no
+    /// `Meeting` access — so it is safe to run on a detached task.
+    nonisolated private static func write(_ plan: ExportPlan) throws -> [URL] {
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(atPath: plan.folderPath, withIntermediateDirectories: true)
+        } catch {
+            logger.error("Failed to create export folder: \(error.localizedDescription)")
+            throw MeetingExportError.writeFailed(error.localizedDescription)
+        }
+
+        var written: [URL] = []
+        for note in plan.notes {
+            written.append(try writeNote(
+                frontmatter: plan.frontmatter,
+                body: note.body,
+                folderPath: plan.folderPath,
+                filename: note.filename
+            ))
         }
         return written
     }
@@ -270,7 +314,7 @@ final class MeetingObsidianExporter: ObservableObject {
         return sanitized.isEmpty ? "Meeting" : sanitized
     }
 
-    private func writeNote(frontmatter: String, body: String, folderPath: String, filename: String) throws -> URL {
+    nonisolated private static func writeNote(frontmatter: String, body: String, folderPath: String, filename: String) throws -> URL {
         let safe = filename.isEmpty ? "Meeting" : filename
         let filePath = (folderPath as NSString).appendingPathComponent("\(safe).md")
         let finalPath = uniquePath(for: filePath)
@@ -293,7 +337,8 @@ final class MeetingObsidianExporter: ObservableObject {
 
     /// Return `path` if free, else `<name> 1.<ext>`, `<name> 2.<ext>`, … (mirrors
     /// `ObsidianPlugin.uniquePath`) so an existing note is never overwritten.
-    private func uniquePath(for path: String) -> String {
+    nonisolated private static func uniquePath(for path: String) -> String {
+        let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: path) else { return path }
         let dir = (path as NSString).deletingLastPathComponent
         let name = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
@@ -307,6 +352,24 @@ final class MeetingObsidianExporter: ObservableObject {
             counter += 1
         }
     }
+}
+
+/// The `Sendable` result of the MainActor render phase: everything the off-main write phase needs to
+/// create files, with no reference to the non-Sendable `Meeting` model. Lets bulk io-lane exports
+/// hand file I/O to a detached task (plan LX-2 D6).
+private struct ExportPlan: Sendable {
+    /// A single note to write: its filename base (no extension) and pre-rendered body.
+    struct Note: Sendable {
+        let filename: String
+        let body: String
+    }
+
+    /// Absolute folder the notes are written into (created if needed).
+    let folderPath: String
+    /// Shared YAML frontmatter block prepended to every note.
+    let frontmatter: String
+    /// One entry per non-empty section (or a single combined note).
+    let notes: [Note]
 }
 
 enum MeetingExportError: LocalizedError, Equatable {

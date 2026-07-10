@@ -110,6 +110,9 @@ struct MeetingsListView: View {
                             guard NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty else { return }
                             coordinator.openMeeting(id: meeting.id)
                         }
+                        // Shared row right-click menu (plan LX-2, D4): single-vs-multi branch on the
+                        // native `List(selection:)` set, identical to the folder-detail rows.
+                        .meetingRowContextMenu(for: meeting)
                 }
             }
         }

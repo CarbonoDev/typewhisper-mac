@@ -108,6 +108,9 @@ struct MeetingTimelineList: View {
                         applyClick(.range, meeting.id, orderedIDs, selection)
                     }
                 )
+                // Shared row right-click menu (plan LX-2, D4) — selectable surfaces only (folder
+                // detail). Home (nil binding) stays a pure nav row with no context menu.
+                .meetingRowContextMenu(for: meeting)
         } else {
             Button {
                 coordinator.openMeeting(id: meeting.id)

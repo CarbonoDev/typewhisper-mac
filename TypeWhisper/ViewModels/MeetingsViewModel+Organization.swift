@@ -73,6 +73,53 @@ extension MeetingsViewModel {
         meetingService.deleteTag(tag)
     }
 
+    // MARK: - Bulk tag/folder ops over a selection (context-menu bulk actions, plan LX-2 D5)
+
+    /// Set the folder of a set of meetings in one save (bulk "Move to folder"). Empty/blank ⇒ Unfiled.
+    /// Thin pass-through to the single-writer `MeetingService.setFolder(_:for meetings:)`.
+    func setMeetingFolder(_ path: String?, for meetings: [Meeting]) {
+        meetingService.setFolder(path, for: meetings)
+    }
+
+    /// Add one tag to a set of meetings in one save (bulk "Add tag"); case-folded, so meetings already
+    /// carrying it are skipped.
+    func addMeetingTag(_ tag: String, to meetings: [Meeting]) {
+        meetingService.addTag(tag, to: meetings)
+    }
+
+    /// Remove one tag from a set of meetings in one save (bulk "Remove tag"), case-folded.
+    func removeMeetingTag(_ tag: String, from meetings: [Meeting]) {
+        meetingService.removeTag(tag, from: meetings)
+    }
+
+    // MARK: - Row context-menu mode (plan LX-2 D4; mirrors `HistoryView`'s single-vs-multi branch)
+
+    /// Which context menu a right-clicked row shows: the bulk menu (carrying its count) when the row is
+    /// inside a multi-selection, else the single-row menu. Pure so the two row surfaces (Meetings list +
+    /// folder detail) branch identically and it is unit-testable without SwiftUI — the exact
+    /// `HistoryView.recordContextMenu(for:)` rule.
+    enum RowContextMenuMode: Equatable {
+        case single
+        case bulk(count: Int)
+    }
+
+    /// Resolve the menu mode for a right-click on `id` against the current `selection`.
+    static func contextMenuMode(rightClicked id: UUID, selection: Set<UUID>) -> RowContextMenuMode {
+        if selection.count > 1, selection.contains(id) {
+            return .bulk(count: selection.count)
+        }
+        return .single
+    }
+
+    /// The count a delete confirmation names for a right-click on `id`: 1 for the single-row menu, N for
+    /// a bulk delete over the selection.
+    static func deleteConfirmationCount(rightClicked id: UUID, selection: Set<UUID>) -> Int {
+        switch contextMenuMode(rightClicked: id, selection: selection) {
+        case .single: return 1
+        case let .bulk(count): return count
+        }
+    }
+
     // MARK: - Filtering (plan D8; pure over `meetings` + the coordinator's active tag)
 
     /// Meetings carrying `tag`, by case-folded membership. Pure — `MainWindowCoordinator` holds the
