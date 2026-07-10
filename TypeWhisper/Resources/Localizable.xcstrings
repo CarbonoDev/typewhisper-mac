@@ -33184,6 +33184,788 @@
           }
         }
       }
+    },
+    "Remove Downloaded Model": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード済みモデルを削除"
+          }
+        }
+      }
+    },
+    "Remove downloaded model": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード済みモデルを削除"
+          }
+        }
+      }
+    },
+    "Require API Token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIトークンを必須にする"
+          }
+        }
+      }
+    },
+    "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raycastから直接、ディクテーション開始、履歴検索、プロファイル切り替えができます。APIサーバーが実行中である必要があります。"
+          }
+        }
+      }
+    },
+    "Start with TypeWhisper defaults. You can add term packs later.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisperのデフォルトから開始します。用語パックは後から追加できます。"
+          }
+        }
+      }
+    },
+    "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings instead of classifying them as no speech.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "誤操作による極端に短いタップは引き続き破棄しますが、ごく短い録音や小さな音声を無音として分類せず、より多く保持します。"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止"
+          }
+        }
+      }
+    },
+    "TTS": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TTS"
+          }
+        }
+      }
+    },
+    "This industry term pack requires an active commercial license.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この業界用語パックには有効な商用ライセンスが必要です。"
+          }
+        }
+      }
+    },
+    "Transcribe short / quiet clips more aggressively": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "短い/小さな音声クリップをより積極的に文字起こし"
+          }
+        }
+      }
+    },
+    "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisperはRaycastと連携できます。ランチャーから直接ディクテーションなどを開始できます。APIサーバーが実行中である必要があります。"
+          }
+        }
+      }
+    },
+    "Utility": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ユーティリティ"
+          }
+        }
+      }
+    },
+    "iCloud Drive": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        }
+      }
+    },
+    "unavailable": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用不可"
+          }
+        }
+      }
+    },
+    "Spoken Punctuation": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点"
+          }
+        }
+      }
+    },
+    "Strategy": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "処理方法"
+          }
+        }
+      }
+    },
+    "Native": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネイティブ"
+          }
+        }
+      }
+    },
+    "Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバック"
+          }
+        }
+      }
+    },
+    "Use the engine output unchanged.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エンジンの出力を変更せずに使用します。"
+          }
+        }
+      }
+    },
+    "Prefer native punctuation and only fix visible spoken commands.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エンジン側の句読点処理を優先し、明らかに残った読み上げコマンドだけを修正します。"
+          }
+        }
+      }
+    },
+    "Always apply spoken punctuation fallback rules.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点のフォールバック規則を常に適用します。"
+          }
+        }
+      }
+    },
+    "Unverified": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未確認"
+          }
+        }
+      }
+    },
+    "Suggested default": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推奨デフォルト"
+          }
+        }
+      }
+    },
+    "Verified: native works": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認済み: ネイティブで動作"
+          }
+        }
+      }
+    },
+    "Verified: fallback needed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認済み: フォールバックが必要"
+          }
+        }
+      }
+    },
+    "Test Spoken Punctuation…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点をテスト…"
+          }
+        }
+      }
+    },
+    "Test Spoken Punctuation": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点のテスト"
+          }
+        }
+      }
+    },
+    "Set a spoken language to configure punctuation behavior.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "句読点の動作を設定するには、話す言語を設定してください。"
+          }
+        }
+      }
+    },
+    "Select a transcription engine to configure punctuation behavior.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "句読点の動作を設定するには、文字起こしエンジンを選択してください。"
+          }
+        }
+      }
+    },
+    "No punctuation profile is available for the current selection.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在の選択に利用できる句読点プロファイルはありません。"
+          }
+        }
+      }
+    },
+    "Use these phrases with %@ in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意のテキスト入力欄で %@ を使って、以下のフレーズを試してください。ネイティブ出力が期待結果と一致する場合は「ネイティブ」のままにします。一致しない場合は、この組み合わせで「フォールバック」を使用します。"
+          }
+        }
+      }
+    },
+    "No guided phrases are available for this language yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この言語で使えるガイド付きフレーズはまだありません。"
+          }
+        }
+      }
+    },
+    "Expected: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "期待結果: %@"
+          }
+        }
+      }
+    },
+    "Keep Automatic": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動のまま"
+          }
+        }
+      }
+    },
+    "Use Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを使用"
+          }
+        }
+      }
+    },
+    "Native Works": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネイティブで動作"
+          }
+        }
+      }
+    },
+    "recorder.liveTranscription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkription"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live Transcription"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブ音声認識"
+          }
+        }
+      }
+    },
+    "Buy or Enter License Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaufen oder Lizenzschlüssel eingeben"
+          }
+        }
+      }
+    },
+    "Automatic Correction Learning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisches Korrektur-Lernen"
+          }
+        }
+      }
+    },
+    "Auto-learned": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch gelernt"
+          }
+        }
+      }
+    },
+    "Correction learning undone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrektur-Lernen rückgängig gemacht"
+          }
+        }
+      }
+    },
+    "Learn corrections from edits after insertion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturen aus Bearbeitungen nach dem Einfügen lernen"
+          }
+        }
+      }
+    },
+    "Learned %d corrections": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Korrekturen gelernt"
+          }
+        }
+      }
+    },
+    "Learned “%@” -> “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ -> „%@“ gelernt"
+          }
+        }
+      }
+    },
+    "Saved %d corrections to Dictionary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Korrekturen im Wörterbuch gespeichert"
+          }
+        }
+      }
+    },
+    "Saved to Dictionary: “%@” -> “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Wörterbuch gespeichert: „%@“ -> „%@“"
+          }
+        }
+      }
+    },
+    "TypeWhisper can watch the target text field briefly after direct dictation insertion and learn only confident corrections. Ambiguous edits are skipped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückgängig"
+          }
+        }
+      }
+    },
+    "TypeWhisper learns confident corrections after direct insertion, without asking for every edit.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
+          }
+        }
+      }
+    },
+    "Sync dictionaries and snippets through your own iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synchronisiere Wörterbücher und Snippets über dein eigenes iCloud Drive, Dropbox, OneDrive, Syncthing oder einen eigenen Ordner."
+          }
+        }
+      }
+    },
+    "TypeWhisper gets better with every workflow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper wird mit jedem Workflow besser"
+          }
+        }
+      }
+    },
+    "Teach TypeWhisper your corrections and keep dictionaries and snippets in sync across Macs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bringe TypeWhisper deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
+          }
+        }
+      }
+    },
+    "Keep dictionaries and snippets available wherever your cloud folder syncs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halte Wörterbücher und Snippets überall verfügbar, wo dein Cloud-Ordner synchronisiert."
+          }
+        }
+      }
+    },
+    "Syncthing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncthing"
+          }
+        }
+      }
+    },
+    "Custom folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigener Ordner"
+          }
+        }
+      }
+    },
+    "Correction examples": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturbeispiele"
+          }
+        }
+      }
+    },
+    "Works with": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktioniert mit"
+          }
+        }
+      }
+    },
+    "A Commercial license unlocks both premium features.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine kommerzielle Lizenz schaltet beide Premium-Funktionen frei."
+          }
+        }
+      }
+    },
+    "Premium Control Center": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium-Kontrollzentrum"
+          }
+        }
+      }
+    },
+    "Commercial license active. Manage correction learning and sync from one place.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommerzielle Lizenz aktiv. Verwalte Korrekturlernen und Sync an einem Ort."
+          }
+        }
+      }
+    },
+    "Learning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lernen"
+          }
+        }
+      }
+    },
+    "Learns after direct insertion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lernt nach direktem Einfügen"
+          }
+        }
+      }
+    },
+    "Sync": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
+          }
+        }
+      }
+    },
+    "Corrections are learned only when edits are confident. Ambiguous changes are skipped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturen werden nur gelernt, wenn Bearbeitungen eindeutig sind. Mehrdeutige Änderungen werden übersprungen."
+          }
+        }
+      }
+    },
+    "Not set up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht eingerichtet"
+          }
+        }
+      }
+    },
+    "%d pending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d ausstehend"
+          }
+        }
+      }
+    },
+    "Folder selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner ausgewählt"
+          }
+        }
+      }
+    },
+    "Add Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを追加"
+          }
+        }
+      }
+    },
+    "Drag this row to reorder global LLM fallbacks.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この行をドラッグしてグローバルLLMフォールバックを並べ替えます。"
+          }
+        }
+      }
+    },
+    "Drag to reorder global LLM fallbacks": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバックを並べ替えるにはドラッグ"
+          }
+        }
+      }
+    },
+    "Global LLM Fallbacks": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバック"
+          }
+        }
+      }
+    },
+    "Inherited LLM workflows try these providers in order. A workflow override uses only its selected provider.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "継承されたLLMワークフローは、これらのプロバイダを順番に試します。ワークフローの上書きは、選択したプロバイダのみを使用します。"
+          }
+        }
+      }
+    },
+    "No global LLM fallbacks are configured yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバックはまだ設定されていません。"
+          }
+        }
+      }
+    },
+    "Remove fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを削除"
+          }
+        }
+      }
+    },
+    "This workflow currently inherits the global LLM fallback list from Workflow settings.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このワークフローは現在、ワークフロー設定のグローバルLLMフォールバックリストを継承しています。"
+          }
+        }
+      }
+    },
+    "This workflow uses only its selected provider and does not use global fallbacks.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このワークフローは選択したプロバイダのみを使用し、グローバルフォールバックは使用しません。"
+          }
+        }
+      }
+    },
+    "Use Global Fallback List": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルフォールバックリストを使用"
+          }
+        }
+      }
     }
   },
   "version": "1.1"
