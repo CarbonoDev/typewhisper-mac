@@ -3929,7 +3929,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testDictationDirectInsertionAddsTrailingSpaceWithoutMutatingStoredTranscription() async throws {
+    func testDictationDirectInsertionDoesNotAddTrailingSpace() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
         let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
@@ -3984,7 +3984,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
         XCTAssertEqual(session.status, .completed)
-        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed ")
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
         XCTAssertEqual(session.transcription?.text, "transcribed")
         XCTAssertEqual(context.historyService.records.first?.finalText, "transcribed")
         XCTAssertEqual(
