@@ -265,6 +265,8 @@
 		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
 		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
 		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
+		MEB0000000000000000701 /* MeetingListFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000701 /* MeetingListFilterTests.swift */; };
+		MEB0000000000000000702 /* MeetingListSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000702 /* MeetingListSelectionTests.swift */; };
 		MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000602 /* MeetingFolderTests.swift */; };
 		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
 		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
@@ -869,6 +871,8 @@
 		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
 		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
 		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000701 /* MeetingListFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListFilterTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000702 /* MeetingListSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListSelectionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000602 /* MeetingFolderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
@@ -2749,6 +2753,8 @@
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
 				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
+				MEF0000000000000000701 /* MeetingListFilterTests.swift */,
+				MEF0000000000000000702 /* MeetingListSelectionTests.swift */,
 				MEF0000000000000000602 /* MeetingFolderTests.swift */,
 				M7F0000000000000000005 /* MeetingFolderContextTests.swift */,
 				M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */,
@@ -4289,6 +4295,8 @@
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
 				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
+				MEB0000000000000000701 /* MeetingListFilterTests.swift in Sources */,
+				MEB0000000000000000702 /* MeetingListSelectionTests.swift in Sources */,
 				MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */,
 				M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */,
 				M8B0000000000000000004 /* MeetingRelatedDocsServiceTests.swift in Sources */,

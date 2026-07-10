@@ -1,5 +1,37 @@
 import Foundation
 
+// MARK: - Filter-bar facet value types (plan LX-1, D2)
+
+/// A date-range preset for the meetings filter bar (plan LX-1, D2). Pure value resolved against a
+/// fixed `now` by `MeetingsViewModel.withinDateRange`, so every boundary is unit-testable. A meeting's
+/// day is its `startDate ?? createdAt` "effective day" (the same rule the Home day grouping uses).
+enum MeetingDateRange: Equatable, Sendable {
+    case all
+    case today
+    case thisWeek
+    case thisMonth
+    /// Inclusive `[start, end]` bounds; the view constructs sensible day-aligned bounds.
+    case custom(start: Date, end: Date)
+}
+
+/// A meeting "state" filter facet (plan LX-1, D2): the presence of a transcript / summary / brief /
+/// extended output. Selected facets compose as an AND set — every one must hold. Derives from the same
+/// facts as `homeBadgeFacts` (`segments` for transcript, `outputs` kinds for the rest).
+enum MeetingStateFacet: String, CaseIterable, Sendable {
+    case hasTranscript
+    case hasSummary
+    case hasBrief
+    case hasExtended
+}
+
+/// Origin facet (plan LX-1, D2): captured (ad-hoc / calendar) vs imported (audio / transcript). A
+/// three-value control (`all` = no filter).
+enum MeetingSourceFacet: String, CaseIterable, Sendable {
+    case all
+    case captured
+    case imported
+}
+
 /// First-party tag organization surface (plan D6/D8, M3). Thin MainActor pass-throughs to the
 /// single-writer `MeetingService` bulk-tag mutators plus the **pure** filter/autocomplete functions
 /// the coordinator-held tag filter and the document Tags chip render. Extension-file discipline: no
@@ -103,14 +135,23 @@ extension MeetingsViewModel {
     }
 
     /// Compose the coordinator's vertical filter (a folder path, or `unfiledOnly` — the two are mutually
-    /// exclusive) with the active tag (horizontal) — they AND together (plan D8). `nil`/`false` inputs
-    /// pass through. `unfiledOnly` wins over `folder` when both are (defensively) supplied. Pure so the
-    /// list view and tests share it.
+    /// exclusive) with the active tag (horizontal) and the LX-1 filter-bar facets (search / date-range /
+    /// state / source / language) — every facet ANDs together (plan D8/LX-1). `nil`/`false`/empty inputs
+    /// pass through, so the pre-LX-1 call sites (folder + tag + unfiled only) behave unchanged. Pure and
+    /// the single choke point the list view, folder detail, and tests all share. `now`/`calendar` are
+    /// injectable so date-range boundaries are deterministic under test.
     static func filteredMeetings(
         _ meetings: [Meeting],
         folder: String?,
         tag: String?,
-        unfiledOnly: Bool = false
+        unfiledOnly: Bool = false,
+        searchText: String = "",
+        dateRange: MeetingDateRange = .all,
+        stateFacets: Set<MeetingStateFacet> = [],
+        sourceFacet: MeetingSourceFacet = .all,
+        languageFilter: String? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> [Meeting] {
         var result = meetings
         if unfiledOnly {
@@ -121,7 +162,168 @@ extension MeetingsViewModel {
         if let tag, !tag.trimmingCharacters(in: .whitespaces).isEmpty {
             result = Self.meetings(result, taggedWith: tag)
         }
-        return result
+        return result.filter { meeting in
+            Self.matchesSearch(meeting, query: searchText)
+                && Self.withinDateRange(meeting, range: dateRange, now: now, calendar: calendar)
+                && Self.matchesStateFacets(meeting, facets: stateFacets)
+                && Self.matchesSource(meeting, facet: sourceFacet)
+                && Self.matchesLanguage(meeting, code: languageFilter)
+        }
+    }
+
+    // MARK: - Pure filter-bar facet predicates (plan LX-1, D2)
+
+    /// Case-folded substring over the meeting's title and its attendees (name + email). Empty/blank
+    /// query passes every meeting through (a no-op facet). Mirrors History's `searchQuery` behavior.
+    static func matchesSearch(_ meeting: Meeting, query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return true }
+        if meeting.title.localizedCaseInsensitiveContains(trimmed) { return true }
+        return meeting.attendees.contains { attendee in
+            attendee.name.localizedCaseInsensitiveContains(trimmed)
+                || (attendee.email?.localizedCaseInsensitiveContains(trimmed) ?? false)
+        }
+    }
+
+    /// Whether the meeting's effective day (`startDate ?? createdAt`, the Home grouping rule) falls in
+    /// `range`. `.all` passes through; `.custom` bounds are inclusive.
+    static func withinDateRange(
+        _ meeting: Meeting,
+        range: MeetingDateRange,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let effective = meeting.startDate ?? meeting.createdAt
+        switch range {
+        case .all:
+            return true
+        case .today:
+            return calendar.isDate(effective, inSameDayAs: now)
+        case .thisWeek:
+            return calendar.isDate(effective, equalTo: now, toGranularity: .weekOfYear)
+        case .thisMonth:
+            return calendar.isDate(effective, equalTo: now, toGranularity: .month)
+        case let .custom(start, end):
+            return effective >= start && effective <= end
+        }
+    }
+
+    /// AND-composed state facets: every selected facet must hold. Empty set is a no-op. Transcript is
+    /// `!segments.isEmpty`; summary/brief/extended read the meeting's `outputs` kinds (same facts as
+    /// `homeBadgeFacts`).
+    static func matchesStateFacets(_ meeting: Meeting, facets: Set<MeetingStateFacet>) -> Bool {
+        guard !facets.isEmpty else { return true }
+        let kinds = Set(meeting.outputs.map(\.kind))
+        for facet in facets {
+            switch facet {
+            case .hasTranscript:
+                if meeting.segments.isEmpty { return false }
+            case .hasSummary:
+                if !kinds.contains(.summary) { return false }
+            case .hasBrief:
+                if !kinds.contains(.brief) { return false }
+            case .hasExtended:
+                if !kinds.contains(.extended) { return false }
+            }
+        }
+        return true
+    }
+
+    /// Source origin facet: `.all` passes through; `.captured` = ad-hoc/calendar; `.imported` =
+    /// imported audio/transcript.
+    static func matchesSource(_ meeting: Meeting, facet: MeetingSourceFacet) -> Bool {
+        switch facet {
+        case .all:
+            return true
+        case .captured:
+            return meeting.source == .adHoc || meeting.source == .calendar
+        case .imported:
+            return meeting.source == .importedAudio || meeting.source == .importedTranscript
+        }
+    }
+
+    /// Language facet (plan LX-1 stretch): case-folded exact match on `languageCode`. `nil`/empty code
+    /// passes through.
+    static func matchesLanguage(_ meeting: Meeting, code: String?) -> Bool {
+        guard let code, !code.isEmpty else { return true }
+        return meeting.languageCode?.caseInsensitiveCompare(code) == .orderedSame
+    }
+
+    /// Distinct, sorted language codes present across `meetings` (drives the filter bar's language menu).
+    static func languageCodesPresent(in meetings: [Meeting]) -> [String] {
+        var seen = Set<String>()
+        var codes: [String] = []
+        for meeting in meetings {
+            guard let code = meeting.languageCode, !code.isEmpty else { continue }
+            let key = code.lowercased()
+            if seen.insert(key).inserted { codes.append(key) }
+        }
+        return codes.sorted()
+    }
+
+    // MARK: - Selection normalization (plan LX-1, D3; mirrors HistoryViewModel)
+
+    /// Keep only the still-visible selected IDs when the filtered set changes, dropping hidden ones
+    /// (History's "normalize, don't nuke" position). Pure so the view applies it on
+    /// `.onChange(of:)` and tests drive it without SwiftUI.
+    static func normalizedSelection(_ selection: Set<UUID>, toVisibleIDs visibleIDs: [UUID]) -> Set<UUID> {
+        selection.intersection(visibleIDs)
+    }
+
+    // MARK: - Selection gesture math (plan LX-1, D3; hand-rolled MeetingTimelineList rows)
+
+    /// Pure ⌘/⇧-click selection math over a flattened, day-ordered id list. The hand-rolled
+    /// `MeetingTimelineList` (and the folder detail via it) drive their selection through this so both
+    /// surfaces behave identically; the math is unit-tested without SwiftUI.
+    enum SelectionGesture {
+        /// The three click kinds the row recognizes (plan D3): plain click replaces, ⌘-click toggles,
+        /// ⇧-click extends a contiguous range.
+        enum Click {
+            case replace
+            case toggle
+            case range
+        }
+
+        /// Apply a `click` on `id` against the current `selection`, the range `anchor` (the last
+        /// replace/toggle target), and the flattened visible `orderedIDs`. Returns the new selection and
+        /// new anchor. A ⇧-click with no valid anchor degrades to a replace.
+        static func apply(
+            click: Click,
+            on id: UUID,
+            selection: Set<UUID>,
+            anchor: UUID?,
+            orderedIDs: [UUID]
+        ) -> (selection: Set<UUID>, anchor: UUID?) {
+            switch click {
+            case .replace:
+                return ([id], id)
+            case .toggle:
+                var updated = selection
+                if updated.contains(id) {
+                    updated.remove(id)
+                } else {
+                    updated.insert(id)
+                }
+                return (updated, id)
+            case .range:
+                guard let anchor,
+                      let anchorIndex = orderedIDs.firstIndex(of: anchor),
+                      let clickIndex = orderedIDs.firstIndex(of: id) else {
+                    return ([id], id)
+                }
+                let lower = min(anchorIndex, clickIndex)
+                let upper = max(anchorIndex, clickIndex)
+                let span = orderedIDs[lower...upper]
+                // Extend (union) so a prior ⌘-click multi-selection is preserved; anchor is unchanged so
+                // repeated ⇧-clicks re-extend from the same origin.
+                return (selection.union(span), anchor)
+            }
+        }
+
+        /// ⌘-A: select every visible id.
+        static func selectAll(_ orderedIDs: [UUID]) -> Set<UUID> {
+            Set(orderedIDs)
+        }
     }
 
     // MARK: - Folder autocomplete (Folder chip)

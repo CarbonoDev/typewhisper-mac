@@ -35,14 +35,25 @@ struct MeetingTimeline: View {
 /// the shared coordinator.
 struct MeetingTimelineList: View {
     let meetings: [Meeting]
+    /// Optional multi-select binding (plan LX-1, D3). `nil` (Home) → plain nav rows, no selection
+    /// affordance. Non-nil (Meetings-list folder detail) → selectable rows driven by the pure
+    /// `MeetingsViewModel.SelectionGesture` (⌘-toggle / ⇧-range) plus ⌘-A, with a subtle highlight.
+    var selection: Binding<Set<UUID>>? = nil
 
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
     @ObservedObject private var jobQueue = JobQueueService.shared
+    /// The last replace/toggle target — the origin a ⇧-click range extends from.
+    @State private var selectionAnchor: UUID?
+    /// Whether the list region holds keyboard focus. The ⌘-A key equivalent is installed ONLY while this
+    /// is true, so a focused TextField (e.g. the folder-detail description field) keeps native ⌘-A for
+    /// text editing instead of selecting every row (LX-1 finding #2).
+    @FocusState private var isListFocused: Bool
 
     var body: some View {
         let groups = homeViewModel.timelineGroups(from: meetings)
+        let orderedIDs = groups.flatMap { $0.meetings.map(\.id) }
         VStack(alignment: .leading, spacing: 20) {
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: 8) {
@@ -53,53 +64,115 @@ struct MeetingTimelineList: View {
 
                     VStack(spacing: 6) {
                         ForEach(group.meetings, id: \.id) { meeting in
-                            row(meeting)
+                            row(meeting, orderedIDs: orderedIDs)
                         }
                     }
                 }
+            }
+        }
+        // Make the selectable list a focus target so ⌘-A can be scoped to it (Home passes nil → not
+        // focusable, no selection, no ⌘-A). `focusEffectDisabled` keeps the container from drawing a
+        // focus ring around the whole list.
+        .focusable(selection != nil)
+        .focusEffectDisabled()
+        .focused($isListFocused)
+        // ⌘-A selects every visible row (plan LX-1 D3), but ONLY while the list holds focus — so a
+        // focused TextField keeps native ⌘-A for text (LX-1 finding #2).
+        .background {
+            if let selection, isListFocused {
+                Button("") { selection.wrappedValue = MeetingsViewModel.SelectionGesture.selectAll(orderedIDs) }
+                    .keyboardShortcut("a", modifiers: .command)
+                    .opacity(0)
             }
         }
     }
 
-    private func row(_ meeting: Meeting) -> some View {
+    @ViewBuilder
+    private func row(_ meeting: Meeting, orderedIDs: [UUID]) -> some View {
         let isLive = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
-        return Button {
-            coordinator.openMeeting(id: meeting.id)
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        if isLive {
-                            Image(systemName: "record.circle.fill")
-                                .foregroundStyle(.red)
-                        }
-                        Text(meeting.title)
-                            .font(.body)
-                            .lineLimit(1)
+        let isSelected = selection?.wrappedValue.contains(meeting.id) ?? false
+        let content = rowContent(meeting, isLive: isLive, isSelected: isSelected)
+        if let selection {
+            content
+                .contentShape(Rectangle())
+                // Plain click opens; ⌘/⇧-click drive selection through the pure helper and win via
+                // high priority. Home (nil binding) keeps the plain nav Button below.
+                .onTapGesture { coordinator.openMeeting(id: meeting.id) }
+                .highPriorityGesture(
+                    TapGesture().modifiers(.command).onEnded {
+                        applyClick(.toggle, meeting.id, orderedIDs, selection)
                     }
-                    HStack(spacing: 8) {
-                        if let start = meeting.startDate {
-                            Text(start, format: .dateTime.hour().minute())
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        attendeeCount(for: meeting)
-                        badges(for: meeting, isLive: isLive)
+                )
+                .highPriorityGesture(
+                    TapGesture().modifiers(.shift).onEnded {
+                        applyClick(.range, meeting.id, orderedIDs, selection)
                     }
-                    tagCapsules(for: meeting)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                )
+        } else {
+            Button {
+                coordinator.openMeeting(id: meeting.id)
+            } label: {
+                content
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func applyClick(
+        _ click: MeetingsViewModel.SelectionGesture.Click,
+        _ id: UUID,
+        _ orderedIDs: [UUID],
+        _ binding: Binding<Set<UUID>>
+    ) {
+        let result = MeetingsViewModel.SelectionGesture.apply(
+            click: click,
+            on: id,
+            selection: binding.wrappedValue,
+            anchor: selectionAnchor,
+            orderedIDs: orderedIDs
+        )
+        binding.wrappedValue = result.selection
+        selectionAnchor = result.anchor
+        // A ⌘/⇧-click is an explicit "I'm working in this list" signal — take focus so ⌘-A applies here.
+        isListFocused = true
+    }
+
+    private func rowContent(_ meeting: Meeting, isLive: Bool, isSelected: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    if isLive {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    Text(meeting.title)
+                        .font(.body)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 8) {
+                    if let start = meeting.startDate {
+                        Text(start, format: .dateTime.hour().minute())
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    attendeeCount(for: meeting)
+                    badges(for: meeting, isLive: isLive)
+                }
+                tagCapsules(for: meeting)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            (isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.03)),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .contentShape(Rectangle())
     }
 
     /// A compact attendee count (people icon + number), shown only when the meeting has attendees, so

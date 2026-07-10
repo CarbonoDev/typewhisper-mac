@@ -28,6 +28,30 @@ final class MainWindowCoordinator: ObservableObject {
     /// exclusive with `activeFolder` (an invariant `show(_:)` maintains). `false` = not filtering.
     @Published private(set) var unfiledOnly = false
 
+    // MARK: - Filter-bar facets (plan LX-1)
+    //
+    // Additive `@Published` facet state — NOT new `MainWindowRoute` cases (the route contract is frozen).
+    // Each composes (AND) with folder/tag and with the others through the pure
+    // `MeetingsViewModel.filteredMeetings` choke point. They are set while on the Meetings/folder/tag
+    // surfaces (the setters never change the route) and are cleared by `show(_:)`'s `default` branch and
+    // by `clearAllFilters`, so navigating to Home (or any non-filter route) always shows the full
+    // unfiltered feed (owner-veto 5).
+
+    /// Free-text search over title + attendees. Empty = no search facet.
+    @Published private(set) var searchText: String = ""
+
+    /// Active date-range preset (`.all` = no date facet).
+    @Published private(set) var dateRange: MeetingDateRange = .all
+
+    /// Active state facets (has-transcript / -summary / -brief / -extended), AND-composed. Empty = none.
+    @Published private(set) var stateFacets: Set<MeetingStateFacet> = []
+
+    /// Source origin facet (`.all` = no source facet).
+    @Published private(set) var sourceFacet: MeetingSourceFacet = .all
+
+    /// Language code filter (`nil` = no language facet). Stretch facet, cheap over the direct column.
+    @Published private(set) var languageFilter: String?
+
     /// Focus a specific meeting document. Used by the focus bridge (menu bar / notifications) and
     /// by Home / list rows.
     func openMeeting(id: UUID) {
@@ -54,8 +78,59 @@ final class MainWindowCoordinator: ObservableObject {
             activeTag = nil
             activeFolder = nil
             unfiledOnly = false
+            clearFacetState()
         }
         self.route = route
+    }
+
+    // MARK: - Filter-bar facet API (plan LX-1)
+
+    /// Set the search text (does not change the route — narrows the current Meetings/folder/tag surface).
+    func setSearchText(_ text: String) {
+        searchText = text
+    }
+
+    /// Set the active date-range preset.
+    func setDateRange(_ range: MeetingDateRange) {
+        dateRange = range
+    }
+
+    /// Toggle one state facet in/out of the AND-composed set.
+    func toggleStateFacet(_ facet: MeetingStateFacet) {
+        if stateFacets.contains(facet) {
+            stateFacets.remove(facet)
+        } else {
+            stateFacets.insert(facet)
+        }
+    }
+
+    /// Set the source origin facet.
+    func setSourceFacet(_ facet: MeetingSourceFacet) {
+        sourceFacet = facet
+    }
+
+    /// Set (or clear, with `nil`) the language facet.
+    func setLanguageFilter(_ code: String?) {
+        languageFilter = code
+    }
+
+    /// Reset every filter-bar facet to its no-op default (used by the `show(_:)` default branch and the
+    /// combined Clear). Leaves the folder/tag/unfiled filters and the route untouched.
+    func clearFacetState() {
+        searchText = ""
+        dateRange = .all
+        stateFacets = []
+        sourceFacet = .all
+        languageFilter = nil
+    }
+
+    /// True while any filter-bar facet is active (drives the combined header + filtered empty state).
+    var hasActiveFacets: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+            || dateRange != .all
+            || !stateFacets.isEmpty
+            || sourceFacet != .all
+            || languageFilter != nil
     }
 
     /// Filter the meetings list by a first-party tag (plan D8, M3). Sets `activeTag` and routes to the
@@ -110,11 +185,13 @@ final class MainWindowCoordinator: ObservableObject {
         }
     }
 
-    /// Clear every filter and return to the unfiltered meetings list (the combined header's Clear).
+    /// Clear every filter (folder/tag/unfiled + all LX-1 facets) and return to the unfiltered meetings
+    /// list (the combined header's Clear).
     func clearAllFilters() {
         activeTag = nil
         activeFolder = nil
         unfiledOnly = false
+        clearFacetState()
         route = .meetings
     }
 

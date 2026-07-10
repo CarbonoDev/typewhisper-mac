@@ -165,7 +165,28 @@ struct MeetingFolderDetailView: View {
                 emptyState
             }
         } else {
-            MeetingTimelineList(meetings: folderMeetings)
+            VStack(alignment: .leading, spacing: 8) {
+                if !viewModel.visibleSelection(in: folderMeetings.map(\.id)).isEmpty {
+                    Label(
+                        String(
+                            format: String(localized: "meetings.selection.count"),
+                            viewModel.visibleSelection(in: folderMeetings.map(\.id)).count
+                        ),
+                        systemImage: "checkmark.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                // Folder detail is a selectable surface (plan LX-1, D3): pass a binding so the shared
+                // timeline rows become selectable, and normalize the selection to the still-visible set
+                // when the folder+tag filter changes.
+                MeetingTimelineList(meetings: folderMeetings, selection: $viewModel.selectedMeetingIDs)
+                    .onChange(of: folderMeetings.map(\.id)) { _, ids in
+                        viewModel.selectedMeetingIDs = MeetingsViewModel.normalizedSelection(
+                            viewModel.selectedMeetingIDs, toVisibleIDs: ids
+                        )
+                    }
+            }
         }
     }
 

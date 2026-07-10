@@ -13,6 +13,20 @@ final class MeetingsViewModel: ObservableObject {
 
     @Published private(set) var meetings: [Meeting] = []
 
+    /// Multi-select on the Meetings list + folder detail surfaces (plan LX-1, D3; the `HistoryViewModel`
+    /// `selectedRecordIDs` analog). Held on the list's data-source VM — not the navigation coordinator
+    /// (frozen API) and not an extension file (extension-file discipline forbids stored state). The
+    /// views bind this into `List(selection:)` (Meetings list) or the hand-rolled `SelectionGesture`
+    /// (timeline) and normalize it to the visible set on filter change. LX-1 adds no action over it.
+    @Published var selectedMeetingIDs: Set<UUID> = []
+
+    /// The selection intersected with a supplied visible-id list (the `HistoryViewModel`
+    /// `visibleSelectedRecordIDs` analog). A convenience for surfaces that want the effective, on-screen
+    /// selection without mutating `selectedMeetingIDs`.
+    func visibleSelection(in visibleIDs: [UUID]) -> Set<UUID> {
+        selectedMeetingIDs.intersection(visibleIDs)
+    }
+
     // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
     @Published private(set) var templates: [PromptAction] = []
     @Published var outputErrorMessage: String?
