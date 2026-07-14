@@ -544,15 +544,51 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
 // MARK: - Settings View
 
+struct ExampleWebhookEditorPresentation {
+    private(set) var editingWebhook: ExampleWebhookConfig?
+
+    mutating func beginAddingWebhook() {
+        editingWebhook = ExampleWebhookConfig()
+    }
+
+    mutating func beginEditingWebhook(_ webhook: ExampleWebhookConfig) {
+        editingWebhook = webhook
+    }
+
+    mutating func dismissEditor() {
+        editingWebhook = nil
+    }
+}
+
 struct ExampleWebhookSettingsView: View {
     @ObservedObject var service: ExampleWebhookService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
-    @State private var editingWebhook: ExampleWebhookConfig?
+    @State private var editorPresentation = ExampleWebhookEditorPresentation()
 
     private let bundle = Bundle(for: ExampleWebhookService.self)
 
     var body: some View {
+        Group {
+            if let editingWebhook = editorPresentation.editingWebhook {
+                ExampleWebhookEditView(
+                    webhook: editingWebhook,
+                    availableProfiles: service.host.availableRuleNames,
+                    onSave: { updated in
+                        service.saveWebhook(updated)
+                        editorPresentation.dismissEditor()
+                    },
+                    onCancel: { editorPresentation.dismissEditor() }
+                )
+                .id(editingWebhook.id)
+            } else {
+                webhookOverview
+            }
+        }
+        .frame(minHeight: 400)
+    }
+
+    private var webhookOverview: some View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
@@ -560,7 +596,7 @@ struct ExampleWebhookSettingsView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    editingWebhook = ExampleWebhookConfig()
+                    editorPresentation.beginAddingWebhook()
                 } label: {
                     Label(String(localized: "Add Webhook", bundle: bundle), systemImage: "plus")
                 }
@@ -583,7 +619,7 @@ struct ExampleWebhookSettingsView: View {
                 List {
                     ForEach(service.webhooks) { webhook in
                         WebhookRow(webhook: webhook, service: service, onEdit: {
-                            editingWebhook = webhook
+                            editorPresentation.beginEditingWebhook(webhook)
                         })
                     }
 
@@ -612,17 +648,6 @@ struct ExampleWebhookSettingsView: View {
                 .keyboardShortcut(.cancelAction)
             }
             .padding()
-        }
-        .sheet(item: $editingWebhook) { webhook in
-            ExampleWebhookEditView(
-                webhook: webhook,
-                availableProfiles: service.host.availableRuleNames,
-                onSave: { updated in
-                    service.saveWebhook(updated)
-                    editingWebhook = nil
-                },
-                onCancel: { editingWebhook = nil }
-            )
         }
     }
 }
