@@ -17,6 +17,22 @@
         }
       }
     },
+    "Add Webhook": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook hinzufügen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhookを追加"
+          }
+        }
+      }
+    },
     "Add a webhook to send transcription data to external services.": {
       "localizations": {
         "de": {
@@ -33,18 +49,18 @@
         }
       }
     },
-    "Add Webhook": {
+    "All transcriptions": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Webhook hinzufügen"
+            "value": "Alle Transkriptionen"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Webhookを追加"
+            "value": "すべての文字起こし"
           }
         }
       }
@@ -129,22 +145,6 @@
         }
       }
     },
-    "Method": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Methode"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メソッド"
-          }
-        }
-      }
-    },
     "Inactive for meetings. Select events to enable.": {
       "localizations": {
         "de": {
@@ -177,6 +177,22 @@
         }
       }
     },
+    "Method": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Methode"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メソッド"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "de": {
@@ -189,6 +205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "名前"
+          }
+        }
+      }
+    },
+    "No Webhooks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Webhooks"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhookなし"
           }
         }
       }
@@ -209,18 +241,18 @@
         }
       }
     },
-    "No Webhooks": {
+    "No workflows configured.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keine Webhooks"
+            "value": "Keine Workflows konfiguriert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Webhookなし"
+            "value": "ワークフローが設定されていません。"
           }
         }
       }
@@ -289,6 +321,86 @@
         }
       }
     },
+    "Select at least one workflow.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle mindestens einen Workflow aus."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1つ以上のワークフローを選択してください。"
+          }
+        }
+      }
+    },
+    "Selected workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Workflows"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したワークフロー"
+          }
+        }
+      }
+    },
+    "Send webhook for": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook senden für"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhookの送信対象"
+          }
+        }
+      }
+    },
+    "The webhook is sent after every transcription, including transcriptions without a workflow.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Webhook wird nach jeder Transkription gesendet, auch wenn kein Workflow verwendet wird."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフローを使用しない場合も含め、すべての文字起こし後にWebhookを送信します。"
+          }
+        }
+      }
+    },
+    "The webhook is sent only for the selected workflows.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Webhook wird nur für die ausgewählten Workflows gesendet."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したワークフローに対してのみWebhookを送信します。"
+          }
+        }
+      }
+    },
     "URL": {
       "localizations": {
         "de": {
@@ -317,6 +429,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhook通知"
+          }
+        }
+      }
+    },
+    "Workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー"
+          }
+        }
+      }
+    },
+    "Workflows: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー：%@"
           }
         }
       }
