@@ -823,10 +823,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        // Launch-window precedence (D2): first-run setup > post-update license prompt > main window.
+        // Launch-window precedence (D2): first-run setup > post-update prompt > main window.
+        // LaunchWindowDecision is the single launch authority; #883's "keep login launches windowless"
+        // intent is subsumed here. With our delicensed coordinator `shouldPresentPrompt` is always
+        // false, so a completed-setup login never auto-opens a window (no `.settings` auto-open) —
+        // the main window opens only when our show-window-at-launch toggle fires. (#883 removed the
+        // `shouldAutoOpenSettingsOnLaunch` indirection; we read `shouldPresentPrompt` directly.)
         let launchDecision = LaunchWindowDecision.decide(
             isFirstRunSetupIncomplete: HomeViewModel.shared.showSetupWizard,
-            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch,
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
             showMainWindowAtLaunch: UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMainWindowAtLaunch)
         )
         switch launchDecision {

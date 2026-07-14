@@ -4,7 +4,9 @@ import XCTest
 @MainActor
 final class PostUpdatePromptCoordinatorTests: XCTestCase {
     // TypeWhisper is free and open source: the post-update licensing prompt has been
-    // removed, so the coordinator must never ask to present it.
+    // removed, so the coordinator must never ask to present it. #883's windowless-login policy is
+    // enforced by `LaunchWindowDecision` (the single launch authority), so its
+    // `InitialWindowPresentationPolicy` tests are intentionally not ported here.
 
     func testPromptIsNeverPresentedOnFreshInstall() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()

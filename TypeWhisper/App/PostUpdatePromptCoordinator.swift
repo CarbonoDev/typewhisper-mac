@@ -8,6 +8,11 @@ enum StartupSheetRoute: String, Identifiable {
     var id: String { rawValue }
 }
 
+// #883 introduced `InitialWindowPresentationPolicy` as its launch-windowless authority upstream. This
+// fork already centralizes launch windowing in `LaunchWindowDecision` (the single authority), so that
+// policy type is intentionally omitted here to avoid two competing authorities; #883's behavior is
+// carried by LaunchWindowDecision + the delicensed `shouldPresentPrompt` (always false).
+
 @MainActor
 final class PostUpdatePromptCoordinator {
     nonisolated(unsafe) static var shared: PostUpdatePromptCoordinator!
@@ -33,10 +38,6 @@ final class PostUpdatePromptCoordinator {
 
     // TypeWhisper is free and open source; there is no licensing prompt to present.
     var shouldPresentPrompt: Bool { false }
-
-    var shouldAutoOpenSettingsOnLaunch: Bool {
-        shouldPresentPrompt
-    }
 
     var activeSheetRoute: StartupSheetRoute? {
         shouldPresentPrompt ? .postUpdateLicensing : nil
