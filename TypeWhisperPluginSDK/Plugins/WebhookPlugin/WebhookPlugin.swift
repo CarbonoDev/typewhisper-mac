@@ -590,6 +590,11 @@ struct ExampleWebhookEditorState {
         }
     }
 
+    func workflowsForSelection(availableWorkflows: [String]) -> [String] {
+        var seen: Set<String> = []
+        return (availableWorkflows + webhook.workflowFilter).filter { seen.insert($0).inserted }
+    }
+
     var webhookForSaving: ExampleWebhookConfig {
         guard workflowScope == .allTranscriptions else { return webhook }
         var updated = webhook
@@ -862,18 +867,27 @@ private struct ExampleWebhookEditView: View {
                         .pickerStyle(.radioGroup)
 
                         if editorState.workflowScope == .selectedWorkflows {
-                            if availableWorkflows.isEmpty {
+                            if workflowsForSelection.isEmpty {
                                 Text("No workflows configured.", bundle: bundle)
                                     .foregroundStyle(.secondary)
                                     .font(.caption)
                             } else {
-                                ForEach(availableWorkflows, id: \.self) { name in
-                                    Toggle(name, isOn: Binding(
+                                ForEach(workflowsForSelection, id: \.self) { name in
+                                    Toggle(isOn: Binding(
                                         get: { editorState.webhook.workflowFilter.contains(name) },
                                         set: { selected in
                                             editorState.setWorkflow(name, isSelected: selected)
                                         }
-                                    ))
+                                    )) {
+                                        HStack {
+                                            Text(name)
+                                            if !availableWorkflows.contains(name) {
+                                                Text("No longer available", bundle: bundle)
+                                                    .foregroundStyle(.secondary)
+                                                    .font(.caption)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -942,5 +956,9 @@ private struct ExampleWebhookEditView: View {
         case .selectedWorkflows:
             return String(localized: "The webhook is sent only for the selected workflows.", bundle: bundle)
         }
+    }
+
+    private var workflowsForSelection: [String] {
+        editorState.workflowsForSelection(availableWorkflows: availableWorkflows)
     }
 }
