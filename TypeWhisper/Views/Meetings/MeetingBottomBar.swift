@@ -69,6 +69,8 @@ struct MeetingBottomBar: View {
             startButton
         case .stop:
             stopButton
+        case .finalizing:
+            finalizingIndicator
         case .resumeAndGenerate:
             HStack(spacing: 8) {
                 resumeButton
@@ -99,6 +101,20 @@ struct MeetingBottomBar: View {
         .buttonStyle(.borderedProminent)
         .tint(.red)
         .keyboardShortcut(".", modifiers: [.command])
+    }
+
+    /// Shown the instant Stop is pressed while the off-MainActor teardown finalizes (buffer snapshot,
+    /// recorder mixdown, audio adopt). A disabled, spinner-labeled affordance so the user sees the
+    /// stop registered immediately — the window stays responsive because the teardown never blocks
+    /// the main thread.
+    private var finalizingIndicator: some View {
+        Label {
+            Text(String(localized: "meetingdoc.finalizing"))
+        } icon: {
+            ProgressView().controlSize(.small)
+        }
+        .foregroundStyle(.secondary)
+        .help(String(localized: "meetingdoc.finalizing.help"))
     }
 
     private var resumeButton: some View {

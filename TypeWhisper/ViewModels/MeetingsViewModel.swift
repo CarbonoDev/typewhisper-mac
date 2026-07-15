@@ -50,6 +50,10 @@ final class MeetingsViewModel: ObservableObject {
     // Capture (M3)
     @Published private(set) var activeMeeting: Meeting?
     @Published private(set) var isCapturing = false
+    /// True while `stop()`'s off-MainActor teardown is finalizing this meeting (recorder mixdown,
+    /// audio adopt). Mirrored from the capture service so the live band and the document bottom bar
+    /// show a "Finalizing…" posture the instant Stop is pressed, without the window freezing.
+    @Published private(set) var isFinalizing = false
     @Published private(set) var liveTranscript: String = ""
     @Published private(set) var captureElapsedSeconds: TimeInterval = 0
     @Published private(set) var isDegradedLiveMode = false
@@ -243,6 +247,10 @@ final class MeetingsViewModel: ObservableObject {
         captureService.$isCapturing
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isCapturing = value }
+            .store(in: &cancellables)
+        captureService.$isFinalizing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isFinalizing = value }
             .store(in: &cancellables)
         // `removeDuplicates` guards the singleton VM's `objectWillChange` from firing (and rebuilding
         // every transcript observer) on redundant republishes — the 350 ms live-preview poll and the

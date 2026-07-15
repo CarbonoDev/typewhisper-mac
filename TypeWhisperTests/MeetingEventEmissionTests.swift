@@ -112,7 +112,9 @@ final class MeetingEventEmissionTests: XCTestCase {
         XCTAssertEqual(emitter.segmentPayloads.last?.segments.first?.text, "This is a test.")
 
         await capture.stop()
-        // [Track J] transcriptReady/ended now emit inside the queued final job; settle it first.
+        // [Track J] transcriptReady/ended now emit inside the queued final job; the off-main teardown
+        // must settle (to enqueue it) before the queue is drained.
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         // .transcriptReady then .ended, both with the meeting id.
@@ -157,6 +159,7 @@ final class MeetingEventEmissionTests: XCTestCase {
         XCTAssertEqual(emitter.segmentPayloads.count, 1, "repeated identical snapshots must not re-emit")
 
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 

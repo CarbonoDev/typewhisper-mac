@@ -119,6 +119,11 @@ final class MeetingCaptureService: ObservableObject {
     private var streamingHandler: StreamingHandler?
     private var captureStartTime: Date?
     private var elapsedTimer: AnyCancellable?
+    /// The in-flight `stop()` teardown (buffer snapshot → live-session finish → recorder stop → audio
+    /// adopt → enqueue final pass). It runs off the MainActor so `stop()` returns instantly and the
+    /// window never freezes while a long meeting finalizes. Retained so it is not cancelled mid-way;
+    /// nil when no teardown is running.
+    private var finalizeTask: Task<Void, Never>?
 
     /// Accumulated stabilized text (drives the UI preview and is the base for persistence).
     private var confirmedText = ""
@@ -285,50 +290,103 @@ final class MeetingCaptureService: ObservableObject {
         )))
     }
 
-    /// Stop capturing. The synchronous teardown (stop the timer, mark `.processing`, grab the buffer,
-    /// finish the live session, flush the pending tail, stop the recorder, release ownership, adopt the
-    /// audio) runs inline; the heavy full-buffer re-transcription is then handed to the job queue as a
-    /// cancellable `.finalTranscription` job (plan J2) rather than being awaited here.
+    /// Stop capturing. Returns to the caller almost immediately: only the cheap, main-actor state
+    /// flip runs inline (mark `.processing`, close the finalize gate, stop the timer, flush the
+    /// pending tail). The *heavy* teardown — snapshotting the capture buffer (up to hundreds of MB
+    /// for a long meeting), finishing the live session, mixing/finalizing the recording file, and
+    /// adopting the audio — runs off the MainActor in `finalizeTask` so the window never freezes; it
+    /// then hands the full-buffer re-transcription to the job queue as a cancellable
+    /// `.finalTranscription` job (plan J2). See `performTeardownAndEnqueueFinalPass`.
     func stop() async {
         // Re-entrancy guard (finding 3): a double-click on Stop (the VM's `isCapturing` mirror
         // lags by a main-queue hop) must not run the finalize pipeline twice concurrently.
         guard isCapturing, let meeting = activeMeeting else { return }
 
         isCapturing = false
-        // Keep `start()`'s guard closed across the multi-`await` teardown below: `isCapturing` is
-        // already false (so the UI stops showing "recording"), but a new session must not begin
-        // until teardown finishes (finding 2). A double-click on Stop is still handled by the
-        // `guard isCapturing` above — this only gates a concurrent *start*.
+        // Keep `start()`'s guard closed across the *entire* off-main teardown below: `isCapturing` is
+        // already false (so the UI stops showing "recording" and can flip to "finalizing"), but a new
+        // session must not begin until teardown finishes (finding 2). `isFinalizing` stays true until
+        // `performTeardownAndEnqueueFinalPass` releases the recorder/ownership and has snapshotted the
+        // buffer. A double-click on Stop is still handled by the `guard isCapturing` above — this only
+        // gates a concurrent *start*.
         isFinalizing = true
         stopElapsedTimer()
 
         meeting.state = .processing
         meetingService.update(meeting)
 
-        // Grab the full 16 kHz buffer before tearing down (it survives stopRecording).
-        let fullBuffer = audioRecorderService.getCurrentBuffer()
-
-        let liveSessionResult = await streamingHandler?.finish()
-        streamingHandler = nil
-
-        // Persist any stabilized tail that has not yet been flushed.
+        // Persist any stabilized tail that has not yet been flushed. Cheap and main-actor bound (it
+        // reads the in-memory confirmed/persisted text), and done inline so a crash during the async
+        // teardown still leaves the last live words on disk (segments persist incrementally).
         flushPendingSegments(elapsed: latestElapsed)
 
-        let audioURL = await audioRecorderService.stopRecording()
-        audioRecorderService.releaseCaptureOwnership(.meeting)
-
-        if let audioURL {
-            meetingService.adoptAudioFile(audioURL, for: meeting)
-        }
-
-        // Snapshot the session state the final pass depends on *before* releasing the finalize gate: a
-        // new capture (of another meeting) may now `start()` and reset the live-session vars, so the
-        // queued finalization must read these snapshots, not `self` (plan §CC2). The buffer /
-        // liveSessionResult are retained in the job closure until it runs.
+        // Snapshot the session state the teardown + final pass depend on *before* returning: once
+        // teardown releases the finalize gate a new capture (of another meeting) may `start()` and
+        // reset these live-session vars, so both the off-main teardown and the queued finalization
+        // read snapshots, never mutable `self` (plan §CC2).
         let sessionTimeOffsetSnapshot = sessionTimeOffset
         let priorLiveCaptureSnapshot = priorLiveCaptureSegmentIDs
         let sessionRulePolicySnapshot = sessionRulePolicy
         let latestElapsedSnapshot = latestElapsed
+
+        // Hand the live-session handle to the teardown and drop our reference now (the local retains
+        // it across the hop); a subsequent `start()` installs a fresh handler.
+        let handler = streamingHandler
+        streamingHandler = nil
+
+        // Return to the caller *now*; run the heavy teardown off the MainActor. `Task` inherits the
+        // MainActor, but every expensive step inside suspends onto a background executor (the detached
+        // buffer snapshot and the nonisolated `stopRecording` file mixdown), so the main run loop
+        // stays free and the window never freezes while a long meeting finalizes.
+        finalizeTask = Task { [weak self] in
+            await self?.performTeardownAndEnqueueFinalPass(
+                for: meeting,
+                handler: handler,
+                sessionTimeOffset: sessionTimeOffsetSnapshot,
+                priorLiveCaptureSegmentIDs: priorLiveCaptureSnapshot,
+                sessionRulePolicy: sessionRulePolicySnapshot,
+                latestElapsed: latestElapsedSnapshot
+            )
+        }
+    }
+
+    /// The heavy `stop()` teardown, run off the MainActor as `finalizeTask` (freeze fix + plan J2).
+    /// Snapshots the capture buffer without blocking the main thread, finishes the live session,
+    /// finalizes/mixes the recording file, adopts the audio, releases the recorder, then enqueues the
+    /// cancellable `.finalTranscription` job. The `isFinalizing` gate stays closed for the whole span
+    /// so no new capture slips in while the recorder/buffer are being torn down (finding 2); it is
+    /// released only after the buffer is snapshotted and ownership handed back (plan §CC2).
+    private func performTeardownAndEnqueueFinalPass(
+        for meeting: Meeting,
+        handler: StreamingHandler?,
+        sessionTimeOffset: TimeInterval,
+        priorLiveCaptureSegmentIDs: Set<UUID>,
+        sessionRulePolicy: FinalRetranscriptionPolicy?,
+        latestElapsed: TimeInterval
+    ) async {
+        // Snapshot the full 16 kHz buffer OFF the MainActor: for a 1 h meeting this is ~57 M samples
+        // (~230 MB) plus a per-sample mic/system mix — running it inline on the main thread is the
+        // dominant Stop freeze. The buffer survives `stopRecording` (only `startRecording` resets it),
+        // and the `isFinalizing` gate blocks any capture that could reset it while we read (plan §CC2).
+        // `getCurrentBuffer()` is a thread-safe (`OSAllocatedUnfairLock`) nonisolated read, already
+        // called off-main by the streaming providers, so this hop introduces no new hazard.
+        let recorder = audioRecorderService
+        let fullBuffer = await Task.detached(priority: .userInitiated) {
+            recorder.getCurrentBuffer()
+        }.value
+
+        // Finish the live session (main-isolated bookkeeping; its model/network calls suspend off-main).
+        let liveSessionResult = await handler?.finish()
+
+        // Stop the recorder: file finalization/mixdown/encode. `stopRecording` is nonisolated `async`,
+        // so its multi-second I/O for a long meeting runs off the MainActor and never blocks the window.
+        let audioURL = await audioRecorderService.stopRecording()
+        audioRecorderService.releaseCaptureOwnership(.meeting)
+
+        if let audioURL {
+            // A same-volume file move (rename) plus a small SwiftData save; main-actor bound but cheap.
+            meetingService.adoptAudioFile(audioURL, for: meeting)
+        }
 
         // Teardown done: the recorder and ownership are released, so a *different* meeting may start.
         // A restart of *this* meeting is still refused by `start()`'s `.finalTranscription` guard until
@@ -361,12 +419,19 @@ final class MeetingCaptureService: ObservableObject {
                 for: meeting,
                 buffer: fullBuffer,
                 liveSessionResult: liveSessionResult,
-                sessionTimeOffset: sessionTimeOffsetSnapshot,
-                priorLiveCaptureSegmentIDs: priorLiveCaptureSnapshot,
-                sessionRulePolicy: sessionRulePolicySnapshot,
-                latestElapsed: latestElapsedSnapshot
+                sessionTimeOffset: sessionTimeOffset,
+                priorLiveCaptureSegmentIDs: priorLiveCaptureSegmentIDs,
+                sessionRulePolicy: sessionRulePolicy,
+                latestElapsed: latestElapsed
             )
         }
+    }
+
+    /// Test hook (plan J2 + freeze fix): await the off-MainActor `stop()` teardown through the point
+    /// where the `.finalTranscription` job has been enqueued and the finalize gate reopened. Lets
+    /// tests keep their `await stop(); await jobQueue.drain()` shape now that teardown is asynchronous.
+    func awaitFinalizeTeardownForTesting() async {
+        await finalizeTask?.value
     }
 
     /// The final (post-stop) re-transcription pass, run as the `.finalTranscription` job body (plan

@@ -113,6 +113,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -140,6 +141,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         XCTAssertEqual(capture.activeMeetingDefaultTemplateID, templateID)
         XCTAssertEqual(capture.defaultTemplateMeetingID, meeting.id)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         // Control: no calendar name → the calendar-name trigger cannot match.
@@ -153,6 +155,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         XCTAssertNil(capture2.activeMeetingDefaultTemplateID)
         XCTAssertNil(capture2.defaultTemplateMeetingID)
         await capture2.stop()
+        await capture2.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -220,6 +223,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await baseline.start(meeting: baseMeeting)
         XCTAssertFalse(baseline.isDegradedLiveMode)
         await baseline.stop()
+        await baseline.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         // With a rule live-engine override to a non-live-capable engine in the empty test host,
@@ -237,6 +241,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         XCTAssertTrue(capture.isDegradedLiveMode, "Rule live-engine override should reach startStreaming")
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -256,6 +261,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         // not the injected test defaults.)
         XCTAssertNil(capture.activeMeetingDefaultTemplateID)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -278,6 +284,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         capture.ingestLiveTranscript("Live one.", elapsed: 1)
         capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.state, .completed)
@@ -304,6 +311,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Only live.", elapsed: 1)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.segments.map(\.text), ["Only live."])
@@ -330,6 +338,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Kept segment.", elapsed: 1)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertTrue(capture.finalRetranscriptionDegraded, "Unavailable override engine should degrade")
@@ -365,6 +374,7 @@ final class MeetingCaptureConfigTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Kept.", elapsed: 1)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertTrue(capture.finalRetranscriptionDegraded)

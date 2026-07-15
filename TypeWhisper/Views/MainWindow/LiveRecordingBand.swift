@@ -8,18 +8,26 @@ struct LiveRecordingBand: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
 
     var body: some View {
-        if viewModel.isCapturing, let active = viewModel.activeMeeting {
+        // Stay visible across both the live span and the post-Stop "finalizing" span (the off-main
+        // teardown), so the sidebar reflects that the meeting is still being wrapped up.
+        if viewModel.isCapturing || viewModel.isFinalizing, let active = viewModel.activeMeeting {
             Button {
                 coordinator.openMeeting(id: active.id)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "record.circle")
-                        .foregroundStyle(.red)
+                    if viewModel.isFinalizing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "record.circle")
+                            .foregroundStyle(.red)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(active.title)
                             .lineLimit(1)
                             .font(.callout)
-                        Text(Self.elapsedString(viewModel.captureElapsedSeconds))
+                        Text(viewModel.isFinalizing
+                            ? String(localized: "meetingdoc.finalizing")
+                            : Self.elapsedString(viewModel.captureElapsedSeconds))
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -29,7 +37,7 @@ struct LiveRecordingBand: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.red.opacity(0.08))
+                .background((viewModel.isFinalizing ? Color.secondary : Color.red).opacity(0.08))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(String(localized: "mainwindow.liveBand.accessibility")))

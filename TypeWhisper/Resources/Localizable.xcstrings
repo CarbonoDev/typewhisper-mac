@@ -20367,6 +20367,38 @@
         }
       }
     },
+    "meetingdoc.finalizing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finalizing…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird abgeschlossen…"
+          }
+        }
+      }
+    },
+    "meetingdoc.finalizing.help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrapping up the recording and preparing the transcript."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme wird abgeschlossen und das Transkript vorbereitet."
+          }
+        }
+      }
+    },
     "meetingdoc.live": {
       "localizations": {
         "en": {

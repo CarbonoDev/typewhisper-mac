@@ -9,36 +9,47 @@ struct HomeLiveBanner: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
 
     var body: some View {
-        if viewModel.isCapturing, let active = viewModel.activeMeeting {
+        // Stay visible across both the live span and the post-Stop "finalizing" span (the off-main
+        // teardown), so Home reflects that the meeting is still being wrapped up.
+        if viewModel.isCapturing || viewModel.isFinalizing, let active = viewModel.activeMeeting {
+            let finalizing = viewModel.isFinalizing
             Button {
                 coordinator.openMeeting(id: active.id)
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "record.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.red)
-                        .symbolEffect(.pulse, options: .repeating)
+                    if finalizing {
+                        ProgressView().controlSize(.regular)
+                    } else {
+                        Image(systemName: "record.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.red)
+                            .symbolEffect(.pulse, options: .repeating)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "home.live.recording"))
+                        Text(finalizing
+                            ? String(localized: "meetingdoc.finalizing")
+                            : String(localized: "home.live.recording"))
                             .font(.caption)
                             .textCase(.uppercase)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(finalizing ? Color.secondary : Color.red)
                         Text(active.title)
                             .font(.headline)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    Text(LiveRecordingBand.elapsedString(viewModel.captureElapsedSeconds))
-                        .font(.title3)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                    if !finalizing {
+                        Text(LiveRecordingBand.elapsedString(viewModel.captureElapsedSeconds))
+                            .font(.title3)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .background((finalizing ? Color.secondary : Color.red).opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                        .stroke((finalizing ? Color.secondary : Color.red).opacity(0.25), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)

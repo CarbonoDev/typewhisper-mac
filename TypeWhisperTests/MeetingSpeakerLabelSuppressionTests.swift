@@ -178,6 +178,7 @@ final class MeetingSpeakerLabelSuppressionTests: XCTestCase {
         XCTAssertTrue(meeting.speakerMap.isEmpty)
 
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await jobQueue.drain()
     }
 }

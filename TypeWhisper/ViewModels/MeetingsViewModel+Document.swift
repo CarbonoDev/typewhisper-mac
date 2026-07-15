@@ -23,6 +23,7 @@ extension MeetingsViewModel {
     enum DocumentContextAction: Equatable {
         case start              // scheduled / empty → begin capture
         case stop               // live → finalize capture
+        case finalizing         // stop pressed, teardown off-main in flight → disabled "Finalizing…"
         case resumeAndGenerate  // stopped-with-content → resume capture (restart-safe) + Generate ▾
         case generate           // completed → Generate ▾ only
     }
@@ -44,12 +45,25 @@ extension MeetingsViewModel {
     nonisolated static func documentPresentation(
         state: MeetingState,
         isCapturingThisMeeting: Bool,
-        hasContent: Bool
+        hasContent: Bool,
+        isFinalizingThisMeeting: Bool = false
     ) -> DocumentPresentation {
         if isCapturingThisMeeting {
             return DocumentPresentation(
                 bodyMode: .liveNotes,
                 contextAction: .stop,
+                showsLiveChip: true,
+                transcriptPanelOpenByDefault: true
+            )
+        }
+        // Stop pressed: `isCapturing` is already false but the heavy teardown (buffer snapshot,
+        // recorder mixdown, audio adopt) is still running off the MainActor. Keep the live posture —
+        // a disabled "Finalizing…" bar and the live chip — instead of briefly flashing the resting
+        // resume/generate affordances the meeting will only earn once the final pass has run.
+        if isFinalizingThisMeeting {
+            return DocumentPresentation(
+                bodyMode: .liveNotes,
+                contextAction: .finalizing,
                 showsLiveChip: true,
                 transcriptPanelOpenByDefault: true
             )
@@ -132,7 +146,8 @@ extension MeetingsViewModel {
         Self.documentPresentation(
             state: meeting.state,
             isCapturingThisMeeting: isCapturing && activeMeeting?.id == meeting.id,
-            hasContent: Self.documentHasContent(meeting)
+            hasContent: Self.documentHasContent(meeting),
+            isFinalizingThisMeeting: isFinalizing && activeMeeting?.id == meeting.id
         )
     }
 

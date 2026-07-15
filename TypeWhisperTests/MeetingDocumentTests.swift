@@ -35,6 +35,34 @@ final class MeetingDocumentStateTests: XCTestCase {
         }
     }
 
+    func testFinalizingShowsFinalizingAndKeepsLivePosture() {
+        // Stop pressed: `isCapturing` is already false, but the off-main teardown is still finalizing
+        // this meeting. The bottom bar shows the disabled "Finalizing…" action and the live chip stays
+        // up (regardless of the stored state, incl. the `.processing` it was just marked), rather than
+        // prematurely flashing the resting resume/generate affordances.
+        for state in [MeetingState.processing, .live, .completed, .interrupted] {
+            let p = MeetingsViewModel.documentPresentation(
+                state: state,
+                isCapturingThisMeeting: false,
+                hasContent: true,
+                isFinalizingThisMeeting: true
+            )
+            XCTAssertEqual(p.contextAction, .finalizing, "state \(state)")
+            XCTAssertEqual(p.bodyMode, .liveNotes, "state \(state)")
+            XCTAssertTrue(p.showsLiveChip, "state \(state)")
+            XCTAssertTrue(p.transcriptPanelOpenByDefault, "state \(state)")
+        }
+    }
+
+    func testActiveCaptureWinsOverFinalizingFlag() {
+        // If both flags were set (transient overlap), live capture wins: Stop, not Finalizing.
+        let p = MeetingsViewModel.documentPresentation(
+            state: .live, isCapturingThisMeeting: true, hasContent: true, isFinalizingThisMeeting: true
+        )
+        XCTAssertEqual(p.contextAction, .stop)
+        XCTAssertEqual(p.bodyMode, .liveNotes)
+    }
+
     func testStoppedWithContentShowsResumeAndGenerate() {
         // A stopped (interrupted) meeting that carries content can resume + generate.
         let p = presentation(.interrupted, capturing: false, content: true)

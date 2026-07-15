@@ -463,6 +463,7 @@ final class MeetingLanguageTests: XCTestCase {
             XCTAssertEqual(meeting.languageProvenance, .rule)
 
             await capture.stop()
+            await capture.awaitFinalizeTeardownForTesting()
             await jobQueue.drain()
         }
     }
@@ -487,6 +488,7 @@ final class MeetingLanguageTests: XCTestCase {
             XCTAssertNil(meeting.languageProvenance)
 
             await capture.stop()
+            await capture.awaitFinalizeTeardownForTesting()
             await jobQueue.drain()
         }
     }
@@ -511,6 +513,7 @@ final class MeetingLanguageTests: XCTestCase {
             XCTAssertEqual(meeting.languageProvenance, .manual)
 
             await capture.stop()
+            await capture.awaitFinalizeTeardownForTesting()
             await jobQueue.drain()
         }
     }
@@ -541,6 +544,7 @@ final class MeetingLanguageTests: XCTestCase {
             try await capture.start(meeting: meeting)
             capture.ingestLiveTranscript("Live rough.", elapsed: 1)
             await capture.stop()
+            await capture.awaitFinalizeTeardownForTesting()
             await jobQueue.drain()
 
             XCTAssertEqual(captured.value, .exact("de"), "final same-engine pass must honor the meeting language")

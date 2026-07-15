@@ -112,6 +112,7 @@ final class MeetingAdHocMenuTests: XCTestCase {
         XCTAssertTrue(capture.isCapturing)
 
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 }

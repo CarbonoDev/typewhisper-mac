@@ -85,20 +85,40 @@ struct MeetingDocumentHeader: View {
         }
     }
 
+    /// True while `stop()`'s off-MainActor teardown is finalizing *this* meeting — the chip then reads
+    /// "Finalizing…" instead of the live timer (the `showsLiveChip` presentation flag stays true across
+    /// both the live and the finalizing spans).
+    private var isFinalizingThisMeeting: Bool {
+        viewModel.isFinalizing && viewModel.activeMeeting?.id == meeting.id
+    }
+
+    @ViewBuilder
     private var liveChip: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(.red)
-                .frame(width: 8, height: 8)
-            Text(String(localized: "meetingdoc.live"))
-                .font(.caption.bold())
-            Text(MeetingTranscriptPanel.timestamp(viewModel.captureElapsedSeconds))
-                .font(.caption.monospacedDigit())
+        if isFinalizingThisMeeting {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(String(localized: "meetingdoc.finalizing"))
+                    .font(.caption.bold())
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.secondary.opacity(0.12), in: Capsule())
+        } else {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                Text(String(localized: "meetingdoc.live"))
+                    .font(.caption.bold())
+                Text(MeetingTranscriptPanel.timestamp(viewModel.captureElapsedSeconds))
+                    .font(.caption.monospacedDigit())
+            }
+            .foregroundStyle(.red)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.red.opacity(0.12), in: Capsule())
         }
-        .foregroundStyle(.red)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(.red.opacity(0.12), in: Capsule())
     }
 
     // MARK: - Chip row

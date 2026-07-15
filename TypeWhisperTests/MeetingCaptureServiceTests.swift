@@ -136,7 +136,9 @@ final class MeetingCaptureServiceTests: XCTestCase {
         capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
 
         await capture.stop()
-        // [Track J] The final pass now runs as a queued job; settle it before asserting the outcome.
+        // The heavy teardown now runs off the MainActor; settle it (it enqueues the final pass), then
+        // drain the queued job before asserting the outcome.
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.state, .completed)
@@ -216,6 +218,8 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertFalse(recorder.acquireCaptureOwnership(.recorder))
 
         await capture.stop()
+        // Ownership is released by the off-main teardown, not inline in `stop()`; settle it first.
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
         // Ownership is released after stop, so the recorder can claim it again.
         XCTAssertNil(recorder.currentCaptureOwner)
@@ -252,7 +256,9 @@ final class MeetingCaptureServiceTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("New content.", elapsed: 2)
         await capture.stop()
-        // [Track J] The restart's final replace runs on the queued job; settle before asserting.
+        // [Track J] The restart's final replace runs on the queued job; settle the off-main teardown
+        // (which adopts the audio and enqueues the pass), then drain before asserting.
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         // Prior segments survive verbatim.
@@ -364,6 +370,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
 
         try await capture.start(meeting: meeting)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         // The prior label + map were cleared by the successful restart.
@@ -397,6 +404,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertEqual(second.state, .scheduled)
 
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -452,6 +460,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(offset, 10)
 
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
     }
 
@@ -468,8 +477,8 @@ final class MeetingCaptureServiceTests: XCTestCase {
         let first = meetingService.createMeeting(title: "First", source: .adHoc, state: .scheduled)
         try await capture.start(meeting: first)
 
-        // Hold `stop()` open inside its `stopRecording` teardown so the test can probe the finalize
-        // window (isCapturing already false, but a new session must still be refused).
+        // Hold the off-main teardown open inside its `stopRecording` step so the test can probe the
+        // finalize window (isCapturing already false, but a new session must still be refused).
         let gate = FinalizeGate()
         recorder.stopRecordingOverride = { outputURL in
             await gate.enter()
@@ -479,11 +488,13 @@ final class MeetingCaptureServiceTests: XCTestCase {
         }
 
         let second = meetingService.createMeeting(title: "Second", source: .adHoc, state: .scheduled)
-        let stopTask = Task { await capture.stop() }
+        // `stop()` now returns immediately; its heavy teardown runs off the MainActor. Driving the
+        // gate below lets that teardown advance to the (held) `stopRecording` step.
+        await capture.stop()
 
         await gate.awaitEntered()
         XCTAssertFalse(capture.isCapturing)
-        XCTAssertTrue(capture.isFinalizing)
+        XCTAssertTrue(capture.isFinalizing, "isFinalizing stays closed across the whole off-main teardown")
 
         do {
             try await capture.start(meeting: second)
@@ -496,15 +507,67 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertEqual(capture.activeMeeting?.id, first.id)
 
         await gate.release()
-        await stopTask.value
-        // [Track J] Teardown is done (isFinalizing false) but the final pass is now a queued job; the
-        // meeting reaches `.completed` only once it runs.
+        // Settle the off-main teardown: it releases the gate, adopts the audio, reopens `isFinalizing`,
+        // and enqueues the final pass (still just a queued job until drained).
+        await capture.awaitFinalizeTeardownForTesting()
         XCTAssertFalse(capture.isFinalizing)
         XCTAssertFalse(capture.isCapturing)
         await captureJobQueue.drain()
 
         XCTAssertEqual(first.state, .completed)
         XCTAssertEqual(second.state, .scheduled)
+    }
+
+    // MARK: - Stop returns instantly; heavy teardown runs off the MainActor (freeze fix)
+
+    /// The window-freeze fix: `stop()` must return *before* the heavy teardown (buffer snapshot,
+    /// recorder mixdown) finishes, flipping the meeting to a visible `.processing` / finalizing state
+    /// immediately. Asserted with a slow `stopRecording` stub — `stop()` completes while the stub is
+    /// still blocked, `isFinalizing` is true, the meeting is `.processing`, and the final-transcription
+    /// job is only enqueued once teardown settles.
+    func testStopReturnsWhileHeavyTeardownStillRunning() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        // A slow "mixdown": stop-recording blocks until the test releases it.
+        let gate = FinalizeGate()
+        recorder.stopRecordingOverride = { outputURL in
+            await gate.enter()
+            await gate.awaitReleased()
+            try Data("recorded".utf8).write(to: outputURL)
+            return outputURL
+        }
+
+        let meeting = meetingService.createMeeting(title: "Freeze", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: meeting)
+        capture.ingestLiveTranscript("Live words.", elapsed: 1)
+
+        // `stop()` returns without awaiting the (slow) teardown.
+        await capture.stop()
+
+        // Drive the off-main teardown up to the held `stopRecording` stub. That we can observe the
+        // stub still running proves `stop()` did not await it.
+        await gate.awaitEntered()
+        XCTAssertFalse(capture.isCapturing, "recording indicator is already off")
+        XCTAssertTrue(capture.isFinalizing, "meeting shows the finalizing state while teardown runs")
+        XCTAssertEqual(meeting.state, .processing, "meeting is marked processing immediately")
+        // The final-transcription job is NOT enqueued yet — teardown enqueues it only after the buffer
+        // snapshot / recorder stop / audio adopt complete.
+        XCTAssertFalse(captureJobQueue.hasActiveJob(kind: .finalTranscription, meetingID: meeting.id))
+
+        // Release the slow stub and let teardown finish.
+        await gate.release()
+        await capture.awaitFinalizeTeardownForTesting()
+        XCTAssertFalse(capture.isFinalizing)
+        XCTAssertTrue(captureJobQueue.hasActiveJob(kind: .finalTranscription, meetingID: meeting.id))
+
+        await captureJobQueue.drain()
+        XCTAssertEqual(meeting.state, .completed, "meeting is never left stuck in .processing")
+        XCTAssertNotNil(meeting.audioFileName, "audio was adopted by the off-main teardown")
     }
 
     // MARK: - [Track J] Final re-transcription runs as a queued, cancellable job
@@ -547,8 +610,10 @@ final class MeetingCaptureServiceTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("Live rough.", elapsed: 1)
         await capture.stop()
+        // Settle the off-main teardown (it enqueues the final pass); the queued job has still not run.
+        await capture.awaitFinalizeTeardownForTesting()
 
-        // Teardown returned but the queued job has not run yet: still processing.
+        // Teardown finished but the queued job has not run yet: still processing.
         XCTAssertEqual(meeting.state, .processing)
         XCTAssertTrue(captureJobQueue.hasActiveJob(kind: .finalTranscription, meetingID: meeting.id))
 
@@ -569,6 +634,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         try await capture.start(meeting: meeting)
         capture.ingestLiveTranscript("live rough.", elapsed: 1)
         await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
         await captureJobQueue.drain()
 
         XCTAssertEqual(meeting.state, .completed)
@@ -595,6 +661,8 @@ final class MeetingCaptureServiceTests: XCTestCase {
         capture.ingestLiveTranscript("Live one.", elapsed: 1)
         capture.ingestLiveTranscript("Live one. Live two.", elapsed: 2)
         await capture.stop()
+        // The off-main teardown enqueues the final pass; settle it before grabbing the job id.
+        await capture.awaitFinalizeTeardownForTesting()
 
         let jobID = try XCTUnwrap(captureJobQueue.jobs.first { $0.kind == .finalTranscription }?.id)
         await waitUntil { self.captureJobQueue.jobs.first { $0.id == jobID }?.state == .running }
