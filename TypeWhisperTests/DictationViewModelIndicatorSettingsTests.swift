@@ -114,6 +114,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
+    func testRecordingCancelConfirmationDefaultsToEnabled() {
+        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
+    func testRecordingCancelConfirmationPersistsWhenDisabled() {
+        DictationViewModel.persistRequireSecondEscapeToCancelRecording(false, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+            false
+        )
+        XCTAssertFalse(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
+    func testRecordingCancelConfirmationPersistsWhenEnabled() {
+        DictationViewModel.persistRequireSecondEscapeToCancelRecording(true, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+            true
+        )
+        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
     func testMicrophoneBoostDefaultsToDisabled() {
         XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
     }
