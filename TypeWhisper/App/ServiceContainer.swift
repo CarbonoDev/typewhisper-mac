@@ -407,6 +407,7 @@ final class ServiceContainer: ObservableObject {
             recorderService: audioRecorderService,
             modelManager: modelManagerService,
             dictionaryService: dictionaryService,
+            audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
 
