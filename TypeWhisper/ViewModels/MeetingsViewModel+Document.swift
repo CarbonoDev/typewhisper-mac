@@ -53,7 +53,10 @@ extension MeetingsViewModel {
                 bodyMode: .liveNotes,
                 contextAction: .stop,
                 showsLiveChip: true,
-                transcriptPanelOpenByDefault: true
+                // Owner request 1: the transcript panel starts hidden for *every* meeting, including
+                // during live capture. It is opened on demand from the bottom bar's waveform toggle,
+                // and that per-document choice is then remembered by `MeetingDocumentModel`.
+                transcriptPanelOpenByDefault: false
             )
         }
         // Stop pressed: `isCapturing` is already false but the heavy teardown (buffer snapshot,
@@ -65,7 +68,8 @@ extension MeetingsViewModel {
                 bodyMode: .liveNotes,
                 contextAction: .finalizing,
                 showsLiveChip: true,
-                transcriptPanelOpenByDefault: true
+                // Owner request 1: hidden by default here too (keep the live posture, panel closed).
+                transcriptPanelOpenByDefault: false
             )
         }
         switch state {

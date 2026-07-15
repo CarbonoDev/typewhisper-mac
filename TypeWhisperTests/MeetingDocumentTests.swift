@@ -24,14 +24,15 @@ final class MeetingDocumentStateTests: XCTestCase {
         XCTAssertFalse(p.transcriptPanelOpenByDefault)
     }
 
-    func testLiveShowsStopAndOpensPanel() {
-        // Capturing wins regardless of the stored state.
+    func testLiveShowsStopWithTranscriptHiddenByDefault() {
+        // Capturing wins regardless of the stored state. Owner request 1: the transcript panel is
+        // hidden by default for *every* meeting, including during live capture.
         for state in MeetingState.allCases {
             let p = presentation(state, capturing: true, content: true)
             XCTAssertEqual(p.bodyMode, .liveNotes, "state \(state)")
             XCTAssertEqual(p.contextAction, .stop, "state \(state)")
             XCTAssertTrue(p.showsLiveChip, "state \(state)")
-            XCTAssertTrue(p.transcriptPanelOpenByDefault, "state \(state)")
+            XCTAssertFalse(p.transcriptPanelOpenByDefault, "state \(state)")
         }
     }
 
@@ -50,7 +51,7 @@ final class MeetingDocumentStateTests: XCTestCase {
             XCTAssertEqual(p.contextAction, .finalizing, "state \(state)")
             XCTAssertEqual(p.bodyMode, .liveNotes, "state \(state)")
             XCTAssertTrue(p.showsLiveChip, "state \(state)")
-            XCTAssertTrue(p.transcriptPanelOpenByDefault, "state \(state)")
+            XCTAssertFalse(p.transcriptPanelOpenByDefault, "state \(state)")
         }
     }
 

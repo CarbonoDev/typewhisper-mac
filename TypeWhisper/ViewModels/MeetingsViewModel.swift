@@ -108,6 +108,9 @@ final class MeetingsViewModel: ObservableObject {
     // template in the generate flow (`defaultTemplate(ofKind:for:)`, addendum AD7).
     let captureService: MeetingCaptureService
     private let startNotificationService: MeetingStartNotificationService
+    /// Owner request 2: one-shot "meeting time ended, still recording" reminder. Driven off the
+    /// capture elapsed tick (which runs only while recording).
+    private let endReminderService: MeetingEndReminderService
     private let llmService: MeetingLLMService
     // [M2] Per-meeting language detection (plan D5). `internal` so `MeetingsViewModel+Language.swift`
     // (extension-file discipline) reaches it for the chip's Detect / Re-detect action and the
@@ -147,6 +150,7 @@ final class MeetingsViewModel: ObservableObject {
         calendarService: CalendarService,
         captureService: MeetingCaptureService,
         startNotificationService: MeetingStartNotificationService,
+        endReminderService: MeetingEndReminderService,
         llmService: MeetingLLMService,
         languageService: MeetingLanguageService, // [M2]
         vaultService: ObsidianVaultService,
@@ -168,6 +172,7 @@ final class MeetingsViewModel: ObservableObject {
         self.calendarService = calendarService
         self.captureService = captureService
         self.startNotificationService = startNotificationService
+        self.endReminderService = endReminderService
         self.llmService = llmService
         self.languageService = languageService // [M2]
         self.vaultService = vaultService
@@ -263,7 +268,14 @@ final class MeetingsViewModel: ObservableObject {
         captureService.$elapsedSeconds
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.captureElapsedSeconds = value }
+            .sink { [weak self] value in
+                guard let self else { return }
+                self.captureElapsedSeconds = value
+                // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs
+                // only while recording, so there are no idle wakeups. The reminder self-gates (linked
+                // calendar event required, past-end, once per meeting) inside the service.
+                self.evaluateMeetingEndReminder()
+            }
             .store(in: &cancellables)
         captureService.$isDegradedLiveMode
             .receive(on: DispatchQueue.main)
@@ -682,6 +694,21 @@ final class MeetingsViewModel: ObservableObject {
 
     func stopCapture() async {
         await captureService.stop()
+    }
+
+    /// Owner request 2: evaluate the end-of-meeting stop reminder against the *authoritative* capture
+    /// service state (not the Combine-mirrored copies, which lag a main-queue hop). Fires at most one
+    /// local notification per meeting when a calendar-linked meeting's scheduled end has passed and it
+    /// is still recording; the service excludes ad-hoc meetings and dedupes per session.
+    private func evaluateMeetingEndReminder() {
+        guard captureService.isCapturing, let meeting = captureService.activeMeeting else { return }
+        endReminderService.evaluate(
+            meetingTitle: meeting.title,
+            calendarEventID: meeting.calendarEventID,
+            scheduledEnd: meeting.endDate,
+            isRecording: true,
+            sessionKey: meeting.id.uuidString
+        )
     }
 
     /// Add an in-meeting note to the active capture, timestamped with elapsed seconds.

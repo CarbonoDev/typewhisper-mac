@@ -30554,6 +30554,70 @@
           }
         }
       }
+    },
+    "meetings.notification.ended.body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scheduled time has ended, but recording is still running. Remember to stop it."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die geplante Zeit ist abgelaufen, aber die Aufnahme läuft noch. Denken Sie daran, sie zu beenden."
+          }
+        }
+      }
+    },
+    "meetings.tray.upcoming.inMinutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %ldm"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %ld Min."
+          }
+        }
+      }
+    },
+    "meetings.menu.recording": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme: %@"
+          }
+        }
+      }
+    },
+    "meetings.menu.upcoming": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demnächst: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

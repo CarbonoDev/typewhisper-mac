@@ -109,6 +109,8 @@ private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    // Owner requests 3 & 4: scoped capture/calendar state for the tray meeting indicators.
+    @StateObject private var meetingTray = MeetingTrayState()
 
     private var title: String {
         AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
@@ -122,24 +124,49 @@ private struct MenuBarExtraLabel: View {
     }
 
     var body: some View {
-        Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
-            .resizable()
-            .renderingMode(isRecordingActive ? .original : .template)
-            .frame(width: 18, height: 18)
-            .accessibilityLabel(Text(verbatim: title))
-            .accessibilityValue(
-                isRecordingActive
-                    ? Text(String(localized: "Recording..."))
-                    : Text(String(localized: "Idle"))
-            )
-            .onAppear {
-                ManagedAppWindowOpener.shared.openWindow = openWindow
+        Group {
+            if meetingTray.isRecording, !meetingTray.meetingTitle.isEmpty {
+                // Owner request 3: recording glyph + truncated meeting title + elapsed time.
+                Label {
+                    Text(MeetingTrayIndicator.recordingLabel(
+                        title: meetingTray.meetingTitle,
+                        elapsedSeconds: meetingTray.elapsedSeconds
+                    ))
+                } icon: {
+                    Image(systemName: "record.circle")
+                }
+                .accessibilityLabel(Text(String(localized: "Recording...")))
+            } else if !isRecordingActive,
+                      let event = meetingTray.upcomingEvent,
+                      let hint = MeetingTrayIndicator.upcomingHint(for: event, now: Date()) {
+                // Owner request 4: compact upcoming-meeting hint (recording takes precedence above).
+                Label {
+                    Text(hint)
+                } icon: {
+                    Image(systemName: "calendar")
+                }
+                .accessibilityLabel(Text(verbatim: "\(event.title) \(hint)"))
+            } else {
+                Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
+                    .resizable()
+                    .renderingMode(isRecordingActive ? .original : .template)
+                    .frame(width: 18, height: 18)
+                    .accessibilityLabel(Text(verbatim: title))
+                    .accessibilityValue(
+                        isRecordingActive
+                            ? Text(String(localized: "Recording..."))
+                            : Text(String(localized: "Idle"))
+                    )
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
-                guard let id = notification.userInfo?["id"] as? String else { return }
-                ManagedAppWindowOpener.shared.openWindow = openWindow
-                openWindow(id: id)
-            }
+        }
+        .onAppear {
+            ManagedAppWindowOpener.shared.openWindow = openWindow
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
+            guard let id = notification.userInfo?["id"] as? String else { return }
+            ManagedAppWindowOpener.shared.openWindow = openWindow
+            openWindow(id: id)
+        }
     }
 }
 

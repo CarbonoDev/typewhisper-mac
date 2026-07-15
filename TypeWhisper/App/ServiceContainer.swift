@@ -52,6 +52,9 @@ final class ServiceContainer: ObservableObject {
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
     let meetingStartNotificationService: MeetingStartNotificationService
+    /// Posts a one-shot reminder when a calendar meeting's scheduled end passes while capture is still
+    /// recording (owner request 2). Mirrors `meetingStartNotificationService`'s registration.
+    let meetingEndReminderService: MeetingEndReminderService
     let meetingLLMService: MeetingLLMService
     let meetingLanguageService: MeetingLanguageService // [M2]
     let obsidianVaultService: ObsidianVaultService
@@ -202,6 +205,7 @@ final class ServiceContainer: ObservableObject {
             ruleMatcher: meetingContextRuleService
         )
         meetingStartNotificationService = MeetingStartNotificationService()
+        meetingEndReminderService = MeetingEndReminderService()
         // Obsidian vault knowledge base (plan M5), constructed before the LLM service because M6's
         // in-meeting Q&A retrieves KB passages through it.
         obsidianVaultService = ObsidianVaultService()
@@ -413,6 +417,7 @@ final class ServiceContainer: ObservableObject {
             calendarService: calendarService,
             captureService: meetingCaptureService,
             startNotificationService: meetingStartNotificationService,
+            endReminderService: meetingEndReminderService,
             llmService: meetingLLMService,
             languageService: meetingLanguageService, // [M2]
             vaultService: obsidianVaultService,

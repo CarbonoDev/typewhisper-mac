@@ -240,6 +240,9 @@ enum MenuBarLayout {
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
+    // Owner requests 3 & 4: surface the recording / upcoming meeting as an actionable menu entry that
+    // opens the main window focused on that meeting.
+    @ObservedObject private var meetings = MeetingsViewModel.shared
 
     var body: some View {
         Group {
@@ -248,6 +251,8 @@ struct MenuBarView: View {
             Label(status.statusText, systemImage: status.statusImage)
 
             Divider()
+
+            meetingIndicatorSection
 
             let groups = MenuBarLayout.groups()
             ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
@@ -274,6 +279,36 @@ struct MenuBarView: View {
 
     private func openManagedWindow(_ id: String) {
         ManagedAppWindowOpener.shared.open(id: id)
+    }
+
+    /// Owner requests 3 & 4: a single entry above the main menu that reflects, in priority order, an
+    /// in-progress meeting recording (opens + focuses that meeting) or the soonest upcoming calendar
+    /// meeting within the lead window (opens the main window). Recording wins when both apply. Nothing
+    /// is shown when neither applies, and the existing click-through-to-menu behavior is unchanged.
+    @ViewBuilder
+    private var meetingIndicatorSection: some View {
+        if meetings.isCapturing, let active = meetings.activeMeeting {
+            Button {
+                meetings.requestFocus(on: active)
+                openManagedWindow(AppWindowID.main)
+            } label: {
+                Label(
+                    String(format: String(localized: "meetings.menu.recording"), active.title),
+                    systemImage: "record.circle"
+                )
+            }
+            Divider()
+        } else if let event = MeetingTrayIndicator.nextUpcoming(events: meetings.upcomingEvents, now: Date()) {
+            Button {
+                openManagedWindow(AppWindowID.main)
+            } label: {
+                Label(
+                    String(format: String(localized: "meetings.menu.upcoming"), event.title),
+                    systemImage: "calendar"
+                )
+            }
+            Divider()
+        }
     }
 
     @ViewBuilder
