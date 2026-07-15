@@ -3,7 +3,7 @@ import AppKit
 import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable, CaseIterable {
-    case home, general, recording, hotkeys, recorder
+    case home, general, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, meetings, diarization, advanced, license, about
 }
 
@@ -42,7 +42,7 @@ enum SettingsGrouping {
     /// each have their own row and detail view — they are no longer aliased onto Workflows, which
     /// previously left both panes (and their deep links) unreachable.
     static let orderedGroups: [(group: SettingsGroup, tabs: [SettingsTab])] = [
-        (.dictation, [.home, .general, .recording, .hotkeys, .dictionary, .snippets, .dictationRecovery]),
+        (.dictation, [.home, .general, .dictation, .hotkeys, .dictionary, .snippets, .dictationRecovery]),
         (.meetings, [.meetings, .diarization]),
         (.library, [.workflows, .prompts, .profiles]),
         (.tools, [.recorder, .fileTranscription, .history]),
@@ -83,7 +83,7 @@ struct SettingsView: View {
         [
             SettingsDestination(tab: .home, title: String(localized: "settings.tab.overview"), systemImage: "chart.bar.doc.horizontal", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
-            SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
+            SettingsDestination(tab: .dictation, title: String(localized: "Dictation"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
             SettingsDestination(
                 tab: .recorder,
@@ -218,7 +218,7 @@ struct SettingsView: View {
             HomeSettingsView()
         case .general:
             GeneralSettingsView()
-        case .recording:
+        case .dictation:
             RecordingSettingsView()
         case .hotkeys:
             HotkeySettingsView()
