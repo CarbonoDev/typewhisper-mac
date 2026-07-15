@@ -1085,12 +1085,38 @@ final class MeetingsViewModel: ObservableObject {
         // pyannote Identify button (finding). The vocabulary test is shared with the finalization
         // adoption check so the two paths always agree.
         let labeled = meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
-        return SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
+        let source = SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
             segmentsAlreadyLabeled: labeled,
             preferProviderLabels: preferProviderSpeakerLabels,
             effectiveParticipantCount: SpeakerSourcePlan.effectiveParticipantCount(for: meeting),
             trackAvailability: availability
         ))
+        // [M1/D2] A resolved `.channel`/`.cloud` path and a "no path" status (e.g. the persisted
+        // "Speaker identification is unavailable…") are mutually exclusive — a resolved path and no path
+        // cannot both be true. `diarizationStatusMessage` is one VM-wide `@Published` var that can go
+        // stale across a meeting switch or a plan re-resolution (attendee/toggle change), so clear it
+        // whenever the freshly resolved path is channel/cloud. The view also suppresses it defensively
+        // (`showsDiarizationStatus`); clearing here keeps the VM state itself honest.
+        if !Self.showsDiarizationStatus(diarizationStatusMessage, under: source),
+           diarizationStatusMessage != nil {
+            diarizationStatusMessage = nil
+        }
+        return source
+    }
+
+    /// [M1/D2] Whether a transient diarization status line may co-render with the resolved speaker
+    /// path. Pure so the "never both a path caption and a contradictory status" rule is unit-testable
+    /// without a view: a `.channel`/`.cloud` path is a *resolved* labeling source, so a "no path"
+    /// status must not render beneath it; every other path (pyannote / none / not-yet-resolved) may
+    /// still surface a legitimate status. `nil` status never shows.
+    nonisolated static func showsDiarizationStatus(_ status: String?, under source: SpeakerSource?) -> Bool {
+        guard status != nil else { return false }
+        switch source {
+        case .channel, .cloud:
+            return false
+        default:
+            return true
+        }
     }
 
     /// Whether the two-person-call toggle should be offered for a meeting (D-A4): only for

@@ -33,7 +33,11 @@ struct SpeakerSection: View {
                 twoPersonToggle
             }
 
-            if let status = viewModel.diarizationStatusMessage {
+            // [M1/D2] Never co-render a resolved-path caption with a contradictory "no path" status
+            // (e.g. the persisted "unavailable" line under a `.channel`/`.cloud` path — the owner's
+            // screenshot). The status is suppressed whenever the resolved plan already names a source.
+            if let status = viewModel.diarizationStatusMessage,
+               MeetingsViewModel.showsDiarizationStatus(status, under: plannedSource) {
                 Label(status, systemImage: "info.circle")
                     .font(.callout)
                     .foregroundStyle(.secondary)

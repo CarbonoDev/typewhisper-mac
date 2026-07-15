@@ -472,6 +472,119 @@ final class MeetingDiarizationEnricherTests: XCTestCase {
         XCTAssertTrue(meeting.segments.allSatisfy { $0.speakerLabel == nil })
     }
 
+    // MARK: - [M1/D1] Availability shares the run's decorrelation evidence
+
+    /// A helper live meeting whose audio duration comfortably covers a short transcript, so the probe
+    /// (and any later whole-file check) sees the synthesized channels rather than tripping the timeline
+    /// guard.
+    private func liveMeetingForAvailability(in dir: URL, service: MeetingService) throws -> Meeting {
+        try makeMeetingWithAudio(in: dir, service: service, segments: [
+            TranscriptionSegment(text: "One.", start: 0, end: 1),
+            TranscriptionSegment(text: "Two.", start: 1, end: 2)
+        ], source: .adHoc)
+    }
+
+    /// The owner's-screenshot defect: a live 2-channel capture whose channels are *correlated* (mixed
+    /// mode — both channels carry the same mic+system mix) must NOT be reported `.separateTrack` from a
+    /// bare channel-count probe. The prefix decorrelation probe downgrades it to the sidecar-dependent
+    /// path, so with no sidecar it is honestly `.unavailable` (no false channel caption / Redo).
+    func testMixedCorrelatedCaptureAvailabilityDowngradesToUnavailableWithoutSidecar() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = try liveMeetingForAvailability(in: dir, service: service)
+
+        // Identical, non-silent channels → confidently correlated head.
+        let sr = 16_000
+        let mix = [Float](repeating: 0.5, count: sr * 2)
+        let inspector = StubInspector(audio: MeetingAudioData(channels: [mix, mix], sampleRate: Double(sr)))
+
+        let enricher = MeetingDiarizationEnricher(
+            meetingService: service,
+            provider: StubProvider(available: false),
+            audioInspector: inspector,
+            numSpeakersProvider: { nil }
+        )
+
+        let availability = await enricher.availability(for: meeting)
+        XCTAssertEqual(availability, .unavailable, "a correlated (mixed) capture is not separate-track")
+    }
+
+    /// Same correlated capture, but with the sidecar available → the availability is `.provider`, not
+    /// `.separateTrack`: the mixed recording can be diarized by pyannote, never by the channel path.
+    func testMixedCorrelatedCaptureAvailabilityIsProviderWhenSidecarAvailable() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = try liveMeetingForAvailability(in: dir, service: service)
+
+        let sr = 16_000
+        let mix = [Float](repeating: 0.5, count: sr * 2)
+        let inspector = StubInspector(audio: MeetingAudioData(channels: [mix, mix], sampleRate: Double(sr)))
+
+        let enricher = MeetingDiarizationEnricher(
+            meetingService: service,
+            provider: StubProvider(available: true),
+            audioInspector: inspector,
+            numSpeakersProvider: { nil }
+        )
+
+        let availability = await enricher.availability(for: meeting)
+        XCTAssertEqual(availability, .provider)
+    }
+
+    /// A genuinely decorrelated (separate mic/system) head keeps `.separateTrack` even with no
+    /// sidecar — the content gate admits real separate tracks, it only rejects correlated ones.
+    func testDecorrelatedCaptureAvailabilityStaysSeparateTrack() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = try liveMeetingForAvailability(in: dir, service: service)
+
+        // Mic loud in [0,1)s, system loud in [1,2)s → normalized difference energy ~1.0.
+        let sr = 16_000
+        var mic = [Float](repeating: 0, count: sr * 2)
+        var system = [Float](repeating: 0, count: sr * 2)
+        for i in 0..<sr { mic[i] = 0.5 }
+        for i in sr..<(sr * 2) { system[i] = 0.5 }
+        let inspector = StubInspector(audio: MeetingAudioData(channels: [mic, system], sampleRate: Double(sr)))
+
+        let enricher = MeetingDiarizationEnricher(
+            meetingService: service,
+            provider: StubProvider(available: false),
+            audioInspector: inspector,
+            numSpeakersProvider: { nil }
+        )
+
+        let availability = await enricher.availability(for: meeting)
+        XCTAssertEqual(availability, .separateTrack)
+    }
+
+    /// A silent 2-channel head is *inconclusive* (a separate-track recording may simply open with
+    /// silence), so availability must not downgrade on it — it keeps `.separateTrack` and defers the
+    /// authoritative decision to the whole-file check in `enrich`.
+    func testSilentPrefixKeepsSeparateTrackAvailability() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = try liveMeetingForAvailability(in: dir, service: service)
+
+        // Two silent channels → no energy → confidently-correlated probe returns false (inconclusive).
+        let sr = 16_000
+        let silence = [Float](repeating: 0, count: sr * 2)
+        let inspector = StubInspector(audio: MeetingAudioData(channels: [silence, silence], sampleRate: Double(sr)))
+
+        let enricher = MeetingDiarizationEnricher(
+            meetingService: service,
+            provider: StubProvider(available: false),
+            audioInspector: inspector,
+            numSpeakersProvider: { nil }
+        )
+
+        let availability = await enricher.availability(for: meeting)
+        XCTAssertEqual(availability, .separateTrack)
+    }
+
     // MARK: - Map persistence & rendering
 
     func testSpeakerMapPersistsAcrossServiceInstancesAndRenders() throws {

@@ -256,6 +256,23 @@ final class MeetingDiarizationEnricher: ObservableObject {
         guard let url = meetingService.audioFileURL(for: meeting) else { return .unavailable }
         if Self.isLiveCaptured(meeting),
            let channels = try? audioInspector.channelCount(at: url), channels >= 2 {
+            // [M1/D1] A channel-COUNT probe alone lies: the recorder writes a 2-channel file for its
+            // *mixed* mode too (both channels carry the same mic+system mix), so a bare count check here
+            // reports `.separateTrack` for a mixed capture the channel path can never label — the plan
+            // and the run then disagree (the owner's screenshot: a channel caption + Redo over a
+            // recording that resolves `.unavailable`). Share the run's decorrelation evidence: run the
+            // same bounded ~10 s prefix probe `enrich` uses. A head that proves the recording cannot be
+            // separate-track (mono, or confidently-correlated stereo) downgrades to the sidecar-dependent
+            // path; a decorrelated or inconclusive/silent head keeps `.separateTrack` (the authoritative
+            // whole-file check stays in `enrich`).
+            if await Self.prefixIsDefinitelyNotSeparateTrack(
+                inspector: audioInspector,
+                url: url,
+                maxFrames: Self.probeFrameCount,
+                threshold: Self.decorrelationThreshold
+            ) {
+                return await provider.isAvailable ? .provider : .unavailable
+            }
             return .separateTrack
         }
         return await provider.isAvailable ? .provider : .unavailable

@@ -276,6 +276,7 @@
 		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
 		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
 		MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */; };
+		M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
@@ -889,6 +890,7 @@
 		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerLabelSuppressionTests.swift; sourceTree = "<group>"; };
+		M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderTrackModeTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
@@ -2780,6 +2782,7 @@
 				M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */,
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
 				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
+				M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
 				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
 				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
@@ -4326,6 +4329,7 @@
 				M8B0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift in Sources */,
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
 				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
+				M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
 				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
 				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,

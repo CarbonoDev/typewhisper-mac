@@ -250,7 +250,13 @@ final class MeetingCaptureService: ObservableObject {
             _ = try await audioRecorderService.startRecording(
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
-                format: .wav
+                format: .wav,
+                // [M1/D3] Meeting capture records separate mic (L) / system (R) tracks so the two-person
+                // channel labeling path is structurally reachable (defect B fix). Per-session only —
+                // the shared recorder instance's `trackMode` (the standalone Recorder's preference) is
+                // left untouched. Unconditional: single-source sessions never read the mix branch, so
+                // there is no phantom empty channel (adjudication Part A #2).
+                trackMode: .separate
             )
         } catch {
             audioRecorderService.releaseCaptureOwnership(.meeting)

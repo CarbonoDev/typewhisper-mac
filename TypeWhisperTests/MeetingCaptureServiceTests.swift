@@ -94,6 +94,36 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertTrue(persisted.segments.allSatisfy { $0.source == .liveCapture })
     }
 
+    // MARK: - [M1/D3] Meeting capture records separate mic/system tracks (per session)
+
+    /// Meeting capture must record separate mic (L) / system (R) tracks so the two-person channel
+    /// labeling path is structurally reachable — and it must do so **per session**, never mutating the
+    /// shared recorder instance's `trackMode` (the standalone Recorder's preference). Verified by the
+    /// captured `sessionTrackMode` after `start()` while the instance `trackMode` stays `.mixed`.
+    func testCaptureStartsRecorderInSeparateTrackModeWithoutLeaking() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
+        // The instance preference the standalone Recorder would use — must be left untouched.
+        recorder.trackMode = .mixed
+        let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
+
+        let meeting = meetingService.createMeeting(title: "Two Person", source: .adHoc, state: .scheduled)
+        try await capture.start(meeting: meeting)
+
+        XCTAssertEqual(recorder.sessionTrackMode, .separate, "meeting session records separate tracks")
+        XCTAssertEqual(recorder.trackMode, .mixed, "the shared instance preference must not leak")
+
+        await capture.stop()
+        await capture.awaitFinalizeTeardownForTesting()
+        await captureJobQueue.drain()
+
+        // The leak guard also holds after teardown: a later standalone recording still mixes.
+        XCTAssertEqual(recorder.trackMode, .mixed)
+    }
+
     // MARK: - Duplicate stable text upserts, not duplicates
 
     func testDuplicateStableTextDoesNotDuplicateSegments() async throws {

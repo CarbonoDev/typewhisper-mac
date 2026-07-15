@@ -517,6 +517,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private var micEnabled = false
     private var systemAudioEnabled = false
     var trackMode: TrackMode = .mixed
+    /// The track mode captured for the *current* recording session (plan M1/D3). Set at
+    /// `startRecording` from its optional `trackMode:` argument (default: the instance `trackMode`) and
+    /// consulted only at mix time, so a caller that needs separate mic/system tracks for one session
+    /// (meeting capture) never mutates the shared instance `trackMode` — the standalone Recorder keeps
+    /// the user's picker preference (verified leak hazard, plan Part A #3). `private(set)` so tests can
+    /// assert the captured value without being able to forge it.
+    private(set) var sessionTrackMode: TrackMode = .mixed
     var micDuckingMode: MicDuckingMode = .aggressive
 
     // 16kHz mono buffer for streaming transcription
@@ -632,7 +639,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func startRecording(micEnabled: Bool, systemAudioEnabled: Bool, format: OutputFormat) async throws -> URL {
+    /// - Parameter trackMode: The stereo layout for this session's final mix (plan M1/D3). `nil`
+    ///   (the default, preserving every existing call site) captures the current instance `trackMode`;
+    ///   an explicit value applies **only to this session** and does not touch the instance property —
+    ///   meeting capture passes `.separate` without leaking into the standalone Recorder's preference.
+    func startRecording(micEnabled: Bool, systemAudioEnabled: Bool, format: OutputFormat, trackMode: TrackMode? = nil) async throws -> URL {
         guard micEnabled || systemAudioEnabled else {
             throw RecorderError.noSourceEnabled
         }
@@ -640,6 +651,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         self.micEnabled = micEnabled
         self.systemAudioEnabled = systemAudioEnabled
         self.outputFormat = format
+        // Capture the per-session track mode before any suspension point, so the mix at stop time uses
+        // this session's layout regardless of a later change to the instance `trackMode` (D3).
+        self.sessionTrackMode = trackMode ?? self.trackMode
         resetSystemAudioMonitoring(systemAudioEnabled: systemAudioEnabled)
 
         // Clear transcription buffer
@@ -771,7 +785,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             do {
                 if micEnabled && systemAudioEnabled,
                    let micURL = micTempURL, let sysURL = systemTempURL {
-                    try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL)
+                    try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL, trackMode: sessionTrackMode)
                 } else if micEnabled, let micURL = micTempURL {
                     try copyOrConvert(from: micURL, to: finalURL)
                 } else if systemAudioEnabled, let sysURL = systemTempURL {
@@ -1072,7 +1086,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Audio Mixing
 
-    private func mixAudioFiles(micURL: URL, systemURL: URL, outputURL: URL) throws {
+    /// Mix (or split into separate mic/system channels) the two source recordings into `outputURL`.
+    /// `trackMode` is passed per-session by `stopRecording` (from `sessionTrackMode`) rather than read
+    /// from the instance property, so a session's layout is explicit and directly testable (M1/D3).
+    /// Both `.mixed` and `.separate` write a 2-channel file — only the channel *content* differs.
+    func mixAudioFiles(micURL: URL, systemURL: URL, outputURL: URL, trackMode: TrackMode) throws {
         let micFile = try AVAudioFile(forReading: micURL)
         let sysFile = try AVAudioFile(forReading: systemURL)
 
