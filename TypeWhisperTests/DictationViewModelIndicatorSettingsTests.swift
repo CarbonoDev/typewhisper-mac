@@ -837,6 +837,23 @@ final class DockIconVisibilityTests: XCTestCase {
 // Transcription/Updates). The meetings-first slim menu (D8) replaces that structure; its coverage
 // now lives in `MenuBarItemsTests` (SettingsRegroupTests.swift).
 
+@MainActor
+final class ManagedAppWindowRestorationTests: XCTestCase {
+    func testManagedWindowIsMarkedNonRestorable() {
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isRestorable = true
+
+        ManagedAppWindowRestoration.disable(for: window)
+
+        XCTAssertFalse(window.isRestorable)
+    }
+}
+
 final class MenuBarIconStateTests: XCTestCase {
     func testRecordingIndicatorIsActiveDuringDictationRecording() {
         XCTAssertTrue(
