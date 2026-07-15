@@ -109,6 +109,7 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     private let modelManager: ModelManagerService
     private let audioFileService: AudioFileService
+    private let dictionaryService: DictionaryService
     private let defaults: UserDefaults
     private let audioSamplesLoader: AudioSamplesLoader
     private let transcriptionRunner: TranscriptionRunner
@@ -129,6 +130,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     init(
         modelManager: ModelManagerService,
         audioFileService: AudioFileService,
+        dictionaryService: DictionaryService,
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         transcriptionRunner: TranscriptionRunner? = nil,
@@ -138,6 +140,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
+        self.dictionaryService = dictionaryService
         self.defaults = defaults
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url, onProgress, isCancelled in
             try await audioFileService.loadAudioSamples(from: url) { progress in
@@ -422,7 +425,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                 throw CancellationError()
             }
 
-            files[index].result = result
+            files[index].result = result.applyingCorrections(using: dictionaryService)
             files[index].state = .done
             files[index].phaseDescription = String(localized: "Done")
             files[index].progressFraction = 1.0
@@ -603,5 +606,32 @@ final class FileTranscriptionViewModel: ObservableObject {
         elapsedTimerTask?.cancel()
         elapsedTimerTask = nil
         elapsedRefreshDate = Date()
+    }
+}
+
+private extension TranscriptionResult {
+    @MainActor
+    func applyingCorrections(using dictionaryService: DictionaryService) -> TranscriptionResult {
+        let correctedTexts = dictionaryService.applyCorrections(
+            to: [text] + segments.map(\.text)
+        )
+        let correctedSegments = zip(segments, correctedTexts.dropFirst()).map { segment, correctedText in
+            TranscriptionSegment(
+                text: correctedText,
+                start: segment.start,
+                end: segment.end,
+                speakerLabel: segment.speakerLabel,
+                speakerConfidence: segment.speakerConfidence
+            )
+        }
+
+        return TranscriptionResult(
+            text: correctedTexts.first ?? text,
+            detectedLanguage: detectedLanguage,
+            duration: duration,
+            processingTime: processingTime,
+            engineUsed: engineUsed,
+            segments: correctedSegments
+        )
     }
 }
