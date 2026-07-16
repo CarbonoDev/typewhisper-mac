@@ -27835,6 +27835,22 @@
         }
       }
     },
+    "meetings.jobs.kind.participantBackfill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilnehmer werden erfasst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collecting participants"
+          }
+        }
+      }
+    },
     "meetings.jobs.progress.detectingLanguage": {
       "localizations": {
         "de": {

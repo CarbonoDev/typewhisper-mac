@@ -33,6 +33,12 @@ final class MeetingService: ObservableObject {
     var onFolderPathRewrite: ((String, String) -> Void)?
     /// Amendment 1 / M7 seam: invoked when a folder is deleted so M7 metadata can drop its config.
     var onFolderDeleted: ((String) -> Void)?
+    /// M2 seam (plan D7): invoked with the attendees written by every attendee choke point
+    /// (`createMeeting`, `linkToCalendarEvent`, `addAttendee`) so `ParticipantDirectoryService` can fold
+    /// them into the participant directory through its single `ingest(_:)` writer. `nil` until
+    /// `ServiceContainer` attaches it; meeting CRUD (and every existing unit test) works without it.
+    /// Removing an attendee deliberately does **not** fire this — a removal never deletes a Person.
+    var onAttendeesIngested: (([Attendee]) -> Void)?
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -95,6 +101,7 @@ final class MeetingService: ObservableObject {
         modelContext.insert(meeting)
         save()
         fetchMeetings()
+        if !attendees.isEmpty { onAttendeesIngested?(attendees) }
         return meeting
     }
 
@@ -169,6 +176,48 @@ final class MeetingService: ObservableObject {
         meeting.updatedAt = Date()
         save()
         fetchMeetings()
+        if !attendees.isEmpty { onAttendeesIngested?(attendees) }
+    }
+
+    /// Add a single attendee to a meeting's roster (M2 attendee choke point, plan D7). De-duplicates by
+    /// `Attendee.id` (email when present, else name) so re-adding is a no-op, appends to
+    /// `attendeesJSON`, and folds the attendee into the participant directory via the ingest seam.
+    /// Single-writer on the MainActor. Returns whether the roster actually changed.
+    @discardableResult
+    func addAttendee(_ attendee: Attendee, to meeting: Meeting) -> Bool {
+        let trimmedName = attendee.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = Attendee(
+            name: trimmedName,
+            email: (normalizedEmail?.isEmpty == false) ? normalizedEmail : nil,
+            isSelf: attendee.isSelf
+        )
+        guard !cleaned.name.isEmpty || cleaned.email != nil else { return false }
+        var roster = meeting.attendees
+        guard !roster.contains(where: { $0.id == cleaned.id }) else { return false }
+        roster.append(cleaned)
+        meeting.attendees = roster
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+        onAttendeesIngested?([cleaned])
+        return true
+    }
+
+    /// Remove an attendee from a meeting's roster (M2 attendee choke point, plan D7 / Part F #6). Matched
+    /// by `Attendee.id`. This **never** deletes the backing `Person` — the directory is decoupled from a
+    /// single meeting's roster (directory deletion is a separate settings action). Single-writer on the
+    /// MainActor. Returns whether the roster actually changed.
+    @discardableResult
+    func removeAttendee(_ attendee: Attendee, from meeting: Meeting) -> Bool {
+        let roster = meeting.attendees
+        let filtered = roster.filter { $0.id != attendee.id }
+        guard filtered.count != roster.count else { return false }
+        meeting.attendees = filtered
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+        return true
     }
 
     /// Unlink a meeting from its calendar event: clear the linkage identifiers (`calendarEventID`,

@@ -13,6 +13,8 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     case audioImport
     case diarization
     case export
+    /// One-time startup fold of every meeting's roster into the participant directory (plan D7, M2).
+    case participantBackfill
 
     /// The serial-execution lane a kind runs in (plan §0.1 lane table). LLM generation, transcription
     /// work, and I/O each get their own lane so they never contend across categories.
@@ -25,7 +27,8 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
             return .llm
         case .finalTranscription, .audioImport, .diarization:
             return .transcription
-        case .export:
+        case .export, .participantBackfill:
+            // Both are pure I/O over the local stores — no LLM or transcription contention.
             return .io
         }
     }
@@ -113,6 +116,7 @@ extension MeetingJobKind {
         case .audioImport: return String(localized: "meetings.jobs.kind.audioImport")
         case .diarization: return String(localized: "meetings.jobs.kind.diarization")
         case .export: return String(localized: "meetings.jobs.kind.export")
+        case .participantBackfill: return String(localized: "meetings.jobs.kind.participantBackfill")
         }
     }
 }

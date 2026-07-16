@@ -265,6 +265,9 @@
 		AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000501 /* MeetingLanguageDirective.swift */; };
 		AA00000000000000000502 /* MeetingLanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000502 /* MeetingLanguageService.swift */; };
 		AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000601 /* MeetingOrganizationIndex.swift */; };
+		P2B0000000000000000001 /* Person.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000001 /* Person.swift */; };
+		P2B0000000000000000002 /* PersonIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000002 /* PersonIdentity.swift */; };
+		P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000003 /* ParticipantDirectoryService.swift */; };
 		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
 		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
 		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
@@ -277,6 +280,9 @@
 		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
 		MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */; };
 		M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */; };
+		P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000101 /* PersonIdentityTests.swift */; };
+		P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */; };
+		P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
@@ -879,6 +885,9 @@
 		BB00000000000000000501 /* MeetingLanguageDirective.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDirective.swift; sourceTree = "<group>"; };
 		BB00000000000000000502 /* MeetingLanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageService.swift; sourceTree = "<group>"; };
 		BB00000000000000000601 /* MeetingOrganizationIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndex.swift; sourceTree = "<group>"; };
+		P2F0000000000000000001 /* Person.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Person.swift; sourceTree = "<group>"; };
+		P2F0000000000000000002 /* PersonIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonIdentity.swift; sourceTree = "<group>"; };
+		P2F0000000000000000003 /* ParticipantDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryService.swift; sourceTree = "<group>"; };
 		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
 		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
 		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
@@ -891,6 +900,9 @@
 		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerLabelSuppressionTests.swift; sourceTree = "<group>"; };
 		M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderTrackModeTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000101 /* PersonIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonIdentityTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryServiceTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAttendeeIngestionTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
@@ -1792,6 +1804,7 @@
 				BB00000000000000000243 /* ErrorLogEntry.swift */,
 				BB00000000000000000381 /* MeetingEnums.swift */,
 				BB00000000000000000382 /* Attendee.swift */,
+				P2F0000000000000000001 /* Person.swift */,
 				BB00000000000000000375 /* Meeting.swift */,
 				CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */,
 				CCB000000000000000000001 /* MeetingContextRule.swift */,
@@ -2074,6 +2087,8 @@
 				BB00000000000000000501 /* MeetingLanguageDirective.swift */,
 				BB00000000000000000502 /* MeetingLanguageService.swift */,
 				BB00000000000000000601 /* MeetingOrganizationIndex.swift */,
+				P2F0000000000000000002 /* PersonIdentity.swift */,
+				P2F0000000000000000003 /* ParticipantDirectoryService.swift */,
 				JQF0000000000000000001 /* MeetingJob.swift */,
 				JQF0000000000000000003 /* MeetingJobClock.swift */,
 				SPAF000000000000000001 /* SpeakerSourcePlan.swift */,
@@ -2783,6 +2798,9 @@
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
 				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
 				M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */,
+				P2F0000000000000000101 /* PersonIdentityTests.swift */,
+				P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */,
+				P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
 				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
 				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
@@ -4330,6 +4348,9 @@
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
 				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
 				M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */,
+				P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */,
+				P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */,
+				P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
 				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
 				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,
@@ -4541,6 +4562,9 @@
 				AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */,
 				AA00000000000000000502 /* MeetingLanguageService.swift in Sources */,
 				AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */,
+				P2B0000000000000000001 /* Person.swift in Sources */,
+				P2B0000000000000000002 /* PersonIdentity.swift in Sources */,
+				P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */,
 				CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */,
 				CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
