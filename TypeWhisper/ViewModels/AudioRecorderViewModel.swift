@@ -533,20 +533,32 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func stopRecording(apiSessionID: UUID?) {
         let recordingDuration = duration
+        let shouldTranscribe = transcriptionEnabled
+
+        // Flip out of `.recording` immediately so the recording timer/widget disappears
+        // the instant Stop is pressed, instead of staying up while audio finalization
+        // and transcription run (which can take a while for long recordings).
+        state = .finalizing
 
         Task {
-            let liveSessionResult = await streamingHandler.finish()
-            let url = await recorderService.stopRecording()
+            let stoppedRecording = await recorderService.stopCapture(
+                includeTranscriptionSamples: shouldTranscribe
+            )
+            async let liveSessionResultTask = streamingHandler.finish(
+                finalSamples: stoppedRecording.transcriptionSamples
+            )
+            async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
+            let (liveSessionResult, url) = await (liveSessionResultTask, finalizedURLTask)
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
-            if transcriptionEnabled, let url {
+            if shouldTranscribe, let url {
                 reconcileSelectionWithAvailablePlugins()
                 let providerId = effectiveProviderId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
-                    buffer: recorderService.getCurrentBuffer(),
+                    buffer: stoppedRecording.transcriptionSamples,
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,
@@ -555,7 +567,6 @@ final class AudioRecorderViewModel: ObservableObject {
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult
                 )
-                state = .finalizing
                 if let apiSessionID {
                     markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
                 }
