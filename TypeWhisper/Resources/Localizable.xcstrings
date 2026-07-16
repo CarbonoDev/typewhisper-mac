@@ -32882,6 +32882,86 @@
           }
         }
       }
+    },
+    "Could Not Remove Plugin Bundle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin-Bundle konnte nicht entfernt werden"
+          }
+        }
+      }
+    },
+    "Remove %@? This will delete the incompatible plugin bundle, its stored data, and its credentials.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ entfernen? Dadurch werden das inkompatible Plugin-Bundle, seine gespeicherten Daten und seine Zugangsdaten gelöscht."
+          }
+        }
+      }
+    },
+    "Remove Incompatible Plugin Bundle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inkompatibles Plugin-Bundle entfernen"
+          }
+        }
+      }
+    },
+    "Remove incompatible bundle for %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inkompatibles Bundle für %@ entfernen"
+          }
+        }
+      }
+    },
+    "Replace %@ with the Marketplace version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ durch die Marketplace-Version ersetzen"
+          }
+        }
+      }
+    },
+    "Replace with Marketplace Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durch Marketplace-Version ersetzen"
+          }
+        }
+      }
+    },
+    "The incompatible plugin bundle is outside the managed Plugins folder and cannot be removed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das inkompatible Plugin-Bundle liegt außerhalb des verwalteten Plugins-Ordners und kann nicht entfernt werden."
+          }
+        }
+      }
+    },
+    "This incompatible plugin bundle is no longer registered.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses inkompatible Plugin-Bundle ist nicht mehr registriert."
+          }
+        }
+      }
     }
   },
   "version": "1.1"
