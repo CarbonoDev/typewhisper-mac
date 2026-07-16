@@ -86,35 +86,74 @@ final class MeetingModelRouter {
         normalized(defaults.string(forKey: purpose.modelDefaultsKey))
     }
 
-    // MARK: - Call-time override (template > purpose; nil = inherit app default)
+    // MARK: - Call-time override (one-shot > template > purpose; nil = inherit app default)
 
-    /// The provider to pass to `process(providerOverride:)`: `template ?? purpose`, `nil` to inherit the
-    /// app default. `templateProvider` is the resolved template's `providerType` (nil for template-less
-    /// purposes).
-    func overrideProvider(for purpose: MeetingModelPurpose, templateProvider: String? = nil) -> String? {
-        normalized(templateProvider) ?? purposeProvider(for: purpose)
+    /// The provider to pass to `process(providerOverride:)`: `one-shot ?? template ?? purpose`, `nil` to
+    /// inherit the app default. `templateProvider` is the resolved template's `providerType` (nil for
+    /// template-less purposes). `oneShotProvider` (plan M5/D10) is a per-run override chosen from a
+    /// Generate/Regenerate menu; it wins for that run and is never persisted (existing call sites pass
+    /// nil = today's behavior).
+    func overrideProvider(
+        for purpose: MeetingModelPurpose,
+        templateProvider: String? = nil,
+        oneShotProvider: String? = nil
+    ) -> String? {
+        normalized(oneShotProvider) ?? normalized(templateProvider) ?? purposeProvider(for: purpose)
     }
 
-    /// The model to pass to `process(cloudModelOverride:)`: `template ?? purpose`, `nil` to inherit the
-    /// app default.
-    func overrideModel(for purpose: MeetingModelPurpose, templateModel: String? = nil) -> String? {
-        normalized(templateModel) ?? purposeModel(for: purpose)
+    /// The model to pass to `process(cloudModelOverride:)`: `one-shot ?? template ?? purpose`, `nil` to
+    /// inherit the app default.
+    ///
+    /// `oneShotProvider` pins the model dimension to that provider (M5 review finding): when a one-shot
+    /// provider is chosen without a one-shot model (the menus emit `action(provider.id, nil)` for a
+    /// provider with an empty model list), a nil one-shot model means "that provider's own default
+    /// model", NOT the template/purpose model — which belongs to a *different* provider. So the ladder
+    /// stops at the one-shot rung (returns nil) rather than bleeding a foreign model under the one-shot
+    /// provider. Execution defuses a foreign model via `resolvedModelId`, but `effectiveModel` (below)
+    /// would otherwise record it, contradicting D10 ("provenance always records what actually ran").
+    func overrideModel(
+        for purpose: MeetingModelPurpose,
+        templateModel: String? = nil,
+        oneShotModel: String? = nil,
+        oneShotProvider: String? = nil
+    ) -> String? {
+        if let model = normalized(oneShotModel) { return model }
+        if normalized(oneShotProvider) != nil { return nil }
+        return normalized(templateModel) ?? purposeModel(for: purpose)
     }
 
-    // MARK: - Effective value (template > purpose > app default) — provenance + settings display
+    // MARK: - Effective value (one-shot > template > purpose > app default) — provenance + settings display
 
-    /// The provider that will actually run: `template ?? purpose ?? appDefault`. `nil` only when even
-    /// the app default is empty. This is what `providerUsed` records so provenance never lies.
-    func effectiveProvider(for purpose: MeetingModelPurpose, templateProvider: String? = nil) -> String? {
-        overrideProvider(for: purpose, templateProvider: templateProvider)
+    /// The provider that will actually run: `one-shot ?? template ?? purpose ?? appDefault`. `nil` only
+    /// when even the app default is empty. This is what `providerUsed` records so provenance never lies —
+    /// including a one-shot override (plan M5: "provenance always records what actually ran").
+    func effectiveProvider(
+        for purpose: MeetingModelPurpose,
+        templateProvider: String? = nil,
+        oneShotProvider: String? = nil
+    ) -> String? {
+        overrideProvider(for: purpose, templateProvider: templateProvider, oneShotProvider: oneShotProvider)
             ?? normalized(processor.selectedProviderId)
     }
 
-    /// The model that will actually run: `template ?? purpose ?? appDefault`. `nil` when even the app
-    /// default is empty (e.g. a provider with no model dimension).
-    func effectiveModel(for purpose: MeetingModelPurpose, templateModel: String? = nil) -> String? {
-        overrideModel(for: purpose, templateModel: templateModel)
-            ?? normalized(processor.selectedCloudModel)
+    /// The model that will actually run: `one-shot ?? template ?? purpose ?? appDefault`. `nil` when even
+    /// the app default is empty (e.g. a provider with no model dimension).
+    func effectiveModel(
+        for purpose: MeetingModelPurpose,
+        templateModel: String? = nil,
+        oneShotModel: String? = nil,
+        oneShotProvider: String? = nil
+    ) -> String? {
+        if let override = overrideModel(
+            for: purpose, templateModel: templateModel, oneShotModel: oneShotModel, oneShotProvider: oneShotProvider
+        ) {
+            return override
+        }
+        // Only inherit the app-default model when no one-shot provider pinned the model dimension: a
+        // one-shot provider chosen without a model runs that provider's own default (which we can't name
+        // here), so record no model rather than the app default of a *different* provider (M5 finding).
+        if normalized(oneShotProvider) != nil { return nil }
+        return normalized(processor.selectedCloudModel)
     }
 
     // MARK: - App default (for the settings display of the "Use app default" rung)

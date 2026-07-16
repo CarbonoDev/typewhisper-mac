@@ -109,6 +109,37 @@ final class SpeakerSourcePlanTests: XCTestCase {
         XCTAssertEqual(source, .pyannote(numSpeakers: 3))
     }
 
+    // MARK: - [M5 finding] Provider labels present resolve `.cloud` regardless of the preference
+
+    /// The plan's pure core (`MeetingsViewModel.plannedSpeakerSource`) resolves `.cloud` whenever provider
+    /// labels are already on the transcript — even with the "prefer provider labels" preference OFF. The
+    /// preference gates *automatic adoption* at finalize, not the display of labels an explicit "Identify
+    /// with <cloud engine>" pick already wrote; otherwise the section stays stuck on the pyannote caption
+    /// over cloud-labeled segments, inviting a pyannote pass that would overwrite them.
+    @MainActor
+    func testProviderLabelsResolveCloudEvenWhenPreferenceOff() {
+        let source = MeetingsViewModel.plannedSpeakerSource(
+            segmentsHaveProviderLabels: true,
+            preferProviderLabels: false,
+            effectiveParticipantCount: 2,
+            trackAvailability: .separateTrack
+        )
+        XCTAssertEqual(source, .cloud)
+    }
+
+    /// With NO provider labels present, the preference still gates the rung as before: preference OFF on a
+    /// two-person separate-track recording falls through to the channel path (behavior unchanged).
+    @MainActor
+    func testNoProviderLabelsStillHonorsPreferenceOff() {
+        let source = MeetingsViewModel.plannedSpeakerSource(
+            segmentsHaveProviderLabels: false,
+            preferProviderLabels: false,
+            effectiveParticipantCount: 2,
+            trackAvailability: .separateTrack
+        )
+        XCTAssertEqual(source, .channel)
+    }
+
     // MARK: - Effective participant count (D-A4)
 
     private func makeStore() throws -> MeetingService {

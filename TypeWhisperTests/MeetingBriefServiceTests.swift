@@ -372,6 +372,37 @@ final class MeetingBriefServiceTests: XCTestCase {
         XCTAssertEqual(output.modelUsed, "claude-3")
     }
 
+    /// [M4 carried minor] Brief provenance follows the purpose rung. Mirrors the summaries-purpose
+    /// provenance test against the brief service: with a `.brief` template carrying **no** provider/model
+    /// and the `briefs` purpose keys set, the call uses the purpose override and the persisted brief
+    /// records the purpose values (`template ?? purpose ?? app default` — the template rung is empty so
+    /// the purpose wins).
+    func testBriefRecordsPurposeAsProvenanceWhenTemplateHasNoModel() async throws {
+        let defaults = makeDefaults()
+        defaults.set("purpose-p", forKey: UserDefaultsKeys.meetingsModelBriefsProviderId)
+        defaults.set("purpose-m", forKey: UserDefaultsKeys.meetingsModelBriefsModel)
+        let service = try makeService()
+        let vault = try makeConnectedVault(defaults: defaults)
+        let prompts = try makePromptActionService(defaults: defaults)
+        // A template without provider/model, so the briefs purpose rung applies.
+        try addBriefTemplate(to: prompts, prompt: "CUSTOM_BRIEF_INSTRUCTION")
+        let stub = StubProcessor()
+        let router = MeetingModelRouter(processor: stub, defaults: defaults)
+        let brief = MeetingBriefService(
+            meetingService: service, vaultService: vault, processor: stub,
+            promptActionService: prompts, modelRouter: router
+        )
+
+        let target = seedMeetings(on: service)
+        let output = try await brief.generateBrief(for: target)
+
+        // The call used the purpose override, and provenance records the same effective value.
+        XCTAssertEqual(stub.calls.first?.providerOverride, "purpose-p")
+        XCTAssertEqual(stub.calls.first?.cloudModelOverride, "purpose-m")
+        XCTAssertEqual(output.providerUsed, "purpose-p")
+        XCTAssertEqual(output.modelUsed, "purpose-m")
+    }
+
     // MARK: - M8: curated related-docs consumption (Amendment 2, DB5)
 
     /// A connected vault with three equally query-matching "Acme" notes, each carrying a unique marker

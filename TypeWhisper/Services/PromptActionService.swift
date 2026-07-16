@@ -310,6 +310,21 @@ class PromptActionService: ObservableObject {
         return action
     }
 
+    /// [M5/D10] Persist a one-shot model pick as the template's own default ("Save as default…" for a
+    /// templated run). Writes only the `providerType`/`cloudModel` overrides on the row (empty/nil = "use
+    /// app default"), leaving prompt/name/temperature untouched, then saves and reloads. This is the
+    /// template rung of the routing ladder, so a saved default takes effect for every future run of the
+    /// template (adjudication Part A #6: a purpose-level save would be silently masked by the template).
+    func setModelDefault(provider: String?, model: String?, for action: PromptAction) {
+        guard modelContext != nil else { return }
+        let trimmedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        action.providerType = (trimmedProvider?.isEmpty == false) ? trimmedProvider : nil
+        action.cloudModel = (trimmedModel?.isEmpty == false) ? trimmedModel : nil
+        action.updatedAt = Date()
+        saveAndReload("save template model default")
+    }
+
     /// Apply an edited spec to an existing meeting-surface row.
     func updateMeetingTemplate(_ action: PromptAction, with spec: PromptTemplateSpec) {
         guard modelContext != nil else { return }

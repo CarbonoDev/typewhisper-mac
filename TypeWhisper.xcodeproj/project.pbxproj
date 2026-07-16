@@ -266,6 +266,8 @@
 		AA00000000000000000502 /* MeetingLanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000502 /* MeetingLanguageService.swift */; };
 		MRB0000000000000000001 /* MeetingModelRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRF0000000000000000001 /* MeetingModelRouter.swift */; };
 		MRB0000000000000000002 /* MeetingModelRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRF0000000000000000002 /* MeetingModelRouterTests.swift */; };
+		M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */; };
+		M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */; };
 		AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000601 /* MeetingOrganizationIndex.swift */; };
 		P2B0000000000000000001 /* Person.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000001 /* Person.swift */; };
 		P2B0000000000000000002 /* PersonIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000002 /* PersonIdentity.swift */; };
@@ -891,6 +893,8 @@
 		BB00000000000000000502 /* MeetingLanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageService.swift; sourceTree = "<group>"; };
 		MRF0000000000000000001 /* MeetingModelRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingModelRouter.swift; sourceTree = "<group>"; };
 		MRF0000000000000000002 /* MeetingModelRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelRouterTests.swift; sourceTree = "<group>"; };
+		M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOneShotOverrideTests.swift; sourceTree = "<group>"; };
+		M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerCloudRerunTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000601 /* MeetingOrganizationIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndex.swift; sourceTree = "<group>"; };
 		P2F0000000000000000001 /* Person.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Person.swift; sourceTree = "<group>"; };
 		P2F0000000000000000002 /* PersonIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonIdentity.swift; sourceTree = "<group>"; };
@@ -2799,6 +2803,8 @@
 				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
 				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
 				MRF0000000000000000002 /* MeetingModelRouterTests.swift */,
+				M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */,
+				M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
 				MEF0000000000000000701 /* MeetingListFilterTests.swift */,
 				MEF0000000000000000702 /* MeetingListSelectionTests.swift */,
@@ -4352,6 +4358,8 @@
 				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
 				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
 				MRB0000000000000000002 /* MeetingModelRouterTests.swift in Sources */,
+				M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */,
+				M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
 				MEB0000000000000000701 /* MeetingListFilterTests.swift in Sources */,
 				MEB0000000000000000702 /* MeetingListSelectionTests.swift in Sources */,

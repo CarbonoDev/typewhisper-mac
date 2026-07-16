@@ -75,8 +75,18 @@ final class MeetingLLMService: ObservableObject {
     /// Generate an output for `meeting` from `template`, persist it as a new `MeetingOutput`, and
     /// return it. Regeneration always inserts a new row (history retained; the UI shows the
     /// newest per kind — plan D15). Throws if the meeting has no transcript, or the LLM call fails.
+    ///
+    /// `providerOverride`/`modelOverride` (plan M5/D10) are a one-shot pick from a Generate/Regenerate
+    /// menu: they win the routing ladder for *this run only* (`one-shot > template > purpose > app
+    /// default`) and are persisted nowhere — only recorded in the output's provenance. Both default nil,
+    /// so existing call sites keep today's `template > purpose > app default` behavior.
     @discardableResult
-    func generateOutput(for meeting: Meeting, using template: PromptAction) async throws -> MeetingOutput {
+    func generateOutput(
+        for meeting: Meeting,
+        using template: PromptAction,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) async throws -> MeetingOutput {
         // Double-generation is prevented primarily by the job queue (plan J1/J2): the summary/extended
         // job dedupes on `(kind, meetingID)`, so a rapid double-click is dropped before this call ever
         // runs a second time. This synchronous flag is the last line of defense for any path that
@@ -117,7 +127,9 @@ final class MeetingLLMService: ObservableObject {
             template: template,
             transcript: transcript,
             notes: notesBlock,
-            languageDirective: languageDirective
+            languageDirective: languageDirective,
+            providerOverride: providerOverride,
+            modelOverride: modelOverride
         )
 
         return meetingService.addOutput(
@@ -125,8 +137,8 @@ final class MeetingLLMService: ObservableObject {
             kind: template.meetingKind ?? .summary,
             content: content,
             templateID: template.id,
-            providerUsed: resolvedProvider(for: template),
-            modelUsed: resolvedModel(for: template)
+            providerUsed: resolvedProvider(for: template, oneShotProvider: providerOverride),
+            modelUsed: resolvedModel(for: template, oneShotModel: modelOverride, oneShotProvider: providerOverride)
         )
     }
 
@@ -226,7 +238,9 @@ final class MeetingLLMService: ObservableObject {
         template: PromptAction,
         transcript: String,
         notes: String,
-        languageDirective: String?
+        languageDirective: String?,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
     ) async throws -> String {
         let chunks = TranscriptContextBuilder.chunk(transcript, charBudget: charBudget)
 
@@ -237,7 +251,9 @@ final class MeetingLLMService: ObservableObject {
             return try await run(
                 template: template,
                 prompt: MeetingLanguageDirective.appending(languageDirective, to: template.prompt),
-                text: userText
+                text: userText,
+                providerOverride: providerOverride,
+                modelOverride: modelOverride
             )
         }
 
@@ -250,7 +266,10 @@ final class MeetingLLMService: ObservableObject {
         var partials: [String] = []
         partials.reserveCapacity(chunks.count)
         for (index, chunk) in chunks.enumerated() {
-            let partial = try await run(template: template, prompt: mapPrompt, text: chunk)
+            let partial = try await run(
+                template: template, prompt: mapPrompt, text: chunk,
+                providerOverride: providerOverride, modelOverride: modelOverride
+            )
             let trimmed = partial.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 let header = String(
@@ -275,21 +294,30 @@ final class MeetingLLMService: ObservableObject {
         return try await run(
             template: template,
             prompt: MeetingLanguageDirective.appending(languageDirective, to: template.prompt),
-            text: reduceInput
+            text: reduceInput,
+            providerOverride: providerOverride,
+            modelOverride: modelOverride
         )
     }
 
-    private func run(template: PromptAction, prompt: String, text: String) async throws -> String {
-        // Plan D9/M4: `template > purpose(summariesAnalysis) > app default`, resolved per call. A nil
-        // override inherits the app default (unchanged when both template and purpose are unset).
+    private func run(
+        template: PromptAction,
+        prompt: String,
+        text: String,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) async throws -> String {
+        // Plan D9/M4 + D10/M5: `one-shot > template > purpose(summariesAnalysis) > app default`, resolved
+        // per call. A nil one-shot AND nil template/purpose inherits the app default (today's behavior).
         try await processor.process(
             prompt: prompt,
             text: text,
             providerOverride: modelRouter.overrideProvider(
-                for: .summariesAnalysis, templateProvider: template.providerType
+                for: .summariesAnalysis, templateProvider: template.providerType, oneShotProvider: providerOverride
             ),
             cloudModelOverride: modelRouter.overrideModel(
-                for: .summariesAnalysis, templateModel: template.cloudModel
+                for: .summariesAnalysis, templateModel: template.cloudModel,
+                oneShotModel: modelOverride, oneShotProvider: providerOverride
             ),
             temperatureDirective: template.temperatureDirective,
             skipMemoryInjection: true
@@ -299,16 +327,23 @@ final class MeetingLLMService: ObservableObject {
     // MARK: - Provenance
 
     /// Provider recorded on the output: the effective value that actually ran under the full ladder
-    /// `template > purpose(summariesAnalysis) > app default` (plan D9/M4 — provenance must follow the
-    /// same rungs the call does so `providerUsed` never lies).
-    private func resolvedProvider(for template: PromptAction) -> String? {
-        modelRouter.effectiveProvider(for: .summariesAnalysis, templateProvider: template.providerType)
+    /// `one-shot > template > purpose(summariesAnalysis) > app default` (plan D9/M4 + D10/M5 — provenance
+    /// must follow the same rungs the call does so `providerUsed` never lies, including a one-shot pick).
+    private func resolvedProvider(for template: PromptAction, oneShotProvider: String? = nil) -> String? {
+        modelRouter.effectiveProvider(
+            for: .summariesAnalysis, templateProvider: template.providerType, oneShotProvider: oneShotProvider
+        )
     }
 
     /// Model recorded on the output: the effective value under the same ladder (nil when even the app
     /// default is empty, e.g. a provider with no model dimension).
-    private func resolvedModel(for template: PromptAction) -> String? {
-        modelRouter.effectiveModel(for: .summariesAnalysis, templateModel: template.cloudModel)
+    private func resolvedModel(
+        for template: PromptAction, oneShotModel: String? = nil, oneShotProvider: String? = nil
+    ) -> String? {
+        modelRouter.effectiveModel(
+            for: .summariesAnalysis, templateModel: template.cloudModel,
+            oneShotModel: oneShotModel, oneShotProvider: oneShotProvider
+        )
     }
 
     /// The mapped attendee name for a segment's speaker label, if any (populated by M9). Inert

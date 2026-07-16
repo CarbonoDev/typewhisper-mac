@@ -122,6 +122,33 @@ final class AudioRecorderTrackModeTests: XCTestCase {
         XCTAssertNotEqual(left[mid], right[mid])
     }
 
+    /// [M1/D3 carried minor] A single-source session (mic-only or system-only) is unaffected by
+    /// `.separate`: `stopRecording` routes a lone source through `copyOrConvert` (never the both-sources
+    /// mix), so the stored file stays exactly what was captured — a mono track, not a phantom-channel
+    /// stereo file. `copyOrConvert` takes no track mode, so setting the instance preference to `.separate`
+    /// changes nothing. Proves no phantom empty channel is ever written for one source (adjudication A#2).
+    func testSingleSourceSessionUnaffectedBySeparateTrackMode() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let recorder = makeOverriddenRecorder(recordingsDirectory: dir.appendingPathComponent("rec"))
+        recorder.trackMode = .separate // even with the separate preference set…
+
+        let sr = 16_000.0
+        let micURL = dir.appendingPathComponent("mic.wav")
+        let outURL = dir.appendingPathComponent("out.wav")
+        try writeMonoWAV(value: 0.4, seconds: 1, sampleRate: sr, to: micURL)
+
+        // …the single-source finalizer copies the one mono track verbatim.
+        try recorder.copyOrConvert(from: micURL, to: outURL)
+
+        let outFile = try AVAudioFile(forReading: outURL)
+        XCTAssertEqual(outFile.processingFormat.channelCount, 1, "a single-source recording stays mono — no phantom second channel")
+        let buffer = AVAudioPCMBuffer(pcmFormat: outFile.processingFormat, frameCapacity: AVAudioFrameCount(outFile.length))!
+        try outFile.read(into: buffer)
+        let mid = Int(buffer.frameLength) / 2
+        XCTAssertEqual(Double(buffer.floatChannelData![0][mid]), 0.4, accuracy: 0.02, "the captured mic content is preserved unchanged")
+    }
+
     /// Mixed mode duplicates the same mic+system mix into both channels — the pre-fix behavior that
     /// the meeting path must NOT use. Proves the track mode parameter is actually honored (the two
     /// layouts diverge for identical inputs).

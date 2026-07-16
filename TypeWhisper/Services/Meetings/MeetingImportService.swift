@@ -13,6 +13,29 @@ protocol MeetingAudioTranscribing: AnyObject {
         samples: [Float],
         languageSelection: LanguageSelection
     ) async throws -> TranscriptionResult
+
+    /// [M5/D10] Re-transcribe meeting audio through a chosen speaker-capable cloud engine so its own
+    /// diarization writes per-segment speaker labels (adopted via the `preferProviderLabels` path). The
+    /// default implementation forwards to `transcribeImportedAudio` (dropping the override), so predating
+    /// stubs that only implement the base method still conform; `ModelManagerService` supplies the real
+    /// engine-override call below.
+    func transcribeMeetingAudio(
+        samples: [Float],
+        languageSelection: LanguageSelection,
+        engineOverrideId: String?,
+        cloudModelOverride: String?
+    ) async throws -> TranscriptionResult
+}
+
+extension MeetingAudioTranscribing {
+    func transcribeMeetingAudio(
+        samples: [Float],
+        languageSelection: LanguageSelection,
+        engineOverrideId: String?,
+        cloudModelOverride: String?
+    ) async throws -> TranscriptionResult {
+        try await transcribeImportedAudio(samples: samples, languageSelection: languageSelection)
+    }
 }
 
 extension ModelManagerService: MeetingAudioTranscribing {
@@ -24,6 +47,22 @@ extension ModelManagerService: MeetingAudioTranscribing {
             audioSamples: samples,
             languageSelection: languageSelection,
             task: .transcribe,
+            onProgress: { _ in true }
+        )
+    }
+
+    func transcribeMeetingAudio(
+        samples: [Float],
+        languageSelection: LanguageSelection,
+        engineOverrideId: String?,
+        cloudModelOverride: String?
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: samples,
+            languageSelection: languageSelection,
+            task: .transcribe,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
             onProgress: { _ in true }
         )
     }

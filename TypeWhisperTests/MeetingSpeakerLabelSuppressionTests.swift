@@ -182,26 +182,40 @@ final class MeetingSpeakerLabelSuppressionTests: XCTestCase {
         await jobQueue.drain()
     }
 
-    // MARK: - [M1/D2] Never co-render a path caption with a contradictory status
+    // MARK: - [M1/D2] Never co-render a path caption with a *contradictory* status
 
-    /// A resolved `.channel`/`.cloud` path names a labeling source, so a "no path" status (e.g. the
-    /// persisted "unavailable" line — the owner's screenshot) must be suppressed beneath it.
-    func testStatusSuppressedUnderResolvedChannelAndCloudPaths() {
-        let status = "Speaker identification is unavailable."
-        XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(status, under: .channel))
-        XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(status, under: .cloud))
+    /// Only the "no path" outcomes (`.unavailable`/`.noAudio`) contradict a resolved `.channel`/`.cloud`
+    /// path (a resolved source and "there is no path" cannot both be true), so those are suppressed
+    /// beneath it — the owner's screenshot.
+    func testNoPathStatusSuppressedUnderResolvedChannelAndCloudPaths() {
+        for source in [SpeakerSource.channel, .cloud] {
+            XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(.unavailable, under: source))
+            XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(.noAudio, under: source))
+        }
     }
 
-    /// The pyannote / none / not-yet-resolved paths may still surface a legitimate status.
+    /// [M5 fix of the deferred M1 minor] A Redo under a `.channel`/`.cloud` plan can legitimately return
+    /// `.timelineMismatch` or `.noSpeakersDetected` — those are real results, not "no path", so they stay
+    /// visible even under a resolved path (the earlier blanket suppression swallowed them, leaving zero
+    /// feedback).
+    func testMeaningfulStatusStaysVisibleUnderChannelAndCloudPaths() {
+        for source in [SpeakerSource.channel, .cloud] {
+            XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(.timelineMismatch, under: source))
+            XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(.noSpeakersDetected, under: source))
+        }
+    }
+
+    /// The pyannote / none / not-yet-resolved paths may surface any legitimate status, including the
+    /// "no path" ones (there is genuinely no resolved source to contradict).
     func testStatusShownUnderPyannoteNoneAndUnresolvedPaths() {
-        let status = "No speakers detected."
-        XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(status, under: .pyannote(numSpeakers: nil)))
-        XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(status, under: SpeakerSource.none))
-        XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(status, under: nil))
+        for source: SpeakerSource? in [.pyannote(numSpeakers: nil), SpeakerSource.none, nil] {
+            XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(.noSpeakersDetected, under: source))
+            XCTAssertTrue(MeetingsViewModel.showsDiarizationStatus(.unavailable, under: source))
+        }
     }
 
-    /// A nil status never renders, regardless of the resolved path.
-    func testNilStatusNeverShown() {
+    /// A nil outcome never renders, regardless of the resolved path.
+    func testNilOutcomeNeverShown() {
         XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(nil, under: .pyannote(numSpeakers: 2)))
         XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(nil, under: SpeakerSource.none))
         XCTAssertFalse(MeetingsViewModel.showsDiarizationStatus(nil, under: .channel))

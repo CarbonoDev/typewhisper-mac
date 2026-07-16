@@ -58,8 +58,17 @@ final class MeetingBriefService: ObservableObject {
 
     /// Build and persist a brief for `meeting`. Regeneration inserts a new `.brief` row; the UI
     /// shows the newest (history retained — plan D15).
+    ///
+    /// `providerOverride`/`modelOverride` (plan M5/D10) are a one-shot pick from a Generate/Regenerate
+    /// menu: they win the routing ladder for *this run only* (`one-shot > template > purpose(briefs) >
+    /// app default`) and persist nowhere — only recorded in the output's provenance. Both default nil, so
+    /// existing call sites keep today's behavior.
     @discardableResult
-    func generateBrief(for meeting: Meeting) async throws -> MeetingOutput {
+    func generateBrief(
+        for meeting: Meeting,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) async throws -> MeetingOutput {
         // Synchronous re-entrancy guard (mirrors `MeetingLLMService`): claim the flag before the
         // first `await` so a double-click can't launch two concurrent briefs.
         guard !isGenerating else { throw MeetingBriefError.alreadyGenerating }
@@ -90,15 +99,16 @@ final class MeetingBriefService: ObservableObject {
             for: meeting.languageCode,
             to: basePrompt
         )
-        // Plan D9/M4: `template > purpose(briefs) > app default`, resolved per call.
+        // Plan D9/M4 + D10/M5: `one-shot > template > purpose(briefs) > app default`, resolved per call.
         let content = try await processor.process(
             prompt: systemPrompt,
             text: context,
             providerOverride: modelRouter.overrideProvider(
-                for: .briefs, templateProvider: template?.providerType
+                for: .briefs, templateProvider: template?.providerType, oneShotProvider: providerOverride
             ),
             cloudModelOverride: modelRouter.overrideModel(
-                for: .briefs, templateModel: template?.cloudModel
+                for: .briefs, templateModel: template?.cloudModel,
+                oneShotModel: modelOverride, oneShotProvider: providerOverride
             ),
             temperatureDirective: template?.temperatureDirective ?? .inheritProviderSetting,
             skipMemoryInjection: true
@@ -109,8 +119,8 @@ final class MeetingBriefService: ObservableObject {
             kind: .brief,
             content: content,
             templateID: template?.id,
-            providerUsed: resolvedProvider(for: template),
-            modelUsed: resolvedModel(for: template)
+            providerUsed: resolvedProvider(for: template, oneShotProvider: providerOverride),
+            modelUsed: resolvedModel(for: template, oneShotModel: modelOverride, oneShotProvider: providerOverride)
         )
     }
 
@@ -258,15 +268,22 @@ final class MeetingBriefService: ObservableObject {
 
     // MARK: - Provenance
 
-    /// Provider recorded on the brief: the effective value under `template > purpose(briefs) > app
-    /// default` (plan D9/M4 — provenance follows the same rungs the call does).
-    private func resolvedProvider(for template: PromptAction?) -> String? {
-        modelRouter.effectiveProvider(for: .briefs, templateProvider: template?.providerType)
+    /// Provider recorded on the brief: the effective value under `one-shot > template > purpose(briefs) >
+    /// app default` (plan D9/M4 + D10/M5 — provenance follows the same rungs the call does).
+    private func resolvedProvider(for template: PromptAction?, oneShotProvider: String? = nil) -> String? {
+        modelRouter.effectiveProvider(
+            for: .briefs, templateProvider: template?.providerType, oneShotProvider: oneShotProvider
+        )
     }
 
     /// Model recorded on the brief: the effective value under the same ladder.
-    private func resolvedModel(for template: PromptAction?) -> String? {
-        modelRouter.effectiveModel(for: .briefs, templateModel: template?.cloudModel)
+    private func resolvedModel(
+        for template: PromptAction?, oneShotModel: String? = nil, oneShotProvider: String? = nil
+    ) -> String? {
+        modelRouter.effectiveModel(
+            for: .briefs, templateModel: template?.cloudModel,
+            oneShotModel: oneShotModel, oneShotProvider: oneShotProvider
+        )
     }
 }
 

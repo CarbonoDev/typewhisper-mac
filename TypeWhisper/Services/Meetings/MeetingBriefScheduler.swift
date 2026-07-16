@@ -28,7 +28,20 @@ protocol MeetingBriefSchedulerStore: AnyObject {
 @MainActor
 protocol MeetingBriefGenerating: AnyObject {
     @discardableResult
-    func generateBrief(for meeting: Meeting) async throws -> MeetingOutput
+    func generateBrief(
+        for meeting: Meeting,
+        providerOverride: String?,
+        modelOverride: String?
+    ) async throws -> MeetingOutput
+}
+
+extension MeetingBriefGenerating {
+    /// The auto-brief scheduler never picks a one-shot override — a scheduled brief uses the routing
+    /// ladder's persisted rungs (plan D9). This convenience keeps its call site override-free.
+    @discardableResult
+    func generateBrief(for meeting: Meeting) async throws -> MeetingOutput {
+        try await generateBrief(for: meeting, providerOverride: nil, modelOverride: nil)
+    }
 }
 
 /// Related-docs discovery seam (Amendment 2, DB6). `MeetingRelatedDocsService` conforms; tests inject a

@@ -58,7 +58,11 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         init(store: MeetingService) { self.store = store }
 
         @discardableResult
-        func generateBrief(for meeting: Meeting) async throws -> MeetingOutput {
+        func generateBrief(
+            for meeting: Meeting,
+            providerOverride: String?,
+            modelOverride: String?
+        ) async throws -> MeetingOutput {
             active += 1
             maxConcurrent = max(maxConcurrent, active)
             // Yield so that if the scheduler ever ran two generations concurrently, their spans would

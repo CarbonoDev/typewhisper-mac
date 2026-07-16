@@ -210,7 +210,10 @@ struct MeetingsSettingsView: View {
         case .sameEngine:
             return String(localized: "meetings.finalPass.mode.sameEngine")
         case .engine(let id, _):
-            let name = promptProcessingService.availableProviders.first { $0.id == id }?.displayName ?? id
+            // [M4 carried minor] The final-pass engine id is a *transcription* engine, so resolve it
+            // against the transcription-engine catalog (not the LLM provider catalog, which never
+            // contains it → the id leaked through as the display name).
+            let name = viewModel.transcriptionEngineOptions.first { $0.id == id }?.name ?? id
             return name.isEmpty ? String(localized: "meetings.finalPass.mode.engine") : name
         }
     }

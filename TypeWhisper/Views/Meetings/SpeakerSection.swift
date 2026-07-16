@@ -33,11 +33,12 @@ struct SpeakerSection: View {
                 twoPersonToggle
             }
 
-            // [M1/D2] Never co-render a resolved-path caption with a contradictory "no path" status
-            // (e.g. the persisted "unavailable" line under a `.channel`/`.cloud` path — the owner's
-            // screenshot). The status is suppressed whenever the resolved plan already names a source.
+            // [M1/D2] Never co-render a resolved-path caption with a *contradictory* "no path" status
+            // (`.unavailable`/`.noAudio`) under a `.channel`/`.cloud` path — the owner's screenshot. A
+            // legitimate `.timelineMismatch`/`.noSpeakersDetected` from a Redo stays visible; the decision
+            // keys off the tracked outcome, not the string.
             if let status = viewModel.diarizationStatusMessage,
-               MeetingsViewModel.showsDiarizationStatus(status, under: plannedSource) {
+               MeetingsViewModel.showsDiarizationStatus(viewModel.diarizationStatusOutcome, under: plannedSource) {
                 Label(status, systemImage: "info.circle")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -58,6 +59,14 @@ struct SpeakerSection: View {
         .task(id: meeting.id) { await refreshPlan() }
         .task(id: meeting.speakerMapJSON) { await refreshPlan() }
         .task(id: meeting.twoPersonCall) { await refreshPlan() }
+        // [M5 finding] A successful cloud rerun (`identifySpeakersWithCloud`) replaces segments with
+        // provider-labeled ones but writes NO `speakerMapJSON`/`twoPersonCall`/`attendeesJSON`, so none
+        // of the triggers above re-fire — the section would keep the stale `.pyannote` caption + Identify
+        // button over cloud-labeled segments (the contradictory surface D2/M1 prevents, and the Identify
+        // pass would overwrite the just-adopted cloud labels). Key a refresh off the segment-label set so
+        // the caption flips to the cloud path without reselecting the meeting. (The channel path already
+        // re-fires via `speakerMapJSON`, which `applySeparateTrackAssignments` writes.)
+        .task(id: speakerLabelFingerprint) { await refreshPlan() }
         // [M3] Adding/removing a participant changes `effectiveParticipantCount` (and empties/refills the
         // roster the two-person toggle keys off), so re-resolve the plan when the roster changes.
         .task(id: meeting.attendeesJSON) { await refreshPlan() }
@@ -65,6 +74,16 @@ struct SpeakerSection: View {
 
     private var hasSpeakerLabels: Bool {
         meeting.segments.contains { ($0.speakerLabel?.isEmpty == false) }
+    }
+
+    /// A cheap change-token over the transcript's speaker labels (order-stable), so a plan re-resolution
+    /// fires whenever the *set* of labels changes — e.g. a cloud rerun swapping `SPEAKER_00…` for the
+    /// provider's own labels — even when no `speakerMapJSON`/`twoPersonCall`/`attendeesJSON` write occurs.
+    private var speakerLabelFingerprint: String {
+        meeting.segments
+            .sorted { $0.order < $1.order }
+            .map { $0.speakerLabel ?? "" }
+            .joined(separator: "\u{1f}")
     }
 
     private func refreshPlan() async {
@@ -117,18 +136,7 @@ struct SpeakerSection: View {
                     }
                 }
             case .pyannote:
-                // [M9-SPK-B / D-A6] Disclose the timing re-pass in the button copy, but only when it
-                // will actually run (the meeting still carries coarse live timestamps).
-                Button {
-                    viewModel.identifySpeakers(for: meeting)
-                } label: {
-                    Label(
-                        String(localized: viewModel.pyannoteIdentifyRefinesTimingFirst(for: meeting)
-                            ? "meetings.speakers.identify.refinesTiming"
-                            : "meetings.diarization.identify"),
-                        systemImage: "person.wave.2"
-                    )
-                }
+                identifyAction
             case .cloud:
                 if hasSpeakerLabels {
                     Button(String(localized: "meetings.speakers.undo")) {
@@ -136,13 +144,93 @@ struct SpeakerSection: View {
                     }
                 }
             case .none:
-                EmptyView()
+                cloudIdentifyAction
             }
         }
     }
 
     private var isWorking: Bool {
         viewModel.isEnriching(for: meeting)
+    }
+
+    // MARK: - Identify action (local pyannote vs one-shot cloud rerun, M5/D10)
+
+    /// The Identify affordance on the pyannote path. When one or more speaker-capable cloud engines are
+    /// configured, this is a split menu — local pyannote (the primary action) plus an "Identify with
+    /// <cloud engine>" one-shot re-transcription per engine — otherwise it collapses to the plain local
+    /// Identify button (M5: "collapses to plain Identify when no capable engine").
+    @ViewBuilder
+    private var identifyAction: some View {
+        let cloudEngines = viewModel.speakerCapableCloudEngineOptions()
+        if cloudEngines.isEmpty {
+            Button {
+                viewModel.identifySpeakers(for: meeting)
+            } label: {
+                identifyLabel
+            }
+        } else {
+            Menu {
+                Button(String(localized: "meetings.speakers.identify.local")) {
+                    viewModel.identifySpeakers(for: meeting)
+                }
+                Divider()
+                ForEach(cloudEngines) { engine in
+                    Button {
+                        viewModel.identifySpeakersWithCloud(engineId: engine.id, for: meeting)
+                    } label: {
+                        Text(String(
+                            format: String(localized: "meetings.speakers.identify.cloud"),
+                            engine.name
+                        ))
+                    }
+                }
+            } label: {
+                identifyLabel
+            } primaryAction: {
+                viewModel.identifySpeakers(for: meeting)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    /// [M5 finding] The Identify affordance on the `.none` path (no local pyannote sidecar and not a
+    /// separate-track recording). Local diarization genuinely cannot run here, but a user with a
+    /// speaker-capable cloud engine configured — exactly who cloud rerun serves — is still offered a
+    /// cloud-only Identify menu when the meeting has stored audio to re-transcribe. Nothing (no local
+    /// option) when no capable engine or no audio, so the surface stays honest.
+    @ViewBuilder
+    private var cloudIdentifyAction: some View {
+        let cloudEngines = viewModel.speakerCapableCloudEngineOptions()
+        if !cloudEngines.isEmpty, viewModel.hasStoredAudio(for: meeting) {
+            Menu {
+                ForEach(cloudEngines) { engine in
+                    Button {
+                        viewModel.identifySpeakersWithCloud(engineId: engine.id, for: meeting)
+                    } label: {
+                        Text(String(
+                            format: String(localized: "meetings.speakers.identify.cloud"),
+                            engine.name
+                        ))
+                    }
+                }
+            } label: {
+                Label(String(localized: "meetings.diarization.identify"), systemImage: "person.wave.2")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    /// [M9-SPK-B / D-A6] Disclose the timing re-pass in the copy, but only when it will actually run
+    /// (the meeting still carries coarse live timestamps).
+    private var identifyLabel: some View {
+        Label(
+            String(localized: viewModel.pyannoteIdentifyRefinesTimingFirst(for: meeting)
+                ? "meetings.speakers.identify.refinesTiming"
+                : "meetings.diarization.identify"),
+            systemImage: "person.wave.2"
+        )
     }
 
     // MARK: - Two-person toggle (D-A4)

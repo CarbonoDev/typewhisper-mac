@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import TypeWhisperPluginSDK
 
 @MainActor
 final class MeetingsViewModel: ObservableObject {
@@ -95,6 +96,14 @@ final class MeetingsViewModel: ObservableObject {
     /// A localized status shown after enrichment finishes without labeling (e.g. "no speakers
     /// detected"). Cleared when a new enrichment starts.
     @Published var diarizationStatusMessage: String?
+    /// [M1/D2] The enrichment outcome that produced `diarizationStatusMessage`, tracked alongside the
+    /// localized string so suppression under a resolved `.channel`/`.cloud` plan can distinguish a
+    /// "no path" outcome (`.unavailable`/`.noAudio` — genuinely mutually exclusive with a resolved path,
+    /// suppress it) from an outcome that is still meaningful under a channel/cloud plan (a Redo that
+    /// returns `.timelineMismatch`/`.noSpeakersDetected` — keep it visible; the earlier blanket
+    /// suppression silently swallowed those, leaving the user with zero feedback). Set and cleared in
+    /// lockstep with `diarizationStatusMessage`.
+    @Published private(set) var diarizationStatusOutcome: MeetingDiarizationEnricher.Outcome?
 
     // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
     // per-meeting final re-transcription override through it.
@@ -332,6 +341,7 @@ final class MeetingsViewModel: ObservableObject {
         exportErrorMessage = nil
         diarizationErrorMessage = nil
         diarizationStatusMessage = nil
+        diarizationStatusOutcome = nil
     }
 
     /// True when a caught generation error is specifically "no LLM provider configured", so the
@@ -743,7 +753,16 @@ final class MeetingsViewModel: ObservableObject {
     /// awaits — and a second click while the job is queued/running is deduped by `(kind, meetingID)`,
     /// so exactly one `MeetingOutput` is produced. A thrown error is recorded for the document's
     /// "needs provider" deep link *and* rethrown so the job is marked `.failed` for the J3 popover.
-    func generateOutput(for meeting: Meeting, using template: PromptAction) {
+    ///
+    /// [M5/D10] `providerOverride`/`modelOverride` are a one-shot pick from the Generate/Regenerate
+    /// menu's "For this run" submenu: they win the routing ladder for this run only and persist nowhere
+    /// (the output's provenance still records what actually ran). Both default nil = today's behavior.
+    func generateOutput(
+        for meeting: Meeting,
+        using template: PromptAction,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) {
         outputErrorMessage = nil
         outputErrorNeedsProvider = false
         // Three-way kind mapping so a `.brief` template enqueues as `.brief` (not `.summary`): the
@@ -769,7 +788,10 @@ final class MeetingsViewModel: ObservableObject {
         ) { [weak llmService, weak self] in
             guard let llmService else { return }
             do {
-                _ = try await llmService.generateOutput(for: meeting, using: template)
+                _ = try await llmService.generateOutput(
+                    for: meeting, using: template,
+                    providerOverride: providerOverride, modelOverride: modelOverride
+                )
             } catch {
                 self?.recordOutputError(error)
                 throw error
@@ -798,6 +820,28 @@ final class MeetingsViewModel: ObservableObject {
 
     func deleteOutput(_ output: MeetingOutput) {
         meetingService.deleteOutput(output)
+    }
+
+    // MARK: - One-shot model overrides (M5 / D10)
+
+    /// [M5/D10] "Save as default…" for a **templated** run (summary/brief): persist the one-shot pick as
+    /// the template's own `providerType`/`cloudModel` default, so it takes effect for every future run of
+    /// this template. Target-aware per adjudication Part A #6 — a summary/brief run is driven by a
+    /// `PromptAction`, and saving to the *purpose* setting would be silently masked by the template's own
+    /// override, so the template is the honest target. Empty strings clear back to "Use app default".
+    func saveModelDefaultToTemplate(provider: String?, model: String?, for template: PromptAction) {
+        promptActionService.setModelDefault(provider: provider, model: model, for: template)
+    }
+
+    /// [M5/D10] "Save as default…" for a **template-less** purpose (Q&A and other purposes with no
+    /// template rung): persist the one-shot pick as that purpose's setting (adjudication Part A #6). Empty
+    /// strings clear back to "Use app default". Provider and model are stored on the purpose's own keys.
+    func saveModelDefaultToPurpose(provider: String?, model: String?, for purpose: MeetingModelPurpose) {
+        let defaults = UserDefaults.standard
+        let trimmedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        defaults.set(trimmedProvider, forKey: purpose.providerDefaultsKey)
+        defaults.set(trimmedModel, forKey: purpose.modelDefaultsKey)
     }
 
     // MARK: - Knowledge base & brief (M5)
@@ -833,7 +877,14 @@ final class MeetingsViewModel: ObservableObject {
     /// [Track J] Routed through the job queue (plan J2): a `.brief` job on the `llm` lane (cap 1),
     /// deduped on `(brief, meetingID)`, so a user brief and the auto-brief scheduler never run two LLM
     /// calls at once for the same meeting and a double-click produces one brief. Enqueue is synchronous.
-    func generateBrief(for meeting: Meeting) {
+    ///
+    /// [M5/D10] `providerOverride`/`modelOverride` are a one-shot pick from the brief's Generate menu:
+    /// they win the ladder for this run only and persist nowhere. Both default nil = today's behavior.
+    func generateBrief(
+        for meeting: Meeting,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) {
         briefErrorMessage = nil
         briefErrorNeedsProvider = false
         jobQueue.enqueue(
@@ -843,7 +894,9 @@ final class MeetingsViewModel: ObservableObject {
         ) { [weak briefService, weak self] in
             guard let briefService else { return }
             do {
-                _ = try await briefService.generateBrief(for: meeting)
+                _ = try await briefService.generateBrief(
+                    for: meeting, providerOverride: providerOverride, modelOverride: modelOverride
+                )
             } catch {
                 self?.recordBriefError(error)
                 throw error
@@ -1024,6 +1077,14 @@ final class MeetingsViewModel: ObservableObject {
         await diarizationEnricher.availability(for: meeting)
     }
 
+    /// [M5 finding] Whether the meeting has stored audio a cloud rerun could re-transcribe — the same
+    /// existence check `availability(for:)` guards on. Drives offering the cloud Identify menu on the
+    /// `.none` path (no local sidecar and not separate-track) to a user with a speaker-capable cloud
+    /// engine configured — precisely who cloud rerun serves.
+    func hasStoredAudio(for meeting: Meeting) -> Bool {
+        meetingService.audioFileURL(for: meeting) != nil
+    }
+
     /// Run opt-in diarization over a meeting's audio and persist speaker labels. Surfaces an explicit
     /// "no speakers detected" status (plan D8) and any hard failure via published messages.
     ///
@@ -1033,7 +1094,7 @@ final class MeetingsViewModel: ObservableObject {
     /// (`applySpeakerLabels` runs only after a successful return).
     func identifySpeakers(for meeting: Meeting) {
         diarizationErrorMessage = nil
-        diarizationStatusMessage = nil
+        clearDiarizationStatus()
         // [Speaker-recognition amendment, D-A5] Hint pyannote with the known participant count so a
         // 2-person meeting that fell through to the sidecar (correlated channels) — or any exact-count
         // meeting — pins the right number of speakers instead of the global default.
@@ -1065,6 +1126,68 @@ final class MeetingsViewModel: ObservableObject {
         }
     }
 
+    /// [M5/D10] A speaker-capable cloud transcription engine offered in the Identify split menu.
+    struct SpeakerCloudEngineOption: Identifiable, Equatable, Sendable {
+        let id: String
+        let name: String
+    }
+
+    /// [M5/D10] A lightweight, value-typed view of a transcription engine's speaker capability, so the
+    /// classifier below is unit-testable without constructing a full plugin conformance. `isStructured`
+    /// is the SDK-visible signal that an engine returns per-segment speaker labels
+    /// (`StructuredTranscriptionEnginePlugin`, e.g. AssemblyAI).
+    struct SpeakerEngineDescriptor: Equatable, Sendable {
+        let id: String
+        let name: String
+        let isStructured: Bool
+        let isConfigured: Bool
+    }
+
+    /// [M5/D10] The installed transcription engines that can return per-segment speaker labels, for the
+    /// Identify split menu's cloud rung. The menu collapses to plain local Identify when this is empty
+    /// (no capable/configured engine).
+    func speakerCapableCloudEngineOptions() -> [SpeakerCloudEngineOption] {
+        let descriptors = PluginManager.shared.transcriptionEngines.map { engine in
+            SpeakerEngineDescriptor(
+                id: engine.providerId,
+                name: engine.providerDisplayName,
+                isStructured: engine is StructuredTranscriptionEnginePlugin,
+                isConfigured: engine.isConfigured
+            )
+        }
+        return Self.speakerCapableCloudEngineOptions(from: descriptors)
+    }
+
+    /// Pure classifier behind `speakerCapableCloudEngineOptions()` (M5) so the "menu collapses without a
+    /// capable engine" rule is unit-testable: keep only configured engines that can return speaker labels
+    /// (a structured engine), preserving order.
+    nonisolated static func speakerCapableCloudEngineOptions(
+        from descriptors: [SpeakerEngineDescriptor]
+    ) -> [SpeakerCloudEngineOption] {
+        descriptors.compactMap { descriptor in
+            guard descriptor.isStructured, descriptor.isConfigured else { return nil }
+            return SpeakerCloudEngineOption(id: descriptor.id, name: descriptor.name)
+        }
+    }
+
+    /// [M5/D10] Run a one-shot speaker-capable cloud re-transcription for `meeting` on the transcription
+    /// lane (via the existing `.diarization` kind), adopting the engine's own speaker labels through the
+    /// `preferProviderLabels` path. Nothing is persisted to `finalRetranscriptionPolicy` or any global —
+    /// this is a per-run action chosen at point of use. A cancelled pass writes nothing.
+    func identifySpeakersWithCloud(engineId: String, model: String? = nil, for meeting: Meeting) {
+        diarizationErrorMessage = nil
+        clearDiarizationStatus()
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.speakers.progress.cloudRerun")
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            let outcome = await diarizationEnricher.rerunCloudSpeakers(meeting, engineId: engineId, model: model)
+            self?.recordDiarizationOutcome(outcome)
+        }
+    }
+
     /// Whether pressing Identify on `meeting` will first run the keep-live timing re-pass (M9-SPK-B /
     /// D-A6): true when the segments still carry coarse live timestamps (`timestampsRefined != true`).
     /// Drives the "(refines timing first)" button copy on the pyannote path so the extra transcription
@@ -1092,38 +1215,83 @@ final class MeetingsViewModel: ObservableObject {
         // pyannote Identify button (finding). The vocabulary test is shared with the finalization
         // adoption check so the two paths always agree.
         let labeled = meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
-        let source = SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
-            segmentsAlreadyLabeled: labeled,
+        let source = Self.plannedSpeakerSource(
+            segmentsHaveProviderLabels: labeled,
             preferProviderLabels: preferProviderSpeakerLabels,
             effectiveParticipantCount: SpeakerSourcePlan.effectiveParticipantCount(for: meeting),
             trackAvailability: availability
-        ))
-        // [M1/D2] A resolved `.channel`/`.cloud` path and a "no path" status (e.g. the persisted
-        // "Speaker identification is unavailable…") are mutually exclusive — a resolved path and no path
-        // cannot both be true. `diarizationStatusMessage` is one VM-wide `@Published` var that can go
-        // stale across a meeting switch or a plan re-resolution (attendee/toggle change), so clear it
-        // whenever the freshly resolved path is channel/cloud. The view also suppresses it defensively
-        // (`showsDiarizationStatus`); clearing here keeps the VM state itself honest.
-        if !Self.showsDiarizationStatus(diarizationStatusMessage, under: source),
-           diarizationStatusMessage != nil {
-            diarizationStatusMessage = nil
+        )
+        // [M1/D2] A resolved `.channel`/`.cloud` path and a "no path" status (`.unavailable`/`.noAudio`)
+        // are mutually exclusive — a resolved labeling source and "there is no path" cannot both be true,
+        // so clear that stale line whenever the freshly resolved path is channel/cloud.
+        // `diarizationStatusMessage` is one VM-wide `@Published` var that can go stale across a meeting
+        // switch or a plan re-resolution (attendee/toggle change). But a Redo under a `.channel` plan can
+        // legitimately return `.timelineMismatch`/`.noSpeakersDetected` — those stay visible (the earlier
+        // blanket clear swallowed them, leaving the user with no feedback). The view also suppresses
+        // defensively (`showsDiarizationStatus`); clearing here keeps the VM state itself honest.
+        if diarizationStatusOutcome != nil,
+           !Self.showsDiarizationStatus(diarizationStatusOutcome, under: source) {
+            clearDiarizationStatus()
         }
         return source
     }
 
-    /// [M1/D2] Whether a transient diarization status line may co-render with the resolved speaker
-    /// path. Pure so the "never both a path caption and a contradictory status" rule is unit-testable
-    /// without a view: a `.channel`/`.cloud` path is a *resolved* labeling source, so a "no path"
-    /// status must not render beneath it; every other path (pyannote / none / not-yet-resolved) may
-    /// still surface a legitimate status. `nil` status never shows.
-    nonisolated static func showsDiarizationStatus(_ status: String?, under source: SpeakerSource?) -> Bool {
-        guard status != nil else { return false }
+    /// [M5 finding] Pure core of `plannedSpeakerSource(for:)` (static so the deliberate choice is
+    /// unit-testable without constructing the view model). Only *provider*-originated labels feed the
+    /// cloud rung — a meeting the app labeled locally (channel `SPEAKER_ME/OTHERS` or pyannote
+    /// `SPEAKER_00…`) must keep its channel Undo/Redo or pyannote Identify, never flip to `.cloud`.
+    ///
+    /// The choice: provider labels *already on the transcript* resolve `.cloud` regardless of the
+    /// "prefer provider labels" preference. That preference gates *automatic adoption* at finalize
+    /// (`autoAssignSpeakers`), not the display of labels an explicit "Identify with <cloud engine>" pick
+    /// (or a provider-labeled import) already wrote. Without this, an explicit cloud rerun with the
+    /// preference OFF left the section stuck on the pyannote caption/Identify over cloud-labeled segments,
+    /// inviting a pyannote pass that would overwrite them. With no provider labels present the preference
+    /// still gates the rung as before.
+    nonisolated static func plannedSpeakerSource(
+        segmentsHaveProviderLabels labeled: Bool,
+        preferProviderLabels: Bool,
+        effectiveParticipantCount: Int?,
+        trackAvailability: MeetingDiarizationEnricher.Availability
+    ) -> SpeakerSource {
+        SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
+            segmentsAlreadyLabeled: labeled,
+            preferProviderLabels: labeled ? true : preferProviderLabels,
+            effectiveParticipantCount: effectiveParticipantCount,
+            trackAvailability: trackAvailability
+        ))
+    }
+
+    /// [M1/D2] Whether a transient diarization status line may co-render with the resolved speaker path.
+    /// Pure so the "never a path caption and a *contradictory* status together" rule is unit-testable
+    /// without a view. Under a resolved `.channel`/`.cloud` path only the "no path" outcomes
+    /// (`.unavailable`/`.noAudio`) are contradictory and suppressed; a `.timelineMismatch` or
+    /// `.noSpeakersDetected` (e.g. from a Redo) is a legitimate result under a channel/cloud plan and
+    /// stays visible. Every other path (pyannote / none / not-yet-resolved) may surface any status. A
+    /// nil outcome never shows.
+    nonisolated static func showsDiarizationStatus(
+        _ outcome: MeetingDiarizationEnricher.Outcome?,
+        under source: SpeakerSource?
+    ) -> Bool {
+        guard let outcome else { return false }
         switch source {
         case .channel, .cloud:
-            return false
+            // Only the "no path" outcomes contradict a resolved path; keep everything else visible.
+            switch outcome {
+            case .unavailable, .noAudio:
+                return false
+            default:
+                return true
+            }
         default:
             return true
         }
+    }
+
+    /// Clear the diarization status message and its tracked outcome in lockstep (M1/D2).
+    private func clearDiarizationStatus() {
+        diarizationStatusMessage = nil
+        diarizationStatusOutcome = nil
     }
 
     /// Whether the two-person-call toggle should be offered for a meeting (D-A4): only for
@@ -1153,7 +1321,7 @@ final class MeetingsViewModel: ObservableObject {
     /// Undo speaker labels (D-A4): clear every segment label + the speaker map. Also the escape hatch
     /// for an automatic labeling the user disagrees with.
     func clearSpeakerLabels(for meeting: Meeting) {
-        diarizationStatusMessage = nil
+        clearDiarizationStatus()
         diarizationErrorMessage = nil
         meetingService.clearSpeakerLabels(for: meeting)
     }
@@ -1163,7 +1331,7 @@ final class MeetingsViewModel: ObservableObject {
     /// recording is not separate-track.
     func relabelByChannel(for meeting: Meeting) {
         diarizationErrorMessage = nil
-        diarizationStatusMessage = nil
+        clearDiarizationStatus()
         let otherName = SpeakerSourcePlan.otherPartyName(for: meeting)
         jobQueue.enqueue(
             kind: .diarization,
@@ -1179,9 +1347,13 @@ final class MeetingsViewModel: ObservableObject {
     /// Surface an enrichment outcome as a status line (plan D8). Split out so the job-queue closure
     /// can publish it on the main actor after a successful (non-throwing) enrich.
     private func recordDiarizationOutcome(_ outcome: MeetingDiarizationEnricher.Outcome) {
+        // Track the outcome kind alongside the localized string (M1/D2) so the suppression rule can keep
+        // a legitimate `.timelineMismatch`/`.noSpeakersDetected` visible under a channel/cloud plan while
+        // still hiding a contradictory `.unavailable`/`.noAudio`. `.labeled` announces nothing.
         switch outcome {
         case .labeled:
-            break // labels now render in the transcript; nothing to announce
+            clearDiarizationStatus() // labels now render in the transcript; nothing to announce
+            return
         case .noSpeakersDetected:
             diarizationStatusMessage = String(localized: "meetings.diarization.status.noSpeakers")
         case .unavailable:
@@ -1193,6 +1365,7 @@ final class MeetingsViewModel: ObservableObject {
         case .timelineMismatch:
             diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
         }
+        diarizationStatusOutcome = outcome
     }
 
     /// Whether a `.diarization` job is in flight for this meeting — drives the "Identify speakers"

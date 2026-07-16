@@ -29723,6 +29723,86 @@
         }
       }
     },
+    "meetings.speakers.progress.cloudRerun": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifying speakers with cloud…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher werden per Cloud erkannt…"
+          }
+        }
+      }
+    },
+    "meetings.speakers.identify.local": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identify speakers (on this Mac)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecher erkennen (auf diesem Mac)"
+          }
+        }
+      }
+    },
+    "meetings.speakers.identify.cloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identify with %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit %@ erkennen"
+          }
+        }
+      }
+    },
+    "meetingdoc.generate.forThisRun": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For this run…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für diesen Durchlauf…"
+          }
+        }
+      }
+    },
+    "meetingdoc.generate.saveAsDefault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save as default for this template…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Standard für diese Vorlage speichern…"
+          }
+        }
+      }
+    },
     "meetingdoc.title.placeholder": {
       "localizations": {
         "en": {

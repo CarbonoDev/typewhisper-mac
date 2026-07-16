@@ -8,6 +8,8 @@ struct MeetingBriefView: View {
     // [Track J] Observe the queue directly so the meeting-scoped brief spinner reacts to job state
     // (the VM does not republish on queue mutations — plan J2 §CC7).
     @ObservedObject private var jobQueue = JobQueueService.shared
+    // [M5/D10] The prompt-provider catalog for the one-shot "For this run" / "Save as default…" submenus.
+    @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     let meeting: Meeting
 
     var body: some View {
@@ -73,8 +75,50 @@ struct MeetingBriefView: View {
             ProgressView()
                 .controlSize(.small)
         } else {
-            Button(label) {
+            Menu {
+                // [M5/D10] One-shot model override for this brief run (wins the ladder, persists
+                // nothing), plus "Save as default…" targeting the brief template when one exists.
+                Menu(String(localized: "meetingdoc.generate.forThisRun")) {
+                    modelPickerContents { providerId, modelId in
+                        viewModel.generateBrief(
+                            for: meeting, providerOverride: providerId, modelOverride: modelId
+                        )
+                    }
+                }
+                if let briefTemplate = viewModel.templates(ofKind: .brief).first {
+                    Menu(String(localized: "meetingdoc.generate.saveAsDefault")) {
+                        modelPickerContents { providerId, modelId in
+                            viewModel.saveModelDefaultToTemplate(
+                                provider: providerId, model: modelId, for: briefTemplate
+                            )
+                        }
+                    }
+                }
+            } label: {
+                Text(label)
+            } primaryAction: {
                 viewModel.generateBrief(for: meeting)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    /// [M5/D10] The provider→model nesting shared by the "For this run" and "Save as default…" submenus.
+    @ViewBuilder
+    private func modelPickerContents(
+        action: @escaping (_ providerId: String, _ modelId: String?) -> Void
+    ) -> some View {
+        ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
+            let models = promptProcessingService.modelsForProvider(provider.id)
+            if models.isEmpty {
+                Button(provider.displayName) { action(provider.id, nil) }
+            } else {
+                Menu(provider.displayName) {
+                    ForEach(models, id: \.id) { model in
+                        Button(model.displayName) { action(provider.id, model.id) }
+                    }
+                }
             }
         }
     }

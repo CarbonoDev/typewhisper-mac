@@ -1362,7 +1362,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Helpers
 
-    private func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
+    /// Finalize a single-source recording (mic-only or system-only). Deliberately takes **no** track
+    /// mode: a single source has no L/R layout to choose, so it copies (`.wav`) or transcodes (`.m4a`)
+    /// the one track verbatim, preserving its channel count. `internal` (like `mixAudioFiles`) so the
+    /// M1/D3 "single-source session is unaffected by `.separate`" invariant is directly testable.
+    func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
         switch outputFormat {
         case .wav:
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)

@@ -785,4 +785,76 @@ final class MeetingDiarizationEnricher: ObservableObject {
             return .unavailable
         }
     }
+
+    // MARK: - One-shot cloud speaker re-transcription (M5 / D10)
+
+    /// One-shot speaker-capable cloud re-transcription (Identify → "Identify with <cloud engine>", plan
+    /// M5/D10). Decodes the stored audio and re-transcribes it through `engineId` — a speaker-capable
+    /// cloud engine whose own diarization writes per-segment speaker labels — then replaces the
+    /// transcript with the labeled result. The labels are provider-originated, so the existing
+    /// `preferProviderLabels` adoption path resolves the meeting to the `.cloud` speaker source (mapping
+    /// editor, no local pass). Enqueued on the `transcription` lane by the view model. Nothing is
+    /// persisted to `finalRetranscriptionPolicy` or any global — this is a per-run action.
+    ///
+    /// Returns `.unavailable` when no transcriber is wired or the call fails, `.noAudio` with no stored
+    /// audio, `.noTranscript` when the meeting has nothing to relabel, and `.noSpeakersDetected` when the
+    /// engine returned a transcript with no speaker labels (the existing transcript is kept untouched).
+    @discardableResult
+    func rerunCloudSpeakers(_ meeting: Meeting, engineId: String, model: String? = nil) async -> Outcome {
+        guard !isEnriching else { return .unavailable }
+        isEnriching = true
+        defer { isEnriching = false }
+
+        guard !meeting.segments.isEmpty else { return .noTranscript }
+        guard let transcriber else { return .unavailable }
+        guard let url = meetingService.audioFileURL(for: meeting) else { return .noAudio }
+
+        // Replace the same source the current transcript came from (a live capture is `.liveCapture`; an
+        // audio import is its import source), so segments from other sources are never disturbed. Derive
+        // it deterministically from the transcript order (SwiftData's `segments` relationship array has no
+        // guaranteed order — every other enricher path sorts by `order` before use).
+        //
+        // Known limitation (M5 review finding): on a *mixed-source* meeting (e.g. a live capture later
+        // merged with an M8 transcript import), the fresh cloud transcription covers the whole stored
+        // audio, so replacing only the first source's segments leaves the other source's segments to
+        // duplicate against the new full transcript. Mixed-source cloud rerun is out of scope here; the
+        // common single-source case (a live capture, or a lone audio import) is correct.
+        let source = meeting.segments.sorted { $0.order < $1.order }.first?.source ?? .liveCapture
+        let selection = meetingService.transcriptionLanguageSelection(for: meeting)
+
+        let samples: [Float]
+        do {
+            samples = try await Self.loadMonoSamples(inspector: audioInspector, url: url)
+        } catch {
+            logger.warning("Cloud speaker rerun skipped (audio decode failed): \(error.localizedDescription)")
+            return .noAudio
+        }
+        guard !samples.isEmpty else { return .noAudio }
+
+        let result: TranscriptionResult
+        do {
+            result = try await transcriber.transcribeMeetingAudio(
+                samples: samples,
+                languageSelection: selection,
+                engineOverrideId: engineId,
+                cloudModelOverride: model
+            )
+        } catch {
+            logger.warning("Cloud speaker rerun transcription failed: \(error.localizedDescription)")
+            return .unavailable
+        }
+
+        let segments = result.segments
+        guard !segments.isEmpty else { return .noSpeakersDetected }
+        // Only adopt when the engine actually diarized (its `speaker_labels` option was on). A transcript
+        // with no labels is not worth clobbering the existing transcript for — surface it honestly.
+        let distinctLabels = Set(segments.compactMap { $0.speakerLabel }.filter { !$0.isEmpty })
+        guard !distinctLabels.isEmpty else { return .noSpeakersDetected }
+
+        meetingService.replaceSegments(of: meeting, source: source, with: segments)
+        // A cloud re-transcription produced fresh per-segment times — mark them refined so a later
+        // Identify does not pay for the M9-SPK-B timing re-pass.
+        meetingService.setTimestampsRefined(true, for: meeting)
+        return .labeled(speakerCount: distinctLabels.count)
+    }
 }
