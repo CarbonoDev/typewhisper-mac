@@ -17931,6 +17931,12 @@
     },
     "Close": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

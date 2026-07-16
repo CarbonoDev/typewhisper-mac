@@ -183,6 +183,12 @@ struct HistoryView: View {
                 Label(String(localized: "\(viewModel.selectedRecordIDs.count) items selected"), systemImage: "checkmark.circle")
             } description: {
                 Text(String(localized: "Right-click to export or delete selected entries."))
+            } actions: {
+                Button {
+                    viewModel.selectRecord(nil)
+                } label: {
+                    Label(String(localized: "Close"), systemImage: "xmark")
+                }
             }
         } else if let record = viewModel.selectedRecord {
             RecordDetailView(record: record, viewModel: viewModel)
@@ -563,6 +569,17 @@ private struct RecordDetailView: View {
                 }
                 .help(String(localized: "Delete"))
                 .accessibilityLabel(String(localized: "Delete"))
+
+                Divider()
+                    .frame(height: 14)
+
+                Button {
+                    viewModel.selectRecord(nil)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .help(String(localized: "Close"))
+                .accessibilityLabel(String(localized: "Close"))
             }
         }
         .buttonStyle(.borderless)
