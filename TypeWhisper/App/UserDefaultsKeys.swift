@@ -189,11 +189,33 @@ enum UserDefaultsKeys {
 
     // MARK: - Meetings · Language detection (plan D5, M2)
     /// LLM provider id used for per-meeting language detection. Empty/unset ⇒ inherit the current
-    /// prompt-provider selection (the "Use prompt provider" default).
+    /// prompt-provider selection (the "Use prompt provider" default). Reused verbatim by
+    /// `MeetingModelPurpose.languageDetection` (plan D9/M4 — detection is configured in one place).
     static let meetingsLanguageDetectionProviderId = "meetings.language.detectionProviderId"
     /// Cloud model id for language detection when a specific detection provider is chosen. Empty/unset
     /// ⇒ the provider default.
     static let meetingsLanguageDetectionModel = "meetings.language.detectionModel"
+
+    // MARK: - Meetings · Per-purpose model routing (plan D9, M4)
+    // Precedence `template > purpose > app default`, resolved per call by `MeetingModelRouter`. Empty/
+    // unset ⇒ "Use app default" (inherit the prompt-provider selection). `languageDetection` reuses the
+    // legacy `meetings.language.detection*` keys above rather than adding new ones (back-compat).
+    /// Provider override for summaries / analysis outputs (`MeetingModelPurpose.summariesAnalysis`).
+    static let meetingsModelSummariesProviderId = "meetings.models.summaries.providerId"
+    /// Model override for summaries / analysis outputs.
+    static let meetingsModelSummariesModel = "meetings.models.summaries.model"
+    /// Provider override for pre-meeting briefs (`MeetingModelPurpose.briefs`).
+    static let meetingsModelBriefsProviderId = "meetings.models.briefs.providerId"
+    /// Model override for pre-meeting briefs.
+    static let meetingsModelBriefsModel = "meetings.models.briefs.model"
+    /// Provider override for in-meeting Q&A (`MeetingModelPurpose.qa`).
+    static let meetingsModelQAProviderId = "meetings.models.qa.providerId"
+    /// Model override for in-meeting Q&A.
+    static let meetingsModelQAModel = "meetings.models.qa.model"
+    /// Provider override for the related-documents relevance judge (`MeetingModelPurpose.relatedDocsJudge`).
+    static let meetingsModelRelatedDocsProviderId = "meetings.models.relatedDocs.providerId"
+    /// Model override for the related-documents relevance judge.
+    static let meetingsModelRelatedDocsModel = "meetings.models.relatedDocs.model"
 
     // [Track D] Automatic pre-meeting briefs (plan AD9).
     /// Whether pre-meeting briefs are generated automatically (default ON).

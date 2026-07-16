@@ -47,6 +47,38 @@ final class ParticipantDirectoryMatchingTests: XCTestCase {
         )
     }
 
+    func testPriorMeetingsUnionViaResolverFactorySeam() throws {
+        // [M4 — M3 review minor] `ServiceContainer` wires the factory seam so `priorMeetings` builds the
+        // directory resolution index once per query and reuses it for the target + every candidate
+        // (was O(meetings × persons) on the MainActor). The union result must be identical to the
+        // per-call seam.
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let directory = ParticipantDirectoryService(appSupportDirectory: dir)
+        meetingService.onAttendeesIngested = { [weak directory] attendees in
+            directory?.ingest(attendees)
+        }
+        // Wire the factory seam ONLY (leave the per-call seam nil) so this test exercises the factory path.
+        meetingService.makePersonIDResolver = { [weak directory] in
+            directory?.makePersonIDResolver() ?? { _ in [] }
+        }
+
+        let older = meetingService.createMeeting(
+            title: "1:1 (imported)", source: .importedTranscript, attendees: [Attendee(name: "Alex")]
+        )
+        let newer = meetingService.createMeeting(
+            title: "1:1 follow-up", source: .importedTranscript, attendees: [Attendee(name: "Alex")]
+        )
+        XCTAssertEqual(directory.persons.count, 1)
+
+        let related = meetingService.priorMeetings(matching: newer)
+        XCTAssertTrue(
+            related.contains { $0.id == older.id },
+            "the factory seam resolves the same shared-identity union as the per-call seam"
+        )
+    }
+
     func testPriorMeetingsUnwiredSeamFallsBackToEmailOrSeries() throws {
         let dir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(dir) }

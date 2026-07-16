@@ -11,9 +11,6 @@ struct MeetingsSettingsView: View {
     // [Track A] AD5 dictation bridge toggle — defaults OFF. Self-contained UserDefaults binding so
     // no shared view-model edit is required.
     @AppStorage(UserDefaultsKeys.meetingsBridgeToDictationEvents) private var bridgeToDictationEvents = false
-    // [M2] Per-meeting language-detection provider/model (plan D5). Empty provider ⇒ prompt provider.
-    @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionProviderId) private var detectionProviderId = ""
-    @AppStorage(UserDefaultsKeys.meetingsLanguageDetectionModel) private var detectionModel = ""
     // [M4] Vault-relative root folder that meeting exports nest under (plan D7). Default "Meetings";
     // empty exports to the vault root.
     @AppStorage(UserDefaultsKeys.meetingsObsidianRootFolder) private var obsidianRootFolder = "Meetings"
@@ -55,8 +52,10 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
-                // [M2] Per-meeting language detection provider (plan D5).
-                languageDetectionSection
+                // [M4] Per-purpose model routing (plan D9): one row per meeting AI purpose, showing
+                // the effective value live under `template > purpose > app default`. Subsumes the old
+                // language-detection section (detection is now just one purpose row, reusing its keys).
+                modelsSection
 
                 Divider()
 
@@ -159,41 +158,61 @@ struct MeetingsSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// [M2] Language-detection provider picker (plan D5). The default row "Use prompt provider" maps to
-    /// an empty stored value, which the detector resolves per call to the current prompt-provider
-    /// selection (`providerOverride: nil`). A specific provider optionally pins a model.
-    private var languageDetectionSection: some View {
+    /// [M4] Per-purpose model routing (plan D9). One `PurposeModelRow` per meeting AI purpose, each
+    /// showing the effective value live under the ladder `template > purpose > app default` (a nil/empty
+    /// pick = "Use app default"). Read-only pointers to the transcription engine + final re-transcription
+    /// policy close the loop without duplicating those controls. Language detection is now just one of
+    /// these rows (reusing its existing keys — plan D9: configured in one place).
+    private var modelsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "meetings.language.sectionTitle"))
+            Text(String(localized: "meetings.models.sectionTitle"))
                 .font(.headline)
-            Text(String(localized: "meetings.language.section.subtitle"))
+            Text(String(localized: "meetings.models.section.subtitle"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker(String(localized: "meetings.language.provider.label"), selection: $detectionProviderId) {
-                Text(String(localized: "meetings.language.provider.usePromptProvider")).tag("")
-                ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
-                    Text(provider.displayName).tag(provider.id)
-                }
-            }
-            .onChange(of: detectionProviderId) { _, _ in
-                // Switching provider invalidates a model pinned to the previous one.
-                detectionModel = ""
-            }
-
-            if !detectionProviderId.isEmpty {
-                let models = promptProcessingService.modelsForProvider(detectionProviderId)
-                if !models.isEmpty {
-                    Picker(String(localized: "meetings.language.model.label"), selection: $detectionModel) {
-                        Text(String(localized: "meetings.language.model.default")).tag("")
-                        ForEach(models, id: \.id) { model in
-                            Text(model.displayName).tag(model.id)
-                        }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(MeetingModelPurpose.allCases.enumerated()), id: \.element) { index, purpose in
+                    PurposeModelRow(
+                        purpose: purpose,
+                        promptProcessingService: promptProcessingService,
+                        router: ServiceContainer.shared.meetingModelRouter
+                    )
+                    if index != MeetingModelPurpose.allCases.count - 1 {
+                        Divider()
                     }
                 }
             }
+
+            // [M4] Read-only transcription pointers (plan D9 — no duplicated transcription controls).
+            Divider()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(
+                    format: String(localized: "meetings.models.transcription.finalPass"),
+                    finalPassDescription
+                ))
+                .font(.callout)
+                Text(String(localized: "meetings.models.transcription.hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A short, read-only description of the current global final re-transcription policy for the
+    /// transcription pointer (reuses the existing final-pass mode strings; not a control).
+    private var finalPassDescription: String {
+        switch viewModel.globalFinalRetranscriptionPolicy {
+        case .off:
+            return String(localized: "meetings.finalPass.mode.off")
+        case .sameEngine:
+            return String(localized: "meetings.finalPass.mode.sameEngine")
+        case .engine(let id, _):
+            let name = promptProcessingService.availableProviders.first { $0.id == id }?.displayName ?? id
+            return name.isEmpty ? String(localized: "meetings.finalPass.mode.engine") : name
+        }
     }
 
     /// [Speaker-recognition amendment, D-A7] A tiny speaker block: prefer provider labels when a
@@ -266,6 +285,117 @@ struct MeetingsSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)
             }
+        }
+    }
+}
+
+/// [M4] One row of the per-purpose model routing section (plan D9). Binds provider/model pickers to the
+/// purpose's UserDefaults keys ("Use app default" = empty), renders the effective value live under
+/// `template > purpose > app default`, and — for template-overridable purposes — an explicit note that a
+/// template overrides this for its own runs (the precedence display is load-bearing, plan D9).
+private struct PurposeModelRow: View {
+    let purpose: MeetingModelPurpose
+    @ObservedObject var promptProcessingService: PromptProcessingService
+    let router: MeetingModelRouter
+
+    @AppStorage private var providerId: String
+    @AppStorage private var model: String
+
+    init(purpose: MeetingModelPurpose, promptProcessingService: PromptProcessingService, router: MeetingModelRouter) {
+        self.purpose = purpose
+        self.promptProcessingService = promptProcessingService
+        self.router = router
+        _providerId = AppStorage(wrappedValue: "", purpose.providerDefaultsKey)
+        _model = AppStorage(wrappedValue: "", purpose.modelDefaultsKey)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker(String(localized: "meetings.models.provider.label"), selection: $providerId) {
+                Text(String(localized: "meetings.models.provider.useAppDefault")).tag("")
+                ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
+                    Text(provider.displayName).tag(provider.id)
+                }
+            }
+            .onChange(of: providerId) { _, _ in
+                // Switching provider invalidates a model pinned to the previous one.
+                model = ""
+            }
+
+            if !providerId.isEmpty {
+                let models = promptProcessingService.modelsForProvider(providerId)
+                if !models.isEmpty {
+                    Picker(String(localized: "meetings.models.model.label"), selection: $model) {
+                        Text(String(localized: "meetings.models.model.default")).tag("")
+                        ForEach(models, id: \.id) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                }
+            }
+
+            // Effective value live (plan D9): what will actually run for this purpose right now.
+            Text(String(format: String(localized: "meetings.models.effective"), effectiveDescription))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if purpose.isTemplateOverridable {
+                Label(
+                    String(localized: "meetings.models.templateOverrideNote"),
+                    systemImage: "info.circle"
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The effective provider (+ model) that will run for this purpose, resolved live through the
+    /// router. Reads the same `.standard` keys the pickers write, so it updates as they change; the
+    /// app-default rung tracks the observed prompt-provider selection.
+    private var effectiveDescription: String {
+        let providerIdValue = router.effectiveProvider(for: purpose)
+        let modelValue = router.effectiveModel(for: purpose)
+        let providerName = providerIdValue.flatMap { id in
+            promptProcessingService.availableProviders.first { $0.id == id }?.displayName
+        } ?? providerIdValue
+        guard let providerName, !providerName.isEmpty else {
+            return String(localized: "meetings.models.effective.none")
+        }
+        if let modelValue, !modelValue.isEmpty {
+            return "\(providerName) · \(modelValue)"
+        }
+        return providerName
+    }
+
+    private var title: String {
+        switch purpose {
+        case .summariesAnalysis: return String(localized: "meetings.models.purpose.summaries.title")
+        case .briefs: return String(localized: "meetings.models.purpose.briefs.title")
+        case .qa: return String(localized: "meetings.models.purpose.qa.title")
+        case .languageDetection: return String(localized: "meetings.models.purpose.languageDetection.title")
+        case .relatedDocsJudge: return String(localized: "meetings.models.purpose.relatedDocs.title")
+        }
+    }
+
+    private var subtitle: String {
+        switch purpose {
+        case .summariesAnalysis: return String(localized: "meetings.models.purpose.summaries.subtitle")
+        case .briefs: return String(localized: "meetings.models.purpose.briefs.subtitle")
+        case .qa: return String(localized: "meetings.models.purpose.qa.subtitle")
+        case .languageDetection: return String(localized: "meetings.models.purpose.languageDetection.subtitle")
+        case .relatedDocsJudge: return String(localized: "meetings.models.purpose.relatedDocs.subtitle")
         }
     }
 }

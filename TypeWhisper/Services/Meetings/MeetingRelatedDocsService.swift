@@ -33,6 +33,9 @@ final class MeetingRelatedDocsService: ObservableObject {
     private let vaultService: ObsidianVaultService
     private let folderMetadataStore: MeetingFolderMetadataStore
     private let processor: any PromptProcessing
+    /// Per-purpose model router (plan D9/M4): resolves the `relatedDocsJudge` purpose (`purpose > app
+    /// default`, no template rung) per call. Defaulted so predating call sites/tests construct without it.
+    private let modelRouter: MeetingModelRouter
 
     /// Budget caps (DB7); constructor-injected so tests can shrink them.
     private let charBudget: Int
@@ -46,6 +49,7 @@ final class MeetingRelatedDocsService: ObservableObject {
         vaultService: ObsidianVaultService,
         folderMetadataStore: MeetingFolderMetadataStore,
         processor: any PromptProcessing,
+        modelRouter: MeetingModelRouter? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget,
         maxCandidates: Int = 24,
         candidateExcerptCap: Int = 240
@@ -54,6 +58,7 @@ final class MeetingRelatedDocsService: ObservableObject {
         self.vaultService = vaultService
         self.folderMetadataStore = folderMetadataStore
         self.processor = processor
+        self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
         self.charBudget = charBudget
         self.maxCandidates = maxCandidates
         self.candidateExcerptCap = candidateExcerptCap
@@ -98,11 +103,13 @@ final class MeetingRelatedDocsService: ObservableObject {
 
         // Judge: one single-turn call over the meeting signals + candidate list.
         let judgeInput = assembleJudgeInput(meeting: meeting, candidates: candidates)
+        // Plan D9/M4: the judge gains the per-purpose rung (`relatedDocsJudge`). No template, so
+        // `purpose`; a nil override inherits the app default (today's behavior when the purpose is unset).
         let reply = try await processor.process(
             prompt: String(localized: "meetings.related.judge.systemPrompt"),
             text: judgeInput,
-            providerOverride: nil,
-            cloudModelOverride: nil,
+            providerOverride: modelRouter.overrideProvider(for: .relatedDocsJudge),
+            cloudModelOverride: modelRouter.overrideModel(for: .relatedDocsJudge),
             temperatureDirective: .inheritProviderSetting,
             skipMemoryInjection: true
         )

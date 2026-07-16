@@ -185,6 +185,22 @@ final class ParticipantDirectoryService: ObservableObject {
         Self.resolvePersonIDs(for: attendees, persons: persons)
     }
 
+    /// A resolver closure that shares a single prebuilt resolution index over the current directory
+    /// snapshot (M4 — M3 review minor). `MeetingService.priorMeetings(matching:)` calls this once per
+    /// query and reuses the returned closure for the target and every candidate roster, so the index is
+    /// built once (O(persons)) instead of once per candidate (was O(meetings × persons) on the
+    /// MainActor). Resolution semantics are identical to `resolvePersonIDs(for:)`.
+    func makePersonIDResolver() -> ([Attendee]) -> Set<UUID> {
+        let index = Self.resolutionIndex(for: persons)
+        return { attendees in
+            var ids = Set<UUID>()
+            for attendee in attendees {
+                if let id = Self.personID(for: attendee, index: index) { ids.insert(id) }
+            }
+            return ids
+        }
+    }
+
     /// The current display name for an attendee, resolved by the directory (plan D6 — rename felt at
     /// display time). Instance wrapper over the pure static; falls back to the attendee's own name.
     func currentDisplayName(for attendee: Attendee) -> String {

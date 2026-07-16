@@ -48,6 +48,12 @@ final class MeetingLLMService: ObservableObject {
     /// same folder scope as the brief so the two stay consistent. Optional so predating call sites/tests
     /// construct the service without it — a nil store keeps whole-vault retrieval (today's behavior).
     private let folderMetadataStore: MeetingFolderMetadataStore?
+    /// Per-purpose model router (plan D9/M4): resolves `template > purpose > app default` for the
+    /// `summariesAnalysis` (output generation) and `qa` (in-meeting Q&A) purposes, per call. Defaulted
+    /// so predating call sites/tests construct the service without it — a nil router builds one over the
+    /// service's processor + `.standard` defaults, where an unset purpose collapses to the prior
+    /// `template ?? app default` behavior.
+    private let modelRouter: MeetingModelRouter
     private let charBudget: Int
 
     init(
@@ -55,12 +61,14 @@ final class MeetingLLMService: ObservableObject {
         vaultService: ObsidianVaultService,
         processor: any PromptProcessing,
         folderMetadataStore: MeetingFolderMetadataStore? = nil,
+        modelRouter: MeetingModelRouter? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
         self.vaultService = vaultService
         self.processor = processor
         self.folderMetadataStore = folderMetadataStore
+        self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
         self.charBudget = charBudget
     }
 
@@ -187,11 +195,13 @@ final class MeetingLLMService: ObservableObject {
             for: meeting.languageCode,
             to: String(localized: "meetings.qa.systemPrompt")
         )
+        // Plan D9/M4: Q&A gains the per-purpose rung (`qa`). No template, so `template ?? purpose`; a
+        // nil override inherits the app default (today's behavior when the purpose is unset).
         let answer = try await processor.process(
             prompt: systemPrompt,
             text: userText,
-            providerOverride: nil,
-            cloudModelOverride: nil,
+            providerOverride: modelRouter.overrideProvider(for: .qa),
+            cloudModelOverride: modelRouter.overrideModel(for: .qa),
             temperatureDirective: .inheritProviderSetting,
             skipMemoryInjection: true
         )
@@ -270,11 +280,17 @@ final class MeetingLLMService: ObservableObject {
     }
 
     private func run(template: PromptAction, prompt: String, text: String) async throws -> String {
+        // Plan D9/M4: `template > purpose(summariesAnalysis) > app default`, resolved per call. A nil
+        // override inherits the app default (unchanged when both template and purpose are unset).
         try await processor.process(
             prompt: prompt,
             text: text,
-            providerOverride: template.providerType,
-            cloudModelOverride: template.cloudModel,
+            providerOverride: modelRouter.overrideProvider(
+                for: .summariesAnalysis, templateProvider: template.providerType
+            ),
+            cloudModelOverride: modelRouter.overrideModel(
+                for: .summariesAnalysis, templateModel: template.cloudModel
+            ),
             temperatureDirective: template.temperatureDirective,
             skipMemoryInjection: true
         )
@@ -282,26 +298,17 @@ final class MeetingLLMService: ObservableObject {
 
     // MARK: - Provenance
 
-    /// Provider recorded on the output: the template override when set, else the current global
-    /// selection.
+    /// Provider recorded on the output: the effective value that actually ran under the full ladder
+    /// `template > purpose(summariesAnalysis) > app default` (plan D9/M4 — provenance must follow the
+    /// same rungs the call does so `providerUsed` never lies).
     private func resolvedProvider(for template: PromptAction) -> String? {
-        if let provider = template.providerType?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !provider.isEmpty {
-            return provider
-        }
-        let selected = processor.selectedProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return selected.isEmpty ? nil : selected
+        modelRouter.effectiveProvider(for: .summariesAnalysis, templateProvider: template.providerType)
     }
 
-    /// Model recorded on the output: the template override when set, else the current global
-    /// selection (nil when neither exists, e.g. a provider with no model dimension).
+    /// Model recorded on the output: the effective value under the same ladder (nil when even the app
+    /// default is empty, e.g. a provider with no model dimension).
     private func resolvedModel(for template: PromptAction) -> String? {
-        if let model = template.cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !model.isEmpty {
-            return model
-        }
-        let selected = processor.selectedCloudModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return selected.isEmpty ? nil : selected
+        modelRouter.effectiveModel(for: .summariesAnalysis, templateModel: template.cloudModel)
     }
 
     /// The mapped attendee name for a segment's speaker label, if any (populated by M9). Inert

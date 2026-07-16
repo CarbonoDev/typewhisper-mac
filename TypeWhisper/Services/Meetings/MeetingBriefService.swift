@@ -29,6 +29,9 @@ final class MeetingBriefService: ObservableObject {
     /// tests/call sites that predate folder context construct the service without it — a nil store
     /// keeps whole-vault retrieval (today's behavior).
     private let folderMetadataStore: MeetingFolderMetadataStore?
+    /// Per-purpose model router (plan D9/M4): resolves `template > purpose(briefs) > app default` per
+    /// call. Defaulted so predating call sites/tests construct the service without it.
+    private let modelRouter: MeetingModelRouter
     private let charBudget: Int
 
     /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
@@ -41,6 +44,7 @@ final class MeetingBriefService: ObservableObject {
         processor: any PromptProcessing,
         promptActionService: PromptActionService? = nil,
         folderMetadataStore: MeetingFolderMetadataStore? = nil,
+        modelRouter: MeetingModelRouter? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
@@ -48,6 +52,7 @@ final class MeetingBriefService: ObservableObject {
         self.processor = processor
         self.promptActionService = promptActionService
         self.folderMetadataStore = folderMetadataStore
+        self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
         self.charBudget = charBudget
     }
 
@@ -85,11 +90,16 @@ final class MeetingBriefService: ObservableObject {
             for: meeting.languageCode,
             to: basePrompt
         )
+        // Plan D9/M4: `template > purpose(briefs) > app default`, resolved per call.
         let content = try await processor.process(
             prompt: systemPrompt,
             text: context,
-            providerOverride: template?.providerType,
-            cloudModelOverride: template?.cloudModel,
+            providerOverride: modelRouter.overrideProvider(
+                for: .briefs, templateProvider: template?.providerType
+            ),
+            cloudModelOverride: modelRouter.overrideModel(
+                for: .briefs, templateModel: template?.cloudModel
+            ),
             temperatureDirective: template?.temperatureDirective ?? .inheritProviderSetting,
             skipMemoryInjection: true
         )
@@ -248,26 +258,15 @@ final class MeetingBriefService: ObservableObject {
 
     // MARK: - Provenance
 
-    /// Provider recorded on the brief: the resolved template's override when set, else the current
-    /// global selection (mirrors `MeetingLLMService.resolvedProvider`).
+    /// Provider recorded on the brief: the effective value under `template > purpose(briefs) > app
+    /// default` (plan D9/M4 — provenance follows the same rungs the call does).
     private func resolvedProvider(for template: PromptAction?) -> String? {
-        if let provider = template?.providerType?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !provider.isEmpty {
-            return provider
-        }
-        let selected = processor.selectedProviderId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return selected.isEmpty ? nil : selected
+        modelRouter.effectiveProvider(for: .briefs, templateProvider: template?.providerType)
     }
 
-    /// Model recorded on the brief: the resolved template's override when set, else the current
-    /// global selection (mirrors `MeetingLLMService.resolvedModel`).
+    /// Model recorded on the brief: the effective value under the same ladder.
     private func resolvedModel(for template: PromptAction?) -> String? {
-        if let model = template?.cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !model.isEmpty {
-            return model
-        }
-        let selected = processor.selectedCloudModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return selected.isEmpty ? nil : selected
+        modelRouter.effectiveModel(for: .briefs, templateModel: template?.cloudModel)
     }
 }
 

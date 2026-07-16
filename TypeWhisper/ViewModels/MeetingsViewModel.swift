@@ -1326,7 +1326,17 @@ final class MeetingsViewModel: ObservableObject {
             let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return }
             let key = identityKey(name: name, email: email)
-            guard !rosterKeys.contains(key), seenKeys.insert(key).inserted else { return }
+            // Exclude when EITHER the email key OR the lowercased name is already on the roster (M3
+            // review minor): `rosterKeys` carries both keys per roster member, but the previous single
+            // `contains(key)` check only tested the candidate's identity key — so a name-only roster
+            // member ('Alex') failed to exclude an email-carrying candidate for the same name ('Alex
+            // <alex@x.com>'), and picking it appended a duplicate 'Alex' row. Checking both keys makes
+            // the exclusion symmetric.
+            let nameKey = name.lowercased()
+            let emailKey = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if rosterKeys.contains(nameKey) { return }
+            if let emailKey, !emailKey.isEmpty, rosterKeys.contains(emailKey) { return }
+            guard seenKeys.insert(key).inserted else { return }
             candidates.append(AttendeeSuggestion(name: name, email: email, isSelf: isSelf, kind: kind))
         }
         for attendee in calendar {

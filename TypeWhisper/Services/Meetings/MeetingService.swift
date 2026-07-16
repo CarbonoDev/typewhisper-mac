@@ -44,6 +44,14 @@ final class MeetingService: ObservableObject {
     /// where two meetings share a person by name only. `nil` until `ServiceContainer` attaches it to
     /// `ParticipantDirectoryService`; email/series matching (and every existing test) works without it.
     var resolvePersonIDs: (([Attendee]) -> Set<UUID>)?
+    /// M4 seam (M3 review minor): a factory that builds a person-ID resolver **once per query** so
+    /// `priorMeetings(matching:)` no longer rebuilds the directory resolution index per candidate
+    /// meeting (was O(meetings × persons) on the MainActor — worst on the owner's large email-less
+    /// archive). When set it supersedes the per-call `resolvePersonIDs` seam inside `priorMeetings`;
+    /// when nil, `priorMeetings` falls back to `resolvePersonIDs` (existing tests and the
+    /// email/series-only path are unaffected). `ServiceContainer` attaches it to
+    /// `ParticipantDirectoryService.makePersonIDResolver()`.
+    var makePersonIDResolver: (() -> ([Attendee]) -> Set<UUID>)?
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -1090,7 +1098,12 @@ final class MeetingService: ObservableObject {
             meeting.attendees.compactMap { $0.email?.lowercased() }.filter { !$0.isEmpty }
         )
         let seriesID = meeting.seriesID
-        let targetPersonIDs = resolvePersonIDs?(meeting.attendees) ?? []
+        // M4 (M3 review minor): build the directory resolution index ONCE per query via the factory
+        // seam, then reuse the returned resolver for the target and every candidate. Falls back to the
+        // per-call seam (or nil) when the factory is unwired, so the email/series-only path and existing
+        // tests are unchanged.
+        let resolver = makePersonIDResolver?() ?? resolvePersonIDs
+        let targetPersonIDs = resolver?(meeting.attendees) ?? []
 
         return meetings.filter { candidate in
             guard candidate.id != meeting.id else { return false }
@@ -1104,7 +1117,7 @@ final class MeetingService: ObservableObject {
                 return true
             }
             guard !targetPersonIDs.isEmpty else { return false }
-            let candidatePersonIDs = resolvePersonIDs?(candidate.attendees) ?? []
+            let candidatePersonIDs = resolver?(candidate.attendees) ?? []
             return !targetPersonIDs.isDisjoint(with: candidatePersonIDs)
         }
     }

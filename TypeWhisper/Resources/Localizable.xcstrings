@@ -30922,6 +30922,342 @@
           }
         }
       }
+    },
+    "meetings.models.sectionTitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Models"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Modelle"
+          }
+        }
+      }
+    },
+    "meetings.models.section.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose which AI provider and model runs for each meeting task. Each task falls back to your app default provider unless you pick one here — and a matching template still overrides it for its own runs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie, welcher KI-Anbieter und welches Modell für jede Meeting-Aufgabe verwendet wird. Jede Aufgabe greift auf Ihren App-Standardanbieter zurück, sofern Sie hier keinen auswählen – und eine passende Vorlage überschreibt dies weiterhin für ihre eigenen Durchläufe."
+          }
+        }
+      }
+    },
+    "meetings.models.provider.label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieter"
+          }
+        }
+      }
+    },
+    "meetings.models.provider.useAppDefault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use app default"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Standard verwenden"
+          }
+        }
+      }
+    },
+    "meetings.models.model.label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        }
+      }
+    },
+    "meetings.models.model.default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider default"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieter-Standard"
+          }
+        }
+      }
+    },
+    "meetings.models.effective": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effective: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effektiv: %@"
+          }
+        }
+      }
+    },
+    "meetings.models.effective.none": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App default"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Standard"
+          }
+        }
+      }
+    },
+    "meetings.models.templateOverrideNote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A template overrides this for its own runs."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Vorlage überschreibt dies für ihre eigenen Durchläufe."
+          }
+        }
+      }
+    },
+    "meetings.models.transcription.finalPass": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final re-transcription: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finale Neutranskription: %@"
+          }
+        }
+      }
+    },
+    "meetings.models.transcription.hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The speech-to-text engine and final re-transcription are set in the sections above. The models here apply only to AI summaries, briefs, Q&A, and related-document search."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Spracherkennungs-Engine und die finale Neutranskription werden in den Abschnitten oben festgelegt. Die Modelle hier gelten nur für KI-Zusammenfassungen, Briefings, Q&A und die Suche verwandter Dokumente."
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.summaries.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summaries & analysis"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenfassungen & Analyse"
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.summaries.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating meeting summaries and analysis outputs from your templates."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erzeugen von Meeting-Zusammenfassungen und Analyse-Ergebnissen aus Ihren Vorlagen."
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.briefs.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pre-meeting briefs"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorbesprechungs-Briefings"
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.briefs.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing briefs from prior related meetings and your knowledge base."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstellen von Briefings aus früheren verwandten Meetings und Ihrer Wissensdatenbank."
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.qa.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-meeting Q&A"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Q&A im Meeting"
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.qa.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answering questions asked against the live transcript."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beantworten von Fragen zum laufenden Transkript."
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.languageDetection.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language detection"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracherkennung"
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.languageDetection.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detecting a meeting's spoken language from a transcript sample."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkennen der gesprochenen Sprache eines Meetings anhand einer Transkriptprobe."
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.relatedDocs.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related-document search"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche verwandter Dokumente"
+          }
+        }
+      }
+    },
+    "meetings.models.purpose.relatedDocs.subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Judging which knowledge-base notes are relevant to a meeting."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewerten, welche Notizen der Wissensdatenbank für ein Meeting relevant sind."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

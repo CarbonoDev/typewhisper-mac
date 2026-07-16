@@ -57,6 +57,7 @@ final class ServiceContainer: ObservableObject {
     let meetingEndReminderService: MeetingEndReminderService
     let meetingLLMService: MeetingLLMService
     let meetingLanguageService: MeetingLanguageService // [M2]
+    let meetingModelRouter: MeetingModelRouter // [M4] per-purpose model routing (plan D9)
     let obsidianVaultService: ObsidianVaultService
     let meetingBriefService: MeetingBriefService
     // [M8] Agentic related-document discovery (Amendment 2).
@@ -193,6 +194,12 @@ final class ServiceContainer: ObservableObject {
         meetingService.resolvePersonIDs = { [weak participantDirectoryService] attendees in
             participantDirectoryService?.resolvePersonIDs(for: attendees) ?? []
         }
+        // [M4] (M3 review minor) Factory seam so `priorMeetings(matching:)` builds the directory
+        // resolution index once per query and reuses it for the target + every candidate, instead of
+        // rebuilding it per candidate (was O(meetings × persons) on the MainActor).
+        meetingService.makePersonIDResolver = { [weak participantDirectoryService] in
+            participantDirectoryService?.makePersonIDResolver() ?? { _ in [] }
+        }
         // [M7] Per-folder context config store (Amendment 1, DA4). UserDefaults-backed; attaches to
         // M4's folder-mutator seams so a folder's config follows a rename and dies with the folder,
         // and feeds the organization index's union point so configured-but-empty folders appear in the
@@ -228,6 +235,12 @@ final class ServiceContainer: ObservableObject {
         // Obsidian vault knowledge base (plan M5), constructed before the LLM service because M6's
         // in-meeting Q&A retrieves KB passages through it.
         obsidianVaultService = ObsidianVaultService()
+        // [M4] Per-purpose model router (plan D9): resolves `template > purpose > app default` per call
+        // over the shared `.standard` defaults the Models settings section writes. One shared instance
+        // is threaded into every meeting LLM service and read by the settings view for the live
+        // effective-value display, so the ladder and its provenance stay single-sourced.
+        let meetingModelRouter = MeetingModelRouter(processor: promptProcessingService)
+        self.meetingModelRouter = meetingModelRouter
         // Constructed after `promptProcessingService` (its single-turn `process` seam),
         // `meetingService`, and `obsidianVaultService` (KB passages for Q&A — plan M4/M6).
         meetingLLMService = MeetingLLMService(
@@ -235,7 +248,8 @@ final class ServiceContainer: ObservableObject {
             vaultService: obsidianVaultService,
             processor: promptProcessingService,
             // [M7] Q&A honors the same per-folder vault scope as the brief (Amendment 1, DA6).
-            folderMetadataStore: meetingFolderMetadataStore
+            folderMetadataStore: meetingFolderMetadataStore,
+            modelRouter: meetingModelRouter // [M4]
         )
         // [M2] Per-meeting language detection (plan D5). Runs a single-turn LLM call over a transcript
         // sample and persists a `.detected` language; enqueues on the shared job queue's cap-1 `llm`
@@ -245,7 +259,8 @@ final class ServiceContainer: ObservableObject {
         meetingLanguageService = MeetingLanguageService(
             meetingService: meetingService,
             processor: promptProcessingService,
-            jobQueue: meetingJobQueue
+            jobQueue: meetingJobQueue,
+            modelRouter: meetingModelRouter // [M4] languageDetection purpose (reuses detection keys)
         )
         // Auto-detect at the capture transcript-ready choke point (plan D5): once a final pass completes
         // and the meeting is unset, enqueue a background detection. Wired as a closure so the capture
@@ -264,7 +279,8 @@ final class ServiceContainer: ObservableObject {
             // from the unified prompt store.
             promptActionService: promptActionService,
             // [M7] The meeting's folder config scopes brief knowledge-base retrieval (Amendment 1, DA5).
-            folderMetadataStore: meetingFolderMetadataStore
+            folderMetadataStore: meetingFolderMetadataStore,
+            modelRouter: meetingModelRouter // [M4] briefs purpose
         )
         // [M8] Agentic related-document discovery (Amendment 2). Searches the vault folder-first then
         // wider (LLM-judge junk-filtered) to curate per-meeting related notes; writes only through
@@ -274,7 +290,8 @@ final class ServiceContainer: ObservableObject {
             meetingService: meetingService,
             vaultService: obsidianVaultService,
             folderMetadataStore: meetingFolderMetadataStore,
-            processor: promptProcessingService
+            processor: promptProcessingService,
+            modelRouter: meetingModelRouter // [M4] relatedDocsJudge purpose
         )
         // Obsidian meeting export (plan M7): first-party core exporter that reuses the vault path
         // from `obsidianVaultService` (no second vault picker).

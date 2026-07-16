@@ -122,6 +122,11 @@ final class MeetingLanguageService: ObservableObject {
     private let processor: any PromptProcessing
     private let jobQueue: JobQueueService
     private let defaults: UserDefaults
+    /// Per-purpose model router (plan D9/M4): the `languageDetection` purpose reuses the existing
+    /// `meetings.language.detection*` keys, so routing through it preserves the exact prior behavior
+    /// while unifying resolution under one ladder. Defaulted so predating tests construct without it —
+    /// a nil router is built over this service's processor + the same `defaults`.
+    private let modelRouter: MeetingModelRouter
     private let sampleCharBudget: Int
 
     init(
@@ -129,12 +134,14 @@ final class MeetingLanguageService: ObservableObject {
         processor: any PromptProcessing,
         jobQueue: JobQueueService,
         defaults: UserDefaults = .standard,
+        modelRouter: MeetingModelRouter? = nil,
         sampleCharBudget: Int = MeetingLanguageService.defaultSampleCharBudget
     ) {
         self.meetingService = meetingService
         self.processor = processor
         self.jobQueue = jobQueue
         self.defaults = defaults
+        self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor, defaults: defaults)
         self.sampleCharBudget = sampleCharBudget
     }
 
@@ -220,21 +227,18 @@ final class MeetingLanguageService: ObservableObject {
         return TranscriptContextBuilder.truncateWords(full, to: sampleCharBudget)
     }
 
-    // MARK: - Provider resolution (per call, never snapshotted — plan D5 / UX risk 8)
+    // MARK: - Provider resolution (per call, never snapshotted — plan D5 / D9 / UX risk 8)
 
     /// The configured detection provider id, or `nil` to inherit the current prompt-provider selection
-    /// (empty/unset default). Resolved inside the detector, per call.
+    /// (empty/unset default). Resolved inside the detector, per call, via the shared router's
+    /// `languageDetection` purpose (which reads the same `meetings.language.detection*` keys).
     private var resolvedProviderOverride: String? {
-        let id = defaults.string(forKey: UserDefaultsKeys.meetingsLanguageDetectionProviderId)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (id?.isEmpty == false) ? id : nil
+        modelRouter.overrideProvider(for: .languageDetection)
     }
 
     /// The configured detection model id, or `nil` for the provider default.
     private var resolvedModelOverride: String? {
-        let model = defaults.string(forKey: UserDefaultsKeys.meetingsLanguageDetectionModel)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (model?.isEmpty == false) ? model : nil
+        modelRouter.overrideModel(for: .languageDetection)
     }
 
     /// The terse detection instruction. Kept as a stable English scaffold (models follow English

@@ -49,6 +49,22 @@ final class ParticipantsSuggestionTests: XCTestCase {
         )
     }
 
+    func testNameOnlyRosterMemberExcludesEmailCarryingCandidateForSameName() {
+        // [M4 — M3 review minor] The roster carries a name-only "Alex"; an email-carrying candidate for
+        // the same name must still be excluded (previously the asymmetric check let it through, and
+        // picking it appended a duplicate 'Alex' row).
+        let result = MeetingsViewModel.rankedAttendeeSuggestions(
+            query: "",
+            directory: [DirectoryCandidate(name: "Alex", email: "alex@x.com")],
+            calendar: [Attendee(name: "Alex", email: "alex@x.com", isSelf: false)],
+            existing: [Attendee(name: "Alex")] // name-only roster member
+        )
+        XCTAssertFalse(
+            result.contains { $0.name.lowercased() == "alex" && $0.kind != .createNew },
+            "a name-only roster 'Alex' excludes an email-carrying candidate for the same name"
+        )
+    }
+
     func testCalendarWinsDedupeAndCarriesEmailAndIsSelf() {
         let result = MeetingsViewModel.rankedAttendeeSuggestions(
             query: "",
