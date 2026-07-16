@@ -36,7 +36,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
     ) -> AudioRecorderService {
         let recorder = AudioRecorderService()
         recorder.recordingsDirectoryOverride = recordingsDirectory
-        recorder.startRecordingOverride = { _, _, _, outputURL in
+        recorder.startRecordingOverride = { _, _, _, outputURL, _ in
             try FileManager.default.createDirectory(
                 at: outputURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
@@ -335,7 +335,7 @@ final class MeetingCaptureServiceTests: XCTestCase {
         let recorder = makeRecorder(recordingsDirectory: dir.appendingPathComponent("recordings"))
         // The recorder start fails (e.g. device unavailable) on this restart attempt.
         struct StartBoom: Error {}
-        recorder.startRecordingOverride = { _, _, _, _ in throw StartBoom() }
+        recorder.startRecordingOverride = { _, _, _, _, _ in throw StartBoom() }
 
         let capture = makeCaptureService(meetingService: meetingService, recorder: recorder)
 

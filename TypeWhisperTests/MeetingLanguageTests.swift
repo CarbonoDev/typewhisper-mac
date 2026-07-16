@@ -409,7 +409,7 @@ final class MeetingLanguageTests: XCTestCase {
     private func makeRecorder(recordingsDirectory: URL) -> AudioRecorderService {
         let recorder = AudioRecorderService()
         recorder.recordingsDirectoryOverride = recordingsDirectory
-        recorder.startRecordingOverride = { _, _, _, outputURL in
+        recorder.startRecordingOverride = { _, _, _, outputURL, _ in
             try FileManager.default.createDirectory(
                 at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true
             )

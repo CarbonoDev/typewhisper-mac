@@ -15,7 +15,7 @@ final class AudioRecorderTrackModeTests: XCTestCase {
     private func makeOverriddenRecorder(recordingsDirectory: URL) -> AudioRecorderService {
         let recorder = AudioRecorderService()
         recorder.recordingsDirectoryOverride = recordingsDirectory
-        recorder.startRecordingOverride = { _, _, _, outputURL in
+        recorder.startRecordingOverride = { _, _, _, outputURL, _ in
             try FileManager.default.createDirectory(
                 at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true
             )
@@ -112,7 +112,7 @@ final class AudioRecorderTrackModeTests: XCTestCase {
         try writeMonoWAV(value: 0.4, seconds: 1, sampleRate: sr, to: micURL)   // mic distinct level
         try writeMonoWAV(value: 0.2, seconds: 1, sampleRate: sr, to: sysURL)   // system distinct level
 
-        try recorder.mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: outURL, trackMode: .separate)
+        try recorder.mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: outURL, trackMode: .separate, micDuckingMode: .aggressive, outputFormat: .wav)
 
         let (left, right) = try readStereo(outURL)
         let mid = left.count / 2
@@ -139,7 +139,7 @@ final class AudioRecorderTrackModeTests: XCTestCase {
         try writeMonoWAV(value: 0.4, seconds: 1, sampleRate: sr, to: micURL)
 
         // …the single-source finalizer copies the one mono track verbatim.
-        try recorder.copyOrConvert(from: micURL, to: outURL)
+        try recorder.copyOrConvert(from: micURL, to: outURL, outputFormat: .wav)
 
         let outFile = try AVAudioFile(forReading: outURL)
         XCTAssertEqual(outFile.processingFormat.channelCount, 1, "a single-source recording stays mono — no phantom second channel")
@@ -164,7 +164,7 @@ final class AudioRecorderTrackModeTests: XCTestCase {
         try writeMonoWAV(value: 0.4, seconds: 1, sampleRate: sr, to: micURL)
         try writeMonoWAV(value: 0.2, seconds: 1, sampleRate: sr, to: sysURL)
 
-        try recorder.mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: outURL, trackMode: .mixed)
+        try recorder.mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: outURL, trackMode: .mixed, micDuckingMode: .aggressive, outputFormat: .wav)
 
         let (left, right) = try readStereo(outURL)
         let mid = left.count / 2

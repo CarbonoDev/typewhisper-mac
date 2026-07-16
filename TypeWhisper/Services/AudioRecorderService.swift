@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import AVFoundation
+import AudioToolbox
 import CoreAudio
 import ScreenCaptureKit
 import Combine
@@ -371,6 +372,76 @@ struct SystemAudioCaptureDiagnostics {
     }
 }
 
+private final class AudioFileChunkReader {
+    private let audioFile: ExtAudioFileRef
+    private let buffer: AVAudioPCMBuffer
+
+    init(
+        url: URL,
+        clientFormat: AVAudioFormat,
+        chunkFrameCount: AVAudioFrameCount
+    ) throws {
+        var openedFile: ExtAudioFileRef?
+        let openStatus = ExtAudioFileOpenURL(url as CFURL, &openedFile)
+        guard openStatus == noErr, let openedFile else {
+            throw Self.error(operation: "open", url: url, status: openStatus)
+        }
+
+        var streamDescription = clientFormat.streamDescription.pointee
+        let formatStatus = ExtAudioFileSetProperty(
+            openedFile,
+            kExtAudioFileProperty_ClientDataFormat,
+            UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
+            &streamDescription
+        )
+        guard formatStatus == noErr else {
+            ExtAudioFileDispose(openedFile)
+            throw Self.error(operation: "configure", url: url, status: formatStatus)
+        }
+
+        self.audioFile = openedFile
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: clientFormat,
+            frameCapacity: chunkFrameCount
+        ) else {
+            ExtAudioFileDispose(openedFile)
+            throw NSError(
+                domain: "AudioRecorderService.AudioFileChunkReader",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not allocate an audio finalization buffer."]
+            )
+        }
+        self.buffer = buffer
+    }
+
+    deinit {
+        ExtAudioFileDispose(audioFile)
+    }
+
+    func read() throws -> AVAudioPCMBuffer {
+        var frameCount = buffer.frameCapacity
+        buffer.frameLength = frameCount
+        let readStatus = ExtAudioFileRead(audioFile, &frameCount, buffer.mutableAudioBufferList)
+        guard readStatus == noErr else {
+            throw Self.error(operation: "read", url: nil, status: readStatus)
+        }
+        buffer.frameLength = frameCount
+        return buffer
+    }
+
+    private static func error(operation: String, url: URL?, status: OSStatus) -> NSError {
+        var description = "Could not \(operation) audio during recorder finalization (OSStatus \(status))."
+        if let url {
+            description += " File: \(url.lastPathComponent)"
+        }
+        return NSError(
+            domain: NSOSStatusErrorDomain,
+            code: Int(status),
+            userInfo: [NSLocalizedDescriptionKey: description]
+        )
+    }
+}
+
 /// Records audio from microphone and/or system audio to file.
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
@@ -389,6 +460,81 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let envelopeReleaseTime: Double
         let gainAttackTime: Double
         let gainReleaseTime: Double
+    }
+
+    private struct MicDuckingProcessor {
+        private let parameters: MicDuckingParameters
+        private let holdSamples: Int
+        private let envelopeAttack: Float
+        private let envelopeRelease: Float
+        private let gainAttack: Float
+        private let gainRelease: Float
+        private var systemEnvelope: Float = 0
+        private var currentMicGain: Float = 1
+        private var remainingHold = 0
+        private(set) var minimumGain: Float = 1
+        private var gainSum: Float = 0
+        private var processedFrameCount = 0
+        private var duckingEngaged = false
+
+        init(parameters: MicDuckingParameters, sampleRate: Double) {
+            self.parameters = parameters
+            self.holdSamples = max(1, Int(sampleRate * parameters.holdTime))
+            self.envelopeAttack = AudioRecorderService.smoothingCoefficient(
+                timeConstant: parameters.envelopeAttackTime,
+                sampleRate: sampleRate
+            )
+            self.envelopeRelease = AudioRecorderService.smoothingCoefficient(
+                timeConstant: parameters.envelopeReleaseTime,
+                sampleRate: sampleRate
+            )
+            self.gainAttack = AudioRecorderService.smoothingCoefficient(
+                timeConstant: parameters.gainAttackTime,
+                sampleRate: sampleRate
+            )
+            self.gainRelease = AudioRecorderService.smoothingCoefficient(
+                timeConstant: parameters.gainReleaseTime,
+                sampleRate: sampleRate
+            )
+        }
+
+        mutating func gain(for referenceSample: Float) -> Float {
+            let sampleMagnitude = abs(referenceSample)
+            let envelopeCoefficient = sampleMagnitude > systemEnvelope ? envelopeAttack : envelopeRelease
+            systemEnvelope = sampleMagnitude + envelopeCoefficient * (systemEnvelope - sampleMagnitude)
+
+            let targetMicGain: Float
+            if systemEnvelope >= parameters.highThreshold {
+                targetMicGain = parameters.minimumMicGain
+                remainingHold = holdSamples
+                duckingEngaged = true
+            } else if systemEnvelope <= parameters.lowThreshold {
+                if remainingHold > 0 {
+                    remainingHold -= 1
+                    targetMicGain = parameters.minimumMicGain
+                    duckingEngaged = true
+                } else {
+                    targetMicGain = 1
+                }
+            } else {
+                let progress = (systemEnvelope - parameters.lowThreshold)
+                    / (parameters.highThreshold - parameters.lowThreshold)
+                targetMicGain = 1 - progress * (1 - parameters.minimumMicGain)
+                duckingEngaged = true
+            }
+
+            let gainCoefficient = targetMicGain < currentMicGain ? gainAttack : gainRelease
+            currentMicGain = targetMicGain + gainCoefficient * (currentMicGain - targetMicGain)
+            minimumGain = min(minimumGain, currentMicGain)
+            gainSum += currentMicGain
+            processedFrameCount += 1
+            return currentMicGain
+        }
+
+        var summary: (minimumGain: Float, averageGain: Float)? {
+            guard duckingEngaged, minimumGain < 0.99, processedFrameCount > 0 else { return nil }
+            return (minimumGain, gainSum / Float(processedFrameCount))
+        }
     }
 
     enum RecorderError: LocalizedError {
@@ -489,6 +635,22 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Sendable snapshot of everything the off-main finalize task needs, captured synchronously
+    /// in `stopCapture` before any suspension point so the detached finalize never races the
+    /// main actor mutating the recorder's plain properties (upstream #914). `trackMode` is
+    /// snapshotted from the fork's per-session `sessionTrackMode` (not the instance `trackMode`),
+    /// preserving invariant D3 across the bounded finalize.
+    struct StoppedRecording: Sendable {
+        let finalOutputURL: URL?
+        let micTempURL: URL?
+        let systemTempURL: URL?
+        let outputFormat: OutputFormat
+        let trackMode: TrackMode
+        let micDuckingMode: MicDuckingMode
+        let transcriptionSamples: [Float]
+        let usesFinalizationOverride: Bool
+    }
+
     @Published private(set) var isRecording = false
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var micLevel: Float = 0
@@ -549,6 +711,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private static let systemAudioNonSilentThreshold: Float = 0.0001
 
     static let recordingsDirectoryName = "TypeWhisper Recordings"
+    static let finalizationChunkFrameCount: AVAudioFrameCount = 8_192
 
     init(
         inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
@@ -760,48 +923,39 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     }
 
     func stopRecording() async -> URL? {
+        let stoppedRecording = await stopCapture()
+        return await finalizeRecording(stoppedRecording)
+    }
+
+    func stopCapture(includeTranscriptionSamples: Bool = false) async -> StoppedRecording {
         // Stop timer
         durationTimer?.invalidate()
         durationTimer = nil
         endSystemAudioMonitoring()
 
-        if let stopRecordingOverride, let finalURL = finalOutputURL {
-            let completedURL: URL?
-            do {
-                completedURL = try await stopRecordingOverride(finalURL)
-            } catch {
-                logger.error("Failed to finalize recording with override: \(error.localizedDescription)")
-                cleanupTempFile(finalURL)
-                completedURL = nil
-            }
+        let usesFinalizationOverride = stopRecordingOverride != nil
+        let stoppedMicEnabled = micEnabled
+        let stoppedSystemAudioEnabled = systemAudioEnabled
+        let stoppedMicTempURL = stoppedMicEnabled ? micTempURL : nil
+        let stoppedSystemTempURL = stoppedSystemAudioEnabled ? systemTempURL : nil
+        let stoppedFinalOutputURL = finalOutputURL
+        let stoppedOutputFormat = outputFormat
+        // Snapshot the per-session track mode (D3), not the instance preference, so a meeting
+        // session that started with `.separate` finalizes with separate tracks even after the
+        // detached finalize — and the standalone Recorder's picker preference never leaks in.
+        let stoppedTrackMode = sessionTrackMode
+        let stoppedMicDuckingMode = micDuckingMode
 
-            cleanupTempFile(micTempURL)
-            cleanupTempFile(systemTempURL)
-            micTempURL = nil
-            systemTempURL = nil
-            finalOutputURL = nil
-            startTime = nil
-
-            DispatchQueue.main.async {
-                self.isRecording = false
-                self.duration = 0
-                self.micLevel = 0
-                self.systemLevel = 0
-            }
-
-            return completedURL
-        }
-
-        // Stop mic
-        if micEnabled {
+        // Test overrides own their capture lifecycle. Production capture must be fully
+        // stopped before any live-session or file finalization work begins.
+        if !usesFinalizationOverride, stoppedMicEnabled {
             audioEngine?.inputNode.removeTap(onBus: 0)
             audioEngine?.stop()
             audioEngine = nil
             micFileLock.withLock { $0 = nil }
         }
 
-        // Stop system audio
-        if systemAudioEnabled, let stream = scStream {
+        if !usesFinalizationOverride, stoppedSystemAudioEnabled, let stream = scStream {
             do {
                 try await stream.stopCapture()
             } catch {
@@ -812,37 +966,18 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             streamOutput = nil
         }
 
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
-        micInputCaptureSession?.stop()
-        micInputCaptureSession = nil
-        micInputActivationGuard.restore(reason: "recorder-mic-stop")
-        micFileLock.withLock { $0 = nil }
-
-        var completedURL = finalOutputURL
-
-        // Mix or copy to final output
-        if let finalURL = completedURL {
-            do {
-                if micEnabled && systemAudioEnabled,
-                   let micURL = micTempURL, let sysURL = systemTempURL {
-                    try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL, trackMode: sessionTrackMode)
-                } else if micEnabled, let micURL = micTempURL {
-                    try copyOrConvert(from: micURL, to: finalURL)
-                } else if systemAudioEnabled, let sysURL = systemTempURL {
-                    try copyOrConvert(from: sysURL, to: finalURL)
-                }
-            } catch {
-                logger.error("Failed to finalize recording: \(error.localizedDescription)")
-                cleanupTempFile(finalURL)
-                completedURL = nil
-            }
+        if !usesFinalizationOverride {
+            audioEngine?.inputNode.removeTap(onBus: 0)
+            audioEngine?.stop()
+            audioEngine = nil
+            micInputCaptureSession?.stop()
+            micInputCaptureSession = nil
+            micInputActivationGuard.restore(reason: "recorder-mic-stop")
+            micFileLock.withLock { $0 = nil }
         }
 
-        // Cleanup temp files
-        cleanupTempFile(micTempURL)
-        cleanupTempFile(systemTempURL)
+        let transcriptionSamples = includeTranscriptionSamples ? getCurrentBuffer() : []
+
         micTempURL = nil
         systemTempURL = nil
         finalOutputURL = nil
@@ -854,6 +989,46 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             self.micLevel = 0
             self.systemLevel = 0
         }
+
+        return StoppedRecording(
+            finalOutputURL: stoppedFinalOutputURL,
+            micTempURL: stoppedMicTempURL,
+            systemTempURL: stoppedSystemTempURL,
+            outputFormat: stoppedOutputFormat,
+            trackMode: stoppedTrackMode,
+            micDuckingMode: stoppedMicDuckingMode,
+            transcriptionSamples: transcriptionSamples,
+            usesFinalizationOverride: usesFinalizationOverride
+        )
+    }
+
+    func finalizeRecording(_ stoppedRecording: StoppedRecording) async -> URL? {
+        var completedURL = stoppedRecording.finalOutputURL
+
+        if stoppedRecording.usesFinalizationOverride,
+           let stopRecordingOverride,
+           let finalURL = completedURL {
+            do {
+                completedURL = try await stopRecordingOverride(finalURL)
+            } catch {
+                logger.error("Failed to finalize recording with override: \(error.localizedDescription)")
+                cleanupTempFile(finalURL)
+                completedURL = nil
+            }
+        } else if let finalURL = completedURL {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try self.finalizeOutputFile(stoppedRecording)
+                }.value
+            } catch {
+                logger.error("Failed to finalize recording: \(error.localizedDescription)")
+                cleanupTempFile(finalURL)
+                completedURL = nil
+            }
+        }
+
+        cleanupTempFile(stoppedRecording.micTempURL)
+        cleanupTempFile(stoppedRecording.systemTempURL)
 
         return completedURL
     }
@@ -1246,14 +1421,23 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     // MARK: - Audio Mixing
 
     /// Mix (or split into separate mic/system channels) the two source recordings into `outputURL`.
-    /// `trackMode` is passed per-session by `stopRecording` (from `sessionTrackMode`) rather than read
-    /// from the instance property, so a session's layout is explicit and directly testable (M1/D3).
-    /// Both `.mixed` and `.separate` write a 2-channel file — only the channel *content* differs.
-    func mixAudioFiles(micURL: URL, systemURL: URL, outputURL: URL, trackMode: TrackMode) throws {
+    /// `trackMode`, `micDuckingMode`, and `outputFormat` are passed per-session (from the Sendable
+    /// `StoppedRecording` snapshot, where `trackMode` comes from `sessionTrackMode`) rather than read
+    /// from the instance properties, so a session's layout is explicit, race-free across the detached
+    /// finalize, and directly testable (M1/D3 + upstream #914). Both `.mixed` and `.separate` write a
+    /// 2-channel file — only the channel *content* differs. `internal` (not `private`) so
+    /// `AudioRecorderTrackModeTests` can drive the mix directly.
+    func mixAudioFiles(
+        micURL: URL,
+        systemURL: URL,
+        outputURL: URL,
+        trackMode: TrackMode,
+        micDuckingMode: MicDuckingMode,
+        outputFormat: OutputFormat
+    ) throws {
         let micFile = try AVAudioFile(forReading: micURL)
         let sysFile = try AVAudioFile(forReading: systemURL)
 
-        // Use the higher sample rate
         let targetSampleRate = max(micFile.processingFormat.sampleRate, sysFile.processingFormat.sampleRate)
         let targetChannels: AVAudioChannelCount = 2
 
@@ -1264,77 +1448,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             interleaved: false
         ) else { return }
 
-        // Determine total length in frames at target sample rate
-        let micDuration = Double(micFile.length) / micFile.processingFormat.sampleRate
-        let sysDuration = Double(sysFile.length) / sysFile.processingFormat.sampleRate
-        let totalDuration = max(micDuration, sysDuration)
-        let totalFrames = AVAudioFrameCount(totalDuration * targetSampleRate)
-
-        guard totalFrames > 0 else { return }
-
-        // Read and convert both sources
-        let micBuffer = try readAndConvert(file: micFile, to: mixFormat, totalFrames: totalFrames)
-        let sysBuffer = try readAndConvert(file: sysFile, to: mixFormat, totalFrames: totalFrames)
-
-        let micDuckingProfile: MicDuckingProfile?
-        if trackMode == .mixed,
-           let systemLeft = sysBuffer.floatChannelData?[0] {
-            let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
-            micDuckingProfile = Self.buildMicDuckingProfile(
-                frameCount: Int(totalFrames),
-                sampleRate: targetSampleRate,
-                mode: micDuckingMode
-            ) { index in
-                monoSample(left: systemLeft, right: systemRight, index: index)
-            }
-        } else {
-            micDuckingProfile = nil
-        }
-
-        if let micDuckingProfile {
-            logger.info("Applied mic ducking with minimum gain \(micDuckingProfile.minimumGain) and average gain \(micDuckingProfile.averageGain)")
-        }
-
-        // Mix buffers
-        guard let mixedBuffer = AVAudioPCMBuffer(pcmFormat: mixFormat, frameCapacity: totalFrames) else { return }
-        mixedBuffer.frameLength = totalFrames
-
-        if trackMode == .separate {
-            guard let leftData = mixedBuffer.floatChannelData?[0],
-                  let rightData = mixedBuffer.floatChannelData?[1],
-                  let micLeft = micBuffer.floatChannelData?[0],
-                  let systemLeft = sysBuffer.floatChannelData?[0] else { return }
-
-            let micRight = micBuffer.format.channelCount > 1 ? micBuffer.floatChannelData?[1] : nil
-            let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
-
-            for i in 0..<Int(totalFrames) {
-                leftData[i] = i < Int(micBuffer.frameLength)
-                    ? monoSample(left: micLeft, right: micRight, index: i)
-                    : 0
-            }
-
-            for i in 0..<Int(totalFrames) {
-                rightData[i] = i < Int(sysBuffer.frameLength)
-                    ? monoSample(left: systemLeft, right: systemRight, index: i)
-                    : 0
-            }
-        } else {
-            for ch in 0..<Int(targetChannels) {
-                guard let mixedData = mixedBuffer.floatChannelData?[ch],
-                      let micData = micBuffer.floatChannelData?[ch],
-                      let sysData = sysBuffer.floatChannelData?[ch] else { continue }
-
-                for i in 0..<Int(totalFrames) {
-                    let micSample = i < Int(micBuffer.frameLength) ? micData[i] : 0
-                    let sysSample = i < Int(sysBuffer.frameLength) ? sysData[i] : 0
-                    let micGain = micDuckingProfile?.gains[i] ?? 1
-                    mixedData[i] = (micSample * micGain) + sysSample
-                }
-            }
-        }
-
-        // Write output
         let outputSettings: [String: Any]
         switch outputFormat {
         case .wav:
@@ -1356,82 +1469,71 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
 
         let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
-        try outputFile.write(from: mixedBuffer)
-    }
+        let micReader = try AudioFileChunkReader(
+            url: micURL,
+            clientFormat: mixFormat,
+            chunkFrameCount: Self.finalizationChunkFrameCount
+        )
+        let systemReader = try AudioFileChunkReader(
+            url: systemURL,
+            clientFormat: mixFormat,
+            chunkFrameCount: Self.finalizationChunkFrameCount
+        )
+        var duckingProcessor = trackMode == .mixed
+            ? Self.makeMicDuckingProcessor(mode: micDuckingMode, sampleRate: targetSampleRate)
+            : nil
 
-    private func readAndConvert(file: AVAudioFile, to targetFormat: AVAudioFormat, totalFrames: AVAudioFrameCount) throws -> AVAudioPCMBuffer {
-        let sourceFormat = file.processingFormat
-        let sourceFrames = AVAudioFrameCount(file.length)
+        while true {
+            let micBuffer = try micReader.read()
+            let systemBuffer = try systemReader.read()
+            let frameCount = max(micBuffer.frameLength, systemBuffer.frameLength)
+            guard frameCount > 0 else { break }
 
-        guard let sourceBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: sourceFrames) else {
-            throw RecorderError.engineStartFailed("Cannot create read buffer")
-        }
-        try file.read(into: sourceBuffer)
-
-        // If formats match, just zero-pad to totalFrames
-        if sourceFormat.sampleRate == targetFormat.sampleRate && sourceFormat.channelCount == targetFormat.channelCount {
-            guard let padded = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: totalFrames) else {
-                return sourceBuffer
+            guard let mixedBuffer = AVAudioPCMBuffer(
+                pcmFormat: mixFormat,
+                frameCapacity: frameCount
+            ) else {
+                throw RecorderError.engineStartFailed("Cannot create finalization mix buffer")
             }
-            padded.frameLength = totalFrames
-            for ch in 0..<Int(targetFormat.channelCount) {
-                guard let dst = padded.floatChannelData?[ch],
-                      let src = sourceBuffer.floatChannelData?[ch] else { continue }
-                let copyCount = min(Int(sourceFrames), Int(totalFrames))
-                dst.update(from: src, count: copyCount)
-                if copyCount < Int(totalFrames) {
-                    dst.advanced(by: copyCount).update(repeating: 0, count: Int(totalFrames) - copyCount)
+            mixedBuffer.frameLength = frameCount
+
+            guard let outputLeft = mixedBuffer.floatChannelData?[0],
+                  let outputRight = mixedBuffer.floatChannelData?[1],
+                  let micLeft = micBuffer.floatChannelData?[0],
+                  let micRight = micBuffer.floatChannelData?[1],
+                  let systemLeft = systemBuffer.floatChannelData?[0],
+                  let systemRight = systemBuffer.floatChannelData?[1] else {
+                throw RecorderError.engineStartFailed("Cannot access finalization mix channels")
+            }
+
+            let micFrameCount = Int(micBuffer.frameLength)
+            let systemFrameCount = Int(systemBuffer.frameLength)
+            for index in 0..<Int(frameCount) {
+                let hasMicFrame = index < micFrameCount
+                let hasSystemFrame = index < systemFrameCount
+                if trackMode == .separate {
+                    outputLeft[index] = hasMicFrame ? (micLeft[index] + micRight[index]) * 0.5 : 0
+                    outputRight[index] = hasSystemFrame
+                        ? (systemLeft[index] + systemRight[index]) * 0.5
+                        : 0
+                    continue
                 }
+
+                let systemLeftSample = hasSystemFrame ? systemLeft[index] : 0
+                let systemRightSample = hasSystemFrame ? systemRight[index] : 0
+                let micGain = duckingProcessor?.gain(
+                    for: (systemLeftSample + systemRightSample) * 0.5
+                ) ?? 1
+                outputLeft[index] = (hasMicFrame ? micLeft[index] * micGain : 0) + systemLeftSample
+                outputRight[index] = (hasMicFrame ? micRight[index] * micGain : 0) + systemRightSample
             }
-            return padded
+
+            try outputFile.write(from: mixedBuffer)
         }
 
-        // Convert format
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
-            throw RecorderError.engineStartFailed("Cannot create audio converter for mixing")
+        if let summary = duckingProcessor?.summary {
+            logger.info("Applied mic ducking with minimum gain \(summary.minimumGain) and average gain \(summary.averageGain)")
         }
-
-        let convertedFrames = AVAudioFrameCount(Double(sourceFrames) * targetFormat.sampleRate / sourceFormat.sampleRate)
-        let outputFrames = max(convertedFrames, totalFrames)
-        guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrames) else {
-            throw RecorderError.engineStartFailed("Cannot create converted buffer")
-        }
-
-        var error: NSError?
-        let consumed = OSAllocatedUnfairLock(initialState: false)
-        converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-            let wasConsumed = consumed.withLock { flag in
-                let prev = flag
-                flag = true
-                return prev
-            }
-            if wasConsumed {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            outStatus.pointee = .haveData
-            return sourceBuffer
-        }
-
-        if let error { throw error }
-
-        // Zero-pad if needed
-        if convertedBuffer.frameLength < totalFrames {
-            guard let padded = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: totalFrames) else {
-                return convertedBuffer
-            }
-            padded.frameLength = totalFrames
-            for ch in 0..<Int(targetFormat.channelCount) {
-                guard let dst = padded.floatChannelData?[ch],
-                      let src = convertedBuffer.floatChannelData?[ch] else { continue }
-                let copyCount = Int(convertedBuffer.frameLength)
-                dst.update(from: src, count: copyCount)
-                dst.advanced(by: copyCount).update(repeating: 0, count: Int(totalFrames) - copyCount)
-            }
-            return padded
-        }
-
-        return convertedBuffer
     }
 
     // MARK: - Level Update (called from SystemLevelSetter on main queue)
@@ -1521,31 +1623,80 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Helpers
 
+    /// Route a stopped session's snapshot to the mixdown (both sources) or a single-source
+    /// finalize. Runs inside the detached, bounded finalize task (#914); `trackMode` here is the
+    /// per-session `sessionTrackMode` snapshotted in `stopCapture` (D3).
+    private func finalizeOutputFile(_ stoppedRecording: StoppedRecording) throws {
+        guard let finalURL = stoppedRecording.finalOutputURL else { return }
+
+        if let micURL = stoppedRecording.micTempURL,
+           let systemURL = stoppedRecording.systemTempURL {
+            try mixAudioFiles(
+                micURL: micURL,
+                systemURL: systemURL,
+                outputURL: finalURL,
+                trackMode: stoppedRecording.trackMode,
+                micDuckingMode: stoppedRecording.micDuckingMode,
+                outputFormat: stoppedRecording.outputFormat
+            )
+        } else if let micURL = stoppedRecording.micTempURL {
+            try copyOrConvert(
+                from: micURL,
+                to: finalURL,
+                outputFormat: stoppedRecording.outputFormat
+            )
+        } else if let systemURL = stoppedRecording.systemTempURL {
+            try copyOrConvert(
+                from: systemURL,
+                to: finalURL,
+                outputFormat: stoppedRecording.outputFormat
+            )
+        }
+    }
+
     /// Finalize a single-source recording (mic-only or system-only). Deliberately takes **no** track
     /// mode: a single source has no L/R layout to choose, so it copies (`.wav`) or transcodes (`.m4a`)
     /// the one track verbatim, preserving its channel count. `internal` (like `mixAudioFiles`) so the
     /// M1/D3 "single-source session is unaffected by `.separate`" invariant is directly testable.
-    func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
+    /// `outputFormat` is passed per-session (from the `StoppedRecording` snapshot) for #914.
+    func copyOrConvert(from sourceURL: URL, to destinationURL: URL, outputFormat: OutputFormat) throws {
         switch outputFormat {
         case .wav:
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         case .m4a:
-            // Convert WAV to M4A
             let sourceFile = try AVAudioFile(forReading: sourceURL)
             let sourceFormat = sourceFile.processingFormat
-            let sourceFrames = AVAudioFrameCount(sourceFile.length)
-
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: sourceFrames) else { return }
-            try sourceFile.read(into: buffer)
-
             let outputSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: sourceFormat.sampleRate,
                 AVNumberOfChannelsKey: sourceFormat.channelCount,
                 AVEncoderBitRateKey: 192000,
             ]
-            let outputFile = try AVAudioFile(forWriting: destinationURL, settings: outputSettings)
-            try outputFile.write(from: buffer)
+            let outputFile: AVAudioFile
+            do {
+                outputFile = try AVAudioFile(forWriting: destinationURL, settings: outputSettings)
+            } catch {
+                throw RecorderError.engineStartFailed(
+                    "Cannot create M4A finalization output: \(error.localizedDescription)"
+                )
+            }
+            let reader = try AudioFileChunkReader(
+                url: sourceURL,
+                clientFormat: outputFile.processingFormat,
+                chunkFrameCount: Self.finalizationChunkFrameCount
+            )
+
+            while true {
+                let buffer = try reader.read()
+                guard buffer.frameLength > 0 else { break }
+                do {
+                    try outputFile.write(from: buffer)
+                } catch {
+                    throw RecorderError.engineStartFailed(
+                        "Cannot write M4A finalization output: \(error.localizedDescription)"
+                    )
+                }
+            }
         }
     }
 
@@ -1561,6 +1712,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     }
 
     // Aggressively duck the mic while system audio is active to avoid replaying the same content twice.
+    private static func makeMicDuckingProcessor(
+        mode: MicDuckingMode,
+        sampleRate: Double
+    ) -> MicDuckingProcessor? {
+        guard let parameters = micDuckingParameters(for: mode) else { return nil }
+        return MicDuckingProcessor(parameters: parameters, sampleRate: sampleRate)
+    }
+
     private static func buildMicDuckingProfile(
         frameCount: Int,
         sampleRate: Double,
@@ -1568,62 +1727,21 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         referenceSample: (Int) -> Float
     ) -> MicDuckingProfile? {
         guard frameCount > 0,
-              let parameters = micDuckingParameters(for: mode) else {
+              var processor = makeMicDuckingProcessor(mode: mode, sampleRate: sampleRate) else {
             return nil
         }
 
-        let holdSamples = max(1, Int(sampleRate * parameters.holdTime))
-        let envelopeAttack = smoothingCoefficient(timeConstant: parameters.envelopeAttackTime, sampleRate: sampleRate)
-        let envelopeRelease = smoothingCoefficient(timeConstant: parameters.envelopeReleaseTime, sampleRate: sampleRate)
-        let gainAttack = smoothingCoefficient(timeConstant: parameters.gainAttackTime, sampleRate: sampleRate)
-        let gainRelease = smoothingCoefficient(timeConstant: parameters.gainReleaseTime, sampleRate: sampleRate)
-
         var gains = [Float](repeating: 1, count: frameCount)
-        var systemEnvelope: Float = 0
-        var currentMicGain: Float = 1
-        var remainingHold = 0
-        var minimumGain: Float = 1
-        var gainSum: Float = 0
-        var duckingEngaged = false
-
         for index in 0..<frameCount {
-            let sampleMagnitude = abs(referenceSample(index))
-            let envelopeCoefficient = sampleMagnitude > systemEnvelope ? envelopeAttack : envelopeRelease
-            systemEnvelope = sampleMagnitude + envelopeCoefficient * (systemEnvelope - sampleMagnitude)
-
-            let targetMicGain: Float
-            if systemEnvelope >= parameters.highThreshold {
-                targetMicGain = parameters.minimumMicGain
-                remainingHold = holdSamples
-                duckingEngaged = true
-            } else if systemEnvelope <= parameters.lowThreshold {
-                if remainingHold > 0 {
-                    remainingHold -= 1
-                    targetMicGain = parameters.minimumMicGain
-                    duckingEngaged = true
-                } else {
-                    targetMicGain = 1
-                }
-            } else {
-                let progress = (systemEnvelope - parameters.lowThreshold) / (parameters.highThreshold - parameters.lowThreshold)
-                targetMicGain = 1 - progress * (1 - parameters.minimumMicGain)
-                duckingEngaged = true
-            }
-
-            let gainCoefficient = targetMicGain < currentMicGain ? gainAttack : gainRelease
-            currentMicGain = targetMicGain + gainCoefficient * (currentMicGain - targetMicGain)
-
-            gains[index] = currentMicGain
-            minimumGain = min(minimumGain, currentMicGain)
-            gainSum += currentMicGain
+            gains[index] = processor.gain(for: referenceSample(index))
         }
 
-        guard duckingEngaged, minimumGain < 0.99 else { return nil }
+        guard let summary = processor.summary else { return nil }
 
         return MicDuckingProfile(
             gains: gains,
-            minimumGain: minimumGain,
-            averageGain: gainSum / Float(frameCount)
+            minimumGain: summary.minimumGain,
+            averageGain: summary.averageGain
         )
     }
 

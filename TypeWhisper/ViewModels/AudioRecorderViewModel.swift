@@ -527,21 +527,35 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func stopRecording(apiSessionID: UUID?) {
         let recordingDuration = duration
+        let shouldTranscribe = transcriptionEnabled
+
+        // Flip out of `.recording` immediately so the recording timer/widget disappears
+        // the instant Stop is pressed, instead of staying up while audio finalization
+        // and transcription run (which can take a while for long recordings).
+        state = .finalizing
 
         Task {
-            let liveSessionResult = await streamingHandler.finish()
-            let url = await recorderService.stopRecording()
+            let stoppedRecording = await recorderService.stopCapture(
+                includeTranscriptionSamples: shouldTranscribe
+            )
+            // Our StreamingHandler.finish() pulls its own tail delta from the recorder buffer
+            // (bufferDeltaProvider); stopCapture never resets that buffer, so it is still intact
+            // here — no need for upstream's finalSamples plumbing, keeping our bounded-stabilization
+            // StreamingHandler (c61427c) untouched. Finalize and finish run in parallel (upstream #914).
+            async let liveSessionResultTask = streamingHandler.finish()
+            async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
+            let (liveSessionResult, url) = await (liveSessionResultTask, finalizedURLTask)
             recorderService.releaseCaptureOwnership(.recorder)
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
-            if transcriptionEnabled, let url {
+            if shouldTranscribe, let url {
                 reconcileSelectionWithAvailablePlugins()
                 let providerId = effectiveProviderId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
-                    buffer: recorderService.getCurrentBuffer(),
+                    buffer: stoppedRecording.transcriptionSamples,
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,
@@ -550,7 +564,6 @@ final class AudioRecorderViewModel: ObservableObject {
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult
                 )
-                state = .finalizing
                 if let apiSessionID {
                     markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
                 }
