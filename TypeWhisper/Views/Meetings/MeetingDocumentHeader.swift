@@ -14,6 +14,7 @@ struct MeetingDocumentHeader: View {
     @State private var isPresentingTagsEditor = false
     @State private var isPresentingFolderEditor = false
     @State private var isPresentingDateEditor = false
+    @State private var isPresentingParticipants = false
     /// Inline title-edit draft (folder-description idiom): committed on submit and on focus loss, so
     /// a rename never touches calendar linkage and never fetch-thrashes on every keystroke.
     @State private var titleDraft = ""
@@ -138,6 +139,7 @@ struct MeetingDocumentHeader: View {
         if MeetingsViewModel.showsDateEditor(calendarEventID: meeting.calendarEventID) {
             dateChip
         }
+        participantsChip
         calendarLinkChip
         languageChip
         tagsChip
@@ -148,6 +150,26 @@ struct MeetingDocumentHeader: View {
         // so a completed meeting no longer forces the user to the list toolbar's create-new import.
         if viewModel.showsImportMergeAction(for: meeting) {
             importChip
+        }
+    }
+
+    // MARK: - Participants chip (plan M3 — in-document add/remove editor)
+
+    /// Opens the in-document participants editor (`ParticipantsSection`). Always present so participants
+    /// can be added even on an attendee-less ad-hoc meeting; the count badge mirrors the roster size.
+    private var participantsChip: some View {
+        Button {
+            isPresentingParticipants = true
+        } label: {
+            chipLabel(
+                icon: "person.2",
+                text: String(localized: "meetingdoc.participants.chip"),
+                trailingCount: meeting.attendees.count
+            )
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresentingParticipants, arrowEdge: .bottom) {
+            ParticipantsSection(meeting: meeting)
         }
     }
 

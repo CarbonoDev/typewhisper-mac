@@ -60,6 +60,11 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                // [M3-Participants] Directory management: rename, merge, split, delete (plan M3/D5#11).
+                ParticipantDirectorySection()
+
+                Divider()
+
                 // [Track D] Automatic pre-meeting brief settings (plan AD9).
                 AutoBriefSettingsView()
 
@@ -262,5 +267,140 @@ struct MeetingsSettingsView: View {
                 .padding(.vertical, 2)
             }
         }
+    }
+}
+
+/// [M3-Participants] The participant directory manager (plan M3): the accumulated people list with
+/// per-person rename (display-time only, plan D6), manual merge (plan D5 #11), split of a
+/// merge-recorded secondary email back out (plan D8 escape hatch), and delete (plan Part F #6). All
+/// mutations route through `MeetingsViewModel` → the single-writer `ParticipantDirectoryService`.
+private struct ParticipantDirectorySection: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    @ObservedObject private var directory = ServiceContainer.shared.participantDirectoryService
+
+    @State private var renamingPersonID: UUID?
+    @State private var renameDraft = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "meetings.participants.sectionTitle"))
+                .font(.headline)
+            Text(String(localized: "meetings.participants.section.subtitle"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if directory.persons.isEmpty {
+                Text(String(localized: "meetings.participants.empty"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                let stats = viewModel.directoryStats()
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(directory.persons, id: \.id) { person in
+                        personRow(person, stats: stats[person.id])
+                        if person.id != directory.persons.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func personRow(_ person: Person, stats: PersonStats?) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                if renamingPersonID == person.id {
+                    TextField(String(localized: "meetings.participants.rename.field"), text: $renameDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .onSubmit { commitRename(person) }
+                } else {
+                    Text(person.displayName)
+                        .font(.callout)
+                }
+                HStack(spacing: 6) {
+                    if let email = person.emailKey, !email.isEmpty {
+                        Text(email)
+                    } else {
+                        Text(String(localized: "meetings.participants.noEmail"))
+                    }
+                    if let count = stats?.meetingCount, count > 0 {
+                        Text("·")
+                        Text(String(
+                            format: String(localized: "meetings.participants.meetingCount"),
+                            count
+                        ))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+
+            if renamingPersonID == person.id {
+                Button(String(localized: "meetings.participants.rename.save")) { commitRename(person) }
+                Button(String(localized: "meetings.participants.rename.cancel")) { cancelRename() }
+            } else {
+                rowMenu(person)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func rowMenu(_ person: Person) -> some View {
+        Menu {
+            Button {
+                renamingPersonID = person.id
+                renameDraft = person.displayName
+            } label: {
+                Label(String(localized: "meetings.participants.action.rename"), systemImage: "pencil")
+            }
+
+            let others = directory.persons.filter { $0.id != person.id }
+            if !others.isEmpty {
+                Menu(String(localized: "meetings.participants.action.mergeInto")) {
+                    ForEach(others, id: \.id) { other in
+                        Button(other.displayName) {
+                            viewModel.mergePersons(person, into: other)
+                        }
+                    }
+                }
+            }
+
+            let altEmails = person.altEmails
+            if !altEmails.isEmpty {
+                Menu(String(localized: "meetings.participants.action.split")) {
+                    ForEach(altEmails, id: \.self) { email in
+                        Button(email) {
+                            viewModel.splitEmail(email, from: person)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+            Button(role: .destructive) {
+                viewModel.deletePerson(person)
+            } label: {
+                Label(String(localized: "meetings.participants.action.delete"), systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func commitRename(_ person: Person) {
+        viewModel.renamePerson(person, to: renameDraft)
+        cancelRename()
+    }
+
+    private func cancelRename() {
+        renamingPersonID = nil
+        renameDraft = ""
     }
 }

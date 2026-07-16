@@ -155,6 +155,98 @@ final class ParticipantDirectoryService: ObservableObject {
         fetchPersons()
     }
 
+    /// Rename a person's current display label (plan D6 — the label is the *current* name, resolved by
+    /// email at display time; historical `attendeesJSON` is **never** rewritten). The previous label is
+    /// folded into `aliases` so a name-only attendee that carried the old spelling still resolves to this
+    /// person (and therefore now renders the new name). No-op for a blank or unchanged name.
+    func rename(_ person: Person, to newName: String) {
+        guard let trimmed = PersonIdentity.normalizeDisplayName(newName),
+              PersonIdentity.nameKey(trimmed) != PersonIdentity.nameKey(person.displayName) || trimmed != person.displayName else {
+            return
+        }
+        let oldName = person.displayName
+        let oldKey = PersonIdentity.nameKey(oldName)
+        if PersonIdentity.nameKey(trimmed) != oldKey,
+           !person.aliases.contains(where: { PersonIdentity.nameKey($0) == oldKey }) {
+            person.aliases = person.aliases + [oldName]
+        }
+        person.displayName = trimmed
+        person.updatedAt = Date()
+        save()
+        fetchPersons()
+    }
+
+    // MARK: - Read-time identity resolution (plan D6/D8 — display + prior-matching)
+
+    /// The set of directory Person ids a roster resolves to (plan D8 — the additive prior-meeting
+    /// matching union). Instance wrapper over the pure static so `MeetingService.priorMeetings` can
+    /// resolve two meetings' rosters against the live directory. See `resolvePersonIDs(for:persons:)`.
+    func resolvePersonIDs(for attendees: [Attendee]) -> Set<UUID> {
+        Self.resolvePersonIDs(for: attendees, persons: persons)
+    }
+
+    /// The current display name for an attendee, resolved by the directory (plan D6 — rename felt at
+    /// display time). Instance wrapper over the pure static; falls back to the attendee's own name.
+    func currentDisplayName(for attendee: Attendee) -> String {
+        Self.resolveDisplayName(name: attendee.name, email: attendee.email, persons: persons)
+    }
+
+    /// Directory Person ids a roster resolves to (plan D8). Email attendees resolve by primary or
+    /// merge-recorded secondary email; a name-only attendee resolves **only** when exactly one person
+    /// carries the name (common-name conservatism, plan D8) — otherwise it contributes nothing. Pure so
+    /// the prior-matching union is unit-testable without a store.
+    static func resolvePersonIDs(for attendees: [Attendee], persons: [Person]) -> Set<UUID> {
+        let index = resolutionIndex(for: persons)
+        var ids = Set<UUID>()
+        for attendee in attendees {
+            if let id = personID(for: attendee, index: index) { ids.insert(id) }
+        }
+        return ids
+    }
+
+    /// The current display name for `name`/`email` resolved against a persons snapshot (plan D6). Pure
+    /// so the "rename felt at display time" behavior is testable without a store. Returns the matched
+    /// person's `displayName`; falls back to the trimmed input name when nothing resolves.
+    static func resolveDisplayName(name: String, email: String?, persons: [Person]) -> String {
+        let fallback = PersonIdentity.normalizeDisplayName(name) ?? name
+        let index = resolutionIndex(for: persons)
+        let attendee = Attendee(name: name, email: email)
+        guard let id = personID(for: attendee, index: index),
+              let person = persons.first(where: { $0.id == id }) else {
+            return fallback
+        }
+        return person.displayName
+    }
+
+    /// Resolution indexes over a persons snapshot: primary + secondary email → person id, and name key →
+    /// person ids (a name may be shared). Built once and shared by `derivedStats`, `resolvePersonIDs`,
+    /// and `resolveDisplayName` so the three never disagree on how an attendee maps to a person.
+    static func resolutionIndex(for persons: [Person]) -> (byEmail: [String: UUID], byName: [String: [UUID]]) {
+        var byEmail: [String: UUID] = [:]
+        var byName: [String: [UUID]] = [:]
+        for person in persons {
+            if let key = person.emailKey { byEmail[key] = person.id }
+            for alt in person.altEmails { byEmail[alt] = person.id }
+            for name in [person.displayName] + person.aliases {
+                byName[PersonIdentity.nameKey(name), default: []].append(person.id)
+            }
+        }
+        return (byEmail, byName)
+    }
+
+    /// Resolve one attendee to a person id via a prebuilt index (plan D8). Email wins (primary or
+    /// secondary); a name-only attendee resolves only when unambiguous. `nil` when nothing/ambiguous.
+    static func personID(
+        for attendee: Attendee,
+        index: (byEmail: [String: UUID], byName: [String: [UUID]])
+    ) -> UUID? {
+        if let key = PersonIdentity.normalizeEmail(attendee.email) {
+            return index.byEmail[key]
+        }
+        let ids = index.byName[PersonIdentity.nameKey(attendee.name)] ?? []
+        return ids.count == 1 ? ids.first : nil
+    }
+
     // MARK: - Derived stats (plan D9 — never stored)
 
     /// Per-person meeting count and last-seen date, derived from a meetings snapshot (plan D9). A
@@ -162,32 +254,18 @@ final class ParticipantDirectoryService: ObservableObject {
     /// latest of the matching meetings' effective dates (`startDate ?? createdAt`). Pure over its
     /// inputs so it is unit-testable without any store.
     static func derivedStats(persons: [Person], meetings: [Meeting]) -> [UUID: PersonStats] {
-        // Resolution indexes: primary + secondary email → person id; name key → [person id].
-        var byEmail: [String: UUID] = [:]
-        var byName: [String: [UUID]] = [:]
-        for person in persons {
-            if let key = person.emailKey { byEmail[key] = person.id }
-            for alt in person.altEmails { byEmail[alt] = person.id }
-            let names = [person.displayName] + person.aliases
-            for name in names {
-                byName[PersonIdentity.nameKey(name), default: []].append(person.id)
-            }
-        }
+        // Shared resolution indexes (primary + secondary email → id; name key → [id]) — the same map
+        // `resolvePersonIDs`/`resolveDisplayName` use, so counting and matching never disagree.
+        let index = resolutionIndex(for: persons)
 
         var stats: [UUID: PersonStats] = [:]
         for meeting in meetings {
             let date = meeting.startDate ?? meeting.createdAt
             var countedThisMeeting = Set<UUID>()
             for attendee in meeting.attendees {
-                let personID: UUID?
-                if let key = PersonIdentity.normalizeEmail(attendee.email) {
-                    personID = byEmail[key]
-                } else {
-                    // Name-only attendee resolves only when unambiguous (one person carries the name).
-                    let ids = byName[PersonIdentity.nameKey(attendee.name)] ?? []
-                    personID = ids.count == 1 ? ids.first : nil
-                }
-                guard let personID, countedThisMeeting.insert(personID).inserted else { continue }
+                // Name-only attendees resolve only when unambiguous (one person carries the name).
+                guard let personID = personID(for: attendee, index: index),
+                      countedThisMeeting.insert(personID).inserted else { continue }
                 var entry = stats[personID] ?? PersonStats(meetingCount: 0, lastSeen: nil)
                 entry.meetingCount += 1
                 if let last = entry.lastSeen {

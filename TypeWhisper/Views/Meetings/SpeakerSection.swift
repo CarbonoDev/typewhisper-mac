@@ -58,6 +58,9 @@ struct SpeakerSection: View {
         .task(id: meeting.id) { await refreshPlan() }
         .task(id: meeting.speakerMapJSON) { await refreshPlan() }
         .task(id: meeting.twoPersonCall) { await refreshPlan() }
+        // [M3] Adding/removing a participant changes `effectiveParticipantCount` (and empties/refills the
+        // roster the two-person toggle keys off), so re-resolve the plan when the roster changes.
+        .task(id: meeting.attendeesJSON) { await refreshPlan() }
     }
 
     private var hasSpeakerLabels: Bool {

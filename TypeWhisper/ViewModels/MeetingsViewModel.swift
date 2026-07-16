@@ -141,6 +141,11 @@ final class MeetingsViewModel: ObservableObject {
     // navigation) and double-clicks are deduped. `internal` so `MeetingsViewModel+AutoBrief` can
     // derive the auto-brief status line from the queue.
     let jobQueue: JobQueueService
+    // [M3-Participants] The single-writer participant directory (plan D4/D5). Drives ranked add-attendee
+    // suggestions, display-time rename resolution (plan D6), and the settings directory manager. Attendee
+    // *writes* still flow through `meetingService`'s choke points (which fold into the directory via the
+    // ingest seam) — the VM never mutates the directory except through explicit management actions.
+    let participantDirectoryService: ParticipantDirectoryService
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -163,8 +168,10 @@ final class MeetingsViewModel: ObservableObject {
         // [Track C]
         contextRuleService: MeetingContextRuleService,
         briefScheduler: MeetingBriefScheduler, // [Track D]
-        jobQueue: JobQueueService // [Track J]
+        jobQueue: JobQueueService, // [Track J]
+        participantDirectoryService: ParticipantDirectoryService // [M3-Participants]
     ) {
+        self.participantDirectoryService = participantDirectoryService // [M3-Participants]
         self.contextRuleService = contextRuleService
         self.jobQueue = jobQueue // [Track J]
         self.meetingService = meetingService
@@ -1123,6 +1130,13 @@ final class MeetingsViewModel: ObservableObject {
     /// attendee-less (ad-hoc) meetings, where the participant count is otherwise unknown. Calendar
     /// meetings derive their count from attendees and never show the toggle.
     func showsTwoPersonToggle(for meeting: Meeting) -> Bool {
+        Self.showsTwoPersonToggle(for: meeting)
+    }
+
+    /// Pure form of the toggle-eligibility rule (D-A4) so it is unit-testable without the view model:
+    /// the toggle reappears the moment the roster drops to empty (plan M3 — adding a participant hides
+    /// it, removing the last one restores it).
+    nonisolated static func showsTwoPersonToggle(for meeting: Meeting) -> Bool {
         meeting.attendees.isEmpty
     }
 
@@ -1205,11 +1219,213 @@ final class MeetingsViewModel: ObservableObject {
         meetingService.setSpeakerMap(map, for: meeting)
     }
 
-    /// Attendee names (from a linked calendar event or manual entry) offered as mapping suggestions.
+    /// Attendee names offered as speaker-mapping suggestions: this meeting's roster first, then the
+    /// broader participant directory (plan M3 — "speaker-map suggestions broadened to directory names"),
+    /// so a known person who is not on the roster can still be picked. De-duplicated case-insensitively,
+    /// roster order preserved.
     func attendeeNameSuggestions(for meeting: Meeting) -> [String] {
-        meeting.attendees
+        let rosterNames = meeting.attendees
             .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let directoryNames = participantDirectoryService.persons.map(\.displayName)
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for name in rosterNames + directoryNames {
+            let key = name.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            ordered.append(name)
+        }
+        return ordered
+    }
+
+    // MARK: - Participants editor (plan M3 — in-document add/remove with ranked suggestions)
+
+    /// A ranked add-attendee suggestion (plan M3): a directory person, a linked-event calendar
+    /// attendee (carries email + `isSelf`), or the persistent "Create '<name>'" row for a fresh
+    /// name-only participant.
+    struct AttendeeSuggestion: Identifiable, Hashable {
+        enum Kind: Hashable { case directory, calendar, createNew }
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+        let kind: Kind
+
+        /// Stable identity: kind + email (when known) else the lowercased name, so a directory and a
+        /// calendar row for the same person are distinct rows but the Create-new row is unique per name.
+        var id: String { "\(kind)::\(email?.lowercased() ?? name.lowercased())" }
+
+        /// The `Attendee` this suggestion adds — a calendar pick carries its email + `isSelf` through
+        /// (plan M3 acceptance: "add attaches email+isSelf from calendar pick").
+        var attendee: Attendee { Attendee(name: name, email: email, isSelf: isSelf) }
+    }
+
+    /// A directory person reduced to the value inputs the pure ranker needs.
+    struct DirectoryCandidate: Equatable, Hashable {
+        let name: String
+        let email: String?
+    }
+
+    /// Ranked add-attendee suggestions for a meeting given the current type-to-add `query` (plan M3):
+    /// the directory ∪ the linked calendar event's attendees ∪ a persistent "Create '<query>'" row.
+    func attendeeSuggestions(for meeting: Meeting, query: String) -> [AttendeeSuggestion] {
+        let directory = participantDirectoryService.persons.map {
+            DirectoryCandidate(name: $0.displayName, email: $0.emailKey)
+        }
+        return Self.rankedAttendeeSuggestions(
+            query: query,
+            directory: directory,
+            calendar: linkedEventAttendees(for: meeting),
+            existing: meeting.attendees
+        )
+    }
+
+    /// The attendees of the meeting's linked calendar event, if that event is in the current
+    /// upcoming/earlier caches (an upcoming meeting being prepped, or a recently-ended one). These
+    /// carry email + `isSelf`; an archived meeting whose event is out of window simply yields none and
+    /// the directory covers it.
+    private func linkedEventAttendees(for meeting: Meeting) -> [Attendee] {
+        guard let eventID = meeting.calendarEventID else { return [] }
+        return (upcomingEvents + earlierEvents).first(where: { $0.id == eventID })?.attendees ?? []
+    }
+
+    /// Pure suggestion ranking (plan M3), so it is unit-testable without constructing the view model.
+    /// Calendar candidates rank ahead of directory ones for the same identity (they carry email +
+    /// `isSelf`); roster members are excluded; prefix matches sort ahead of substring matches, then
+    /// alphabetically. A persistent "Create '<query>'" row is appended whenever a non-empty query is not
+    /// already an exact roster name.
+    nonisolated static func rankedAttendeeSuggestions(
+        query: String,
+        directory: [DirectoryCandidate],
+        calendar: [Attendee],
+        existing: [Attendee],
+        limit: Int = 8
+    ) -> [AttendeeSuggestion] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryLower = trimmedQuery.lowercased()
+
+        // Roster identity keys (email when present, else name) — used to exclude already-added people.
+        var rosterKeys = Set<String>()
+        for attendee in existing {
+            if let email = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !email.isEmpty {
+                rosterKeys.insert(email)
+            }
+            rosterKeys.insert(attendee.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        }
+
+        func identityKey(name: String, email: String?) -> String {
+            if let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !email.isEmpty {
+                return email
+            }
+            return name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        // Calendar first so its richer row (email + isSelf) wins the dedupe over a bare directory row.
+        var candidates: [AttendeeSuggestion] = []
+        var seenKeys = Set<String>()
+        func consider(name rawName: String, email: String?, isSelf: Bool?, kind: AttendeeSuggestion.Kind) {
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            let key = identityKey(name: name, email: email)
+            guard !rosterKeys.contains(key), seenKeys.insert(key).inserted else { return }
+            candidates.append(AttendeeSuggestion(name: name, email: email, isSelf: isSelf, kind: kind))
+        }
+        for attendee in calendar {
+            consider(name: attendee.name, email: attendee.email, isSelf: attendee.isSelf, kind: .calendar)
+        }
+        for candidate in directory {
+            consider(name: candidate.name, email: candidate.email, isSelf: nil, kind: .directory)
+        }
+
+        // Query filter (empty query keeps all) over name + email.
+        let filtered = candidates.filter { candidate in
+            guard !queryLower.isEmpty else { return true }
+            if candidate.name.lowercased().contains(queryLower) { return true }
+            if let email = candidate.email?.lowercased(), email.contains(queryLower) { return true }
+            return false
+        }
+
+        // Prefix matches first, then alphabetical; stable and deterministic.
+        let ranked = filtered.enumerated().sorted { lhs, rhs in
+            let lPrefix = queryLower.isEmpty ? false : lhs.element.name.lowercased().hasPrefix(queryLower)
+            let rPrefix = queryLower.isEmpty ? false : rhs.element.name.lowercased().hasPrefix(queryLower)
+            if lPrefix != rPrefix { return lPrefix }
+            let order = lhs.element.name.localizedCaseInsensitiveCompare(rhs.element.name)
+            if order != .orderedSame { return order == .orderedAscending }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+
+        var result = Array(ranked.prefix(limit))
+
+        // Persistent "Create '<query>'" row: offered whenever a non-empty query is not already an exact
+        // roster member (case-insensitive). Coexists with a same-named directory/calendar match so the
+        // owner can always choose to add a fresh name-only participant.
+        if !trimmedQuery.isEmpty, !rosterKeys.contains(queryLower) {
+            result.append(AttendeeSuggestion(name: trimmedQuery, email: nil, isSelf: nil, kind: .createNew))
+        }
+        return result
+    }
+
+    /// Add a picked suggestion to a meeting's roster (plan M3). Routes through the M2 attendee choke
+    /// point, which folds it into the directory; a calendar pick carries its email + `isSelf` through.
+    @discardableResult
+    func addSuggestedAttendee(_ suggestion: AttendeeSuggestion, to meeting: Meeting) -> Bool {
+        meetingService.addAttendee(suggestion.attendee, to: meeting)
+    }
+
+    /// Add a typed name-only attendee to a meeting's roster (the "Create '<name>'" path, plan M3).
+    @discardableResult
+    func addTypedAttendee(named name: String, to meeting: Meeting) -> Bool {
+        meetingService.addAttendee(Attendee(name: name), to: meeting)
+    }
+
+    /// Remove an attendee from a meeting's roster (plan M3 / Part F #6). Routes through the M2 choke
+    /// point, which **never** deletes the backing `Person` — the UI must not call directory delete here.
+    @discardableResult
+    func removeAttendee(_ attendee: Attendee, from meeting: Meeting) -> Bool {
+        meetingService.removeAttendee(attendee, from: meeting)
+    }
+
+    /// The current display name for a roster attendee, resolved by the directory (plan D6 — a rename is
+    /// felt at display time without rewriting historical `attendeesJSON`). Falls back to the attendee's
+    /// own stored name.
+    func currentDisplayName(for attendee: Attendee) -> String {
+        participantDirectoryService.currentDisplayName(for: attendee)
+    }
+
+    // MARK: - Participant directory management (plan M3 — settings surface)
+
+    /// The full participant directory (settings list). Observed live via the service's `@Published`.
+    var directoryPersons: [Person] {
+        participantDirectoryService.persons
+    }
+
+    /// Per-person derived meeting count + last-seen (plan D9), computed over the current archive.
+    func directoryStats() -> [UUID: PersonStats] {
+        ParticipantDirectoryService.derivedStats(
+            persons: participantDirectoryService.persons,
+            meetings: meetings
+        )
+    }
+
+    /// Rename a directory person (plan D6). Display-time only; historical `attendeesJSON` is untouched.
+    func renamePerson(_ person: Person, to newName: String) {
+        participantDirectoryService.rename(person, to: newName)
+    }
+
+    /// Manually merge one directory person into another (plan D5 #11 / Part F #3).
+    func mergePersons(_ loser: Person, into winner: Person) {
+        participantDirectoryService.merge(loser, into: winner)
+    }
+
+    /// Split a merge-recorded secondary email back out into its own person (plan D8 escape hatch).
+    @discardableResult
+    func splitEmail(_ email: String, from person: Person) -> Person? {
+        participantDirectoryService.split(email: email, from: person)
+    }
+
+    /// Delete a directory person (settings action, plan Part F #6 — distinct from removing an attendee).
+    func deletePerson(_ person: Person) {
+        participantDirectoryService.delete(person)
     }
 
     // MARK: - Template CRUD (editor — plan AD6 unified library)

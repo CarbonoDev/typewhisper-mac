@@ -39,6 +39,11 @@ final class MeetingService: ObservableObject {
     /// `ServiceContainer` attaches it; meeting CRUD (and every existing unit test) works without it.
     /// Removing an attendee deliberately does **not** fire this — a removal never deletes a Person.
     var onAttendeesIngested: (([Attendee]) -> Void)?
+    /// M3 seam (plan D8): resolves a roster to directory Person ids so `priorMeetings(matching:)` can
+    /// union on shared resolved identity — unlocking the owner's largely email-less imported archive,
+    /// where two meetings share a person by name only. `nil` until `ServiceContainer` attaches it to
+    /// `ParticipantDirectoryService`; email/series matching (and every existing test) works without it.
+    var resolvePersonIDs: (([Attendee]) -> Set<UUID>)?
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -1071,13 +1076,21 @@ final class MeetingService: ObservableObject {
 
     // MARK: - Queries
 
-    /// Meetings related to the given one — sharing at least one attendee email OR the same
-    /// recurrence `seriesID`. Excludes the meeting itself. Used by pre-meeting briefs (M5).
+    /// Meetings related to the given one — sharing at least one attendee email, the same recurrence
+    /// `seriesID`, OR (plan D8) a shared resolved directory `Person` identity. Excludes the meeting
+    /// itself. Used by pre-meeting briefs (M5) and the related-meetings surface.
+    ///
+    /// The directory union is what unlocks the owner's largely email-less imported archive: two archive
+    /// meetings that share a person only by name resolve — via the participant directory — to the same
+    /// `Person` id and match. Email/series stay primary; the union is purely additive, and when the
+    /// directory seam is unwired (`resolvePersonIDs == nil`, e.g. in a unit test that does not build the
+    /// directory) behavior is exactly the prior email-OR-series rule.
     func priorMeetings(matching meeting: Meeting) -> [Meeting] {
         let emails = Set(
             meeting.attendees.compactMap { $0.email?.lowercased() }.filter { !$0.isEmpty }
         )
         let seriesID = meeting.seriesID
+        let targetPersonIDs = resolvePersonIDs?(meeting.attendees) ?? []
 
         return meetings.filter { candidate in
             guard candidate.id != meeting.id else { return false }
@@ -1087,7 +1100,12 @@ final class MeetingService: ObservableObject {
             let candidateEmails = Set(
                 candidate.attendees.compactMap { $0.email?.lowercased() }.filter { !$0.isEmpty }
             )
-            return !emails.isDisjoint(with: candidateEmails)
+            if !emails.isDisjoint(with: candidateEmails) {
+                return true
+            }
+            guard !targetPersonIDs.isEmpty else { return false }
+            let candidatePersonIDs = resolvePersonIDs?(candidate.attendees) ?? []
+            return !targetPersonIDs.isDisjoint(with: candidatePersonIDs)
         }
     }
 

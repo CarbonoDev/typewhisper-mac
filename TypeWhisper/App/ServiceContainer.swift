@@ -186,6 +186,13 @@ final class ServiceContainer: ObservableObject {
         meetingService.onAttendeesIngested = { [weak participantDirectoryService] attendees in
             participantDirectoryService?.ingest(attendees)
         }
+        // [M3-Participants] Prior-meeting matching union on resolved directory identity (plan D8) — the
+        // headline win for the owner's largely email-less imported archive. Wired here so
+        // `priorMeetings(matching:)` can resolve two rosters against the live directory; unwired in unit
+        // tests, where the query falls back to the email-OR-series rule.
+        meetingService.resolvePersonIDs = { [weak participantDirectoryService] attendees in
+            participantDirectoryService?.resolvePersonIDs(for: attendees) ?? []
+        }
         // [M7] Per-folder context config store (Amendment 1, DA4). UserDefaults-backed; attaches to
         // M4's folder-mutator seams so a folder's config follows a rename and dies with the folder,
         // and feeds the organization index's union point so configured-but-empty folders appear in the
@@ -442,7 +449,8 @@ final class ServiceContainer: ObservableObject {
             // [Track C]
             contextRuleService: meetingContextRuleService,
             briefScheduler: meetingBriefScheduler, // [Track D]
-            jobQueue: meetingJobQueue // [Track J]
+            jobQueue: meetingJobQueue, // [Track J]
+            participantDirectoryService: participantDirectoryService // [M3-Participants]
         )
         homeFeedViewModel = HomeFeedViewModel() // [Track C]
 

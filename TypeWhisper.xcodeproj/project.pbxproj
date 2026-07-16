@@ -268,6 +268,7 @@
 		P2B0000000000000000001 /* Person.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000001 /* Person.swift */; };
 		P2B0000000000000000002 /* PersonIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000002 /* PersonIdentity.swift */; };
 		P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000003 /* ParticipantDirectoryService.swift */; };
+		P3B0000000000000000001 /* ParticipantsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000001 /* ParticipantsSection.swift */; };
 		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
 		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
 		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
@@ -283,6 +284,8 @@
 		P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000101 /* PersonIdentityTests.swift */; };
 		P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */; };
 		P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */; };
+		P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */; };
+		P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
@@ -888,6 +891,7 @@
 		P2F0000000000000000001 /* Person.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Person.swift; sourceTree = "<group>"; };
 		P2F0000000000000000002 /* PersonIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonIdentity.swift; sourceTree = "<group>"; };
 		P2F0000000000000000003 /* ParticipantDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryService.swift; sourceTree = "<group>"; };
+		P3F0000000000000000001 /* ParticipantsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantsSection.swift; sourceTree = "<group>"; };
 		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
 		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
 		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
@@ -903,6 +907,8 @@
 		P2F0000000000000000101 /* PersonIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonIdentityTests.swift; sourceTree = "<group>"; };
 		P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryServiceTests.swift; sourceTree = "<group>"; };
 		P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAttendeeIngestionTests.swift; sourceTree = "<group>"; };
+		P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantsSuggestionTests.swift; sourceTree = "<group>"; };
+		P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryMatchingTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
@@ -2136,6 +2142,7 @@
 				BB00000000000000000411 /* MeetingImportView.swift */,
 				BB00000000000000000413 /* SpeakerMappingView.swift */,
 				SPAF000000000000000002 /* SpeakerSection.swift */,
+				P3F0000000000000000001 /* ParticipantsSection.swift */,
 			);
 			path = Meetings;
 			sourceTree = "<group>";
@@ -2801,6 +2808,8 @@
 				P2F0000000000000000101 /* PersonIdentityTests.swift */,
 				P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */,
 				P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */,
+				P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */,
+				P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */,
 				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
 				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
 				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
@@ -4351,6 +4360,8 @@
 				P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */,
 				P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */,
 				P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */,
+				P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */,
+				P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */,
 				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
 				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
 				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,
@@ -4565,6 +4576,7 @@
 				P2B0000000000000000001 /* Person.swift in Sources */,
 				P2B0000000000000000002 /* PersonIdentity.swift in Sources */,
 				P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */,
+				P3B0000000000000000001 /* ParticipantsSection.swift in Sources */,
 				CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */,
 				CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */,
 				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
