@@ -155,6 +155,35 @@ final class ParticipantDirectoryService: ObservableObject {
         fetchPersons()
     }
 
+    /// Restore participants from a settings backup (fork adaptation of #932). Additive by `id`: a
+    /// person whose id already exists in `participants.store` is skipped, never overwritten, so an
+    /// import never clobbers the local directory. Single-writer on the MainActor. Returns the number
+    /// of persons inserted.
+    @discardableResult
+    func importPersons(_ dtos: [SettingsBackupExporter.PersonDTO]) -> Int {
+        let existingIDs = Set(persons.map(\.id))
+        var imported = 0
+        for dto in dtos where !existingIDs.contains(dto.id) {
+            let person = Person(
+                id: dto.id,
+                emailKey: dto.emailKey,
+                displayName: dto.displayName,
+                createdAt: dto.createdAt,
+                updatedAt: dto.updatedAt
+            )
+            // `aliases`/`altEmails` are stored as JSON columns; carry them verbatim.
+            person.aliasesJSON = dto.aliasesJSON
+            person.altEmailsJSON = dto.altEmailsJSON
+            modelContext.insert(person)
+            imported += 1
+        }
+        if imported > 0 {
+            save()
+            fetchPersons()
+        }
+        return imported
+    }
+
     /// Rename a person's current display label (plan D6 — the label is the *current* name, resolved by
     /// email at display time; historical `attendeesJSON` is **never** rewritten). The previous label is
     /// folded into `aliases` so a name-only attendee that carried the old spelling still resolves to this

@@ -460,6 +460,111 @@ final class MeetingService: ObservableObject {
         return meeting
     }
 
+    /// Restore meetings from a settings backup (fork adaptation of #932). Additive by `id`: a meeting
+    /// whose id already exists in `meetings.store` is skipped, never overwritten. The full aggregate —
+    /// scalar/JSON columns plus the cascade children (segments, notes, outputs, Q&A turns) — is
+    /// reconstructed so the round-trip is faithful. Saved audio is not part of a backup, so
+    /// `audioFileName` is carried as metadata only (playback resolves to nil if the file is absent on
+    /// the destination). Single-writer on the MainActor. Returns the number of meetings inserted.
+    @discardableResult
+    func importMeetings(_ dtos: [SettingsBackupExporter.MeetingDTO]) -> Int {
+        let existingIDs = Set(meetings.map(\.id))
+        var imported = 0
+        for dto in dtos where !existingIDs.contains(dto.id) {
+            let meeting = Meeting(
+                id: dto.id,
+                title: dto.title,
+                startDate: dto.startDate,
+                endDate: dto.endDate,
+                calendarEventID: dto.calendarEventID,
+                seriesID: dto.seriesID,
+                attendeesJSON: dto.attendeesJSON,
+                speakerMapJSON: dto.speakerMapJSON,
+                audioFileName: dto.audioFileName,
+                finalRetranscriptionRaw: dto.finalRetranscriptionRaw,
+                notesIncludedInOutputs: dto.notesIncludedInOutputs,
+                languageCode: dto.languageCode,
+                languageProvenanceRaw: dto.languageProvenanceRaw,
+                obsidianFolder: dto.obsidianFolder,
+                obsidianTagsJSON: dto.obsidianTagsJSON,
+                lastObsidianExportAt: dto.lastObsidianExportAt,
+                relatedNotePathsJSON: dto.relatedNotePathsJSON,
+                excludedNotePathsJSON: dto.excludedNotePathsJSON,
+                relatedDiscoveryAt: dto.relatedDiscoveryAt,
+                twoPersonCall: dto.twoPersonCall,
+                timestampsRefined: dto.timestampsRefined,
+                createdAt: dto.createdAt,
+                updatedAt: dto.updatedAt
+            )
+            // Preserve the raw state/source strings verbatim (an unknown future value degrades
+            // gracefully via the enum accessors rather than being silently normalized on import).
+            meeting.stateRaw = dto.stateRaw
+            meeting.sourceRaw = dto.sourceRaw
+            modelContext.insert(meeting)
+
+            for segmentDTO in dto.segments {
+                let segment = MeetingSegment(
+                    id: segmentDTO.id,
+                    order: segmentDTO.order,
+                    start: segmentDTO.start,
+                    end: segmentDTO.end,
+                    text: segmentDTO.text,
+                    speakerLabel: segmentDTO.speakerLabel,
+                    speakerConfidence: segmentDTO.speakerConfidence,
+                    source: MeetingSegmentSource(rawValue: segmentDTO.sourceRaw) ?? .importedTranscript,
+                    isStable: segmentDTO.isStable,
+                    meeting: meeting
+                )
+                segment.sourceRaw = segmentDTO.sourceRaw
+                modelContext.insert(segment)
+            }
+
+            for noteDTO in dto.notes {
+                let note = MeetingNote(
+                    id: noteDTO.id,
+                    text: noteDTO.text,
+                    timestampOffset: noteDTO.timestampOffset,
+                    createdAt: noteDTO.createdAt,
+                    meeting: meeting
+                )
+                modelContext.insert(note)
+            }
+
+            for outputDTO in dto.outputs {
+                let output = MeetingOutput(
+                    id: outputDTO.id,
+                    kind: MeetingOutputKind(rawValue: outputDTO.kindRaw) ?? .summary,
+                    templateID: outputDTO.templateID,
+                    content: outputDTO.content,
+                    providerUsed: outputDTO.providerUsed,
+                    modelUsed: outputDTO.modelUsed,
+                    createdAt: outputDTO.createdAt,
+                    meeting: meeting
+                )
+                output.kindRaw = outputDTO.kindRaw
+                modelContext.insert(output)
+            }
+
+            for turnDTO in dto.qaTurns {
+                let turn = MeetingQATurn(
+                    id: turnDTO.id,
+                    question: turnDTO.question,
+                    answer: turnDTO.answer,
+                    createdAt: turnDTO.createdAt,
+                    meeting: meeting
+                )
+                modelContext.insert(turn)
+            }
+
+            imported += 1
+        }
+        if imported > 0 {
+            save()
+            fetchMeetings()
+        }
+        return imported
+    }
+
     /// Merge an imported transcript into an existing meeting (plan M8 / D12). Captured content is
     /// preserved; imported segments duplicating the overlap are dropped by `TranscriptMerger`; the
     /// union is re-numbered chronologically and deterministically (stable for equal start times).

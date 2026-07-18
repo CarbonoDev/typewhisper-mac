@@ -94,6 +94,35 @@ final class MeetingContextRuleService: ObservableObject, MeetingContextRuleMatch
         fetchRules()
     }
 
+    /// Restore capture-context rules from a settings backup (fork adaptation of #932). Additive by
+    /// `id`: a rule whose id already exists in `meeting-rules.store` is skipped, never overwritten.
+    /// The encoded `triggerData`/`actionsData` blobs and `sortOrder` are preserved verbatim so the
+    /// round-trip is faithful. Single-writer on the MainActor. Returns the number of rules inserted.
+    @discardableResult
+    func importRules(_ dtos: [SettingsBackupExporter.MeetingContextRuleDTO]) -> Int {
+        let existingIDs = Set(rules.map(\.id))
+        var imported = 0
+        for dto in dtos where !existingIDs.contains(dto.id) {
+            let rule = MeetingContextRule(
+                id: dto.id,
+                name: dto.name,
+                isEnabled: dto.isEnabled,
+                sortOrder: dto.sortOrder,
+                createdAt: dto.createdAt,
+                updatedAt: dto.updatedAt
+            )
+            rule.triggerData = dto.triggerData
+            rule.actionsData = dto.actionsData
+            modelContext.insert(rule)
+            imported += 1
+        }
+        if imported > 0 {
+            save()
+            fetchRules()
+        }
+        return imported
+    }
+
     /// Persist a new ordering (drag-to-reorder in the rules list); `sortOrder` drives the match
     /// tie-break.
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
