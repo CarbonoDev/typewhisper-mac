@@ -763,6 +763,31 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(stable, "Ich bin an Koeln.")
     }
 
+    func testStabilizeTextReplacesNearLengthWordCorrection() {
+        // A restated snapshot with a matching word count (ratio 1.0) that diverges at the very
+        // first word — so the scalar prefix check cannot fire — must be recognized as a provider
+        // correction by the word-level pass and replace the confirmed text wholesale.
+        let confirmed = "Sie haben gestern einen langen Brief geschrieben"
+        let new = "Wir haben gestern einen langen Brief geschrieben"
+
+        let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
+
+        XCTAssertEqual(stable, new)
+    }
+
+    func testStabilizeTextAppendsLengthMismatchedSnapshotInsteadOfReplacing() {
+        // A snapshot whose word count far exceeds the confirmed text (ratio 2.5, well past the
+        // 1.5 gate) can never be a same-utterance correction, so it must be appended rather than
+        // replacing the confirmed text. The word-count-ratio gate rejects it before the LCS pass.
+        let confirmed = "Guten Morgen liebe Freunde"
+        let new = "Ganz herzlich willkommen liebe Freunde zu diesem wunderbaren Abend heute"
+
+        let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
+
+        XCTAssertNotEqual(stable, new)
+        XCTAssertTrue(stable.hasPrefix(confirmed))
+    }
+
     func testStabilizeTextReplacesCompactedProvisionalCorrections() {
         let updates = [
             "Fourscore",
