@@ -591,12 +591,17 @@ final class StreamingHandler: @unchecked Sendable {
         let newWords = transcriptWords(in: new)
         guard confirmedWords.count >= 4, newWords.count >= 4 else { return false }
 
+        // Cheap length gate BEFORE the O(n*m) LCS: a large word-count disparity can never satisfy
+        // the `wordCountRatio <= 1.5` requirement, so reject it in O(1) instead of after a full DP
+        // (this is the hottest path during long-running live-preview stabilization).
+        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
+        guard wordCountRatio <= 1.5 else { return false }
+
         let matchedCount = approximateWordMatchCount(newWords, in: confirmedWords)
         let newCoverage = Double(matchedCount) / Double(newWords.count)
         let confirmedCoverage = Double(matchedCount) / Double(confirmedWords.count)
-        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
 
-        return newCoverage >= 0.72 && confirmedCoverage >= 0.60 && wordCountRatio <= 1.5
+        return newCoverage >= 0.72 && confirmedCoverage >= 0.60
     }
 
     private nonisolated static func approximateWordMatchCount(
