@@ -99,6 +99,11 @@ final class MeetingCaptureService: ObservableObject {
     private let engineAvailabilityCheck: (String) -> Bool
     /// Whether a final-pass override engine id is a metered/cloud engine.
     private let engineIsCloudCheck: (String) -> Bool
+    /// Resolves the microphone the session should record from, honoring the user's mic-priority list
+    /// (and, since #890, the clamshell built-in-mic exclusion) exactly like the standalone Recorder.
+    /// ServiceContainer wires this to `audioDeviceService.resolvedRecordingInputSelection()`; defaulted
+    /// to the system default so tests and v1 call sites without a device service are unaffected.
+    private let microphoneSelectionProvider: () -> ResolvedRecordingInputSelection
     /// [M2] Invoked once the final transcript is ready (after the final pass replaces live segments and
     /// the meeting is marked `.completed`). ServiceContainer wires this to enqueue a `.background`
     /// language-detection job so an unset meeting language fills itself in (plan D5). Optional so the
@@ -168,7 +173,8 @@ final class MeetingCaptureService: ObservableObject {
         ruleMatcher: MeetingContextRuleMatching? = nil,
         cloudCeilingSeconds: Double = FinalRetranscriptionPolicy.defaultCloudCeilingSeconds,
         engineAvailabilityCheck: ((String) -> Bool)? = nil,
-        engineIsCloudCheck: ((String) -> Bool)? = nil
+        engineIsCloudCheck: ((String) -> Bool)? = nil,
+        microphoneSelectionProvider: @escaping () -> ResolvedRecordingInputSelection = { .systemDefault }
     ) {
         self.meetingService = meetingService
         self.audioRecorderService = audioRecorderService
@@ -185,6 +191,7 @@ final class MeetingCaptureService: ObservableObject {
         self.engineIsCloudCheck = engineIsCloudCheck ?? { [weak modelManager] id in
             modelManager?.usesMeteredStreamingFallback(engineOverrideId: id) ?? false
         }
+        self.microphoneSelectionProvider = microphoneSelectionProvider
     }
 
     // MARK: - Lifecycle
@@ -246,6 +253,11 @@ final class MeetingCaptureService: ObservableObject {
         meeting.state = .live
         meetingService.update(meeting)
 
+        // Resolve the mic through the same priority list (and clamshell exclusion, #890) the
+        // standalone Recorder uses, so a meeting honors a prioritized external mic instead of always
+        // recording from the system default. Only meaningful when the mic is enabled.
+        let microphoneSelection = micEnabled ? microphoneSelectionProvider() : .systemDefault
+
         do {
             _ = try await audioRecorderService.startRecording(
                 micEnabled: micEnabled,
@@ -256,7 +268,8 @@ final class MeetingCaptureService: ObservableObject {
                 // the shared recorder instance's `trackMode` (the standalone Recorder's preference) is
                 // left untouched. Unconditional: single-source sessions never read the mix branch, so
                 // there is no phantom empty channel (adjudication Part A #2).
-                trackMode: .separate
+                trackMode: .separate,
+                microphoneSelection: microphoneSelection
             )
         } catch {
             audioRecorderService.releaseCaptureOwnership(.meeting)

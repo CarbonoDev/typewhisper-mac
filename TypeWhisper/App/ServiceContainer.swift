@@ -231,7 +231,12 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             jobQueue: meetingJobQueue,
             eventEmitter: meetingEventEmitter,
-            ruleMatcher: meetingContextRuleService
+            ruleMatcher: meetingContextRuleService,
+            // Honor the user's mic-priority list (and clamshell built-in exclusion, #890) for meeting
+            // capture, resolved the same way the standalone Recorder does at start time.
+            microphoneSelectionProvider: { [audioDeviceService] in
+                audioDeviceService.resolvedRecordingInputSelection()
+            }
         )
         meetingStartNotificationService = MeetingStartNotificationService()
         meetingEndReminderService = MeetingEndReminderService()
