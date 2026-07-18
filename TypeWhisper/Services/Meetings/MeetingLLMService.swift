@@ -180,6 +180,20 @@ final class MeetingLLMService: ObservableObject {
                 )
             }
 
+        // The primary grounding for a Q&A answer is *this* meeting's own transcript. If that meeting
+        // has no transcript visible for the question, refuse rather than silently answering from
+        // retrieval-only context — the fix for the cross-meeting leak (owner report): without this
+        // guard an empty own-transcript let the composer build a knowledge-base-only prompt and the
+        // model answered from a *different* meeting's note that whole-vault retrieval had surfaced.
+        // Mirrors `generateOutput`'s `emptyTranscript` guard. The offset filter matches the composer's
+        // `segment.start <= offset` rule so a mid-capture question asked before anything is spoken is
+        // refused too, instead of falling back to foreign material.
+        let visibleSegments = offset.map { limit in segments.filter { $0.start <= limit } } ?? segments
+        let ownTranscript = TranscriptContextBuilder.renderTranscript(visibleSegments)
+        guard !ownTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MeetingLLMError.noTranscriptContext
+        }
+
         let priorTurns = meeting.qaTurns
             .sorted { $0.createdAt < $1.createdAt }
             .map { MeetingQAComposer.PriorTurn(question: $0.question, answer: $0.answer) }
@@ -363,6 +377,10 @@ enum MeetingLLMError: LocalizedError, Equatable {
     case alreadyAnswering
     /// A Q&A question was empty after trimming (plan M6).
     case emptyQuestion
+    /// The meeting has no transcript visible for the question, so a Q&A answer cannot be grounded in
+    /// this meeting's own content. Surfaced instead of silently answering from retrieval-only context
+    /// (which could draw on a different meeting's note) — cross-meeting-leak fix.
+    case noTranscriptContext
 
     var errorDescription: String? {
         switch self {
@@ -374,6 +392,8 @@ enum MeetingLLMError: LocalizedError, Equatable {
             return String(localized: "meetings.qa.error.alreadyAnswering")
         case .emptyQuestion:
             return String(localized: "meetings.qa.error.emptyQuestion")
+        case .noTranscriptContext:
+            return String(localized: "meetings.qa.error.noTranscript")
         }
     }
 }
@@ -426,15 +446,22 @@ enum MeetingQAComposer {
         let kbBudget = max(0, charBudget / 4)
         let kbBlock = TranscriptContextBuilder.truncateWords(renderPassages(knowledgePassages), to: kbBudget)
 
+        // The meeting's OWN transcript is the primary grounding and leads the context; prior turns
+        // (this meeting's own Q&A history) follow; the knowledge base is *supplementary* and comes
+        // last. Ordering is load-bearing for the cross-meeting-leak fix: the final bound below keeps
+        // the prefix, so putting the foreign KB last means it is the first thing dropped under budget
+        // pressure and can never displace the transcript. The KB is also withheld entirely when there
+        // is no transcript to supplement — retrieval must never stand in as the sole grounding
+        // (defense-in-depth behind the service's own-transcript guard).
         var contextSections: [String] = []
-        if !kbBlock.isEmpty {
-            contextSections.append("\(String(localized: "meetings.qa.context.knowledgeHeader"))\n\(kbBlock)")
-        }
         if !relevantTranscript.isEmpty {
             contextSections.append("\(String(localized: "meetings.qa.context.transcriptHeader"))\n\(relevantTranscript)")
         }
         if !priorBlock.isEmpty {
             contextSections.append("\(String(localized: "meetings.qa.context.priorHeader"))\n\(priorBlock)")
+        }
+        if !kbBlock.isEmpty, !relevantTranscript.isEmpty {
+            contextSections.append("\(String(localized: "meetings.qa.context.knowledgeHeader"))\n\(kbBlock)")
         }
 
         // Reserve the whole question section off the top before the final bound, then truncate only

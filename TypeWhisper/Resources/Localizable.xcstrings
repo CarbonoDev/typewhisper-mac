@@ -23999,6 +23999,22 @@
         }
       }
     },
+    "meetings.qa.error.noTranscript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no transcript to answer from yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Besprechung hat noch kein Transkript, aus dem eine Antwort abgeleitet werden kann."
+          }
+        }
+      }
+    },
     "meetings.qa.placeholder": {
       "localizations": {
         "en": {
