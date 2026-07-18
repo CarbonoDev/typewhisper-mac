@@ -961,14 +961,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let stoppedMicDuckingMode = micDuckingMode
 
         // Test overrides own their capture lifecycle. Production capture must be fully
-        // stopped before any live-session or file finalization work begins.
-        if !usesFinalizationOverride, stoppedMicEnabled {
-            audioEngine?.inputNode.removeTap(onBus: 0)
-            audioEngine?.stop()
-            audioEngine = nil
-            micFileLock.withLock { $0 = nil }
-        }
-
+        // stopped before any live-session or file finalization work begins. The mic engine
+        // teardown is handled unconditionally below (the #845 block that also stops the mic
+        // input capture session and restores the activation guard), so it is not duplicated here.
         if !usesFinalizationOverride, stoppedSystemAudioEnabled, let stream = scStream {
             do {
                 try await stream.stopCapture()
