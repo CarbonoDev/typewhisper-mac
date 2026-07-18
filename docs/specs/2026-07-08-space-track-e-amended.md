@@ -1,9 +1,14 @@
 # Space (Track E) — Amended Vault-Browser Spec
 
-Status: authoritative in-repo target for Track E. **Do not build in M5** — this is the written
-target Track E implements later. Reconciles the base Meetings language/tags/folders plan (§4, D10)
-with Amendment 1 (folder detail view + vault context picker + scoped retrieval) and Amendment 2
-(agentic related-document discovery). Written as the final deliverable of milestone M5.
+Status: **Implemented** — shipped as Track E ME-1/ME-2/ME-3 (commits `b833370`, `08e84e0`,
+`f3d2b97`). This document is retained unchanged as the historical spec; the body below is the
+target that was built against, not a description of the final code.
+
+_Original spec status (historical):_ authoritative in-repo target for Track E. **Do not build in
+M5** — this is the written target Track E implements later. Reconciles the base Meetings
+language/tags/folders plan (§4, D10) with Amendment 1 (folder detail view + vault context picker +
+scoped retrieval) and Amendment 2 (agentic related-document discovery). Written as the final
+deliverable of milestone M5.
 
 ## 1. Summary
 

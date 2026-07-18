@@ -1,5 +1,7 @@
 # Release Checklist
 
+> This describes the upstream TypeWhisper project's release process and is retained for reference. The fork's release process is not yet defined.
+
 ## Before the Stable Tag
 
 - `xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`

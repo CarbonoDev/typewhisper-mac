@@ -1,5 +1,7 @@
 # TypeWhisper 1.x Release Readiness
 
+> This describes the upstream TypeWhisper project's release process and is retained for reference. The fork's release process is not yet defined.
+
 This document defines the release gates for the current `1.x` product path leading into the stable `1.5.0` release.
 
 TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.5`, the focus is app-aware dictation insertion, expanded bundled providers, local-model memory reliability, dictionary-learning improvements, workflow and hotkey reliability, and stable plugin metadata for the current SDK line.

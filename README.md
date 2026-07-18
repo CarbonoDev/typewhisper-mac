@@ -1,20 +1,206 @@
-# TypeWhisper for Mac
+# TypeWhisper Meetings (working title)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-black.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org)
 
-Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
+A macOS menu bar app for **calendar-aware meeting capture** on top of the speech-to-text and AI
+text-processing foundation it inherits from [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac).
+Record a meeting from the microphone and system audio, get a durable live transcript with reliable
+post-call speaker labels, and turn it into pre-meeting briefs, summaries, extended analysis, and
+grounded Q&A — with an optional Obsidian vault as the knowledge base.
 
-TypeWhisper `1.5` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, local automation APIs, app-aware insertion, expanded provider support, and local-model reliability improvements. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+The original app's dictation, file transcription, workflows, and plugin system are all still here and
+still work the same way. This fork adds the entire Meetings surface on top and unlocks every feature
+for everyone.
 
-See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
+> **This is a fork.** It is based on the original TypeWhisper and keeps its architecture and most of
+> its features. See [A note on this fork](#a-note-on-this-fork) for credit, naming, and licensing.
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/22fe922d-4a4c-47d1-805e-684a148ebd03" autoplay loop muted playsinline width="270"></video>
-</p>
+## A note on this fork
+
+This project is a fork of **[TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac)** by the
+TypeWhisper project. Enormous credit and thanks go to the original authors: the dictation pipeline,
+the "everything is a plugin" architecture, the transcription engines, the workflow system, the HTTP
+API, and the CLI are all their work. This fork stands on that foundation and adds a meetings-focused
+layer.
+
+A few things to be aware of:
+
+- **Name is a working title.** "TypeWhisper Meetings" is a placeholder pending a naming decision.
+  The upstream [TRADEMARK.md](TRADEMARK.md) states that "TypeWhisper" and its logo/app icon are
+  trademarks and that forks must be renamed and remove those trademarks before redistribution. If
+  this fork is ever distributed, a distinct name (and icon) avoids trademark friction. Until then the
+  app still builds as `TypeWhisper` internally.
+- **All features are unlocked.** Upstream ships a dual-license model with a supporter/commercial tier
+  gating some features. This fork removes that machinery: `LicenseService` reports every feature as
+  available, and there are no purchase, license-key, supporter, or reminder prompts.
+- **License files are untouched.** The code remains under **GPLv3** ([LICENSE](LICENSE)), and the
+  upstream [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) and [TRADEMARK.md](TRADEMARK.md) are left
+  in place as inherited from upstream. Removing paid feature-gates in code does not change your
+  GPLv3 obligations.
+
+## Meetings
+
+Meetings are the headline of this fork. Open the app from the menu bar (**Open TypeWhisper**) and you
+land in a meetings-first main window with a Home feed, a Meetings list, first-party Folders and Tags,
+and a Space vault browser in the sidebar.
+
+### Calendar-aware capture
+
+- **EventKit calendar integration** — TypeWhisper reads your calendars (with permission) to surface
+  upcoming meetings, link a recording to the event it belongs to, and drive pre-meeting briefs.
+- **Mic + system audio, separate tracks** — Live capture records the microphone and system audio and
+  keeps them as separate tracks, which the speaker pass can later split deterministically by channel.
+- **Durable live transcript** — Stabilized transcript text is persisted incrementally as the meeting
+  runs, so nothing is lost if the app is interrupted; on stop, the full buffer is re-transcribed to
+  timestamped segments.
+- **Ad-hoc or scheduled** — Start a recording straight from the menu bar for an unscheduled call, or
+  let an upcoming calendar meeting prompt you.
+
+### Reliable speaker labeling
+
+Speaker labels are resolved **after** the call through a strict precedence ladder, so the most
+trustworthy source wins:
+
+1. **Cloud provider labels** — if the transcription engine already produced diarized labels tied to
+   the real audio timeline, they are adopted directly.
+2. **Two-person channel split** — a two-person call recorded as genuinely separate mic/system tracks
+   is labeled deterministically by channel, with no detection model at all.
+3. **Local pyannote** — general local diarization via a bundled Python `pyannote.audio` sidecar,
+   hinted with the known participant count when available.
+
+Diarization settings (enable/disable, speaker count, Python path, Hugging Face token for gated
+pyannote models) live in **Settings → Meetings → Diarization**. Detected speakers can be mapped to
+named participants from the meeting's roster.
+
+### Briefs, summaries, and analysis
+
+- **Pre-meeting briefs** — Before a meeting, TypeWhisper assembles a brief from summaries of prior
+  related meetings (shared attendees or the same recurring series) plus relevant passages from your
+  Obsidian vault, and makes one LLM call to draft it. Briefs can be generated automatically ahead of
+  time (**Settings → Meetings → auto-brief**) or on demand. It degrades gracefully: no vault uses
+  prior meetings only, no prior meetings uses vault passages only.
+- **Summaries and extended analysis** — Generate structured outputs from the transcript using
+  editable templates. Summary and Extended Analysis ship as presets; templates are editable prompt
+  actions in the unified prompt/template library.
+- **In-meeting Q&A** — Ask questions grounded on the meeting transcript-so-far. When the meeting
+  material doesn't cover a question and an Obsidian vault is connected, the model can escalate to a
+  single vault knowledge-base search round, with the answer disclosing that your notes were consulted.
+
+### Organization and knowledge base
+
+- **Participants directory** — A directory of the people across your meetings, backfilled from
+  meeting rosters, used for attendee mapping and for finding related meetings.
+- **Folders and tags** — First-party folders and tags organize the in-app meetings list. They work
+  with no vault connected and are backed by the meeting store, not the vault.
+- **Related documents** — Per-meeting agentic discovery ranks candidate vault notes with a
+  single-turn LLM judge and surfaces the most relevant documents for a meeting.
+- **Obsidian export** — Export meetings as Markdown notes into an Obsidian vault, with frontmatter
+  (including a `typewhisper-meeting` backlink) and a uniform, never-overwrite folder layout.
+- **Space — the vault browser** — A read-write browser for the connected Obsidian vault in the
+  sidebar: open notes, and compose atomic, never-clobber **quick notes**. Space is a projection of
+  the vault on disk; it is gated on a connected vault while Folders/Tags keep working without one.
+
+### Import existing meetings
+
+- **Audio or transcript** — Import existing recordings (audio) or transcripts as meetings.
+- **Bulk archives via CLI / HTTP API** — Import a whole archive of old transcripts through the CLI
+  (`typewhisper meetings import-transcript`) or the local HTTP API, optionally driven by an external
+  agent, so historical meetings feed prior-meeting briefs. Supported transcript formats include
+  Google Meet exports, `Speaker:` turns, timestamped lines, and plain text (`.txt`, `.md`).
+- **Calendar matching** — On import, optionally match a transcript to a historical calendar event by
+  date and link it automatically when confidence is high enough.
+
+### Under the hood
+
+- **Per-purpose model settings** — Summaries/analysis, briefs, Q&A, language detection, and the
+  related-docs judge each have an independent provider/model setting, resolved per call with
+  `template > purpose > app default` precedence.
+- **Background job queue** — Long-running per-meeting work (summaries, briefs, final transcription,
+  diarization, discovery, export, imports) runs through a lane-based job queue so LLM, transcription,
+  and I/O work never contend across categories.
+- **Menu bar meeting indicators** — The menu bar surfaces an in-progress recording (with elapsed
+  time) or the soonest upcoming calendar meeting (with a countdown), each of which opens and focuses
+  the meeting in the main window.
+
+## Inherited features (from upstream TypeWhisper)
+
+Everything below comes from the original TypeWhisper and is preserved in this fork. Where the fork
+changed behavior it is called out.
+
+### Transcription
+
+- **Multiple engines** — WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25
+  European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed),
+  Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq
+  Whisper, OpenAI Whisper, Smallest Pulse, xAI/Grok STT, and OpenAI Compatible (any OpenAI-compatible
+  API), plus registry engines such as AssemblyAI and ElevenLabs.
+- **On-device or cloud** — All processing happens locally on your Mac, or use cloud APIs for faster
+  processing.
+- **Streaming preview** — See partial transcription in real-time while speaking (WhisperKit).
+- **File transcription** — Batch-process multiple audio/video files with drag & drop; Dictionary
+  Corrections apply to file transcriptions.
+- **Subtitle export** — Export transcriptions as SRT or WebVTT with timestamps.
+
+### Dictation
+
+- **System-wide** — Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app.
+- **Modifier-key hotkeys** — Use a single modifier key (Command, Shift, Option, Control) as your hotkey.
+- **Indicator styles** — Choose Notch, Overlay, or Minimal, with optional live transcript preview.
+- **Sound feedback** — Audio cues for recording start, transcription success, and errors.
+- **Microphone selection** — Choose a specific input device, with a microphone priority list and
+  recovery after route changes (including clamshell failover).
+
+### AI processing
+
+- **Workflows** — Build reusable transformations for translation, rewriting, extraction, formatting,
+  and app-specific automation. Workflows run automatically by app, website, or app + website, from a
+  dedicated hotkey, as a global fallback, or manually from the Workflow Palette.
+- **Global LLM fallback list** — Order Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT,
+  xAI/Grok, Gemini, OpenAI Compatible, and local providers in one global provider/model list. Prompts
+  and workflows inherit that order by default; a workflow with an explicit provider stays on that one.
+- **Speech providers** — System voices, xAI/Grok TTS, and experimental local Supertonic TTS.
+- **Local prompt processing** — Gemma 4 via MLX runs on-device on Apple Silicon (verified path:
+  the E2B/E4B 4-bit models).
+- **Translation** — Translate transcriptions on-device using Apple Translate.
+
+### Personalization
+
+- **Dictionary** — Terms improve cloud recognition accuracy; corrections fix common mistakes
+  automatically, with auto-learning of high-confidence single-word manual corrections, grouped
+  correction variants, search, and safe reset actions. Includes importable term packs.
+- **Snippets** — Text shortcuts with placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`.
+- **History** — Searchable transcription history with inline editing, correction detection, app
+  context tracking, timeline grouping, filters, bulk delete, multi-select export, and auto-retention.
+
+### Integration & extensibility
+
+- **Plugin system** — Extend TypeWhisper with custom LLM providers, transcription engines, TTS
+  providers, post-processors, and action plugins. Bundled engines and integrations are reference
+  implementations of the same SDK. See
+  [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md).
+- **HTTP API** — Local REST API for integration with external tools and scripts (see below).
+- **CLI tool** — Shell-friendly transcription and meeting import via the command line (see below).
+- **Backup & Restore** — Export and restore settings, including meeting data.
+
+### General
+
+- **Universal binary** — Runs natively on Apple Silicon and Intel Macs.
+- **Widgets** — Desktop widgets for usage stats, last transcription, activity chart, and history.
+- **Multilingual UI** — English and German.
+- **Launch at Login** — Start automatically with macOS, windowless on login launches.
+- **Settings layout** — Settings are grouped as **Dictation**, **Meetings**, **Library**, **Tools**,
+  and **Application**. The former "Recording" tab is now **Dictation**; the Meetings group holds the
+  Meetings and Diarization tabs. With paid gating removed, formerly premium controls (target-app
+  correction learning, cloud folder sync) live in the Application group and are available to everyone.
 
 ## Screenshots
+
+The screenshots below cover the inherited dictation surfaces and predate the fork's settings
+regroup — in particular, the Premium and License pages shown have been replaced by the delicensed
+settings (see [A note on this fork](#a-note-on-this-fork)). Screenshots of the Meetings window,
+Space vault browser, briefs, and speaker mapping are not yet captured.
 
 <!-- readme-screenshots:start -->
 
@@ -44,6 +230,8 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <p align="center">
   <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Integration Marketplace"></a>
+  <a href=".github/screenshots/premium.png"><img src=".github/screenshots/premium.png" width="270" alt="Premium"></a>
+  <a href=".github/screenshots/license.png"><img src=".github/screenshots/license.png" width="270" alt="License"></a>
 </p>
 
 <p align="center">
@@ -54,146 +242,36 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <!-- readme-screenshots:end -->
 
-## What's New in 1.5
-
-- **App-aware dictation insertion** - Dictation output now better respects sentence position, trailing spaces, terminal paste behavior, rich-text targets, and target-app context
-- **Expanded speech and AI providers** - Gemini speech transcription, Cartesia speech transcription, Sber SaluteSpeech, OpenRouter speech-to-text, Reson8, Mistral AI, Soniox regions and TTS, and OpenAI-compatible profiles broaden the bundled provider set
-- **Local model reliability** - MLX memory-footprint controls, idle auto-unload behavior, stalled Gemma 4 download recovery, and Parakeet vocabulary repair improve local model setup and day-to-day stability
-- **Dictionary learning and normalization** - Auto-learned corrections, target-app correction learning, per-term CTC tuning plumbing, multilingual number-word normalization, English ordinals, digit sequences, and French decimal cleanup improve recognition output
-- **Workflow and hotkey reliability** - Hybrid modifier timing, non-Control modifier taps, global push-to-talk, Pages workflow hotkeys, menu-based dictation pause, Esc confirmation, and automatic workflow output resolution all received targeted fixes
-- **Recording and indicator polish** - Virtual audio input support, media pause/resume hardening, fullscreen indicator fixes, recorder final-failure surfacing, FaceTime built-in microphone capture, and TaskForge insertion fallback improve real-world capture and insertion flows
-- **Release and plugin metadata cleanup** - Cloud ASR upload fallback handling, plugin host-compatibility metadata, plugin uninstall cleanup, and GitHub Latest protection keep the 1.5 distribution path clean
-
-## Features
-
-### Transcription
-
-- **Eleven engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, Smallest Pulse, xAI/Grok STT, and OpenAI Compatible (any OpenAI-compatible API)
-- **On-device or cloud** - All processing happens locally on your Mac, or use Groq/OpenAI/xAI APIs for faster processing
-- **Streaming preview** - See partial transcription in real-time while speaking (WhisperKit)
-- **Short-clip handling** - Better retention of brief utterances and fewer false no-speech discards
-- **File transcription** - Batch-process multiple audio/video files with drag & drop
-- **Subtitle export** - Export transcriptions as SRT or WebVTT with timestamps
-
-### Dictation
-
-- **System-wide** - Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app
-- **Modifier-key hotkeys** - Use a single modifier key (Command, Shift, Option, Control) as your hotkey
-- **Indicator styles** - Choose Notch, Overlay, or Minimal, with optional live transcript preview where supported
-- **Sound feedback** - Audio cues for recording start, transcription success, and errors
-- **Microphone selection** - Choose a specific input device with live preview and improved recovery after route changes
-
-### AI Processing
-
-- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app, website, or app + website combinations, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
-- **LLM provider fallbacks** - Order Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, xAI/Grok, Gemini, OpenAI Compatible, and local providers in one global provider/model list. Prompts and workflows inherit that order by default; a workflow with an explicit provider stays on that single provider
-- **Speech providers** - System voices, xAI/Grok TTS, and experimental local Supertonic TTS can provide spoken feedback and readback
-- **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
-- **Translation** - Translate transcriptions on-device using Apple Translate
-
-### Personalization
-
-- **Workflow triggers** - Per-app, per-website, combined app + website, hotkey, global fallback, and manual palette-only triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
-- **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns high-confidence local single-word manual corrections, while broader rewrites and deletions are skipped. Includes importable term packs
-- **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
-- **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
-- **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
-
-### Integration & Extensibility
-
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Gemini, Granite, Groq, Linear, OpenAI / ChatGPT, OpenAI Compatible, Qwen3, Smallest Pulse, Supertonic, Voxtral, Webhook, and xAI/Grok ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md)
-- **Local model download controls** - Bundled Qwen3, Granite, Voxtral, and Supertonic plugins support an optional HuggingFace token for higher rate limits and clearer download errors. Supertonic requires explicit OpenRAIL-M model-license acceptance before model assets download.
-- **HTTP API** - Local REST API for integration with external tools and scripts
-- **CLI tool** - Shell-friendly transcription via the command line
-
-### General
-
-- **Home dashboard** - Usage statistics, activity chart, and onboarding tutorial
-- **Auto-update** - Built-in updates via Sparkle with stable, release-candidate, and daily channels
-- **Universal binary** - Runs natively on Apple Silicon and Intel Macs
-- **Widgets** - Desktop widgets for usage stats, last transcription, activity chart, and transcription history
-- **Multilingual UI** - English and German
-- **Launch at Login** - Start automatically with macOS
-
 ## Install
 
-### Homebrew
-
-```bash
-brew install --cask typewhisper/tap/typewhisper
-```
-
-### Direct Download
-
-Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
-
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.5.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
-Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
+This fork is not published to Homebrew or as a signed release. Build it from source (see
+[Build](#build)). To install the original, upstream app instead, see
+[TypeWhisper releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
 ## Quick Start
 
-1. Install TypeWhisper from Homebrew or the latest DMG.
-2. Open Settings and grant Microphone plus Accessibility access.
+1. Build and launch the app (see [Build](#build)), or run `scripts/build-dev-local.sh` for a local
+   dev build.
+2. Open Settings and grant Microphone plus Accessibility access (and Calendar access for Meetings).
 3. Pick an engine and, if needed, download a local model.
-4. Trigger the global hotkey and complete your first dictation.
-
-## Manual Uninstall (macOS)
-
-These steps are for official TypeWhisper release builds on macOS. They remove the app itself, its local state, widget data, and stored secrets so you can reinstall from a clean slate.
-
-If you installed via Homebrew, you can optionally start with:
-
-```bash
-brew uninstall --cask typewhisper
-```
-
-That removes the app bundle, but it does not reliably remove all files in `~/Library` or TypeWhisper entries in Keychain.
-
-If `~/Library` is hidden in Finder, use `Go -> Go to Folder...` and paste the paths below.
-
-1. Quit TypeWhisper if it is running.
-2. Delete the app bundle:
-   ```bash
-   rm -rf /Applications/TypeWhisper.app
-   ```
-3. Delete app data and plugins:
-   ```bash
-   rm -rf ~/Library/Application\ Support/TypeWhisper
-   ```
-4. Delete preferences:
-   ```bash
-   rm -f ~/Library/Preferences/com.typewhisper.mac.plist
-   ```
-5. Delete widget and app group data used by official releases:
-   ```bash
-   rm -rf ~/Library/Group\ Containers/2D8ALY3LCL.com.typewhisper.mac
-   ```
-6. Remove TypeWhisper secrets from Keychain:
-   - In Keychain Access, search for `com.typewhisper.mac.apikey` and delete matching items.
-   - This includes API and plugin secrets stored under the `com.typewhisper.mac.apikey.*` service prefix.
-   - Also remove the license items stored under service `com.typewhisper.mac.apikey.license`, especially the `polar-license` and `polar-supporter` accounts.
-7. If you installed the CLI tool from Settings > Advanced, remove it too:
-   ```bash
-   rm -f /usr/local/bin/typewhisper
-   ```
-8. Optional: if you want to remove exported user files as well, delete:
-   ```bash
-   rm -rf ~/Documents/TypeWhisper\ Recordings
-   ```
-9. Restart your Mac, then install the latest build again.
-
-If a fresh install still crashes immediately after these steps, please open an issue and include your macOS version, how you installed TypeWhisper, and whether the crash happens on first launch or after granting permissions.
+4. Trigger the global hotkey to dictate, or start a meeting recording from the menu bar.
 
 ## System Requirements
 
 - macOS 14.0 (Sonoma) or later
 - Apple Silicon (M1 or later) recommended
 - 8 GB RAM minimum, 16 GB+ recommended for larger models
-- Some features (Apple Translate, improved Settings UI) require macOS 15+. Apple Intelligence and SpeechAnalyzer require macOS 26+.
+- Some features (Apple Translate, improved Settings UI) require macOS 15+. Apple Intelligence and
+  SpeechAnalyzer require macOS 26+.
+- Local pyannote diarization requires a Python 3 environment with `pyannote.audio` installed and a
+  Hugging Face token for the gated models. Cloud engines that diarize, or two-person separate-track
+  calls, do not need it.
 
 ## Gemma 4 Support
 
-TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on Apple Silicon. In the current verified release path, Gemma 4 support is limited to the dense `E2B 4-bit` and `E4B 4-bit` variants; larger or unverified variants stay visible in the UI but remain disabled until they are validated end to end.
+TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on
+Apple Silicon. In the current verified path, Gemma 4 support is limited to the dense `E2B 4-bit` and
+`E4B 4-bit` variants; larger or unverified variants stay visible in the UI but remain disabled.
 
 ## Model Recommendations
 
@@ -207,7 +285,7 @@ TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/TypeWhisper/typewhisper-mac.git
+   git clone https://github.com/CarbonoDev/typewhisper-mac.git
    cd typewhisper-mac
    ```
 
@@ -216,9 +294,12 @@ TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device
    open TypeWhisper.xcodeproj
    ```
 
-3. Select the TypeWhisper scheme and build (Cmd+B). Swift Package dependencies (WhisperKit, FluidAudio, Sparkle, TypeWhisperPluginSDK) resolve automatically.
+3. Select the TypeWhisper scheme and build (Cmd+B). Swift Package dependencies (WhisperKit,
+   FluidAudio, Sparkle, TypeWhisperPluginSDK) resolve automatically. Building requires no signing
+   setup (ad-hoc signing).
 
-4. Run the app. It appears as a menu bar icon - open Settings to download a model.
+4. Run the app. It appears as a menu bar icon — open it to reach the Meetings window, or open
+   Settings to download a model.
 
 5. Run the automated checks before shipping changes:
    ```bash
@@ -228,7 +309,8 @@ TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device
 
 ## HTTP API
 
-The HTTP API is an advanced local automation surface. It binds to `127.0.0.1` only, is disabled by default, and is intended for local tools and scripts.
+The HTTP API is an advanced local automation surface. It binds to `127.0.0.1` only, is disabled by
+default, and is intended for local tools and scripts.
 
 Enable the API server in Settings > Advanced (default port: `8978`).
 
@@ -515,7 +597,8 @@ Behavior:
 
 ## CLI Tool
 
-TypeWhisper includes a command-line tool for shell-friendly transcription. It is part of the advanced automation surface and connects to the running local API server.
+TypeWhisper includes a command-line tool for shell-friendly transcription and meeting import. It is
+part of the advanced automation surface and connects to the running local API server.
 
 ### Installation
 
@@ -570,88 +653,62 @@ typewhisper meetings import-transcript call.txt --folder Clients/Acme --tags sal
 typewhisper meetings list --folder Clients/Acme --json
 ```
 
-The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
+The CLI requires the API server to be running (Settings > Advanced).
 
-Dictionary Corrections apply to CLI transcriptions by default. Use `--no-corrections` when a script needs the raw engine output.
-
-Local file paths are handed to the running TypeWhisper app directly, so large files do not need to fit inside an HTTP upload body. Stdin usage (`typewhisper transcribe -`) still uses the regular `/v1/transcribe` upload endpoint and is limited to 256 MiB.
-
-## Workflows
-
-Workflows let you configure transcription, transformation, and automation behavior per application, website, combined app + website context, hotkey, global fallback, or manual palette-only workflow. For example:
-
-- **Mail** - German language, Whisper Large v3
-- **Slack** - English language, Parakeet TDT v3
-- **Terminal** - English language, auto-submit enabled
-- **github.com** - English cleanup workflow that matches in any browser
-- **docs.google.com** - German dictation workflow that translates to English
-
-Create workflows in Settings > Workflows. Choose a template, then use Automatic to enable app, website, hotkey, or any combination of those trigger components. Always stays the global fallback, and Manual keeps the workflow palette-only. Hotkey workflows choose whether the shortcut starts dictation or processes the current selection/clipboard through the same insertion path as the Workflow Palette. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
-
-LLM Prompt workflows inherit the ordered global LLM fallback list shown at the top of Settings > Workflows. TypeWhisper moves to the next provider/model when an inherited attempt is unavailable, cannot restore, is rate-limited, hits a network or API error, or returns no text. Selecting a provider inside a workflow disables that fallback behavior for the workflow and makes one strict provider call instead.
-
-When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
-1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
-2. **URL-only match** - cross-browser workflows (e.g. github.com in any browser)
-3. **App-only match** - generic app workflows (e.g. all of Chrome)
-4. **Always fallback** - global workflow when no more specific workflow matches
-
-Hotkeys are direct workflow shortcuts, not context conditions in the app/URL matching order. Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
-
-The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
-
-Multiple engines can be loaded simultaneously during a session for instant switching between workflows. Note that loading multiple local models increases memory usage. Set `Auto-unload model` to `Never` if you want TypeWhisper to restore previously loaded local models at launch; any active auto-unload policy keeps startup lazy and reloads the selected/downloaded model on first real use. Cloud engines (Groq, OpenAI, xAI/Grok) have negligible memory overhead.
+Local file paths are handed to the running TypeWhisper app directly, so large files do not need to
+fit inside an HTTP upload body. Stdin usage (`typewhisper transcribe -`) still uses the regular
+`/v1/transcribe` upload endpoint and is limited to 256 MiB.
 
 ## Plugins
 
-TypeWhisper supports plugins for adding custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Plugins are macOS `.bundle` files placed in `~/Library/Application Support/TypeWhisper/Plugins/`.
+TypeWhisper supports plugins for adding custom LLM providers, transcription engines, TTS providers,
+post-processors, and action plugins. Plugins are macOS `.bundle` files placed in
+`~/Library/Application Support/TypeWhisper/Plugins/`.
 
-Bundled engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral, Supertonic, Groq, OpenAI, xAI/Grok, OpenAI Compatible, Gemini, Linear, Webhook, and more) are implemented as plugins and serve as reference implementations.
+Bundled engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral,
+Supertonic, Groq, OpenAI, xAI/Grok, OpenAI Compatible, Gemini, Linear, Webhook, and more) are
+implemented as plugins and serve as reference implementations.
 
-See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md) for the full plugin development guide, including the event bus, host services API, and manifest format.
+See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md) for the full
+plugin development guide, including the event bus, host services API, and manifest format.
 
 ## Architecture
 
 ```
 TypeWhisper/
-├── typewhisper-cli/           # Command-line tool (status, models, transcribe)
+├── typewhisper-cli/           # Command-line tool (status, models, transcribe, meetings)
 ├── PluginRegistry/            # Source registry entries for community plugin feeds
-├── Plugins/                # Redirect docs and legacy entrypoint for moved first-party plugin sources
-├── TypeWhisperPluginSDK/   # Plugin SDK (Swift package)
-│   ├── Plugins/            # First-party plugin sources and manifests
+├── TypeWhisperPluginSDK/      # Plugin SDK + first-party plugin sources (Swift package)
 ├── TypeWhisperWidgetExtension/ # WidgetKit widgets (stats, activity, history)
-├── TypeWhisperWidgetShared/    # Shared widget data models
-├── App/                    # App entry point, dependency injection
-├── Models/                 # Data models (TranscriptionResult, Profile, PromptAction, etc.)
+├── App/                       # App entry point, ServiceContainer dependency injection
+├── Models/                    # Data models (TranscriptionResult, Meeting, MeetingTemplate, ...)
 ├── Services/
-│   ├── Cloud/              # KeychainService, WavEncoder (shared cloud utilities)
-│   ├── LLM/               # Apple Intelligence provider (cloud LLM providers are plugins)
-│   ├── HTTPServer/         # Local REST API (HTTPServer, APIRouter, APIHandlers)
-│   ├── ModelManagerService # Transcription dispatch (delegates to plugins)
-│   ├── AudioRecordingService
-│   ├── AudioFileService    # Audio/video - 16kHz PCM conversion
-│   ├── HotkeyService
-│   ├── TextInsertionService
-│   ├── WorkflowService     # Workflow matching and persistence
-│   ├── HistoryService      # Transcription history persistence (SwiftData)
-│   ├── DictionaryService   # Custom term corrections
-│   ├── SnippetService      # Text snippets with placeholders
-│   ├── PromptActionService # Prompt action persistence (SwiftData)
-│   ├── PromptProcessingService # LLM orchestration for prompt execution
-│   ├── PluginManager       # Plugin discovery, loading, and lifecycle
-│   ├── PluginRegistryService # Plugin marketplace (download, install, update)
-│   ├── PostProcessingPipeline # Priority-based text processing chain
-│   ├── EventBus            # Typed publish/subscribe event system
-│   ├── TranslationService  # On-device translation via Apple Translate
-│   ├── SubtitleExporter    # SRT/VTT export
-│   └── SoundService        # Audio feedback for recording events
-├── ViewModels/             # MVVM view models with Combine
-├── Views/                  # SwiftUI views
-└── Resources/              # Info.plist, entitlements, localization, sounds
+│   ├── Meetings/              # MeetingService, MeetingCaptureService, CalendarService,
+│   │                          #   MeetingBriefService, MeetingLLMService, MeetingModelRouter,
+│   │                          #   MeetingImportService, ObsidianVaultService, VaultNoteWriter,
+│   │                          #   MeetingObsidianExporter, ParticipantDirectoryService,
+│   │                          #   MeetingRelatedDocsService, MeetingJob (job queue), ...
+│   ├── DiarizationProvider / PyannoteDiarizationProvider / LocalDiarizationService
+│   ├── HTTPServer/            # Local REST API (HTTPServer, APIRouter, APIHandlers)
+│   ├── ModelManagerService    # Transcription dispatch (delegates to plugins)
+│   ├── HotkeyService / AudioRecordingService / TextInsertionService
+│   ├── WorkflowService / HistoryService / DictionaryService / SnippetService
+│   ├── PluginManager / PluginRegistryService / PostProcessingPipeline / EventBus
+│   └── TranslationService / SubtitleExporter / SoundService
+├── ViewModels/                # MVVM view models with Combine (incl. MeetingsViewModel+*)
+├── Views/
+│   ├── MainWindow/            # Meetings-first main window, sidebar, routes
+│   ├── Meetings/              # Meeting document, brief, Q&A, import, speaker mapping, ...
+│   └── Space/                 # Obsidian vault browser + quick notes
+├── Resources/                 # Info.plist, entitlements, localization, sounds
+└── diarize_sidecar.py         # pyannote diarization sidecar (copied into app resources at build)
 ```
 
-**Patterns:** MVVM with `ServiceContainer` singleton for dependency injection. ViewModels use a static `_shared` pattern. Localization via `String(localized:)` with `Localizable.xcstrings`.
+**Patterns:** MVVM with `ServiceContainer` singleton for dependency injection. ViewModels use a
+static `_shared` pattern. Localization via `String(localized:)` with `Localizable.xcstrings`.
 
 ## License
 
-GPLv3 - see [LICENSE](LICENSE) for details. Commercial licensing available - see [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md).
+GPLv3 - see [LICENSE](LICENSE) for details. This fork removes upstream's paid feature-gates in code
+but leaves the inherited [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) and [TRADEMARK.md](TRADEMARK.md)
+in place. See [A note on this fork](#a-note-on-this-fork).
