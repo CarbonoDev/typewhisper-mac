@@ -144,6 +144,38 @@ final class MeetingModelRouterTests: XCTestCase {
         XCTAssertEqual(router.effectiveModel(for: .summariesAnalysis), "purpose-m")
     }
 
+    func testGlobalFallbackEngagesOnlyAtAppDefaultRung() {
+        // [B6/#859] The global LLM fallback priority list lives inside PromptProcessingService and is
+        // consulted *only* when it receives `process(providerOverride: nil)` — an explicit override pins a
+        // single candidate and bypasses the fallback list entirely (verified against the real service in
+        // PromptProcessingModelResolutionTests). The router's job is therefore to emit a nil override at,
+        // and only at, the app-default rung. This test locks that contract across every higher rung.
+        let defaults = makeDefaults()
+        let router = MeetingModelRouter(processor: StubProcessor(), defaults: defaults)
+
+        // App-default rung (no purpose/template/one-shot): nil override ⇒ fallback list engages.
+        XCTAssertNil(router.overrideProvider(for: .summariesAnalysis))
+        XCTAssertNil(router.overrideModel(for: .summariesAnalysis))
+
+        // One-shot rung: concrete override ⇒ fallback bypassed.
+        XCTAssertEqual(
+            router.overrideProvider(for: .summariesAnalysis, oneShotProvider: "oneshot-p"), "oneshot-p"
+        )
+
+        // Template rung: concrete override ⇒ fallback bypassed.
+        XCTAssertEqual(
+            router.overrideProvider(for: .summariesAnalysis, templateProvider: "tmpl-p"), "tmpl-p"
+        )
+
+        // Purpose rung: concrete override ⇒ fallback bypassed.
+        defaults.set("purpose-p", forKey: UserDefaultsKeys.meetingsModelSummariesProviderId)
+        XCTAssertEqual(router.overrideProvider(for: .summariesAnalysis), "purpose-p")
+
+        // With the purpose set, the app-default rung no longer applies, so a nil override is never emitted
+        // for this purpose ⇒ the fallback list can never engage over an explicit purpose selection.
+        XCTAssertNotNil(router.overrideProvider(for: .summariesAnalysis))
+    }
+
     func testWhitespaceOnlyPurposeIsTreatedAsUnset() {
         let defaults = makeDefaults()
         defaults.set("   ", forKey: UserDefaultsKeys.meetingsModelSummariesProviderId)
