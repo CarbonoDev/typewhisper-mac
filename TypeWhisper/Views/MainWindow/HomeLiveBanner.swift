@@ -44,11 +44,14 @@ struct HomeLiveBanner: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(14)
+                .padding(MeetingTheme.s4)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background((finalizing ? Color.secondary : Color.red).opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                .background(
+                    (finalizing ? Color.secondary : Color.red).opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: MeetingTheme.cardRadius)
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: MeetingTheme.cardRadius)
                         .stroke((finalizing ? Color.secondary : Color.red).opacity(0.25), lineWidth: 1)
                 )
             }

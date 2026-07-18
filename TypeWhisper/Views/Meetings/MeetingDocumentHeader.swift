@@ -1,189 +1,133 @@
 import SwiftUI
 
-/// [Track B] The meeting document header (plan D4): a serif title, a status line (date, LIVE chip
-/// while capturing, attendee count), a chip row (output selector incl. custom templates, date +
-/// attendees, folder / tags, export), the **primary prominent Start button** on scheduled meetings
-/// (owner discoverability requirement #1), and the interrupted / degraded status banners.
+/// [Sprint 1] The meeting document masthead: an uppercase kicker line (date · duration · people ·
+/// state), the serif editable title, a byline (attendee avatars + natural-language sentence), quiet
+/// metadata links (folder · #tags · language), a single prioritized status banner, and the `⋯`
+/// overflow menu that hosts every editor the old nine-chip row used to spread across the page.
+/// The primary Start button and the live timer moved to the bottom bar — the document has exactly
+/// one record affordance (`MeetingBottomBar`).
 struct MeetingDocumentHeader: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
 
-    @State private var isPresentingLanguagePicker = false
-    @State private var isPresentingTagsEditor = false
-    @State private var isPresentingFolderEditor = false
-    @State private var isPresentingDateEditor = false
+    /// Every metadata editor popover anchors at the overflow button — one presentation point, so a
+    /// byline meta link and the menu never race two popover bindings for the same editor.
+    private enum EditorPopover: String, Identifiable {
+        case language
+        case tags
+        case folder
+        case date
+        case participants
+
+        var id: String { rawValue }
+    }
+
+    @State private var activeEditor: EditorPopover?
     @State private var isPresentingParticipants = false
+    @State private var isPresentingOverride = false
     /// Inline title-edit draft (folder-description idiom): committed on submit and on focus loss, so
     /// a rename never touches calendar linkage and never fetch-thrashes on every keystroke.
     @State private var titleDraft = ""
     @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            titleBlock
-            chipRow
-            if presentation.contextAction == .start {
-                primaryStartButton
+        VStack(alignment: .leading, spacing: MeetingTheme.s3) {
+            if presentation.showsLiveChip {
+                liveMasthead
+            } else {
+                masthead
             }
-            banners
+            banner
         }
     }
 
-    private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Inline, single-click-to-edit title (folder-description idiom). Renaming routes through
-            // the single-writer `MeetingService.setTitle`, which never clears calendar linkage.
-            TextField(
-                String(localized: "meetingdoc.title.placeholder"),
-                text: $titleDraft,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .font(.largeTitle)
-            .fontDesign(.serif)
-            .bold()
-            .lineLimit(1...3)
-            .focused($titleFieldFocused)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onSubmit { commitTitle() }
-            .onChange(of: titleFieldFocused) { _, focused in
-                if !focused { commitTitle() }
-            }
-            .onAppear { titleDraft = meeting.title }
-            .onChange(of: meeting.id) { _, _ in titleDraft = meeting.title }
-            .onChange(of: meeting.title) { _, newValue in
-                // Reflect external title changes (e.g. linking adopted the event title) when the
-                // field isn't being actively edited.
-                if !titleFieldFocused { titleDraft = newValue }
-            }
+    // MARK: - Masthead
 
-            HStack(spacing: 10) {
-                if presentation.showsLiveChip {
-                    liveChip
-                }
-                if let start = meeting.startDate {
-                    Label {
-                        Text(start, format: .dateTime.weekday().month().day().hour().minute())
-                    } icon: {
-                        Image(systemName: "calendar")
-                    }
-                }
-                if !meeting.attendees.isEmpty {
-                    Label {
-                        Text("\(meeting.attendees.count)")
-                    } icon: {
-                        Image(systemName: "person.2")
-                    }
-                }
-                if !presentation.showsLiveChip {
-                    Text(meeting.state.displayName)
-                }
+    private var masthead: some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            HStack(alignment: .firstTextBaseline) {
+                MeetingKicker(parts: kickerParts)
+                Spacer(minLength: MeetingTheme.s3)
+                overflowMenu
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            titleField(MeetingTheme.pageTitle)
+            byline
+            metaLinks
         }
     }
 
-    /// True while `stop()`'s off-MainActor teardown is finalizing *this* meeting — the chip then reads
-    /// "Finalizing…" instead of the live timer (the `showsLiveChip` presentation flag stays true across
-    /// both the live and the finalizing spans).
-    private var isFinalizingThisMeeting: Bool {
-        viewModel.isFinalizing && viewModel.activeMeeting?.id == meeting.id
+    /// While live the masthead compresses to a single row — the page belongs to the notes.
+    private var liveMasthead: some View {
+        HStack(alignment: .firstTextBaseline) {
+            titleField(MeetingTheme.liveTitle)
+            Spacer(minLength: MeetingTheme.s3)
+            overflowMenu
+        }
     }
 
-    @ViewBuilder
-    private var liveChip: some View {
-        if isFinalizingThisMeeting {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text(String(localized: "meetingdoc.finalizing"))
-                    .font(.caption.bold())
+    private var kickerParts: [String] {
+        var parts = [String(localized: "meetingdoc.kicker.meeting")]
+        // [Sprint 3] Imported meetings without a stored date still carry one in their export
+        // filename — surface it so the kicker isn't a bare "MEETING".
+        let start = meeting.startDate ?? ImportedMeetingTitle.parse(meeting.title).date
+        if let start {
+            parts.append(start.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+            if meeting.state == .completed {
+                if let duration = durationText { parts.append(duration) }
+            } else {
+                parts.append(start.formatted(.dateTime.hour().minute()))
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.secondary.opacity(0.12), in: Capsule())
+        }
+        if !meeting.attendees.isEmpty {
+            parts.append(String(format: String(localized: "meetingdoc.kicker.people"), meeting.attendees.count))
+        }
+        // The state word only earns kicker space when it's surprising — scheduled reads off the
+        // future date, completed off the summary; interrupted/processing/failed need saying.
+        if meeting.state != .completed, meeting.state != .scheduled, meeting.state != .live {
+            parts.append(meeting.state.displayName)
+        }
+        return parts
+    }
+
+    private var durationText: String? {
+        let seconds: Double
+        if let start = meeting.startDate, let end = meeting.endDate, end > start {
+            seconds = end.timeIntervalSince(start)
+        } else if let last = meeting.segments.map(\.end).max(), last > 0 {
+            seconds = last
         } else {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 8, height: 8)
-                Text(String(localized: "meetingdoc.live"))
-                    .font(.caption.bold())
-                Text(MeetingTranscriptPanel.timestamp(viewModel.captureElapsedSeconds))
-                    .font(.caption.monospacedDigit())
-            }
-            .foregroundStyle(.red)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.red.opacity(0.12), in: Capsule())
+            return nil
         }
+        return Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
     }
 
-    // MARK: - Chip row
-
-    private var chipRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { chips }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) { chips }
-            }
+    private func titleField(_ font: Font) -> some View {
+        // Inline, single-click-to-edit title (folder-description idiom). Renaming routes through
+        // the single-writer `MeetingService.setTitle`, which never clears calendar linkage.
+        TextField(
+            String(localized: "meetingdoc.title.placeholder"),
+            text: $titleDraft,
+            axis: .vertical
+        )
+        .textFieldStyle(.plain)
+        .font(font)
+        .lineLimit(1...3)
+        .focused($titleFieldFocused)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onSubmit { commitTitle() }
+        .onChange(of: titleFieldFocused) { _, focused in
+            if !focused { commitTitle() }
+        }
+        .onAppear { titleDraft = meeting.title }
+        .onChange(of: meeting.id) { _, _ in titleDraft = meeting.title }
+        .onChange(of: meeting.title) { _, newValue in
+            // Reflect external title changes (e.g. linking adopted the event title) when the
+            // field isn't being actively edited.
+            if !titleFieldFocused { titleDraft = newValue }
         }
     }
-
-    @ViewBuilder
-    private var chips: some View {
-        outputSelectorChip
-        if MeetingsViewModel.showsDateEditor(calendarEventID: meeting.calendarEventID) {
-            dateChip
-        }
-        participantsChip
-        calendarLinkChip
-        languageChip
-        tagsChip
-        folderChip
-        exportChip
-        // Requirement 1 (merge-import default fix): a discoverable "import transcript into THIS
-        // meeting" entry, reachable on any meeting that already has a transcript or is completed —
-        // so a completed meeting no longer forces the user to the list toolbar's create-new import.
-        if viewModel.showsImportMergeAction(for: meeting) {
-            importChip
-        }
-    }
-
-    // MARK: - Participants chip (plan M3 — in-document add/remove editor)
-
-    /// Opens the in-document participants editor (`ParticipantsSection`). Always present so participants
-    /// can be added even on an attendee-less ad-hoc meeting; the count badge mirrors the roster size.
-    private var participantsChip: some View {
-        Button {
-            isPresentingParticipants = true
-        } label: {
-            chipLabel(
-                icon: "person.2",
-                text: String(localized: "meetingdoc.participants.chip"),
-                trailingCount: meeting.attendees.count
-            )
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $isPresentingParticipants, arrowEdge: .bottom) {
-            ParticipantsSection(meeting: meeting)
-        }
-    }
-
-    private var importChip: some View {
-        Button {
-            model.isPresentingImport = true
-        } label: {
-            chipLabel(icon: "square.and.arrow.down", text: String(localized: "meetingdoc.chip.import"))
-        }
-        .buttonStyle(.plain)
-        .help(String(localized: "meetingdoc.chip.import.help"))
-    }
-
-    // MARK: - Inline title editing (folder-description idiom)
 
     private func commitTitle() {
         viewModel.renameMeeting(meeting, to: titleDraft)
@@ -191,248 +135,245 @@ struct MeetingDocumentHeader: View {
         titleDraft = meeting.title
     }
 
-    // MARK: - Date chip (requirement 2 — unlinked meetings only)
+    // MARK: - Byline (participants)
 
-    /// An editable date chip shown only for meetings not linked to a calendar event. Opens a
-    /// popover with a date+time picker (and a Clear action). Writes go through the single-writer
-    /// `MeetingService.setMeetingDate`, updating the same `startDate` the timeline day-grouping,
-    /// prior-meeting matching, and related-docs signals read.
-    private var dateChip: some View {
+    private var otherAttendees: [Attendee] {
+        meeting.attendees.filter { $0.isSelf != true }
+    }
+
+    private var otherAttendeeNames: [String] {
+        otherAttendees.map(\.displayName)
+    }
+
+    private var byline: some View {
         Button {
-            isPresentingDateEditor = true
+            isPresentingParticipants = true
         } label: {
-            chipLabel(icon: "calendar", text: dateChipText)
+            HStack(spacing: MeetingTheme.s2) {
+                if !otherAttendeeNames.isEmpty {
+                    MeetingAvatarStack(names: otherAttendeeNames)
+                }
+                Text(bylineText)
+                    .font(MeetingTheme.meta)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $isPresentingDateEditor, arrowEdge: .bottom) {
-            MeetingDateEditorPopover(meeting: meeting, isPresented: $isPresentingDateEditor)
+        .popover(isPresented: $isPresentingParticipants, arrowEdge: .bottom) {
+            ParticipantsSection(meeting: meeting)
         }
     }
 
-    private var dateChipText: String {
-        guard let start = meeting.startDate else {
-            return String(localized: "meetingdoc.date.chip.unset")
+    private var bylineText: String {
+        let attendees = otherAttendees
+        guard !attendees.isEmpty else {
+            return String(localized: "meetingdoc.byline.addPeople")
         }
-        return start.formatted(.dateTime.month().day().hour().minute())
+        // Compact given names keep the sentence one quiet line; the popover carries full rosters.
+        var list = attendees.prefix(3).map(\.shortDisplayName).formatted(.list(type: .and, width: .short))
+        if attendees.count > 3 {
+            list += " +\(attendees.count - 3)"
+        }
+        return String(format: String(localized: "meetingdoc.byline.with"), list)
     }
 
-    // MARK: - Calendar link chip (requirement 3 — link/unlink to a past event)
+    // MARK: - Meta links (folder · #tags · language)
 
-    /// A menu chip to link the meeting to a historical calendar event (opens the picker sheet) and,
-    /// when already linked, to change or remove that link. Linking sets `calendarEventID` /
-    /// `seriesID` / `attendees` and adopts the event's date; unlinking clears the linkage but keeps
-    /// all content.
-    private var calendarLinkChip: some View {
-        let isLinked = meeting.calendarEventID != nil
-        return Menu {
+    @ViewBuilder
+    private var metaLinks: some View {
+        let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
+        let tags = meeting.tags
+        let language = viewModel.languageDisplayName(for: meeting)
+        if folder?.isEmpty == false || !tags.isEmpty || language != nil {
+            HStack(spacing: MeetingTheme.s3) {
+                if let folder, !folder.isEmpty {
+                    MeetingMetaLink(text: folder, systemImage: "folder") { activeEditor = .folder }
+                }
+                if !tags.isEmpty {
+                    MeetingMetaLink(text: tagSummary(tags)) { activeEditor = .tags }
+                }
+                if let language {
+                    MeetingMetaLink(text: language, systemImage: "globe") { activeEditor = .language }
+                }
+            }
+        }
+    }
+
+    private func tagSummary(_ tags: [String]) -> String {
+        let shown = tags.prefix(2).map { "#\($0)" }.joined(separator: " ")
+        return tags.count > 2 ? "\(shown) +\(tags.count - 2)" : shown
+    }
+
+    // MARK: - Overflow menu
+
+    private var overflowMenu: some View {
+        Menu {
+            Button {
+                model.isPresentingExport = true
+            } label: {
+                Label(String(localized: "meetingdoc.chip.export"), systemImage: "square.and.arrow.up")
+            }
+            // Merge-import must never race the live-capture writer (a merge rewrites all
+            // segments): keep the old chip's `showsImportMergeAction` gate, plus the pre-meeting
+            // empty state where import builds the document.
+            if viewModel.showsImportMergeAction(for: meeting) || presentation.bodyMode == .scheduledEmpty {
+                Button {
+                    model.isPresentingImport = true
+                } label: {
+                    Label(String(localized: "meetingdoc.chip.import"), systemImage: "square.and.arrow.down")
+                }
+            }
+            // One-click cleanup for meetings that kept their export filename as a title: apply the
+            // normalized title and, when the meeting has no date of its own, the one parsed from
+            // the filename. Both writes go through the existing single-writer setters.
+            if ImportedMeetingTitle.parse(meeting.title).isImported {
+                Button {
+                    let parsed = ImportedMeetingTitle.parse(meeting.title)
+                    viewModel.renameMeeting(meeting, to: parsed.cleanTitle)
+                    if meeting.startDate == nil, let date = parsed.date {
+                        viewModel.setMeetingDate(date, for: meeting)
+                    }
+                } label: {
+                    Label(String(localized: "meetingdoc.overflow.cleanTitle"), systemImage: "wand.and.stars")
+                }
+            }
+            Divider()
             Button {
                 model.isPresentingLinkEvent = true
             } label: {
                 Label(
-                    isLinked
+                    meeting.calendarEventID != nil
                         ? String(localized: "meetingdoc.link.change")
                         : String(localized: "meetingdoc.link.link"),
                     systemImage: "calendar.badge.plus"
                 )
             }
-            if isLinked {
+            if meeting.calendarEventID != nil {
                 Button(role: .destructive) {
                     viewModel.unlinkMeeting(meeting)
                 } label: {
                     Label(String(localized: "meetingdoc.link.unlink"), systemImage: "calendar.badge.minus")
                 }
             }
-        } label: {
-            chipLabel(
-                icon: isLinked ? "link" : "calendar.badge.plus",
-                text: isLinked
-                    ? String(localized: "meetingdoc.link.chip.linked")
-                    : String(localized: "meetingdoc.link.chip.unlinked")
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
-    // MARK: - Tags chip (plan D9/M3 — token editor with index autocomplete)
-
-    private var tagsChip: some View {
-        Button {
-            isPresentingTagsEditor = true
-        } label: {
-            let tags = meeting.tags
-            let text = tags.isEmpty
-                ? String(localized: "meetingdoc.tags.chip.empty")
-                : tags.prefix(2).map { "#\($0)" }.joined(separator: " ")
-            chipLabel(
-                icon: "tag",
-                text: text,
-                trailingCount: tags.count > 2 ? tags.count : 0
-            )
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $isPresentingTagsEditor, arrowEdge: .bottom) {
-            MeetingTagsEditorPopover(meeting: meeting)
-        }
-    }
-
-    // MARK: - Language chip (plan D9; Detect wired in M2)
-
-    private var languageChip: some View {
-        Button {
-            isPresentingLanguagePicker = true
-        } label: {
-            let text = viewModel.languageDisplayName(for: meeting)
-                ?? String(localized: "meetingdoc.language.chip.unset")
-            chipLabel(icon: "globe", text: text)
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $isPresentingLanguagePicker, arrowEdge: .bottom) {
-            MeetingLanguagePickerPopover(meeting: meeting, isPresented: $isPresentingLanguagePicker)
-        }
-    }
-
-    private var outputSelectorChip: some View {
-        Menu {
-            ForEach(MeetingsViewModel.selectableOutputKinds, id: \.self) { kind in
+            if MeetingsViewModel.showsDateEditor(calendarEventID: meeting.calendarEventID) {
                 Button {
-                    model.selectedOutputKind = kind
+                    activeEditor = .date
                 } label: {
-                    if kind == model.selectedOutputKind {
-                        Label(MeetingsViewModel.outputKindLabel(kind), systemImage: "checkmark")
-                    } else {
-                        Text(MeetingsViewModel.outputKindLabel(kind))
-                    }
+                    Label(String(localized: "meetingdoc.date.editor.title"), systemImage: "calendar")
                 }
             }
-            let customTemplates = customTemplateRows
-            if !customTemplates.isEmpty {
+            Divider()
+            // Participants stay editable in every state — the byline (the usual trigger) is hidden
+            // while live, but adding the people in the room mid-recording must keep working.
+            Button {
+                activeEditor = .participants
+            } label: {
+                Label(String(localized: "meetingdoc.participants.chip"), systemImage: "person.2")
+            }
+            Button {
+                activeEditor = .folder
+            } label: {
+                Label(String(localized: "meetingdoc.folder.editor.title"), systemImage: "folder")
+            }
+            Button {
+                activeEditor = .tags
+            } label: {
+                Label(String(localized: "meetingdoc.tags.editor.title"), systemImage: "tag")
+            }
+            Button {
+                activeEditor = .language
+            } label: {
+                Label(String(localized: "meetingdoc.language.picker.title"), systemImage: "globe")
+            }
+            if meeting.state == .scheduled || meeting.state == .live {
                 Divider()
-                Section(String(localized: "meetingdoc.output.customTemplates")) {
-                    ForEach(customTemplates, id: \.id) { template in
-                        // Selection-only: switch the rendered body to this template's kind (showing the
-                        // latest output of that kind). Generation stays exclusively on the bottom bar's
-                        // Generate ▾ — an accidental menu click here must never cost a provider call.
-                        Button(template.name) {
-                            model.selectedOutputKind = kind(of: template)
-                        }
-                    }
+                Button {
+                    isPresentingOverride = true
+                } label: {
+                    Label(String(localized: "meetingdoc.finalPass.disclosure"), systemImage: "gearshape")
                 }
             }
         } label: {
-            chipLabel(
-                icon: "doc.text",
-                text: MeetingsViewModel.outputKindLabel(model.selectedOutputKind)
-            )
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
-    }
-
-    // MARK: - Folder chip (plan D9/M4 — inline folder editing with tree autocomplete)
-
-    private var folderChip: some View {
-        Button {
-            isPresentingFolderEditor = true
-        } label: {
-            let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
-            let text = (folder?.isEmpty == false)
-                ? folder!
-                : String(localized: "meetingdoc.chip.noFolder")
-            chipLabel(icon: "folder", text: text)
-        }
-        .buttonStyle(.plain)
-        .popover(isPresented: $isPresentingFolderEditor, arrowEdge: .bottom) {
-            MeetingFolderEditorPopover(meeting: meeting, isPresented: $isPresentingFolderEditor)
-        }
-    }
-
-    private var exportChip: some View {
-        Button {
-            model.isPresentingExport = true
-        } label: {
-            chipLabel(icon: "square.and.arrow.up", text: String(localized: "meetingdoc.chip.export"))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func chipLabel(icon: String, text: String, trailingCount: Int = 0) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-            Text(text)
-                .lineLimit(1)
-            if trailingCount > 0 {
-                Text("\(trailingCount)")
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(.secondary.opacity(0.2), in: Capsule())
+        .popover(item: $activeEditor, arrowEdge: .bottom) { editor in
+            switch editor {
+            case .language:
+                MeetingLanguagePickerPopover(meeting: meeting, isPresented: dismissBinding(for: .language))
+            case .tags:
+                MeetingTagsEditorPopover(meeting: meeting)
+            case .folder:
+                MeetingFolderEditorPopover(meeting: meeting, isPresented: dismissBinding(for: .folder))
+            case .date:
+                MeetingDateEditorPopover(meeting: meeting, isPresented: dismissBinding(for: .date))
+            case .participants:
+                ParticipantsSection(meeting: meeting)
             }
         }
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(.secondary.opacity(0.12), in: Capsule())
-    }
-
-    // MARK: - Primary Start button (owner requirement #1)
-
-    private var primaryStartButton: some View {
-        Button {
-            Task { await viewModel.startCapture(for: meeting) }
-        } label: {
-            Label(String(localized: "meetingdoc.start.primary"), systemImage: "record.circle.fill")
-                .font(.title3.bold())
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
+        .sheet(isPresented: $isPresentingOverride) {
+            overrideSheet
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .tint(.red)
-        .disabled(!viewModel.canStartCapture)
     }
 
-    // MARK: - Banners
+    /// Bridges the popovers' `Binding<Bool>` dismissal contract onto the single `activeEditor` item.
+    private func dismissBinding(for editor: EditorPopover) -> Binding<Bool> {
+        Binding(
+            get: { activeEditor == editor },
+            set: { if !$0 { activeEditor = nil } }
+        )
+    }
+
+    /// The per-meeting final re-transcription override, retired from the document body — it's
+    /// plumbing, reachable from the overflow menu only (Sprint 1).
+    private var overrideSheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(String(localized: "meetingdoc.finalPass.disclosure"))
+                    .font(.headline)
+                Spacer()
+                Button(String(localized: "meetingdoc.export.done")) { isPresentingOverride = false }
+            }
+            .padding()
+            Divider()
+            ScrollView {
+                MeetingFinalRetranscriptionOverrideView(meeting: meeting)
+                    .padding()
+            }
+        }
+        .frame(width: 440, height: 380)
+    }
+
+    // MARK: - Status banner (max one, highest priority wins)
 
     @ViewBuilder
-    private var banners: some View {
+    private var banner: some View {
+        // Meeting-scoped facts outrank the global capture error: `captureErrorMessage` is one
+        // published value for the whole app, and a stale error from some other meeting's failed
+        // start must not hide THIS meeting's interrupted/degraded state.
         if meeting.state == .interrupted {
-            banner(String(localized: "meetings.detail.interruptedBanner"), icon: "exclamationmark.triangle")
-        }
-        if viewModel.finalRetranscriptionDegradedMeetingID == meeting.id {
-            banner(String(localized: "meetings.finalPass.degradedStatus"), icon: "wifi.exclamationmark")
-        }
-        if let error = viewModel.captureErrorMessage {
-            banner(error, icon: "exclamationmark.octagon", tint: .red)
+            bannerRow(String(localized: "meetings.detail.interruptedBanner"), icon: "exclamationmark.triangle")
+        } else if viewModel.finalRetranscriptionDegradedMeetingID == meeting.id {
+            bannerRow(String(localized: "meetings.finalPass.degradedStatus"), icon: "wifi.exclamationmark")
+        } else if let error = viewModel.captureErrorMessage {
+            bannerRow(error, icon: "exclamationmark.octagon", tint: .red)
         }
     }
 
-    private func banner(_ text: String, icon: String, tint: Color = .orange) -> some View {
+    private func bannerRow(_ text: String, icon: String, tint: Color = .orange) -> some View {
         Label(text, systemImage: icon)
             .font(.callout)
             .foregroundStyle(tint)
-            .padding(8)
+            .padding(MeetingTheme.s2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    // MARK: - Custom template helpers
-
-    private var customTemplateRows: [PromptAction] {
-        // Templates beyond the kind's actual default (per-meeting/rule override, AD7 — not necessarily
-        // the first) surface as explicit "custom" selection rows.
-        MeetingsViewModel.selectableOutputKinds.flatMap { kind -> [PromptAction] in
-            let defaultID = viewModel.defaultTemplate(ofKind: kind, for: meeting)?.id
-            return viewModel.templates(ofKind: kind).filter { $0.id != defaultID }
-        }
-    }
-
-    private func kind(of template: PromptAction) -> MeetingOutputKind {
-        for kind in MeetingsViewModel.selectableOutputKinds
-        where viewModel.templates(ofKind: kind).contains(where: { $0.id == template.id }) {
-            return kind
-        }
-        return model.selectedOutputKind
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: MeetingTheme.rowRadius))
     }
 }
 

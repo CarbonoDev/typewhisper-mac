@@ -1,18 +1,18 @@
 import SwiftUI
+import AppKit
 
-/// [Track B] The state-switched body of the meeting document (plan D4). Retires the old
-/// `MeetingLiveCaptureView` ↔ `MeetingDetailView` branch into one screen:
-/// - `.scheduledEmpty` — pre-meeting brief, an "import a transcript" affordance (owner requirement
-///   #2), and the per-meeting final re-transcription override.
-/// - `.liveNotes` — editable, timeline-stamped notes plus in-meeting Q&A.
-/// - `.renderedOutput` — the selected output rendered as markdown, generate affordances, brief,
-///   Q&A, speaker diarization / mapping, and notes. The merge-into-this-meeting entry point now
-///   lives in the header chip row (`MeetingDocumentHeader.importChip`) so it is discoverable on any
-///   meeting with a transcript or completed state, not buried at the bottom of the document.
+/// [Sprint 1] The state-switched body of the meeting document, rebuilt lifecycle-first:
+/// - `.scheduledEmpty` — the briefing page: the pre-meeting brief is the hero, related documents
+///   are the supporting context, and nothing else renders (import + final-pass override moved to
+///   the masthead's overflow menu).
+/// - `.liveNotes` — the capture page: notes only; Q&A lives in the transcript panel's Q&A tab.
+/// - `.renderedOutput` — outcomes first: action items and decisions extracted from the generated
+///   markdown, then the output article under text tabs, then a closed-by-default appendix
+///   (transcript, Q&A, speakers, notes, related documents).
 struct MeetingDocumentBody: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
-    // [Track J] Observe the queue directly so the meeting-scoped "Identify speakers" spinner reacts to
-    // `.diarization` job state (the VM no longer mirrors `isEnriching` — plan J2 §CC7).
+    // [Track J] Observe the queue directly so meeting-scoped spinners react to job state (the VM
+    // does not republish on queue mutations — plan J2 §CC7).
     @ObservedObject private var jobQueue = JobQueueService.shared
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
@@ -29,124 +29,69 @@ struct MeetingDocumentBody: View {
         }
     }
 
-    // MARK: - Scheduled / empty
+    // MARK: - Scheduled / empty — the briefing page
 
     private var scheduledEmptyBody: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            MeetingBriefView(meeting: meeting)
-
-            Divider()
-            MeetingRelatedDocsSection(meeting: meeting)
-
-            Divider()
-            importAffordance
-
-            if meeting.state == .scheduled || meeting.state == .live {
-                Divider()
-                MeetingFinalRetranscriptionOverrideView(meeting: meeting)
-            }
-        }
-    }
-
-    /// Owner requirement #2: an "import transcript or audio" affordance in the empty / scheduled
-    /// state ("Have a transcript? Import it").
-    private var importAffordance: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "meetingdoc.import.prompt.title"))
-                .font(.headline)
-            Text(String(localized: "meetingdoc.import.prompt.message"))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Button {
+        VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
+            MeetingBriefView(meeting: meeting) {
                 model.isPresentingImport = true
-            } label: {
-                Label(String(localized: "meetingdoc.import.prompt.button"), systemImage: "square.and.arrow.down")
             }
+            MeetingRelatedDocsSection(meeting: meeting)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Live capture
+    // MARK: - Live capture — agenda + notes
 
     private var liveNotesBody: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
+            // The brief's talking points ride along into the meeting as a tick-off agenda —
+            // unchecked items are what's left to cover.
+            if let brief = viewModel.latestOutput(ofKind: .brief, for: meeting) {
+                let agenda = MeetingOutputParser.parseAgenda(markdown: brief.content)
+                if !agenda.items.isEmpty {
+                    MeetingAgendaSection(meetingID: meeting.id, items: agenda.items)
+                }
+            }
             MeetingNotesPane(meeting: meeting)
-            Divider()
-            MeetingQAView(meeting: meeting)
         }
     }
 
-    // MARK: - Rendered output (stopped / completed)
+    // MARK: - Rendered output — outcomes first
+
+    /// Outcome extraction only applies to the prose kinds; the brief tab renders untouched (its
+    /// "suggested talking points" are prep, not action items).
+    private var slicesOutcomes: Bool {
+        model.selectedOutputKind == .summary || model.selectedOutputKind == .extended
+    }
 
     private var renderedOutputBody: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            outputSection
+        let latest = viewModel.latestOutput(ofKind: model.selectedOutputKind, for: meeting)
+        let outcomes: MeetingOutputParser.ExtractedOutcomes? = (latest != nil && slicesOutcomes)
+            ? MeetingOutputParser.parse(markdown: latest!.content)
+            : nil
 
-            Divider()
-            MeetingBriefView(meeting: meeting)
-
-            Divider()
-            MeetingRelatedDocsSection(meeting: meeting)
-
-            if !meeting.segments.isEmpty {
-                Divider()
-                MeetingQAView(meeting: meeting)
-
-                Divider()
-                SpeakerSection(meeting: meeting)
+        return VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
+            if let outcomes, !outcomes.actions.isEmpty {
+                ActionItemsSection(meeting: meeting, items: outcomes.actions)
             }
-
-            if !meeting.notes.isEmpty {
-                Divider()
-                notesSection
+            if let outcomes, !outcomes.decisions.isEmpty {
+                DecisionsSection(decisions: outcomes.decisions)
             }
-
-            // The per-meeting final-pass override still matters for a scheduled meeting that already
-            // carries an imported transcript, and for a stopped-but-resumable one (state .live) — the
-            // final pass runs at the next stop. Collapsed so it doesn't dominate the rendered document.
-            if meeting.state == .scheduled || meeting.state == .live {
-                Divider()
-                DisclosureGroup(String(localized: "meetingdoc.finalPass.disclosure")) {
-                    MeetingFinalRetranscriptionOverrideView(meeting: meeting)
-                        .padding(.top, 8)
-                }
-                .font(.headline)
-            }
+            outputArticle(latest: latest, outcomes: outcomes)
+            appendix
         }
     }
 
     @ViewBuilder
-    private var outputSection: some View {
-        let latest = viewModel.latestOutput(ofKind: model.selectedOutputKind, for: meeting)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(MeetingsViewModel.outputKindLabel(model.selectedOutputKind))
-                    .font(.title3.bold())
-                Spacer()
-                if let latest, let provenance = Self.provenance(for: latest) {
-                    Text(provenance)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Re-hosted from the retired MeetingOutputsView: let the user fold in-meeting notes into
-            // (or out of) generated outputs. Only meaningful when the meeting actually has notes;
-            // MeetingLLMService reads meeting.notesIncludedInOutputs at generation time.
-            if !meeting.notes.isEmpty {
-                Toggle(isOn: notesIncludedBinding) {
-                    Text(String(localized: "meetings.output.includeNotes"))
-                        .font(.caption)
-                }
-                .toggleStyle(.checkbox)
-            }
+    private func outputArticle(latest: MeetingOutput?, outcomes: MeetingOutputParser.ExtractedOutcomes?) -> some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s4) {
+            MeetingOutputTabs(tabs: outputTabs, selection: $model.selectedOutputKind)
 
             if let error = viewModel.outputErrorMessage {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MeetingTheme.s1) {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.red)
-
                     if viewModel.outputErrorNeedsProvider {
                         Button(String(localized: "meetings.error.selectProvider")) {
                             viewModel.openProviderSettings()
@@ -158,10 +103,168 @@ struct MeetingDocumentBody: View {
             }
 
             if let latest {
-                MarkdownDocumentView(markdown: latest.content)
+                MeetingProse(markdown: outcomes?.strippedMarkdown ?? latest.content) {
+                    if let provenance = Self.provenance(for: latest) {
+                        Text(provenance)
+                            .font(MeetingTheme.footnote)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             } else {
-                emptyOutputPlaceholder
+                emptyOutputCard
             }
+        }
+    }
+
+    private var outputTabs: [MeetingOutputTabs.Tab] {
+        MeetingsViewModel.selectableOutputKinds.map { kind in
+            MeetingOutputTabs.Tab(
+                id: String(describing: kind),
+                label: MeetingsViewModel.outputKindLabel(kind),
+                kind: kind
+            )
+        }
+    }
+
+    /// Transcript exists but nothing was generated for this tab yet: one card, one action.
+    private var emptyOutputCard: some View {
+        MeetingEmptyStateCard(
+            icon: "sparkles",
+            title: String(localized: "meetingdoc.output.none"),
+            message: meeting.segments.isEmpty
+                ? String(localized: "meetingdoc.output.needsTranscript")
+                : String(localized: "meetingdoc.output.generateHint")
+        ) {
+            if !meeting.segments.isEmpty {
+                if viewModel.isGeneratingOutput(for: meeting) {
+                    ProgressView().controlSize(.small)
+                } else if let template = viewModel.defaultTemplate(ofKind: model.selectedOutputKind, for: meeting) {
+                    Button {
+                        viewModel.generateOutput(for: meeting, using: template)
+                    } label: {
+                        Label(String(localized: "meetingdoc.generate"), systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    // MARK: - Appendix
+
+    private var speakerCount: Int {
+        Set(meeting.segments.compactMap { segment -> String? in
+            guard let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !label.isEmpty else { return nil }
+            return label
+        }).count
+    }
+
+    private var transcriptDetail: String {
+        var parts: [String] = []
+        if let last = meeting.segments.map(\.end).max(), last > 0 {
+            parts.append(Duration.seconds(last).formatted(.units(allowed: [.hours, .minutes], width: .narrow)))
+        }
+        if speakerCount > 1 {
+            parts.append(String(format: String(localized: "meetingdoc.appendix.speakerCount"), speakerCount))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var appendix: some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            MeetingSectionLabel(String(localized: "meetingdoc.appendix"))
+
+            if !meeting.segments.isEmpty {
+                MeetingQuietRow(
+                    icon: "waveform",
+                    title: String(localized: "meetingdoc.transcript.title"),
+                    detail: transcriptDetail
+                ) {
+                    model.panelTab = .transcript
+                    model.isTranscriptPanelOpen = true
+                }
+            }
+
+            if !meeting.qaTurns.isEmpty {
+                MeetingQuietRow(
+                    icon: "sparkles",
+                    title: String(localized: "meetings.qa.sectionTitle"),
+                    detail: "\(meeting.qaTurns.count)"
+                ) {
+                    model.panelTab = .qa
+                    model.isTranscriptPanelOpen = true
+                }
+            }
+
+            if !meeting.segments.isEmpty {
+                MeetingAppendixRow(
+                    title: String(localized: "meetings.diarization.title"),
+                    summary: speakerSummary
+                ) {
+                    SpeakerSection(meeting: meeting)
+                }
+            }
+
+            if !meeting.notes.isEmpty {
+                MeetingAppendixRow(
+                    title: String(localized: "meetings.detail.notes"),
+                    summary: "\(meeting.notes.count)"
+                ) {
+                    notesAppendixContent
+                }
+            }
+
+            if viewModel.isVaultConnected || !viewModel.relatedDocuments(for: meeting).isEmpty {
+                MeetingAppendixRow(
+                    title: String(localized: "meetingdoc.related.title"),
+                    summary: relatedSummary
+                ) {
+                    MeetingRelatedDocsSection(meeting: meeting)
+                }
+            }
+        }
+    }
+
+    private var speakerSummary: String? {
+        let mapped = meeting.speakerMap.values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !mapped.isEmpty else { return nil }
+        return mapped.sorted().joined(separator: " · ")
+    }
+
+    private var relatedSummary: String? {
+        let count = viewModel.relatedDocuments(for: meeting).count
+        return count > 0 ? "\(count)" : nil
+    }
+
+    private var notesAppendixContent: some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            ForEach(meeting.notes.sorted { $0.createdAt < $1.createdAt }, id: \.id) { note in
+                HStack(alignment: .top, spacing: MeetingTheme.s2) {
+                    if let offset = note.timestampOffset {
+                        Text(MeetingTranscriptPanel.timestamp(offset))
+                            .font(MeetingTheme.mono)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 56, alignment: .leading)
+                    }
+                    Text(note.text)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            // Re-hosted from the retired MeetingOutputsView: fold in-meeting notes into (or out of)
+            // generated outputs. MeetingLLMService reads meeting.notesIncludedInOutputs at
+            // generation time.
+            Toggle(isOn: notesIncludedBinding) {
+                Text(String(localized: "meetings.output.includeNotes"))
+                    .font(.caption)
+            }
+            .toggleStyle(.checkbox)
+            .padding(.top, MeetingTheme.s1)
         }
     }
 
@@ -172,47 +275,6 @@ struct MeetingDocumentBody: View {
         )
     }
 
-    private var emptyOutputPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "meetingdoc.output.none"))
-                .foregroundStyle(.secondary)
-            if meeting.segments.isEmpty {
-                Text(String(localized: "meetingdoc.output.needsTranscript"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(String(localized: "meetingdoc.output.generateHint"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    // MARK: - Notes (read-only list in the resting state)
-
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "meetings.detail.notes"))
-                .font(.headline)
-            ForEach(meeting.notes.sorted { $0.createdAt < $1.createdAt }, id: \.id) { note in
-                HStack(alignment: .top, spacing: 8) {
-                    if let offset = note.timestampOffset {
-                        Text(MeetingTranscriptPanel.timestamp(offset))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 56, alignment: .leading)
-                    }
-                    Text(note.text)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-    }
-
     static func provenance(for output: MeetingOutput) -> String? {
         var parts: [String] = []
         if let provider = output.providerUsed, !provider.isEmpty { parts.append(provider) }
@@ -221,6 +283,112 @@ struct MeetingDocumentBody: View {
         let timestamp = output.createdAt.formatted(date: .abbreviated, time: .shortened)
         if source.isEmpty { return timestamp }
         return "\(source) — \(timestamp)"
+    }
+}
+
+// MARK: - Action items (extracted outcomes)
+
+/// The extracted action-items card: checkbox rows whose done-state persists via
+/// `MeetingChecklistStore` (keyed by the item's stable content hash — a regenerated, reworded item
+/// intentionally resets), assignees when the parser found one, and a copy-as-markdown action.
+private struct ActionItemsSection: View {
+    let meeting: Meeting
+    let items: [MeetingOutputParser.ActionItem]
+    @ObservedObject private var store = MeetingChecklistStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            MeetingSectionLabel(sectionTitle) {
+                Button {
+                    copyAsMarkdown()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+                .help(String(localized: "meetingdoc.actions.copy"))
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(items, id: \.stableID) { item in
+                    row(for: item)
+                }
+            }
+            .padding(MeetingTheme.s3)
+            .background(MeetingTheme.tintedCardFill, in: RoundedRectangle(cornerRadius: MeetingTheme.cardRadius))
+        }
+    }
+
+    private var sectionTitle: String {
+        let done = store.doneCount(meetingID: meeting.id, itemIDs: items.map(\.stableID))
+        return done > 0
+            ? String(format: String(localized: "meetingdoc.actions.titleWithDone"), done, items.count)
+            : String(format: String(localized: "meetingdoc.actions.title"), items.count)
+    }
+
+    private func row(for item: MeetingOutputParser.ActionItem) -> some View {
+        let isDone = store.isDone(meetingID: meeting.id, itemID: item.stableID)
+        return Button {
+            store.setDone(!isDone, meetingID: meeting.id, itemID: item.stableID)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: MeetingTheme.s2) {
+                Image(systemName: isDone ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isDone ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                Text(item.text)
+                    .font(MeetingTheme.meta)
+                    .strikethrough(isDone)
+                    .foregroundStyle(isDone ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+                if let assignee = item.assignee {
+                    Text(assignee)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, MeetingTheme.s2)
+                        .padding(.vertical, 2)
+                        .background(MeetingTheme.chipFill, in: Capsule())
+                }
+            }
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func copyAsMarkdown() {
+        let lines = items.map { item -> String in
+            let done = store.isDone(meetingID: meeting.id, itemID: item.stableID)
+            let box = done ? "[x]" : "[ ]"
+            let assignee = item.assignee.map { " (\($0))" } ?? ""
+            return "- \(box) \(item.text)\(assignee)"
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+}
+
+/// Extracted decisions: quiet accent-ruled rows — statements, not checkboxes.
+private struct DecisionsSection: View {
+    let decisions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            MeetingSectionLabel(String(format: String(localized: "meetingdoc.decisions.title"), decisions.count))
+            VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+                ForEach(Array(decisions.enumerated()), id: \.offset) { _, decision in
+                    Text(decision)
+                        .font(MeetingTheme.meta)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, MeetingTheme.s3)
+                        .overlay(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(Color.accentColor.opacity(0.5))
+                                .frame(width: 3)
+                        }
+                }
+            }
+        }
     }
 }
 

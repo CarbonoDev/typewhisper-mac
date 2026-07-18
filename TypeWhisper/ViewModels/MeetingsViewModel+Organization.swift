@@ -197,6 +197,7 @@ extension MeetingsViewModel {
         stateFacets: Set<MeetingStateFacet> = [],
         sourceFacet: MeetingSourceFacet = .all,
         languageFilter: String? = nil,
+        folderFacets: Set<String> = [],
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [Meeting] {
@@ -205,6 +206,19 @@ extension MeetingsViewModel {
             result = Self.unfiledMeetings(result)
         } else if let folder, !MeetingService.folderComponents(folder).isEmpty {
             result = Self.meetings(result, inFolder: folder)
+        }
+        // [Sprint 5] Multi-select folder facet: OR within the set (any selected folder matches, by
+        // the same path-prefix rule as the single-folder filter), AND with everything else.
+        if !folderFacets.isEmpty {
+            result = result.filter { meeting in
+                let comps = MeetingService.folderComponents(meeting.folderPath)
+                return folderFacets.contains { facet in
+                    let prefix = MeetingService.folderComponents(facet)
+                    return !prefix.isEmpty
+                        && comps.count >= prefix.count
+                        && Array(comps.prefix(prefix.count)) == prefix
+                }
+            }
         }
         if let tag, !tag.trimmingCharacters(in: .whitespaces).isEmpty {
             result = Self.meetings(result, taggedWith: tag)

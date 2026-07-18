@@ -122,11 +122,13 @@ final class MeetingImportService: ObservableObject {
     @discardableResult
     func importTranscriptFile(at url: URL, title: String? = nil) throws -> Meeting {
         let segments = try parseTranscriptFile(at: url)
+        let resolved = resolvedTitleAndDate(title, fallbackFileName: url)
         let meeting = meetingService.createFromImport(
-            title: resolvedTitle(title, fallbackFileName: url),
+            title: resolved.title,
             source: .importedTranscript,
             segments: segments,
-            segmentSource: .importedTranscript
+            segmentSource: .importedTranscript,
+            startDate: resolved.startDate
         )
         return meeting
     }
@@ -175,11 +177,13 @@ final class MeetingImportService: ObservableObject {
 
         // Adopt a copy so the original is untouched; `adoptAudioFile` moves, so stage a temp copy.
         let audioURL = stagedCopy(of: url)
+        let resolved = resolvedTitleAndDate(title, fallbackFileName: url)
         let meeting = meetingService.createFromImport(
-            title: resolvedTitle(title, fallbackFileName: url),
+            title: resolved.title,
             source: .importedAudio,
             segments: result.segments,
             segmentSource: .importedAudio,
+            startDate: resolved.startDate,
             audioFileURL: audioURL
         )
         // Persist the chosen language as an explicit `.manual` pick (a user selection in the sheet).
@@ -220,12 +224,23 @@ final class MeetingImportService: ObservableObject {
     /// Derive the title from the explicit argument, else the file name (sans extension), else a
     /// localized default.
     private func resolvedTitle(_ title: String?, fallbackFileName url: URL) -> String {
+        resolvedTitleAndDate(title, fallbackFileName: url).title
+    }
+
+    /// [Sprint 3] Derive the title AND an embedded start date from an export filename. A user-typed
+    /// title is never normalized; a filename fallback goes through `ImportedMeetingTitle` so Gemini
+    /// exports ("Weekly sync - 2026_07_07 11_00 CST - Notas de Gemini (1)") land with a clean title
+    /// and the meeting dated when it actually happened.
+    private func resolvedTitleAndDate(_ title: String?, fallbackFileName url: URL) -> (title: String, startDate: Date?) {
         if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
+            return (title, nil)
         }
         let base = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !base.isEmpty { return base }
-        return String(localized: "meetings.import.defaultTitle")
+        guard !base.isEmpty else {
+            return (String(localized: "meetings.import.defaultTitle"), nil)
+        }
+        let parsed = ImportedMeetingTitle.parse(base)
+        return (parsed.cleanTitle, parsed.date)
     }
 
     /// Derive the title for a raw-text import from the explicit argument, else the localized default

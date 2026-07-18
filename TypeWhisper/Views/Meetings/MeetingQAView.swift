@@ -10,9 +10,8 @@ struct MeetingQAView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "meetings.qa.sectionTitle"))
-                .font(.headline)
-
+            // [Sprint 4] No internal section title — the host (the transcript panel's Q&A tab)
+            // already names this surface.
             let turns = meeting.qaTurns.sorted { $0.createdAt < $1.createdAt }
             if turns.isEmpty {
                 Text(String(localized: "meetings.qa.empty"))

@@ -99,8 +99,11 @@ extension MeetingsViewModel {
 
     /// Whether a meeting has anything worth rendering as a document body (a transcript or a
     /// generated output). Notes alone don't count — they are shown live, folded into outputs.
+    /// A `.brief` output alone doesn't count either (Sprint 1): the brief belongs to the
+    /// pre-meeting briefing page, and a scheduled meeting whose only artifact is its brief must
+    /// not flip into the rendered-output layout and lead with an empty summary.
     nonisolated static func documentHasContent(_ meeting: Meeting) -> Bool {
-        !meeting.segments.isEmpty || !meeting.outputs.isEmpty
+        !meeting.segments.isEmpty || meeting.outputs.contains { $0.kind != .brief }
     }
 
     // MARK: - Import / merge affordance (merge-import default fix)

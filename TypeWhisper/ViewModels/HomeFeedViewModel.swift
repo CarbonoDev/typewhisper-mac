@@ -1,6 +1,13 @@
 import Combine
 import Foundation
 
+/// [Sprint 2] Open/total action-item facts for a meeting's newest prose output, driving the
+/// needs-attention rows and the timeline's "N open" trailing count.
+struct MeetingActionFacts: Equatable {
+    var openCount: Int
+    var totalCount: Int
+}
+
 /// An upcoming calendar event projected for the "Coming up" card: the event plus its resolved
 /// color (via the `CalendarColorProviding` seam), its time status, and whether it is running long.
 struct ComingUpItem: Identifiable {
@@ -90,6 +97,49 @@ final class HomeFeedViewModel: ObservableObject {
                 )
             )
         }
+    }
+
+    // MARK: - Action-item facts (Sprint 2)
+
+    /// Memoized parses of each meeting's newest prose outputs, keyed by those outputs' `createdAt`
+    /// stamps so a regeneration invalidates the entry. Parsing is cheap (a few KB string scan) but
+    /// Home renders often — without this, every scroll frame would re-parse every visible meeting.
+    private var actionItemCache: [UUID: (outputDates: [Date], items: [MeetingOutputParser.ActionItem])] = [:]
+
+    /// Open/total action-item counts for a meeting, or nil when it has no summary/extended output.
+    /// Items are the UNION of the newest summary's and the newest extended's parses (deduped by
+    /// stableID): the document's checkboxes act on whichever tab the user reads, so counting only
+    /// one output would leave the other tab's checked-off items "open" forever. The
+    /// done-subtraction reads `MeetingChecklistStore` uncached (a dictionary lookup) so views
+    /// observing the store update live as items are checked off in the document.
+    func actionFacts(for meeting: Meeting) -> MeetingActionFacts? {
+        let sources = [MeetingOutputKind.summary, .extended].compactMap { kind in
+            meeting.outputs.filter { $0.kind == kind }.max { $0.createdAt < $1.createdAt }
+        }
+        guard !sources.isEmpty else { return nil }
+        let dates = sources.map(\.createdAt).sorted()
+
+        let items: [MeetingOutputParser.ActionItem]
+        if let cached = actionItemCache[meeting.id], cached.outputDates == dates {
+            items = cached.items
+        } else {
+            var union: [MeetingOutputParser.ActionItem] = []
+            var seen = Set<String>()
+            for output in sources {
+                for item in MeetingOutputParser.parse(markdown: output.content).actions
+                where !seen.contains(item.stableID) {
+                    seen.insert(item.stableID)
+                    union.append(item)
+                }
+            }
+            items = union
+            actionItemCache[meeting.id] = (dates, items)
+        }
+        guard !items.isEmpty else { return MeetingActionFacts(openCount: 0, totalCount: 0) }
+        let done = MeetingChecklistStore.shared.doneCount(
+            meetingID: meeting.id, itemIDs: items.map(\.stableID)
+        )
+        return MeetingActionFacts(openCount: items.count - done, totalCount: items.count)
     }
 
     // MARK: - Timeline projection

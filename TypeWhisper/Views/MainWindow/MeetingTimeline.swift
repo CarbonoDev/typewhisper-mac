@@ -13,15 +13,20 @@ struct MeetingTimeline: View {
         if viewModel.meetings.isEmpty {
             emptyState
         } else {
-            MeetingTimelineList(meetings: viewModel.meetings)
+            VStack(alignment: .leading, spacing: MeetingTheme.s3) {
+                MeetingSectionLabel(String(localized: "home.recent.section"))
+                MeetingTimelineList(meetings: viewModel.meetings)
+            }
         }
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(String(localized: "home.timeline.empty.title"), systemImage: "calendar")
-        } description: {
-            Text(String(localized: "home.timeline.empty.message"))
+        MeetingEmptyStateCard(
+            icon: "waveform",
+            title: String(localized: "home.timeline.empty.title"),
+            message: String(localized: "home.timeline.empty.message")
+        ) {
+            EmptyView()
         }
     }
 }
@@ -141,41 +146,130 @@ struct MeetingTimelineList: View {
     }
 
     private func rowContent(_ meeting: Meeting, isLive: Bool, isSelected: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    if isLive {
-                        Image(systemName: "record.circle.fill")
-                            .foregroundStyle(.red)
+        TimelineRowContent(meeting: meeting, isLive: isLive, isSelected: isSelected) {
+            HStack(spacing: 8) {
+                attendeeCount(for: meeting)
+                badges(for: meeting, isLive: isLive)
+            }
+        }
+    }
+
+    /// [Sprint 2] The quiet row treatment: transparent until hover, selection keeps its accent
+    /// highlight (folder detail), metadata in a mono time gutter, and an honest open-action count
+    /// instead of artifact badges.
+    private struct TimelineRowContent<Accessory: View>: View {
+        let meeting: Meeting
+        let isLive: Bool
+        let isSelected: Bool
+        @ViewBuilder var accessory: Accessory
+
+        @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
+        // Observed so checking items off in a document updates the trailing count live.
+        @ObservedObject private var checklistStore = MeetingChecklistStore.shared
+        @State private var isHovering = false
+
+        var body: some View {
+            HStack(alignment: .firstTextBaseline, spacing: MeetingTheme.s3) {
+                Text(gutterText)
+                    .font(MeetingTheme.mono)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 56, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        if isLive {
+                            Image(systemName: "record.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                        // [Sprint 3] Imported export filenames display as the meetings they are.
+                        Text(ImportedMeetingTitle.displayTitle(for: meeting.title))
+                            .font(MeetingTheme.meta)
+                            .lineLimit(1)
+                        accessory
                     }
-                    Text(meeting.title)
-                        .font(.body)
-                        .lineLimit(1)
+                    tagRow
                 }
-                HStack(spacing: 8) {
-                    if let start = meeting.startDate {
-                        Text(start, format: .dateTime.hour().minute())
+                Spacer(minLength: 8)
+                trailingFacts
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .opacity(isHovering || isSelected ? 1 : 0)
+            }
+            .padding(.vertical, MeetingTheme.s2)
+            .padding(.horizontal, MeetingTheme.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // [Sprint 5] A quiet card fill separates rows from the page ground — fully transparent
+            // rows read flat (owner feedback).
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.16)
+                    : (isHovering ? Color.primary.opacity(0.06) : Color.primary.opacity(0.035)),
+                in: RoundedRectangle(cornerRadius: MeetingTheme.rowRadius)
+            )
+            .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
+        }
+
+        private var gutterText: String {
+            // Imported meetings without a stored date still carry one in their export filename.
+            guard let start = meeting.startDate ?? ImportedMeetingTitle.parse(meeting.title).date else {
+                return ""
+            }
+            return start.formatted(.dateTime.hour().minute())
+        }
+
+        @ViewBuilder
+        private var tagRow: some View {
+            let tags = meeting.tags
+            let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
+            if folder?.isEmpty == false || !tags.isEmpty {
+                let maxVisible = 3
+                HStack(spacing: 6) {
+                    // [Sprint 5] Name the folder on the row (owner feedback) — quiet, before tags.
+                    if let folder, !folder.isEmpty {
+                        Label(folder, systemImage: "folder")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    attendeeCount(for: meeting)
-                    badges(for: meeting, isLive: isLive)
+                    ForEach(Array(tags.prefix(maxVisible)), id: \.self) { tag in
+                        chip("#\(tag)")
+                    }
+                    if tags.count > maxVisible {
+                        chip("+\(tags.count - maxVisible)")
+                    }
                 }
-                tagCapsules(for: meeting)
             }
-            Spacer(minLength: 8)
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            (isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.03)),
-            in: RoundedRectangle(cornerRadius: 10)
-        )
-        .contentShape(Rectangle())
+
+        private func chip(_ text: String) -> some View {
+            Text(text)
+                .font(.caption)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(MeetingTheme.chipFill, in: Capsule())
+                .foregroundStyle(.secondary)
+        }
+
+        /// `N open` while action items remain; a quiet check when they're all done.
+        @ViewBuilder
+        private var trailingFacts: some View {
+            if meeting.state == .completed,
+               let facts = homeViewModel.actionFacts(for: meeting),
+               facts.totalCount > 0 {
+                if facts.openCount > 0 {
+                    Text(String(format: String(localized: "home.recent.open"), facts.openCount))
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                } else {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.green)
+                        .help(String(localized: "home.recent.allDone"))
+                }
+            }
+        }
     }
 
     /// A compact attendee count (people icon + number), shown only when the meeting has attendees, so
@@ -207,41 +301,24 @@ struct MeetingTimelineList: View {
             if let badge = workingBadge(for: meeting) {
                 workingBadgeCapsule(text: badge.text)
             }
-            ForEach(homeViewModel.badges(for: meeting), id: \.self) { badge in
+            // [Sprint 2] Badge diet: only state that needs the user survives. Summary/Extended/In
+            // vault described artifacts (the normal resting state) and are gone — the trailing
+            // open-action count and the needs-attention section carry that load. Brief-ready only
+            // matters before the meeting happens.
+            ForEach(dietBadges(for: meeting), id: \.self) { badge in
                 badgeCapsule(text: badge.displayName, systemImage: badge.systemImage, tint: badge.tint)
             }
         }
     }
 
-    /// First-party tag capsules on a timeline row (plan D9/M3), capped so a heavily-tagged meeting
-    /// can't blow out the row; the remainder collapses into a "+N" capsule. Display-only — the whole
-    /// row is already a navigation Button (filtering lives on the sidebar TAGS section), so nested
-    /// interactive capsules are deliberately avoided.
-    @ViewBuilder
-    private func tagCapsules(for meeting: Meeting) -> some View {
-        let tags = meeting.tags
-        if !tags.isEmpty {
-            let maxVisible = 4
-            let visible = tags.prefix(maxVisible)
-            HStack(spacing: 6) {
-                ForEach(Array(visible), id: \.self) { tag in
-                    tagCapsule("#\(tag)")
-                }
-                if tags.count > maxVisible {
-                    tagCapsule("+\(tags.count - maxVisible)")
-                }
+    private func dietBadges(for meeting: Meeting) -> [MeetingBadge] {
+        homeViewModel.badges(for: meeting).filter { badge in
+            switch badge {
+            case .runningLong: return true
+            case .briefReady: return meeting.state == .scheduled
+            case .summary, .extended, .inVault: return false
             }
         }
-    }
-
-    private func tagCapsule(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2)
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15), in: Capsule())
-            .foregroundStyle(.secondary)
     }
 
     private func workingBadge(for meeting: Meeting) -> MeetingActivityBadge? {

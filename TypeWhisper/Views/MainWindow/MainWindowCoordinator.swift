@@ -52,6 +52,14 @@ final class MainWindowCoordinator: ObservableObject {
     /// Language code filter (`nil` = no language facet). Stretch facet, cheap over the direct column.
     @Published private(set) var languageFilter: String?
 
+    /// [Sprint 5] Multi-select folder facet for the archive's first-class folder dropdown. Empty =
+    /// all folders. OR within the set (a meeting matches when it lives under ANY selected folder),
+    /// AND-composed with the other facets through the same choke point.
+    @Published private(set) var folderFacets: Set<String> = []
+
+    /// [Sprint 5] Archive date-sort order. Not a filter — survives `clearFacetState`.
+    @Published var meetingsSortNewestFirst = true
+
     /// Focus a specific meeting document. Used by the focus bridge (menu bar / notifications) and
     /// by Home / list rows.
     func openMeeting(id: UUID) {
@@ -114,6 +122,20 @@ final class MainWindowCoordinator: ObservableObject {
         languageFilter = code
     }
 
+    /// Toggle one folder in/out of the multi-select folder facet.
+    func toggleFolderFacet(_ path: String) {
+        if folderFacets.contains(path) {
+            folderFacets.remove(path)
+        } else {
+            folderFacets.insert(path)
+        }
+    }
+
+    /// Clear the folder facet back to "all folders".
+    func clearFolderFacets() {
+        folderFacets = []
+    }
+
     /// Reset every filter-bar facet to its no-op default (used by the `show(_:)` default branch and the
     /// combined Clear). Leaves the folder/tag/unfiled filters and the route untouched.
     func clearFacetState() {
@@ -122,6 +144,7 @@ final class MainWindowCoordinator: ObservableObject {
         stateFacets = []
         sourceFacet = .all
         languageFilter = nil
+        folderFacets = []
     }
 
     /// True while any filter-bar facet is active (drives the combined header + filtered empty state).
@@ -131,6 +154,7 @@ final class MainWindowCoordinator: ObservableObject {
             || !stateFacets.isEmpty
             || sourceFacet != .all
             || languageFilter != nil
+            || !folderFacets.isEmpty
     }
 
     /// Filter the meetings list by a first-party tag (plan D8, M3). Sets `activeTag` and routes to the

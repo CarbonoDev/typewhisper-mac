@@ -27,6 +27,8 @@ struct MeetingDocumentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: model.isTranscriptPanelOpen)
+        // [Sprint 4] The window names the meeting (clean title for imported exports), not the app.
+        .navigationTitle(ImportedMeetingTitle.displayTitle(for: meeting.title))
         .onAppear { applyPanelDefault() }
         .onChange(of: meeting.id) { _, _ in
             // Switching to a different meeting: reset per-document UI state and re-apply defaults.
@@ -49,14 +51,19 @@ struct MeetingDocumentView: View {
 
     private var documentColumn: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            // [Sprint 1] The document reads in a centered, measure-limited column — a page, not a
+            // form (MeetingTheme.contentMaxWidth).
+            VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
                 MeetingDocumentHeader(model: model, meeting: meeting, presentation: presentation)
                 MeetingDocumentBody(model: model, meeting: meeting, presentation: presentation)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: MeetingTheme.contentMaxWidth, alignment: .topLeading)
+            .padding(MeetingTheme.pagePadding)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // [Sprint 4] The document reads on faint warm paper in light mode (MeetingTheme).
+        .background(MeetingTheme.paperBackground)
         .safeAreaInset(edge: .bottom) {
             MeetingBottomBar(model: model, meeting: meeting, presentation: presentation)
         }
@@ -99,9 +106,17 @@ struct MeetingDocumentView: View {
 /// document via `@StateObject`.
 @MainActor
 final class MeetingDocumentModel: ObservableObject {
+    /// The side panel's tab: the transcript or the Q&A history (Sprint 1 — Q&A moved off the page
+    /// into the panel so answers never push the document around).
+    enum PanelTab: Hashable {
+        case transcript
+        case qa
+    }
+
     /// The output kind currently rendered in the body (Summary / Extended / Brief).
     @Published var selectedOutputKind: MeetingOutputKind = .summary
     @Published var isTranscriptPanelOpen = false
+    @Published var panelTab: PanelTab = .transcript
     @Published var transcriptSearch = ""
     @Published var noteDraft = ""
     @Published var askDraft = ""
@@ -117,6 +132,7 @@ final class MeetingDocumentModel: ObservableObject {
     func resetForMeetingSwitch() {
         selectedOutputKind = .summary
         isTranscriptPanelOpen = false
+        panelTab = .transcript
         transcriptSearch = ""
         noteDraft = ""
         askDraft = ""

@@ -764,9 +764,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        // TypeWhisper is free and open source; there are no supporter/Discord
-        // callback URLs to handle.
+        // [Sprint 1] Deep links into the meetings surface, e.g. from an Obsidian export or
+        // automation: `typewhisper://meeting/<uuid>` opens that meeting document,
+        // `typewhisper://meetings` opens the main window.
+        guard url.scheme?.lowercased() == "typewhisper" else { return }
+        switch url.host?.lowercased() {
+        case "meeting":
+            let idString = url.pathComponents.count > 1 ? url.pathComponents[1] : ""
+            if let id = UUID(uuidString: idString) {
+                openMainWindow()
+                MainWindowCoordinator.shared.openMeeting(id: id)
+            }
+        case "meetings":
+            openMainWindow()
+            MainWindowCoordinator.shared.show(.meetings)
+        case "home":
+            openMainWindow()
+            MainWindowCoordinator.shared.show(.home)
+        case "folder":
+            let path = url.pathComponents.dropFirst().joined(separator: "/")
+            if !path.isEmpty {
+                openMainWindow()
+                MainWindowCoordinator.shared.show(.folder(path))
+            }
+        #if DEBUG
+        case "screenshot":
+            // Dev-only self-capture for design iteration: `typewhisper://screenshot/<name>`
+            // renders the main window's own view tree to /tmp/typewhisper-dev-screenshots/<name>.png.
+            // No Screen Recording permission needed because the app draws itself.
+            let rawName = url.pathComponents.count > 1 ? url.pathComponents[1] : "window"
+            captureMainWindowForDev(named: rawName)
+        #endif
+        default:
+            break
+        }
     }
+
+    #if DEBUG
+    private func captureMainWindowForDev(named rawName: String) {
+        let name = rawName.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
+        // Give any just-triggered navigation a beat to settle before drawing.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            guard let window = NSApp.windows.first(where: { self.isManagedWindow($0) && $0.isVisible }),
+                  let frameView = window.contentView?.superview else { return }
+            let bounds = frameView.bounds
+            guard let rep = frameView.bitmapImageRepForCachingDisplay(in: bounds) else { return }
+            frameView.cacheDisplay(in: bounds, to: rep)
+            guard let data = rep.representation(using: .png, properties: [:]) else { return }
+            let dir = URL(fileURLWithPath: "/tmp/typewhisper-dev-screenshots", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: dir.appendingPathComponent("\(name).png"))
+        }
+    }
+    #endif
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
         if let identifier = window.identifier?.rawValue,

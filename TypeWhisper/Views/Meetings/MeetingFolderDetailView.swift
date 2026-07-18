@@ -40,13 +40,13 @@ struct MeetingFolderDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
                 header
                 meetingsSection
             }
-            .padding(24)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MeetingTheme.pagePadding)
+            .frame(maxWidth: MeetingTheme.contentMaxWidth, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationTitle(folderName)
         .toolbar {
@@ -67,16 +67,17 @@ struct MeetingFolderDetailView: View {
 
     // MARK: - Header (serif title + inline description + Context affordance)
 
+    /// [Sprint 3] Masthead-aligned header: kicker (FOLDER · N MEETINGS), serif title, inline
+    /// description, and the Context affordance as a quiet row.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "folder")
-                    .foregroundStyle(.secondary)
-                Text(folderName)
-                    .font(.largeTitle)
-                    .fontDesign(.serif)
-                    .fontWeight(.bold)
-            }
+        VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+            MeetingKicker(parts: [
+                String(localized: "meetingfolder.kicker.folder"),
+                String(format: String(localized: "meetingfolder.kicker.count"), folderMeetings.count),
+            ])
+
+            Text(folderName)
+                .font(MeetingTheme.pageTitle)
 
             // Inline, single-click-to-edit description with an "Add a description…" placeholder when
             // empty — matches the Granola reference.
@@ -87,34 +88,24 @@ struct MeetingFolderDetailView: View {
             )
             .textFieldStyle(.plain)
             .lineLimit(1...5)
-            .font(.body)
+            .font(MeetingTheme.meta)
             .foregroundStyle(.secondary)
             .onChange(of: descriptionText) { _, newValue in
                 viewModel.setFolderDescription(newValue, for: folderPath)
             }
 
-            contextAffordance
+            MeetingQuietRow(
+                icon: "text.book.closed",
+                title: String(localized: "meetingfolder.context.header"),
+                detail: contextSummary
+            ) {
+                isPresentingContext = true
+            }
 
             if let tag = coordinator.activeTag {
                 activeTagChip(tag)
             }
         }
-    }
-
-    /// The clearly-labeled "Context" affordance and its state caption (e.g. "3 attached" /
-    /// "Vault context off"). Opens the secondary configuration sheet.
-    private var contextAffordance: some View {
-        HStack(spacing: 8) {
-            Button {
-                isPresentingContext = true
-            } label: {
-                Label(String(localized: "meetingfolder.context.header"), systemImage: "text.book.closed")
-            }
-            Text(contextSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 2)
     }
 
     /// A one-line summary of the folder's context configuration for the primary page (pure over the

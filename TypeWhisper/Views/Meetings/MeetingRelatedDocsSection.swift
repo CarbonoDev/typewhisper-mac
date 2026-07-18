@@ -36,10 +36,7 @@ struct MeetingRelatedDocsSection: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            Text(String(localized: "meetingdoc.related.title"))
-                .font(.headline)
-            Spacer()
+        MeetingSectionLabel(String(localized: "meetingdoc.related.title")) {
             if viewModel.isVaultConnected {
                 findButton
             }

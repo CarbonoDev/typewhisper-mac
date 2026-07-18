@@ -17,21 +17,70 @@ struct MeetingBottomBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            transcriptToggle
-            askField
-            contextActions
+            // [Sprint 1] Pre-meeting the bar carries exactly one verb: Start. The waveform toggle
+            // and Ask field are useless without segments, so they don't render — and the live timer
+            // pill (relocated from the old header chip) anchors the left edge while recording.
+            if presentation.showsLiveChip {
+                liveTimerPill
+            }
+            if presentation.bodyMode == .scheduledEmpty {
+                Spacer(minLength: 0)
+                contextActions
+                Spacer(minLength: 0)
+            } else {
+                transcriptToggle
+                askField
+                contextActions
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: MeetingTheme.barRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: MeetingTheme.barRadius)
                 .strokeBorder(.separator, lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
+    }
+
+    /// True while `stop()`'s off-MainActor teardown is finalizing *this* meeting — the pill then
+    /// reads "Finalizing…" instead of the live timer.
+    private var isFinalizingThisMeeting: Bool {
+        viewModel.isFinalizing && viewModel.activeMeeting?.id == meeting.id
+    }
+
+    /// The live timer pill (moved here from the old header live chip): red dot + monospaced elapsed
+    /// time, or a spinner while finalizing.
+    @ViewBuilder
+    private var liveTimerPill: some View {
+        if isFinalizingThisMeeting {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(String(localized: "meetingdoc.finalizing"))
+                    .font(.caption.bold())
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.secondary.opacity(0.12), in: Capsule())
+        } else {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                Text(String(localized: "meetingdoc.live"))
+                    .font(.caption.bold())
+                Text(MeetingTranscriptPanel.timestamp(viewModel.captureElapsedSeconds))
+                    .font(.caption.monospacedDigit())
+            }
+            .foregroundStyle(.red)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.red.opacity(0.12), in: Capsule())
+        }
     }
 
     private var transcriptToggle: some View {
@@ -217,6 +266,10 @@ struct MeetingBottomBar: View {
         let question = model.askDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !viewModel.isAnswering(for: meeting.id) else { return }
         model.askDraft = ""
+        // [Sprint 1] Answers render in the side panel's Q&A tab — open it so the reply is visible
+        // without pushing the document around.
+        model.panelTab = .qa
+        model.isTranscriptPanelOpen = true
         Task {
             let ok = await viewModel.askQuestion(question, for: meeting)
             if !ok, model.askDraft.isEmpty { model.askDraft = question }

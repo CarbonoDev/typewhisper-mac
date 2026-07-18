@@ -19,4 +19,29 @@ struct Attendee: Codable, Hashable, Sendable, Identifiable {
         self.email = email
         self.isSelf = isSelf
     }
+
+    /// A human-presentable name (Sprint 1): calendar invitees often arrive with an email address in
+    /// `name`. When the name looks like an email, derive a readable form from its local part
+    /// ("juan.sanchez@x.mx" → "Juan Sanchez"); otherwise the name passes through untouched.
+    var displayName: String {
+        Self.prettify(name)
+    }
+
+    /// The compact byline form: the given name(s) only ("Juan Sanchez" → "Juan").
+    var shortDisplayName: String {
+        displayName.split(separator: " ").first.map(String.init) ?? displayName
+    }
+
+    private static func prettify(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains("@"), !trimmed.contains(" ") else { return trimmed }
+        let local = trimmed.prefix(while: { $0 != "@" })
+        let words = local
+            .split(whereSeparator: { ".-_+".contains($0) })
+            .filter { !$0.isEmpty }
+        guard !words.isEmpty else { return trimmed }
+        return words
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
 }

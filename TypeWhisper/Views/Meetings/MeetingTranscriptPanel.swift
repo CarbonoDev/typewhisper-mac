@@ -30,9 +30,19 @@ struct MeetingTranscriptPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            searchField
-            Divider()
-            content
+            // [Sprint 1] The panel hosts two tabs: the transcript and the Q&A history (Q&A moved
+            // off the document page so answers never push the notes/summary around).
+            switch model.panelTab {
+            case .transcript:
+                searchField
+                Divider()
+                content
+            case .qa:
+                ScrollView {
+                    MeetingQAView(meeting: meeting)
+                        .padding(12)
+                }
+            }
         }
         .frame(width: 380)
         .background(.regularMaterial)
@@ -40,17 +50,26 @@ struct MeetingTranscriptPanel: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(String(localized: "meetingdoc.transcript.title"))
-                .font(.headline)
-            Spacer()
-            Button {
-                copyTranscript()
-            } label: {
-                Image(systemName: "doc.on.doc")
+            Picker("", selection: $model.panelTab) {
+                Text(String(localized: "meetingdoc.transcript.title"))
+                    .tag(MeetingDocumentModel.PanelTab.transcript)
+                Text(String(localized: "meetings.qa.sectionTitle"))
+                    .tag(MeetingDocumentModel.PanelTab.qa)
             }
-            .buttonStyle(.borderless)
-            .help(String(localized: "meetingdoc.transcript.copyAll"))
-            .disabled(meeting.segments.isEmpty)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            Spacer()
+            if model.panelTab == .transcript {
+                Button {
+                    copyTranscript()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .help(String(localized: "meetingdoc.transcript.copyAll"))
+                .disabled(meeting.segments.isEmpty)
+            }
 
             Button {
                 model.isTranscriptPanelOpen = false

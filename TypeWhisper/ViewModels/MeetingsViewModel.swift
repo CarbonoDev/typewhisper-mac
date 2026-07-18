@@ -542,10 +542,11 @@ final class MeetingsViewModel: ObservableObject {
         meetings.filter { selectedMeetingIDs.contains($0.id) }
     }
 
-    /// Delete a single meeting (context-menu "Delete"), removing its audio blob, and drop it from the
-    /// selection. Callers gate on a confirmation dialog.
+    /// Delete a single meeting (context-menu "Delete"), removing its audio blob, its action-item
+    /// checklist state, and dropping it from the selection. Callers gate on a confirmation dialog.
     func deleteMeeting(_ meeting: Meeting) {
         meetingService.deleteMeeting(meeting)
+        MeetingChecklistStore.shared.removeAll(meetingID: meeting.id)
         selectedMeetingIDs.remove(meeting.id)
     }
 
@@ -554,6 +555,9 @@ final class MeetingsViewModel: ObservableObject {
     func deleteMeetings(_ meetings: [Meeting]) {
         guard !meetings.isEmpty else { return }
         meetingService.deleteMeetings(meetings)
+        for meeting in meetings {
+            MeetingChecklistStore.shared.removeAll(meetingID: meeting.id)
+        }
         selectedMeetingIDs.subtract(meetings.map(\.id))
     }
 
