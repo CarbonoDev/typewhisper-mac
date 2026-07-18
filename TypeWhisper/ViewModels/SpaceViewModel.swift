@@ -1,6 +1,10 @@
 import Foundation
 import Combine
 import AppKit
+import os.log
+
+private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SpaceViewModel")
 
 /// The Space browser's view model (Track E, ME-1). MVVM + `ServiceContainer` DI (static `_shared`
 /// assigned at startup, per project pattern). It holds **one cached snapshot** of
@@ -33,6 +37,12 @@ final class SpaceViewModel: ObservableObject {
     /// re-run the recursive builder over the whole snapshot on every SwiftUI redraw (plan D6 / ME-1
     /// review). Pure, cached, safe to read from `body`.
     @Published private(set) var tree: [SpaceNode] = []
+
+    /// The active compose-then-create quick-note draft, or `nil` when not composing (Track E, ME-3,
+    /// plan D1). The editor exists **before any file does**; committing performs exactly one
+    /// never-clobber creation write. `SpaceFolderView` renders the draft editor when the draft targets
+    /// the folder it's showing.
+    @Published var draft: SpaceDraftState?
 
     private let vaultService: ObsidianVaultService
     private let defaults: UserDefaults
@@ -87,19 +97,94 @@ final class SpaceViewModel: ObservableObject {
         refresh()
     }
 
-    // MARK: - Note reading (Track E, ME-2)
+    // MARK: - Note reading (Track E, ME-2 / ME-3)
 
-    /// The raw text of a single vault note (frontmatter included), or `nil` when unreadable / missing /
-    /// out of the vault. A direct single read off the enumeration path (`ObsidianVaultService.readNote`);
-    /// callers load it into view `@State` on appear, never in a `body`.
-    func noteBody(at path: String) -> String? {
-        vaultService.readNote(path)
+    /// Read a single vault note **once**, returning its raw text (frontmatter included) and resolved
+    /// `typewhisper-meeting` backlink together (Track E, ME-3 — one disk read replaces the ME-2 note
+    /// view's two, `readNote` + `meetingID`). `nil` when unreadable / missing / out of the vault; the
+    /// backlink stays tolerant. Callers load it into view `@State` on appear, never in a `body`.
+    func loadNote(at path: String) -> VaultNoteRead? {
+        vaultService.readNoteWithBacklink(path)
     }
 
-    /// The `typewhisper-meeting` backlink UUID parsed from a note's frontmatter, or `nil` (tolerant).
-    /// Existence of the referenced meeting is resolved separately (`SpaceReveal.linkedMeeting`).
-    func linkedMeetingUUID(at path: String) -> UUID? {
-        vaultService.meetingID(inNoteAt: path)
+    // MARK: - Quick-note draft (Track E, ME-3)
+
+    /// Begin a compose-then-create draft targeting `folderPath` (the currently viewed Space folder). The
+    /// editor opens empty — no file exists yet; one is created only on commit (plan D1).
+    func beginDraft(inFolder folderPath: String) {
+        draft = SpaceDraftState(folderPath: folderPath, text: "")
+    }
+
+    /// Update the active draft's text (the `TextEditor` binding). No-op when not drafting.
+    func updateDraftText(_ text: String) {
+        draft?.text = text
+    }
+
+    /// Discard the active draft without writing anything (the deliberate Discard affordance / an empty
+    /// commit). Frictionless: the caller confirms only when `SpaceDraft.shouldConfirmDiscard` is true.
+    func discardDraft() {
+        draft = nil
+    }
+
+    /// Commit the active draft as **one** never-clobber creation write (plan D1/D6). An empty draft is
+    /// discarded silently (no file). Otherwise the filename derives from the first typed line
+    /// (`SpaceDraft.filename`), the note is written into the draft's folder via `VaultNoteWriter`
+    /// (collisions suffix `<name> 1.md`, never overwrite), the cached snapshot refreshes so the note
+    /// appears immediately, and the new note's **vault-relative path** is returned for the caller to
+    /// route to (read mode). Returns `nil` on empty draft, no vault, or a write failure — on failure
+    /// the draft is **kept** so the user never loses content.
+    @discardableResult
+    func commitDraft() -> String? {
+        guard let draft else { return nil }
+        guard !SpaceDraft.isEmpty(draft.text) else {
+            self.draft = nil
+            return nil
+        }
+        guard let vaultPath = vaultService.vaultPath else {
+            // No vault (e.g. disconnected mid-draft): keep the draft on the page so the user never
+            // loses typed content — the same contract as the write-failure branch below, and D1's
+            // central guarantee. A later reconnect can commit it.
+            return nil
+        }
+        let folderAbsolute = absoluteFolderPath(vaultPath: vaultPath, relativeFolder: draft.folderPath)
+        let filename = SpaceDraft.filename(from: draft.text)
+        do {
+            let url = try VaultNoteWriter.write(
+                content: draft.text, toFolder: folderAbsolute, filename: filename)
+            self.draft = nil
+            refresh()
+            return vaultRelativePath(of: url, vaultPath: vaultPath)
+        } catch {
+            // Keep the draft on the page so a write failure never loses the user's content, and log
+            // it (the exporter logs its write failures the same way) so a failing disk/permissions
+            // state is diagnosable rather than a silently no-op Done.
+            logger.error("Failed to write Space quick-note: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// The absolute path of a vault-relative folder: the vault root joined with each path component
+    /// (empty ⇒ the vault root itself). `VaultNoteWriter.write` creates any missing intermediates.
+    /// `..`/`.` components are skipped so a malformed route can never escape the vault to create
+    /// directories outside it (defense-in-depth mirroring `resolvedNoteURL`'s traversal rejection on
+    /// the read path; folder paths originate from the enumerator's own tree, so this never fires today).
+    private func absoluteFolderPath(vaultPath: String, relativeFolder: String) -> String {
+        var path = vaultPath
+        for component in relativeFolder.split(separator: "/") {
+            let name = String(component)
+            guard name != ".." && name != "." else { continue }
+            path = (path as NSString).appendingPathComponent(name)
+        }
+        return path
+    }
+
+    /// The vault-relative path of an absolute file URL (the created note), for routing to `.spaceNote`.
+    /// Mirrors `ObsidianVaultService`'s relative-path derivation (drop the vault prefix, trim slashes).
+    private func vaultRelativePath(of url: URL, vaultPath: String) -> String {
+        let full = url.standardizedFileURL.path
+        let base = URL(fileURLWithPath: vaultPath, isDirectory: true).standardizedFileURL.path
+        guard full.hasPrefix(base) else { return url.lastPathComponent }
+        return String(full.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     /// Focus a meeting document from a Space note's "Open meeting" bridge row — the single navigation

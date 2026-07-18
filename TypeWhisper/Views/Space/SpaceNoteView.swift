@@ -142,12 +142,14 @@ struct SpaceNoteView: View {
     // MARK: - Loading
 
     private func load() {
-        rawContent = viewModel.noteBody(at: path)
+        // One disk read yields both the body and the backlink (ME-3 — folds the ME-2 two-read load).
+        let read = viewModel.loadNote(at: path)
+        rawContent = read?.body
         // The "Open meeting" row appears only when the backlink resolves to a meeting that still
         // exists (unknown-uuid → no row, per the tolerant-parsing rule); resolution is the pure
         // `SpaceReveal.linkedMeeting` seam over the current meeting set.
         linkedMeetingID = SpaceReveal.linkedMeeting(
-            uuid: viewModel.linkedMeetingUUID(at: path),
+            uuid: read?.meetingID,
             existingMeetingIDs: Set(MeetingsViewModel.shared.meetings.map(\.id))
         )
         didLoad = true

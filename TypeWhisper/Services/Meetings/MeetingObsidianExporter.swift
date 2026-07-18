@@ -118,27 +118,26 @@ final class MeetingObsidianExporter: ObservableObject {
     }
 
     /// The off-main (nonisolated) write phase: create the target folder and write each planned note,
-    /// never overwriting an existing file (`uniquePath`). Operates only on the `Sendable` plan — no
-    /// `Meeting` access — so it is safe to run on a detached task.
+    /// never overwriting an existing file. Delegates to the shared `VaultNoteWriter` (Track E, ME-3) —
+    /// the same never-clobber discipline Space's quick-note uses — so there is exactly one write
+    /// implementation; `VaultWriteError` is mapped to the exporter's own error. Operates only on the
+    /// `Sendable` plan — no `Meeting` access — so it is safe to run on a detached task.
     nonisolated private static func write(_ plan: ExportPlan) throws -> [URL] {
-        let fileManager = FileManager.default
         do {
-            try fileManager.createDirectory(atPath: plan.folderPath, withIntermediateDirectories: true)
-        } catch {
-            logger.error("Failed to create export folder: \(error.localizedDescription)")
+            var written: [URL] = []
+            for note in plan.notes {
+                let content = "\(plan.frontmatter)\n\n\(note.body)"
+                written.append(try VaultNoteWriter.write(
+                    content: content,
+                    toFolder: plan.folderPath,
+                    filename: note.filename
+                ))
+            }
+            return written
+        } catch let error as VaultWriteError {
+            logger.error("Failed to write meeting note: \(error.localizedDescription)")
             throw MeetingExportError.writeFailed(error.localizedDescription)
         }
-
-        var written: [URL] = []
-        for note in plan.notes {
-            written.append(try writeNote(
-                frontmatter: plan.frontmatter,
-                body: note.body,
-                folderPath: plan.folderPath,
-                filename: note.filename
-            ))
-        }
-        return written
     }
 
     // MARK: - Section rendering
@@ -305,7 +304,7 @@ final class MeetingObsidianExporter: ObservableObject {
         let folder = (meeting.obsidianFolder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         for segment in [root, folder] {
             for component in segment.split(separator: "/") {
-                let safe = sanitizeFilename(String(component))
+                let safe = VaultNoteWriter.sanitizeFilename(String(component))
                 guard !safe.isEmpty else { continue }
                 path = (path as NSString).appendingPathComponent(safe)
             }
@@ -314,47 +313,8 @@ final class MeetingObsidianExporter: ObservableObject {
     }
 
     private func sanitizedBaseName(for meeting: Meeting) -> String {
-        let sanitized = sanitizeFilename(meeting.title)
+        let sanitized = VaultNoteWriter.sanitizeFilename(meeting.title)
         return sanitized.isEmpty ? "Meeting" : sanitized
-    }
-
-    nonisolated private static func writeNote(frontmatter: String, body: String, folderPath: String, filename: String) throws -> URL {
-        let safe = filename.isEmpty ? "Meeting" : filename
-        let filePath = (folderPath as NSString).appendingPathComponent("\(safe).md")
-        let finalPath = uniquePath(for: filePath)
-        let content = "\(frontmatter)\n\n\(body)"
-        do {
-            try content.write(toFile: finalPath, atomically: true, encoding: .utf8)
-        } catch {
-            logger.error("Failed to write meeting note: \(error.localizedDescription)")
-            throw MeetingExportError.writeFailed(error.localizedDescription)
-        }
-        return URL(fileURLWithPath: finalPath)
-    }
-
-    /// Strip characters illegal in a filename (mirrors `ObsidianPlugin.sanitizeFilename`).
-    private func sanitizeFilename(_ name: String) -> String {
-        let illegal = CharacterSet(charactersIn: "/:\\*?\"<>|")
-        return name.components(separatedBy: illegal).joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Return `path` if free, else `<name> 1.<ext>`, `<name> 2.<ext>`, … (mirrors
-    /// `ObsidianPlugin.uniquePath`) so an existing note is never overwritten.
-    nonisolated private static func uniquePath(for path: String) -> String {
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: path) else { return path }
-        let dir = (path as NSString).deletingLastPathComponent
-        let name = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
-        let ext = (path as NSString).pathExtension
-        var counter = 1
-        while true {
-            let candidate = (dir as NSString).appendingPathComponent("\(name) \(counter).\(ext)")
-            if !fileManager.fileExists(atPath: candidate) {
-                return candidate
-            }
-            counter += 1
-        }
     }
 }
 

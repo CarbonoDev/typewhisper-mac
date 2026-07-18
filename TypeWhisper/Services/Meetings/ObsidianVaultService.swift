@@ -47,6 +47,13 @@ enum VaultRetrievalScope: Equatable, Sendable {
     }
 }
 
+/// A single vault note read once (Track E, ME-3): the raw file text (frontmatter included) plus the
+/// resolved `typewhisper-meeting` backlink, derived from the same read so the reader touches disk once.
+struct VaultNoteRead: Sendable, Equatable {
+    let body: String
+    let meetingID: UUID?
+}
+
 /// A vault entry (note or folder) for the read-only context picker (Amendment 1, DA8). Cheaper than
 /// `VaultPassage` — no body parse; just the relative path and a display name.
 struct VaultEntry: Identifiable, Sendable, Equatable {
@@ -289,6 +296,16 @@ final class ObsidianVaultService: ObservableObject {
         guard let raw = readNote(relativePath) else { return nil }
         guard let value = Self.frontmatterField("typewhisper-meeting", in: raw) else { return nil }
         return UUID(uuidString: value)
+    }
+
+    /// Read a note **once** and derive both its raw body and its `typewhisper-meeting` backlink from the
+    /// same file access (Track E, ME-3 — folding the note reader's former two reads, `readNote` then
+    /// `meetingID`, into one). `nil` on the same unreadable/missing/out-of-vault conditions as `readNote`;
+    /// the `meetingID` stays tolerant (absent/malformed/non-UUID ⇒ `nil` without failing the read).
+    func readNoteWithBacklink(_ relativePath: String) -> VaultNoteRead? {
+        guard let raw = readNote(relativePath) else { return nil }
+        let meetingID = Self.frontmatterField("typewhisper-meeting", in: raw).flatMap { UUID(uuidString: $0) }
+        return VaultNoteRead(body: raw, meetingID: meetingID)
     }
 
     /// Resolve a vault-relative note path to an absolute file URL **only if it stays inside the vault**

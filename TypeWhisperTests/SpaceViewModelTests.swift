@@ -128,6 +128,84 @@ final class SpaceViewModelTests: XCTestCase {
         XCTAssertEqual(vm.children(of: "Meetings/Clients/Acme").map(\.name), [exportedName])
     }
 
+    // MARK: - Quick-note draft commit (Track E, ME-3)
+
+    private func makeConnectedVM(root: String? = "Meetings") throws -> (SpaceViewModel, URL) {
+        let defaults = makeDefaults(root: root)
+        let vault = try makeVault()
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        let vm = SpaceViewModel(vaultService: service, defaults: defaults)
+        vm.refresh()
+        return (vm, vault)
+    }
+
+    /// Commit writes exactly one note under the drafted folder, the returned vault-relative path points
+    /// at it, the file exists on disk, and the refreshed snapshot surfaces it in that folder's index.
+    func testCommitDraftCreatesNoteUnderCurrentFolderAndRefreshes() throws {
+        let (vm, vaultURL) = try makeConnectedVM()
+        vm.beginDraft(inFolder: "Meetings/Clients/Acme")
+        vm.updateDraftText("Kickoff Notes\nfirst item")
+
+        let created = try XCTUnwrap(vm.commitDraft())
+        XCTAssertEqual(created, "Meetings/Clients/Acme/Kickoff Notes.md")
+        XCTAssertNil(vm.draft, "draft cleared after a successful commit")
+
+        let onDisk = vaultURL.appendingPathComponent(created)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: onDisk.path))
+        XCTAssertEqual(try String(contentsOf: onDisk, encoding: .utf8), "Kickoff Notes\nfirst item")
+
+        // The refreshed snapshot lists the new note beside the folder's existing entries.
+        let names = vm.children(of: "Meetings/Clients/Acme").map(\.name)
+        XCTAssertTrue(names.contains("Kickoff Notes"), "new note missing from refreshed index: \(names)")
+    }
+
+    /// The filename derives from the first typed line (heading marker stripped), and a second draft with
+    /// the same first line never clobbers — it suffixes ` 1`.
+    func testCommitDraftDerivesFilenameAndSuffixesCollisions() throws {
+        let (vm, _) = try makeConnectedVM()
+
+        vm.beginDraft(inFolder: "Meetings")
+        vm.updateDraftText("# Weekly Sync\nagenda")
+        XCTAssertEqual(try XCTUnwrap(vm.commitDraft()), "Meetings/Weekly Sync.md")
+
+        vm.beginDraft(inFolder: "Meetings")
+        vm.updateDraftText("# Weekly Sync\ndifferent body")
+        XCTAssertEqual(try XCTUnwrap(vm.commitDraft()), "Meetings/Weekly Sync 1.md")
+    }
+
+    /// An empty (whitespace-only) draft is discarded silently: no file, `nil` return, draft cleared.
+    func testCommitEmptyDraftDiscardsWithoutWriting() throws {
+        let (vm, _) = try makeConnectedVM()
+        let before = vm.children(of: "Meetings").count
+
+        vm.beginDraft(inFolder: "Meetings")
+        vm.updateDraftText("   \n\t ")
+        XCTAssertNil(vm.commitDraft())
+        XCTAssertNil(vm.draft)
+        XCTAssertEqual(vm.children(of: "Meetings").count, before, "no note created for an empty draft")
+    }
+
+    /// A draft with no usable first line still commits (non-empty content) under the "Untitled" fallback.
+    func testCommitDraftFallsBackToUntitledFilename() throws {
+        let (vm, _) = try makeConnectedVM()
+        vm.beginDraft(inFolder: "Meetings")
+        // Only illegal characters on the first line → sanitizes empty → fallback.
+        vm.updateDraftText("/:*?\nreal content")
+        XCTAssertEqual(try XCTUnwrap(vm.commitDraft()), "Meetings/Untitled.md")
+    }
+
+    /// Explicit discard drops the draft without writing anything.
+    func testDiscardDraftDropsItWithoutWriting() throws {
+        let (vm, _) = try makeConnectedVM()
+        let before = vm.children(of: "Meetings").count
+        vm.beginDraft(inFolder: "Meetings")
+        vm.updateDraftText("some content")
+        vm.discardDraft()
+        XCTAssertNil(vm.draft)
+        XCTAssertEqual(vm.children(of: "Meetings").count, before)
+    }
+
     func testDisconnectGatesOffTheTree() throws {
         let defaults = makeDefaults()
         let vault = try makeVault()

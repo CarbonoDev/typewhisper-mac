@@ -231,4 +231,61 @@ final class ObsidianVaultServiceTests: XCTestCase {
         service.connect(to: vault.path)
         XCTAssertNil(service.meetingID(inNoteAt: "Meetings/Bad.md"))
     }
+
+    // MARK: - readNoteWithBacklink (Track E, ME-3 — the single-read fold SpaceNoteView depends on)
+
+    func testReadNoteWithBacklinkReturnsBodyAndMeetingID() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let uuid = UUID()
+        let contents = """
+        ---
+        title: Linked meeting
+        typewhisper-meeting: \(uuid.uuidString)
+        ---
+        # Linked meeting
+        Body text.
+        """
+        try writeNote("Meetings/Linked.md", contents: contents, in: vault)
+
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+
+        // Backlink present: both fields resolve from one read, and the body is the raw file verbatim.
+        let read = try XCTUnwrap(service.readNoteWithBacklink("Meetings/Linked.md"))
+        XCTAssertEqual(read.meetingID, uuid)
+        XCTAssertEqual(read.body, contents)
+    }
+
+    func testReadNoteWithBacklinkReturnsBodyWithNilIDWhenAbsentOrMalformed() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        // No frontmatter at all (Cooking.md): body reads, backlink is nil.
+        try writeNote("Meetings/BadLink.md", contents: """
+        ---
+        typewhisper-meeting: not-a-uuid
+        ---
+        body
+        """, in: vault)
+
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+
+        let plain = try XCTUnwrap(service.readNoteWithBacklink("Cooking.md"))
+        XCTAssertNil(plain.meetingID)
+        XCTAssertFalse(plain.body.isEmpty)
+
+        // Malformed (non-UUID) backlink: still returns the body, id nil (tolerant).
+        let malformed = try XCTUnwrap(service.readNoteWithBacklink("Meetings/BadLink.md"))
+        XCTAssertNil(malformed.meetingID)
+        XCTAssertTrue(malformed.body.contains("body"))
+    }
+
+    func testReadNoteWithBacklinkNilForMissingFile() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        XCTAssertNil(service.readNoteWithBacklink("Meetings/Nope.md"))
+    }
 }
