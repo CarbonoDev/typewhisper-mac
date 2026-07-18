@@ -40,6 +40,11 @@ final class MeetingLLMService: ObservableObject {
     /// question in meeting A does not disable the Ask field in meeting B: a meeting id is present
     /// while that meeting's answer is in flight. Asking and generating an output stay independent.
     @Published private(set) var answeringMeetingIDs: Set<UUID> = []
+    /// Per-meeting set of answers currently in a model-requested **vault-search escalation** round
+    /// (pass 2). Present only while the escalation retrieval + re-ask is in flight; a subset of
+    /// `answeringMeetingIDs`. Exposed VM-agnostically so the UI can surface a "Searching your vault…"
+    /// status. NOTE: the UI hookup is a deliberate follow-up — no view consumes this yet.
+    @Published private(set) var searchingVaultMeetingIDs: Set<UUID> = []
 
     private let meetingService: MeetingService
     private let vaultService: ObsidianVaultService
@@ -144,14 +149,26 @@ final class MeetingLLMService: ObservableObject {
 
     // MARK: - In-meeting Q&A (plan M6)
 
-    /// Answer `question` against the meeting transcript so far plus the connected knowledge base and
-    /// prior Q&A turns, then persist the result atomically as a `MeetingQATurn`. Single-turn call
-    /// (plan D6: prior turns are replayed compactly inside the user text, `skipMemoryInjection`).
+    /// Answer `question` about the meeting and persist the result atomically as a `MeetingQATurn`.
+    ///
+    /// Grounding is **meeting-first, escalation-on-demand** (owner decision):
+    ///  - Pass 1 (default) grounds ONLY on the meeting's own material — transcript so far, prior Q&A
+    ///    turns, and EXPLICITLY curated notes (the meeting's related docs ∪ the folder's configured note
+    ///    attachments). NO broad vault retrieval: neither the whole-vault default fallback nor any
+    ///    folder-prefix *search* runs here.
+    ///  - Pass 2 (escalation, model-chosen, at most one round) runs only if the model replies with a
+    ///    single `VAULT_SEARCH: <terms>` line — its signal that the meeting material does not cover the
+    ///    question but vault knowledge plausibly would. The host then runs ONE retrieval round at the
+    ///    escalation scope (folder scope when the meeting has one, else whole vault), re-composes with
+    ///    the retrieved excerpts clearly labeled as secondary, and re-asks. Empty results, a second
+    ///    `VAULT_SEARCH` reply (loop guard), or no connected vault all resolve to a "not covered" answer;
+    ///    a real pass-2 answer is prefixed with a localized disclosure that vault notes were consulted.
+    ///    The marker itself never surfaces to the user.
     ///
     /// `asOfOffset` scopes the transcript to elapsed seconds when asked mid-capture so an answer can
     /// never draw on words spoken after the question (nil = the whole transcript, for after-meeting
     /// questions). A failed LLM call throws and persists nothing; a successful call persists exactly
-    /// one turn.
+    /// one turn. `skipMemoryInjection` on both passes (plan D6).
     @discardableResult
     func answerQuestion(
         for meeting: Meeting,
@@ -168,7 +185,10 @@ final class MeetingLLMService: ObservableObject {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { throw MeetingLLMError.emptyQuestion }
         answeringMeetingIDs.insert(meeting.id)
-        defer { answeringMeetingIDs.remove(meeting.id) }
+        defer {
+            answeringMeetingIDs.remove(meeting.id)
+            searchingVaultMeetingIDs.remove(meeting.id)
+        }
 
         let segments = meeting.segments
             .sorted { $0.order < $1.order }
@@ -198,32 +218,94 @@ final class MeetingLLMService: ObservableObject {
             .sorted { $0.createdAt < $1.createdAt }
             .map { MeetingQAComposer.PriorTurn(question: $0.question, answer: $0.answer) }
 
-        // Knowledge-base passages only when a vault is connected (shared retriever with M5). Amendment 1
-        // (DA6/F1) + Amendment 2 (DB5): the meeting's curated related notes ∪ folder config scope
-        // retrieval identically to the brief — `.none` yields no passages, the curated union restricts,
-        // no context keeps whole-vault behavior.
-        let scope = retrievalScope(for: meeting)
-        let passages = vaultService.isConnected
-            ? vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: scope)
+        // ── PASS 1 (DEFAULT): ground ONLY on the meeting's own material ────────────────────────────
+        // Owner decision: broad vault retrieval is OFF by default. The vault contributes only
+        // EXPLICITLY curated notes (the meeting's user-selected related docs ∪ the folder's configured
+        // note attachments). `curatedScope` never expands a folder-prefix *search* and never falls back
+        // to the whole-vault default — those are deferred to model-requested escalation below. `.none`
+        // (nothing curated / `noVaultContext`) yields no passages.
+        let curatedPassages = vaultService.isConnected
+            ? vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: curatedScope(for: meeting))
             : []
 
-        let userText = MeetingQAComposer.compose(
+        let pass1Text = MeetingQAComposer.compose(
             question: trimmedQuestion,
             segments: segments,
             upTo: offset,
             priorTurns: priorTurns,
-            knowledgePassages: passages,
+            knowledgePassages: curatedPassages,
             charBudget: charBudget
         )
-
         // Plan D4: the answer is the final output — append the meeting's language directive.
-        let systemPrompt = MeetingLanguageDirective.appending(
+        let pass1Prompt = MeetingLanguageDirective.appending(
             for: meeting.languageCode,
             to: String(localized: "meetings.qa.systemPrompt")
         )
-        // Plan D9/M4: Q&A gains the per-purpose rung (`qa`). No template, so `template ?? purpose`; a
-        // nil override inherits the app default (today's behavior when the purpose is unset).
-        let answer = try await processor.process(
+        let pass1Answer = try await runQA(userText: pass1Text, systemPrompt: pass1Prompt)
+
+        // The model is instructed to reply with exactly one line `VAULT_SEARCH: <terms>` — and nothing
+        // else — if, and only if, the meeting material does not cover the question and vault knowledge
+        // plausibly would. Anything else is a normal answer: persist it verbatim.
+        guard let rawTerms = MeetingQAComposer.vaultSearchTerms(in: pass1Answer) else {
+            return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: pass1Answer)
+        }
+        let searchTerms = rawTerms.isEmpty ? trimmedQuestion : rawTerms
+
+        // ── PASS 2 (ESCALATION, model-chosen, max ONE round) ──────────────────────────────────────
+        // Run one retrieval round through the existing vault services at the *escalation* scope: the
+        // folder scope (including its folder-prefix search) when the meeting has one, else whole vault.
+        searchingVaultMeetingIDs.insert(meeting.id)
+        let retrievedPassages = vaultService.isConnected
+            ? vaultService.retrieve(query: searchTerms, limit: 3, scope: retrievalScope(for: meeting))
+            : []
+        // Empty search results (or no vault) ⇒ skip pass 2 and answer "not covered". The marker never
+        // surfaces to the user.
+        guard !retrievedPassages.isEmpty else {
+            return meetingService.addQATurn(
+                to: meeting,
+                question: trimmedQuestion,
+                answer: String(localized: "meetings.qa.answer.notCovered")
+            )
+        }
+
+        // Re-compose: pass-1 material + clearly labeled retrieved excerpts (secondary to the transcript).
+        let pass2Text = MeetingQAComposer.compose(
+            question: trimmedQuestion,
+            segments: segments,
+            upTo: offset,
+            priorTurns: priorTurns,
+            knowledgePassages: curatedPassages,
+            retrievedPassages: retrievedPassages,
+            charBudget: charBudget
+        )
+        let pass2Prompt = MeetingLanguageDirective.appending(
+            for: meeting.languageCode,
+            to: String(localized: "meetings.qa.systemPrompt.escalated")
+        )
+        let pass2Answer = try await runQA(userText: pass2Text, systemPrompt: pass2Prompt)
+
+        // Loop guard: a `VAULT_SEARCH` reply in pass 2 is treated as "not covered" — never a third round.
+        guard MeetingQAComposer.vaultSearchTerms(in: pass2Answer) == nil else {
+            return meetingService.addQATurn(
+                to: meeting,
+                question: trimmedQuestion,
+                answer: String(localized: "meetings.qa.answer.notCovered")
+            )
+        }
+
+        // Disclose (localized, natural) that the answer consulted vault notes beyond the meeting.
+        let disclosedAnswer = String(localized: "meetings.qa.answer.vaultConsultedPrefix")
+            + "\n\n"
+            + pass2Answer
+        return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: disclosedAnswer)
+    }
+
+    /// The single-turn Q&A LLM call, shared by both passes so the per-purpose routing (plan D9/M4:
+    /// `.qa`) and the `skipMemoryInjection` / temperature policy are applied identically on the
+    /// escalation pass as on the default pass. No template rung for Q&A, so `template ?? purpose`; a nil
+    /// override inherits the app default (today's behavior when the purpose is unset).
+    private func runQA(userText: String, systemPrompt: String) async throws -> String {
+        try await processor.process(
             prompt: systemPrompt,
             text: userText,
             providerOverride: modelRouter.overrideProvider(for: .qa),
@@ -231,12 +313,33 @@ final class MeetingLLMService: ObservableObject {
             temperatureDirective: .inheritProviderSetting,
             skipMemoryInjection: true
         )
-
-        return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: answer)
     }
 
-    /// The DB5 consumption scope for a meeting's Q&A retrieval — identical to the brief (Amendment 2,
-    /// DB5): curated related notes ∪ folder attachment scope, `noVaultContext` absolute.
+    /// The **pass-1** (default) Q&A retrieval scope: EXPLICITLY curated material only — the meeting's
+    /// related notes ∪ the folder's configured note attachments (minus exclusions), never a folder-prefix
+    /// search and never the whole-vault fallback (owner decision — broad vault retrieval is off by
+    /// default). Delegates to the folder store when present; without a store, restricts to the meeting's
+    /// own curated related notes (`.none` when there are none, so retrieval yields nothing rather than
+    /// falling back to whole-vault).
+    private func curatedScope(for meeting: Meeting) -> VaultRetrievalScope {
+        let curated = meeting.relatedNotePaths.map(\.path)
+        let excluded = meeting.excludedNotePaths
+        guard let folderMetadataStore else {
+            let notePaths = Set(curated).subtracting(Set(excluded))
+            guard !notePaths.isEmpty else { return .none }
+            return .restricted(notePaths: notePaths, folderPrefixes: [], excludedPaths: Set(excluded))
+        }
+        return folderMetadataStore.curatedRetrievalScope(
+            forFolderPath: meeting.folderPath,
+            curatedNotePaths: curated,
+            excludedNotePaths: excluded
+        )
+    }
+
+    /// The **escalation** (pass-2) Q&A retrieval scope — the full DB5 consumption scope, identical to the
+    /// brief (Amendment 2, DB5): curated related notes ∪ folder attachment scope (including folder-prefix
+    /// search), `noVaultContext` absolute, whole-vault when nothing is configured. Only ever run after
+    /// the model requests a `VAULT_SEARCH` escalation.
     private func retrievalScope(for meeting: Meeting) -> VaultRetrievalScope {
         guard let folderMetadataStore else { return .wholeVault }
         return folderMetadataStore.retrievalScope(
@@ -413,12 +516,38 @@ enum MeetingQAComposer {
         let answer: String
     }
 
+    /// The machine marker the model emits (as its *entire* reply) to request one vault-search
+    /// escalation round. NOT localized — it is a literal token the host greps for, embedded verbatim in
+    /// both the EN and DE system prompts.
+    static let vaultSearchMarker = "VAULT_SEARCH:"
+
+    /// Detects the model's escalation request. Returns the trimmed search terms when `answer` is a
+    /// `VAULT_SEARCH: <terms>` reply (the model is instructed to emit nothing else), else `nil` for a
+    /// normal answer. An empty-terms marker returns `""` so the caller can fall back to the question.
+    /// Case-insensitive on the marker; tolerant of surrounding whitespace; only the marker line's
+    /// remainder is taken as terms.
+    static func vaultSearchTerms(in answer: String) -> String? {
+        let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.uppercased().hasPrefix(vaultSearchMarker) else { return nil }
+        let firstLine = trimmed
+            .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            .first
+            .map(String.init) ?? trimmed
+        return String(firstLine.dropFirst(vaultSearchMarker.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// - Parameter retrievedPassages: pass-2 escalation excerpts, retrieved from the vault only after the
+    ///   model asked for a search. Rendered LAST under a distinct "secondary to the transcript" header so
+    ///   they are dropped first under budget pressure and never displace the meeting's own content.
+    ///   Empty on the default (pass-1) path.
     static func compose(
         question: String,
         segments: [TranscriptContextBuilder.Segment],
         upTo offset: Double?,
         priorTurns: [PriorTurn],
         knowledgePassages: [VaultPassage],
+        retrievedPassages: [VaultPassage] = [],
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) -> String {
         let question = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -446,13 +575,19 @@ enum MeetingQAComposer {
         let kbBudget = max(0, charBudget / 4)
         let kbBlock = TranscriptContextBuilder.truncateWords(renderPassages(knowledgePassages), to: kbBudget)
 
+        // Escalation-only: vault excerpts retrieved because the model asked for a search. Budgeted like
+        // the curated KB and rendered LAST (see ordering note below) so they can never displace the
+        // transcript, prior turns, or the curated notes.
+        let retrievedBudget = max(0, charBudget / 4)
+        let retrievedBlock = TranscriptContextBuilder.truncateWords(renderPassages(retrievedPassages), to: retrievedBudget)
+
         // The meeting's OWN transcript is the primary grounding and leads the context; prior turns
-        // (this meeting's own Q&A history) follow; the knowledge base is *supplementary* and comes
-        // last. Ordering is load-bearing for the cross-meeting-leak fix: the final bound below keeps
-        // the prefix, so putting the foreign KB last means it is the first thing dropped under budget
-        // pressure and can never displace the transcript. The KB is also withheld entirely when there
-        // is no transcript to supplement — retrieval must never stand in as the sole grounding
-        // (defense-in-depth behind the service's own-transcript guard).
+        // (this meeting's own Q&A history) follow; curated notes are *supplementary*; escalation-retrieved
+        // excerpts are *secondary* and come last. Ordering is load-bearing for the cross-meeting-leak fix:
+        // the final bound below keeps the prefix, so putting supplementary/secondary vault content last
+        // means it is the first thing dropped under budget pressure and can never displace the transcript.
+        // Both vault sections are withheld entirely when there is no transcript to supplement — retrieval
+        // must never stand in as the sole grounding (defense-in-depth behind the service's guard).
         var contextSections: [String] = []
         if !relevantTranscript.isEmpty {
             contextSections.append("\(String(localized: "meetings.qa.context.transcriptHeader"))\n\(relevantTranscript)")
@@ -462,6 +597,9 @@ enum MeetingQAComposer {
         }
         if !kbBlock.isEmpty, !relevantTranscript.isEmpty {
             contextSections.append("\(String(localized: "meetings.qa.context.knowledgeHeader"))\n\(kbBlock)")
+        }
+        if !retrievedBlock.isEmpty, !relevantTranscript.isEmpty {
+            contextSections.append("\(String(localized: "meetings.qa.context.retrievedHeader"))\n\(retrievedBlock)")
         }
 
         // Reserve the whole question section off the top before the final bound, then truncate only

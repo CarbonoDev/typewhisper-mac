@@ -14,6 +14,8 @@ final class MeetingQAComposerTests: XCTestCase {
         struct Call {
             let prompt: String
             let text: String
+            let providerOverride: String?
+            let cloudModelOverride: String?
             let skipMemoryInjection: Bool
         }
 
@@ -22,6 +24,9 @@ final class MeetingQAComposerTests: XCTestCase {
         private(set) var calls: [Call] = []
         var errorToThrow: Error?
         var response = "ANSWER_TEXT"
+        /// Optional per-call (1-based index) response override; `nil` ⇒ `response`. Lets an escalation
+        /// test return a `VAULT_SEARCH:` marker on pass 1 and a normal answer on pass 2.
+        var responder: ((Int) -> String)?
 
         func process(
             prompt: String,
@@ -31,9 +36,15 @@ final class MeetingQAComposerTests: XCTestCase {
             temperatureDirective: PluginLLMTemperatureDirective,
             skipMemoryInjection: Bool
         ) async throws -> String {
-            calls.append(Call(prompt: prompt, text: text, skipMemoryInjection: skipMemoryInjection))
+            calls.append(Call(
+                prompt: prompt,
+                text: text,
+                providerOverride: providerOverride,
+                cloudModelOverride: cloudModelOverride,
+                skipMemoryInjection: skipMemoryInjection
+            ))
             if let errorToThrow { throw errorToThrow }
-            return response
+            return responder?(calls.count) ?? response
         }
     }
 
@@ -294,9 +305,13 @@ final class MeetingQAComposerTests: XCTestCase {
         XCTAssertTrue(meeting.qaTurns.isEmpty)
     }
 
-    // MARK: - Service: retrieval wiring
+    // MARK: - Service: retrieval wiring (redesign — broad vault retrieval OFF by default)
 
-    func testConnectedVaultContributesKnowledgeBasePassage() async throws {
+    /// Redesign (owner decision): the default pass grounds ONLY on the meeting's own material. A
+    /// connected vault whose query-matching note is NOT curated must not contribute to the pass-1
+    /// prompt — no whole-vault fallback, no folder-prefix search — unless the model explicitly
+    /// escalates. With a normal (non-marker) answer there is exactly one pass and no vault content.
+    func testConnectedVaultDoesNotContributeByDefault() async throws {
         let service = try makeService()
         let stub = StubProcessor()
         let vault = try makeConnectedVault()
@@ -308,8 +323,13 @@ final class MeetingQAComposerTests: XCTestCase {
             to: meeting
         )
 
-        _ = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
-        XCTAssertTrue(stub.calls.first?.text.contains("VAULT_MARKER_QA") == true)
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+        XCTAssertEqual(stub.calls.count, 1, "a non-marker answer settles in one pass")
+        XCTAssertFalse(
+            stub.calls.first?.text.contains("VAULT_MARKER_QA") == true,
+            "a non-curated vault note must not enter the default (pass-1) prompt"
+        )
+        XCTAssertEqual(turn.answer, "ANSWER_TEXT")
     }
 
     func testDisconnectedVaultOmitsKnowledgeBase() async throws {
@@ -327,6 +347,131 @@ final class MeetingQAComposerTests: XCTestCase {
         XCTAssertFalse(stub.calls.first?.text.contains("VAULT_MARKER_QA") == true)
         XCTAssertEqual(meeting.qaTurns.count, 1)
         XCTAssertEqual(turn.answer, "ANSWER_TEXT")
+    }
+
+    // MARK: - Model-requested vault-search escalation (owner decision)
+
+    /// The marker parser: a `VAULT_SEARCH:` reply yields its terms; anything else is `nil`. Tolerant of
+    /// case, surrounding whitespace, and any trailing lines (only the marker line's remainder is terms).
+    func testVaultSearchTermsParsing() {
+        XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "VAULT_SEARCH: acme roadmap"), "acme roadmap")
+        XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "  vault_search:  acme  \n more"), "acme")
+        XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "VAULT_SEARCH:"), "", "empty terms ⇒ empty string, not nil")
+        XCTAssertNil(MeetingQAComposer.vaultSearchTerms(in: "The meeting decided to ship on Tuesday."))
+        XCTAssertNil(MeetingQAComposer.vaultSearchTerms(in: "See VAULT_SEARCH: in the middle of a sentence."))
+    }
+
+    /// A `VAULT_SEARCH:` reply triggers exactly one escalation round: pass 1 carries no vault content,
+    /// pass 2 carries the retrieved excerpt under the labeled secondary header, the marker never
+    /// surfaces, and the persisted answer discloses the vault consult and carries the pass-2 answer.
+    func testModelRequestedVaultSearchTriggersOneEscalationRound() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.responder = { $0 == 1 ? "VAULT_SEARCH: acme roadmap" : "PASS2_ANSWER_MARKER" }
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+
+        // Exactly two passes: default pass then one escalation round.
+        XCTAssertEqual(stub.calls.count, 2)
+        XCTAssertFalse(stub.calls[0].text.contains("VAULT_MARKER_QA"), "pass 1 grounds only on the meeting")
+        XCTAssertTrue(stub.calls[1].text.contains("VAULT_MARKER_QA"), "pass 2 includes the retrieved excerpt")
+        XCTAssertTrue(
+            stub.calls[1].text.contains(String(localized: "meetings.qa.context.retrievedHeader")),
+            "the retrieved excerpt is under the labeled secondary header"
+        )
+        // The marker never surfaces; the answer discloses the vault consult and carries the pass-2 answer.
+        XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"), "the marker must never surface to the user")
+        XCTAssertTrue(turn.answer.contains("PASS2_ANSWER_MARKER"))
+        XCTAssertTrue(turn.answer.contains(String(localized: "meetings.qa.answer.vaultConsultedPrefix")))
+        XCTAssertEqual(meeting.qaTurns.count, 1, "exactly one turn is persisted")
+    }
+
+    /// Empty escalation results ⇒ skip pass 2 and answer "not covered" (no second LLM call); the marker
+    /// never surfaces.
+    func testVaultSearchWithNoResultsSkipsPass2AndAnswersNotCovered() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        // Search terms that match nothing in the vault ⇒ empty retrieval.
+        stub.responder = { _ in "VAULT_SEARCH: nonexistent zzz" }
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+        XCTAssertEqual(stub.calls.count, 1, "empty retrieval ⇒ no pass 2")
+        XCTAssertEqual(turn.answer, String(localized: "meetings.qa.answer.notCovered"))
+        XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"))
+        XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// Loop guard: a `VAULT_SEARCH:` reply in pass 2 is treated as "not covered" — no third round — and
+    /// the marker never surfaces.
+    func testVaultSearchInPass2IsTreatedAsNotCovered() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.responder = { _ in "VAULT_SEARCH: acme roadmap" } // marker on every call
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+        XCTAssertEqual(stub.calls.count, 2, "no third round after a pass-2 escalation request")
+        XCTAssertEqual(turn.answer, String(localized: "meetings.qa.answer.notCovered"))
+        XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"), "the marker must never surface to the user")
+        XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// Provenance/PART-M5: the per-purpose `.qa` provider/model overrides are honored on BOTH the default
+    /// pass and the escalation pass.
+    func testEscalationHonorsQAOverridesOnBothPasses() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.responder = { $0 == 1 ? "VAULT_SEARCH: acme roadmap" : "PASS2" }
+        let vault = try makeConnectedVault()
+
+        let routerDefaults = makeDefaults()
+        routerDefaults.set("qa-purpose-provider", forKey: UserDefaultsKeys.meetingsModelQAProviderId)
+        routerDefaults.set("qa-purpose-model", forKey: UserDefaultsKeys.meetingsModelQAModel)
+        let router = MeetingModelRouter(processor: stub, defaults: routerDefaults)
+
+        let llm = MeetingLLMService(
+            meetingService: service,
+            vaultService: vault,
+            processor: stub,
+            modelRouter: router
+        )
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        _ = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+
+        XCTAssertEqual(stub.calls.count, 2)
+        for (index, call) in stub.calls.enumerated() {
+            XCTAssertEqual(call.providerOverride, "qa-purpose-provider", "pass \(index + 1) provider override")
+            XCTAssertEqual(call.cloudModelOverride, "qa-purpose-model", "pass \(index + 1) model override")
+        }
     }
 
     // MARK: - Service: offset scoping + prior-turn replay through the service
