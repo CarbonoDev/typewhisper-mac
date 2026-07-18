@@ -242,6 +242,12 @@
 		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
 		M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */; };
 		M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000002 /* MeetingFolderDetailView.swift */; };
+		TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000001 /* SpaceTreeModel.swift */; };
+		TEB0000000000000000002 /* SpaceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000002 /* SpaceSelection.swift */; };
+		TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000003 /* SpaceSidebarSection.swift */; };
+		TEB0000000000000000004 /* SpaceFolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000004 /* SpaceFolderView.swift */; };
+		TEB0000000000000000005 /* SpaceNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000005 /* SpaceNoteView.swift */; };
+		TEB0000000000000000006 /* SpaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000006 /* SpaceViewModel.swift */; };
 		M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000003 /* VaultContextPickerView.swift */; };
 		M7B0000000000000000010 /* MeetingRowContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000010 /* MeetingRowContextMenu.swift */; };
 		M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */; };
@@ -298,6 +304,9 @@
 		P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */; };
 		P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
+		TEB1000000000000000001 /* SpaceTreeModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000001 /* SpaceTreeModelTests.swift */; };
+		TEB1000000000000000002 /* SpaceSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000002 /* SpaceSelectionTests.swift */; };
+		TEB1000000000000000003 /* SpaceViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000003 /* SpaceViewModelTests.swift */; };
 		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
 		DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */; };
@@ -876,6 +885,12 @@
 		BB00000000000000000403 /* MeetingBriefService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefService.swift; sourceTree = "<group>"; };
 		M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderMetadataStore.swift; sourceTree = "<group>"; };
 		M7F0000000000000000002 /* MeetingFolderDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderDetailView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000001 /* SpaceTreeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceTreeModel.swift; sourceTree = "<group>"; };
+		TEF0000000000000000002 /* SpaceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSelection.swift; sourceTree = "<group>"; };
+		TEF0000000000000000003 /* SpaceSidebarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSidebarSection.swift; sourceTree = "<group>"; };
+		TEF0000000000000000004 /* SpaceFolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceFolderView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000005 /* SpaceNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceNoteView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000006 /* SpaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceViewModel.swift; sourceTree = "<group>"; };
 		M7F0000000000000000003 /* VaultContextPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultContextPickerView.swift; sourceTree = "<group>"; };
 		M7F0000000000000000010 /* MeetingRowContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRowContextMenu.swift; sourceTree = "<group>"; };
 		M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+FolderContext.swift"; sourceTree = "<group>"; };
@@ -932,6 +947,9 @@
 		P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantsSuggestionTests.swift; sourceTree = "<group>"; };
 		P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryMatchingTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000001 /* SpaceTreeModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceTreeModelTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000002 /* SpaceSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceSelectionTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000003 /* SpaceViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceViewModelTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
 		DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefSchedulerTests.swift; sourceTree = "<group>"; };
@@ -1976,6 +1994,7 @@
 				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
 				M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */,
 				M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */,
+				TEF0000000000000000006 /* SpaceViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -2028,9 +2047,22 @@
 				BB00000000000000000373 /* DiarizationSettingsView.swift */,
 				CC00000000000000000047 /* Meetings */,
 				MWG0000000000000000001 /* MainWindow */,
+				TEG0000000000000000001 /* Space */,
 				CCB0000000000000000B01 /* PromptLibrary */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		TEG0000000000000000001 /* Space */ = {
+			isa = PBXGroup;
+			children = (
+				TEF0000000000000000001 /* SpaceTreeModel.swift */,
+				TEF0000000000000000002 /* SpaceSelection.swift */,
+				TEF0000000000000000003 /* SpaceSidebarSection.swift */,
+				TEF0000000000000000004 /* SpaceFolderView.swift */,
+				TEF0000000000000000005 /* SpaceNoteView.swift */,
+			);
+			path = Space;
 			sourceTree = "<group>";
 		};
 		MWG0000000000000000001 /* MainWindow */ = {
@@ -2864,6 +2896,9 @@
 				SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */,
 				SPBF000000000000000003 /* MeetingTimingRepassTests.swift */,
 				SPCF000000000000000002 /* SidebarSelectionTests.swift */,
+				TEF1000000000000000001 /* SpaceTreeModelTests.swift */,
+				TEF1000000000000000002 /* SpaceSelectionTests.swift */,
+				TEF1000000000000000003 /* SpaceViewModelTests.swift */,
 				SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */,
 				JQF0000000000000000007 /* MeetingJobPresentationTests.swift */,
 				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
@@ -4419,6 +4454,9 @@
 				SPBB000000000000000002 /* SpeakerTimingAlignerTests.swift in Sources */,
 				SPBB000000000000000003 /* MeetingTimingRepassTests.swift in Sources */,
 				SPCB000000000000000002 /* SidebarSelectionTests.swift in Sources */,
+				TEB1000000000000000001 /* SpaceTreeModelTests.swift in Sources */,
+				TEB1000000000000000002 /* SpaceSelectionTests.swift in Sources */,
+				TEB1000000000000000003 /* SpaceViewModelTests.swift in Sources */,
 				SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */,
 				JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */,
 				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
@@ -4589,6 +4627,12 @@
 				AA00000000000000000403 /* MeetingBriefService.swift in Sources */,
 				M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */,
 				M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */,
+				TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */,
+				TEB0000000000000000002 /* SpaceSelection.swift in Sources */,
+				TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */,
+				TEB0000000000000000004 /* SpaceFolderView.swift in Sources */,
+				TEB0000000000000000005 /* SpaceNoteView.swift in Sources */,
+				TEB0000000000000000006 /* SpaceViewModel.swift in Sources */,
 				M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */,
 				M7B0000000000000000010 /* MeetingRowContextMenu.swift in Sources */,
 				M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */,

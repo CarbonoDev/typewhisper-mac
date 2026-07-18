@@ -321,9 +321,10 @@ struct MainWindowSidebar: View {
         .fontWeight(isSelected ? .semibold : .regular)
     }
 
-    /// Reserved injection point for Track E's Space section. Empty (and hidden) in Phase 1.
+    /// Track E's `SPACE · OBSIDIAN` section: the vault projection below Folders/Tags (ME-1). Quiet
+    /// rows with no count badges (the grey number means *meetings*); gated on a connected vault.
     @ViewBuilder
     private var spaceSection: some View {
-        EmptyView()
+        SpaceSidebarSection()
     }
 }

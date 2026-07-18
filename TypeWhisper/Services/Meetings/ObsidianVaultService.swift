@@ -86,6 +86,11 @@ final class ObsidianVaultService: ObservableObject {
 
     /// Scan safety bounds so retrieval over a large vault stays cheap and deterministic.
     private let maxFilesScanned = 2_000
+
+    /// The upper bound `listEntries()` (and the retrieval scanners) enforce on entries scanned.
+    /// Exposed read-only so callers that reuse the snapshot (Track E's Space browser) can honestly
+    /// report a truncated index without mirroring the constant — if the cap moves, they follow.
+    var maxEntriesScanned: Int { maxFilesScanned }
     private let maxFileBytes = 512 * 1024
     private let passageCharBudget = 2_000
 

@@ -94,6 +94,7 @@ final class ServiceContainer: ObservableObject {
     let watchFolderViewModel: WatchFolderViewModel
     let meetingsViewModel: MeetingsViewModel
     let homeFeedViewModel: HomeFeedViewModel // [Track C]
+    let spaceViewModel: SpaceViewModel // [Track E] Vault-browser (Space) view model
 
     private init() {
         // Services
@@ -470,6 +471,9 @@ final class ServiceContainer: ObservableObject {
             participantDirectoryService: participantDirectoryService // [M3-Participants]
         )
         homeFeedViewModel = HomeFeedViewModel() // [Track C]
+        // [Track E] Space vault browser (ME-1): caches one `listEntries()` snapshot from the shared
+        // vault reader and rebuilds the tree in memory; no second scanner, no second vault picker.
+        spaceViewModel = SpaceViewModel(vaultService: obsidianVaultService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -487,6 +491,7 @@ final class ServiceContainer: ObservableObject {
         WatchFolderViewModel._shared = watchFolderViewModel
         MeetingsViewModel._shared = meetingsViewModel
         HomeFeedViewModel._shared = homeFeedViewModel // [Track C]
+        SpaceViewModel._shared = spaceViewModel // [Track E]
         JobQueueService._shared = meetingJobQueue // [Track J]
         MeetingOrganizationIndex._shared = meetingOrganizationIndex // [M3]
         MeetingFolderMetadataStore._shared = meetingFolderMetadataStore // [M7]

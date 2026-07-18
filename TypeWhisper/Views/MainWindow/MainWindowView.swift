@@ -71,9 +71,12 @@ struct MainWindowView: View {
             } else {
                 unavailable
             }
-        case .spaceFolder, .spaceNote:
-            // Phase 2 — filled by Track E; dead until then.
-            unavailable
+        case let .spaceFolder(path):
+            // Track E (ME-1): the vault folder index in the document shell.
+            SpaceFolderView(path: path)
+        case let .spaceNote(path):
+            // Track E: the vault note. ME-1 stub (document-shell placeholder); reader lands in ME-2.
+            SpaceNoteView(path: path)
         }
     }
 
