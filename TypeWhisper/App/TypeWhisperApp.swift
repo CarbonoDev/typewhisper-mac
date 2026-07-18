@@ -136,21 +136,25 @@ private struct MenuBarExtraLabel: View {
             ) {
             case .recording(let label):
                 // Owner request 3: recording glyph + truncated meeting title + elapsed time.
-                Label {
-                    Text(label)
-                } icon: {
+                // HStack, not Label: inside a MenuBarExtra label SwiftUI applies an icon-only
+                // label style by default, silently dropping the Text.
+                HStack(spacing: 4) {
                     Image(systemName: "record.circle")
+                    Text(label)
                 }
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(String(localized: "Recording...")))
             case .upcoming(let label):
                 // Owner requests 1 & 2: Granola-style tray title — glyph + truncated meeting title +
                 // countdown ("test · in 39m"). `meetingTray.trayNow` is the ticked clock so the
-                // countdown re-renders while visible (no always-on timer).
-                Label {
-                    Text(label)
-                } icon: {
+                // countdown re-renders while visible (no always-on timer). HStack, not Label: inside
+                // a MenuBarExtra label SwiftUI applies an icon-only label style by default, silently
+                // dropping the Text.
+                HStack(spacing: 4) {
                     Image(systemName: "calendar")
+                    Text(label)
                 }
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(verbatim: label))
             case .idle:
                 Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
