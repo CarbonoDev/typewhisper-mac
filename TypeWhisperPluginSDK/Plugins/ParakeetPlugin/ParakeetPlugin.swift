@@ -641,7 +641,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         for version: ParakeetVersion,
         targetDirectory: URL? = nil,
         fetcher: VocabularyAssetFetcher = { url, description in
-            try await DownloadUtils.fetchHuggingFaceFile(from: url, description: description)
+            try await ModelHub.fetchFile(from: url, description: description)
         }
     ) async throws {
         let directory = targetDirectory ?? Self.vocabularyAssetDirectory(for: version)
