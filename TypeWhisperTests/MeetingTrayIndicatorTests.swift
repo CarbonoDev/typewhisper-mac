@@ -136,7 +136,7 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             isRecording: true,
             recordingTitle: "Standup",
             elapsedSeconds: 65,
-            upcoming: upcoming,
+            candidate: upcoming,
             now: epoch
         )
         XCTAssertEqual(display, MeetingTrayIndicator.Display.recording(label: "Standup · 1:05"))
@@ -148,7 +148,7 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             isRecording: false,
             recordingTitle: "",
             elapsedSeconds: 0,
-            upcoming: upcoming,
+            candidate: upcoming,
             now: epoch
         )
         XCTAssertEqual(display, MeetingTrayIndicator.Display.upcoming(label: "test · in 39m"))
@@ -159,7 +159,7 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             isRecording: false,
             recordingTitle: "",
             elapsedSeconds: 0,
-            upcoming: nil,
+            candidate: nil,
             now: epoch
         )
         XCTAssertEqual(display, MeetingTrayIndicator.Display.idle)
@@ -171,10 +171,160 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             isRecording: true,
             recordingTitle: "",
             elapsedSeconds: 30,
-            upcoming: nil,
+            candidate: nil,
             now: epoch
         )
         XCTAssertEqual(display, MeetingTrayIndicator.Display.idle)
+    }
+
+    // MARK: - Since-start formatting (ongoing tray title: "now" / minutes / hours+minutes tiers)
+
+    func testSinceStartFirstMinuteIsNowForm() {
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: epoch), "now")
+        XCTAssertEqual(
+            MeetingTrayIndicator.sinceStart(start: epoch, now: epoch.addingTimeInterval(59)),
+            "now"
+        )
+    }
+
+    func testSinceStartMinutesFormUnderAnHour() {
+        let now = epoch.addingTimeInterval(24 * 60)
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: now), "24m")
+    }
+
+    func testSinceStartFloorsPartialMinutes() {
+        // 24 min 30 s in still reads "24m" (floor, unlike the countdown's round-up).
+        let now = epoch.addingTimeInterval(24 * 60 + 30)
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: now), "24m")
+    }
+
+    func testSinceStartHoursAndMinutesFormAboveAnHour() {
+        let now = epoch.addingTimeInterval(65 * 60)
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: now), "1h 5m")
+    }
+
+    func testSinceStartWholeHoursCollapseMinutes() {
+        let now = epoch.addingTimeInterval(120 * 60)
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: now), "2h")
+    }
+
+    func testSinceStartExactlyOneMinuteLeavesNowForm() {
+        // The "now" form covers strictly the first minute: at 60 s it becomes "1m".
+        let now = epoch.addingTimeInterval(60)
+        XCTAssertEqual(MeetingTrayIndicator.sinceStart(start: epoch, now: now), "1m")
+    }
+
+    // MARK: - Ongoing label composition + truncation
+
+    func testOngoingLabelJoinsTitleAndSinceStart() {
+        let now = epoch.addingTimeInterval(24 * 60)
+        XCTAssertEqual(
+            MeetingTrayIndicator.ongoingLabel(title: "test", start: epoch, now: now),
+            "test · 24m"
+        )
+    }
+
+    func testOngoingLabelTruncatesTitle() {
+        let now = epoch.addingTimeInterval(5 * 60)
+        let label = MeetingTrayIndicator.ongoingLabel(
+            title: "Quarterly Planning And Roadmap Review",
+            start: epoch,
+            now: now,
+            maxTitleLength: 10
+        )
+        XCTAssertTrue(label.contains("\u{2026}"), "expected an ellipsis, got \(label)")
+        XCTAssertTrue(label.hasSuffix("5m"))
+    }
+
+    // MARK: - Ongoing display state (recording > ongoing > upcoming > idle)
+
+    func testDisplayOngoingForInProgressCandidate() {
+        // Started 24 min ago, 60-min duration -> ongoing with the since-start form.
+        let ongoing = event(id: "current", startsIn: -24 * 60, duration: 3600, now: epoch)
+        let display = MeetingTrayIndicator.display(
+            isRecording: false,
+            recordingTitle: "",
+            elapsedSeconds: 0,
+            candidate: ongoing,
+            now: epoch
+        )
+        XCTAssertEqual(display, MeetingTrayIndicator.Display.ongoing(label: "current · 24m"))
+    }
+
+    func testDisplayRecordingTakesPrecedenceOverOngoing() {
+        let ongoing = event(id: "current", startsIn: -5 * 60, now: epoch)
+        let display = MeetingTrayIndicator.display(
+            isRecording: true,
+            recordingTitle: "Standup",
+            elapsedSeconds: 65,
+            candidate: ongoing,
+            now: epoch
+        )
+        XCTAssertEqual(display, MeetingTrayIndicator.Display.recording(label: "Standup · 1:05"))
+    }
+
+    func testDisplayOngoingBeatsUpcomingViaTrayCandidate() {
+        // With both an in-progress and a soon-upcoming meeting, the pipeline (trayCandidate ->
+        // display) surfaces the ongoing one.
+        let inProgress = event(id: "current", startsIn: -10 * 60, now: epoch)
+        let soon = event(id: "soon", startsIn: 5 * 60, now: epoch)
+        let candidate = MeetingTrayIndicator.trayCandidate(events: [soon, inProgress], now: epoch)
+        let display = MeetingTrayIndicator.display(
+            isRecording: false,
+            recordingTitle: "",
+            elapsedSeconds: 0,
+            candidate: candidate,
+            now: epoch
+        )
+        XCTAssertEqual(display, MeetingTrayIndicator.Display.ongoing(label: "current · 10m"))
+    }
+
+    func testDisplayBoundaryAtStartFlipsUpcomingToOngoing() {
+        let start = epoch.addingTimeInterval(5 * 60)
+        let meeting = event(id: "meeting", startsIn: 5 * 60, now: epoch)
+        // 1 s before start: still the upcoming countdown form.
+        let before = MeetingTrayIndicator.display(
+            isRecording: false,
+            recordingTitle: "",
+            elapsedSeconds: 0,
+            candidate: meeting,
+            now: start.addingTimeInterval(-1)
+        )
+        XCTAssertEqual(before, MeetingTrayIndicator.Display.upcoming(label: "meeting · in 1m"))
+        // Exactly at start: ongoing, first-minute "now" form.
+        let at = MeetingTrayIndicator.display(
+            isRecording: false,
+            recordingTitle: "",
+            elapsedSeconds: 0,
+            candidate: meeting,
+            now: start
+        )
+        XCTAssertEqual(at, MeetingTrayIndicator.Display.ongoing(label: "meeting · now"))
+    }
+
+    func testDisplayBoundaryAtEndFallsBackToIdleForStaleCandidate() {
+        // A candidate whose scheduled end has passed (stale between ticks) renders neither form.
+        let meeting = event(id: "meeting", startsIn: -30 * 60, duration: 30 * 60, now: epoch)
+        let display = MeetingTrayIndicator.display(
+            isRecording: false,
+            recordingTitle: "",
+            elapsedSeconds: 0,
+            candidate: meeting,
+            now: epoch
+        )
+        XCTAssertEqual(display, MeetingTrayIndicator.Display.idle)
+    }
+
+    func testTrayCandidateAtEndAdvancesToNextUpcomingOrNil() {
+        // At the ended meeting's end time, the recompute drops it: the next upcoming meeting within
+        // the window is promoted; with none, the candidate is nil (idle glyph).
+        let ended = event(id: "ended", startsIn: -30 * 60, duration: 30 * 60, now: epoch)
+        let next = event(id: "next", startsIn: 20 * 60, now: epoch)
+        XCTAssertEqual(
+            MeetingTrayIndicator.trayCandidate(events: [ended, next], now: epoch)?.id,
+            "next"
+        )
+        XCTAssertNil(MeetingTrayIndicator.trayCandidate(events: [ended], now: epoch))
     }
 
     // MARK: - Tray candidate window boundary (owner request 2: default 60-minute window)
@@ -219,13 +369,19 @@ final class MeetingTrayIndicatorTests: XCTestCase {
 
     // MARK: - Upcoming detection (lead-window over the existing upcoming events)
 
-    private func event(id: String, startsIn seconds: TimeInterval, allDay: Bool = false, now: Date) -> CalendarEventDTO {
+    private func event(
+        id: String,
+        startsIn seconds: TimeInterval,
+        duration: TimeInterval = 1800,
+        allDay: Bool = false,
+        now: Date
+    ) -> CalendarEventDTO {
         let start = now.addingTimeInterval(seconds)
         return CalendarEventDTO(
             id: id,
             title: id,
             startDate: start,
-            endDate: start.addingTimeInterval(1800),
+            endDate: start.addingTimeInterval(duration),
             isAllDay: allDay
         )
     }
@@ -273,6 +429,10 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             "meetings.tray.upcoming.inHours",
             "meetings.tray.upcoming.inHoursMinutes",
             "meetings.tray.countdown.now",
+            "meetings.tray.ongoing.minutes",
+            "meetings.tray.ongoing.hours",
+            "meetings.tray.ongoing.hoursMinutes",
+            "meetings.tray.accessibility.ongoing",
             "meetings.menu.recording",
             "meetings.menu.upcoming"
         ] {

@@ -130,27 +130,46 @@ private struct MenuBarExtraLabel: View {
                 recordingTitle: meetingTray.meetingTitle,
                 elapsedSeconds: meetingTray.elapsedSeconds,
                 // An unrelated dictation/recorder capture owns the icon (red glyph), so suppress the
-                // upcoming title while it is active — recording state always takes precedence.
-                upcoming: isRecordingActive ? nil : meetingTray.upcomingEvent,
+                // ongoing/upcoming title while it is active — recording state always takes precedence.
+                candidate: isRecordingActive ? nil : meetingTray.upcomingEvent,
                 now: meetingTray.trayNow
             ) {
             case .recording(let label):
                 // Owner request 3: recording glyph + truncated meeting title + elapsed time.
-                Label {
-                    Text(label)
-                } icon: {
+                // HStack, not Label: inside a MenuBarExtra label SwiftUI applies an icon-only
+                // label style by default, silently dropping the Text.
+                HStack(spacing: 4) {
                     Image(systemName: "record.circle")
+                    Text(label)
                 }
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(String(localized: "Recording...")))
+            case .ongoing(let label):
+                // Owner: "While meeting is ongoing (whether recording or not) also show the text on
+                // the tray bar" — glyph + truncated meeting title + time since start ("test · 24m",
+                // "now" during the first minute). `meetingTray.trayNow` is the ticked clock so the
+                // elapsed form advances while visible (no always-on timer). HStack, not Label:
+                // inside a MenuBarExtra label SwiftUI applies an icon-only label style by default,
+                // silently dropping the Text.
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                    Text(label)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    Text(String(format: String(localized: "meetings.tray.accessibility.ongoing"), label))
+                )
             case .upcoming(let label):
                 // Owner requests 1 & 2: Granola-style tray title — glyph + truncated meeting title +
                 // countdown ("test · in 39m"). `meetingTray.trayNow` is the ticked clock so the
-                // countdown re-renders while visible (no always-on timer).
-                Label {
-                    Text(label)
-                } icon: {
+                // countdown re-renders while visible (no always-on timer). HStack, not Label: inside
+                // a MenuBarExtra label SwiftUI applies an icon-only label style by default, silently
+                // dropping the Text.
+                HStack(spacing: 4) {
                     Image(systemName: "calendar")
+                    Text(label)
                 }
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(verbatim: label))
             case .idle:
                 Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))

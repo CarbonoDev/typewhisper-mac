@@ -255,8 +255,9 @@ final class CalendarService: ObservableObject {
     }
 
     /// Whether the event is happening right now (started, not yet ended). Used for the
-    /// "in progress" badge.
-    static func isCurrent(_ event: CalendarEventDTO, now: Date = Date()) -> Bool {
+    /// "in progress" badge and the tray's ongoing-meeting state. Pure, so `nonisolated`:
+    /// the (nonisolated) `MeetingTrayIndicator` reuses this single definition of "ongoing".
+    nonisolated static func isCurrent(_ event: CalendarEventDTO, now: Date = Date()) -> Bool {
         event.startDate <= now && event.endDate > now
     }
 

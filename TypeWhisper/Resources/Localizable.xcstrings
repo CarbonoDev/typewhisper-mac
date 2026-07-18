@@ -24687,6 +24687,38 @@
         }
       }
     },
+    "meetings.qa.answer.notCovered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting doesn't cover that."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting deckt das nicht ab."
+          }
+        }
+      }
+    },
+    "meetings.qa.answer.vaultConsultedPrefix": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting didn't cover that directly, so I checked related notes from your vault:"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting deckt das nicht direkt ab, daher habe ich verwandte Notizen aus Ihrem Vault herangezogen:"
+          }
+        }
+      }
+    },
     "meetings.qa.ask": {
       "localizations": {
         "en": {
@@ -24783,6 +24815,22 @@
         }
       }
     },
+    "meetings.qa.context.retrievedHeader": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Vault notes retrieved for this question (secondary to the meeting transcript)"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Für diese Frage abgerufene Vault-Notizen (nachrangig zum Meeting-Transkript)"
+          }
+        }
+      }
+    },
     "meetings.qa.context.transcriptHeader": {
       "localizations": {
         "en": {
@@ -24847,6 +24895,22 @@
         }
       }
     },
+    "meetings.qa.error.noTranscript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting has no transcript to answer from yet."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Besprechung hat noch kein Transkript, aus dem eine Antwort abgeleitet werden kann."
+          }
+        }
+      }
+    },
     "meetings.qa.placeholder": {
       "localizations": {
         "en": {
@@ -24884,13 +24948,45 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You are a meeting assistant answering a question about a meeting. Use only the provided transcript, knowledge-base excerpts, and prior questions and answers as your source of truth. Answer concisely and factually; if the provided context does not contain the answer, say so plainly rather than inventing details."
+            "value": "You are a meeting assistant answering a question about a meeting. Ground your answer only in the provided meeting material: the transcript, the curated notes, and prior questions and answers. Answer concisely and factually. If the question is simply not covered by the meeting, say so plainly rather than inventing details."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Verwenden Sie ausschließlich das bereitgestellte Transkript, die Auszüge aus der Wissensdatenbank sowie frühere Fragen und Antworten als Grundlage. Antworten Sie präzise und sachlich; enthält der bereitgestellte Kontext die Antwort nicht, sagen Sie das klar, anstatt Details zu erfinden."
+            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Stützen Sie Ihre Antwort ausschließlich auf das bereitgestellte Meeting-Material: das Transkript, die kuratierten Notizen sowie frühere Fragen und Antworten. Antworten Sie präzise und sachlich. Wird die Frage vom Meeting schlicht nicht abgedeckt, sagen Sie das klar, anstatt Details zu erfinden."
+          }
+        }
+      }
+    },
+    "meetings.qa.systemPrompt.escalated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are a meeting assistant answering a question about a meeting. Notes retrieved from the user's vault have been added below the meeting material and labeled as secondary. Prefer the meeting transcript; use the retrieved vault notes only to fill gaps. Answer concisely and factually. Do not request another search. If the answer is still not present, say plainly that the meeting does not cover it rather than inventing details."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Aus dem Vault des Nutzers abgerufene Notizen wurden unterhalb des Meeting-Materials ergänzt und als nachrangig gekennzeichnet. Bevorzugen Sie das Meeting-Transkript; nutzen Sie die abgerufenen Vault-Notizen nur, um Lücken zu füllen. Antworten Sie präzise und sachlich. Fordern Sie keine weitere Suche an. Ist die Antwort weiterhin nicht enthalten, sagen Sie klar, dass das Meeting sie nicht abdeckt, anstatt Details zu erfinden."
+          }
+        }
+      }
+    },
+    "meetings.qa.systemPrompt.vaultSearchInvitation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exception: if — and only if — the provided meeting material does not contain the answer and information elsewhere in the user's notes vault would plausibly cover it, do not guess and do not declare it uncovered: reply with exactly one line in the form `VAULT_SEARCH: <search terms>` and nothing else, so the app can look it up for you."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausnahme: Nur wenn das bereitgestellte Meeting-Material die Antwort nicht enthält und Informationen an anderer Stelle im Notiz-Vault des Nutzers sie plausibel abdecken würden, raten Sie nicht und erklären Sie die Frage nicht für unbeantwortet: Antworten Sie mit genau einer Zeile in der Form `VAULT_SEARCH: <Suchbegriffe>` und sonst nichts, damit die App sie für Sie nachschlagen kann."
           }
         }
       }
@@ -31863,6 +31959,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "jetzt"
+          }
+        }
+      }
+    },
+    "meetings.tray.ongoing.minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%ldm"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%ld Min."
+          }
+        }
+      }
+    },
+    "meetings.tray.ongoing.hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%ldh"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%ld Std."
+          }
+        }
+      }
+    },
+    "meetings.tray.ongoing.hoursMinutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$ldh %2$ldm"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$ld Std. %2$ld Min."
+          }
+        }
+      }
+    },
+    "meetings.tray.accessibility.ongoing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting in progress: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting läuft: %@"
           }
         }
       }

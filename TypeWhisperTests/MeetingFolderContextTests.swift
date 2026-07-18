@@ -308,6 +308,9 @@ final class MeetingFolderContextScopeTests: XCTestCase {
         var selectedCloudModel = "m"
         private(set) var calls: [Call] = []
         var response = "RESULT"
+        /// Optional per-call (1-based) response override; `nil` ⇒ `response`. Lets a Q&A test drive the
+        /// model-requested vault-search escalation (marker on pass 1, normal answer on pass 2).
+        var responder: ((Int) -> String)?
         func process(
             prompt: String,
             text: String,
@@ -317,7 +320,7 @@ final class MeetingFolderContextScopeTests: XCTestCase {
             skipMemoryInjection: Bool
         ) async throws -> String {
             calls.append(Call(prompt: prompt, text: text))
-            return response
+            return responder?(calls.count) ?? response
         }
     }
 
@@ -401,13 +404,18 @@ final class MeetingFolderContextScopeTests: XCTestCase {
         XCTAssertFalse(call.text.contains("RANDOM_MARKER"))
     }
 
-    /// Q&A retrieval honors the identical folder scope.
-    func testQAScopedIdenticallyToBrief() async throws {
+    /// Redesign (owner decision): a folder's attached-folder **prefix** is a *search*, so it is OFF by
+    /// default and only runs on model-requested escalation. Pass 1 (default) does not surface the
+    /// folder-prefix note; once the model replies with `VAULT_SEARCH:`, the escalation round honors the
+    /// identical folder scope as the brief — the attached-folder note is in scope, the unrelated note is
+    /// not.
+    func testQAEscalationHonorsFolderScopeAndDefaultPassDoesNot() async throws {
         let defaults = makeDefaults()
         let service = try makeService()
         let vault = try makeVault(defaults: defaults)
         let store = MeetingFolderMetadataStore(defaults: defaults)
         let stub = StubProcessor()
+        stub.responder = { $0 == 1 ? "VAULT_SEARCH: acme sync roadmap" : "ESCALATED_ANSWER" }
         let llm = MeetingLLMService(
             meetingService: service, vaultService: vault, processor: stub, folderMetadataStore: store
         )
@@ -421,9 +429,14 @@ final class MeetingFolderContextScopeTests: XCTestCase {
         store.attachFolders(["ProjectAcme"], to: "Clients/Acme")
 
         _ = try await llm.answerQuestion(for: target, question: "acme sync roadmap status")
-        let call = try XCTUnwrap(stub.calls.first)
-        XCTAssertTrue(call.text.contains("SPEC_MARKER"), "attached-folder note feeds Q&A")
-        XCTAssertFalse(call.text.contains("RANDOM_MARKER"), "unrelated note excluded from Q&A too")
+
+        XCTAssertEqual(stub.calls.count, 2, "one escalation round")
+        // Pass 1 (default): the folder-prefix search does not run — neither note is present.
+        XCTAssertFalse(stub.calls[0].text.contains("SPEC_MARKER"), "folder-prefix search is off by default")
+        XCTAssertFalse(stub.calls[0].text.contains("RANDOM_MARKER"))
+        // Pass 2 (escalation): honors the folder scope — the attached-folder note is in, the unrelated note out.
+        XCTAssertTrue(stub.calls[1].text.contains("SPEC_MARKER"), "attached-folder note feeds the escalation round")
+        XCTAssertFalse(stub.calls[1].text.contains("RANDOM_MARKER"), "unrelated note excluded from Q&A too")
     }
 
     /// No folder config ⇒ whole-vault behavior (regression guard): both notes reachable.

@@ -244,6 +244,39 @@ final class MeetingFolderMetadataStore: ObservableObject {
         )
     }
 
+    /// The **pass-1** ("meeting-grounded") retrieval scope for in-meeting Q&A — the per-note subset of
+    /// `retrievalScope`: the meeting's related documents (including auto-discovered ones the user can
+    /// remove, so they sit under user curation in effect) and the folder's explicitly attached notes.
+    /// Owner decision: broad vault retrieval is OFF by default, so this differs from `retrievalScope`
+    /// in two load-bearing ways:
+    ///   • It drops the folder's `attachedFolderPaths` **prefixes** — a live folder is a *search* (rank
+    ///     every `.md` under it), which is deferred to model-requested escalation (pass 2), not run by
+    ///     default.
+    ///   • It **never** falls back to `.wholeVault`: with no notes in that union it returns `.none`
+    ///     (retrieve nothing) rather than the whole-vault default fallback.
+    /// The precedence ladder otherwise mirrors `retrievalScope`:
+    /// 1. Folder `noVaultContext` ⇒ `.none` (absolute).
+    /// 2. The **note** union `curatedNotePaths ∪ folder.attachedNotePaths` (minus exclusions):
+    ///    non-empty ⇒ `.restricted(notePaths:, folderPrefixes: [])`; empty ⇒ `.none`.
+    func curatedRetrievalScope(
+        forFolderPath folderPath: String?,
+        curatedNotePaths: [String] = [],
+        excludedNotePaths: [String] = []
+    ) -> VaultRetrievalScope {
+        var config = FolderContextConfig()
+        if let folderPath, !MeetingService.folderComponents(folderPath).isEmpty {
+            config = self.config(for: folderPath)
+        }
+        if config.noVaultContext { return .none }
+
+        let excluded = Set(excludedNotePaths)
+        let curated = Set(curatedNotePaths).subtracting(excluded)
+        let folderNotes = Set(config.attachedNotePaths)
+        let notePaths = curated.union(folderNotes)
+        guard !notePaths.isEmpty else { return .none }
+        return .restricted(notePaths: notePaths, folderPrefixes: [], excludedPaths: excluded)
+    }
+
     // MARK: - Persistence
 
     private func load() {
