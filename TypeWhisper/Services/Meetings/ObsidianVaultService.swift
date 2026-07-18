@@ -267,6 +267,82 @@ final class ObsidianVaultService: ObservableObject {
         return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && !isDirectory.boolValue
     }
 
+    // MARK: - Single-note read (Track E, ME-2 — off the enumeration path)
+
+    /// The full text of one vault note, or `nil` when no vault is connected, the path is empty, escapes
+    /// the vault (traversal), points at a missing file, exceeds `maxFileBytes`, or isn't UTF-8. This is
+    /// a **single direct read**, deliberately off the enumeration path — it never touches
+    /// `enumerateNotes`/`enumerateEntries`, so the single-enumerator rule (spec §3) stays intact. The
+    /// returned string is the raw file (frontmatter included); Space strips it for display.
+    func readNote(_ relativePath: String) -> String? {
+        guard let url = resolvedNoteURL(for: relativePath) else { return nil }
+        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int, size <= maxFileBytes else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// The `typewhisper-meeting` frontmatter UUID of a vault note (Track E, ME-2, the Space↔meeting
+    /// bridge). `nil` when the note is unreadable, carries no (or malformed) frontmatter, has no such
+    /// field, or the value isn't a UUID — tolerant by design: a note never errors, it just doesn't
+    /// offer the bridge. Existence of the referenced meeting is resolved by the caller.
+    func meetingID(inNoteAt relativePath: String) -> UUID? {
+        guard let raw = readNote(relativePath) else { return nil }
+        guard let value = Self.frontmatterField("typewhisper-meeting", in: raw) else { return nil }
+        return UUID(uuidString: value)
+    }
+
+    /// Resolve a vault-relative note path to an absolute file URL **only if it stays inside the vault**
+    /// (traversal rejection). Trims via `MeetingService.normalizeVaultRelPath`, then compares the
+    /// standardized (../-resolved) target against the standardized vault root — off the enumeration
+    /// path, matching `noteExists`' style.
+    private func resolvedNoteURL(for relativePath: String) -> URL? {
+        guard let vaultPath else { return nil }
+        let rel = MeetingService.normalizeVaultRelPath(relativePath)
+        guard !rel.isEmpty else { return nil }
+        let root = URL(fileURLWithPath: vaultPath, isDirectory: true)
+        let target = root.appendingPathComponent(rel)
+        let rootPath = root.standardizedFileURL.path
+        let targetPath = target.standardizedFileURL.path
+        guard targetPath == rootPath || targetPath.hasPrefix(rootPath + "/") else { return nil }
+        return target
+    }
+
+    /// Extract a single scalar YAML frontmatter field's value from a note's raw text (Track E, ME-2).
+    /// Tolerant: returns `nil` unless the file opens with a `---` line and has a matching closing `---`,
+    /// then finds the first `key:`-prefixed line inside (case-insensitive key match). The value is
+    /// trimmed and, when wrapped in double quotes, unquoted to mirror the exporter's `yamlScalar`
+    /// quoting. Empty values yield `nil`.
+    private static func frontmatterField(_ key: String, in raw: String) -> String? {
+        let lines = raw.components(separatedBy: "\n")
+        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return nil }
+        var closingIndex: Int?
+        for index in 1..<lines.count where lines[index].trimmingCharacters(in: .whitespaces) == "---" {
+            closingIndex = index
+            break
+        }
+        guard let closingIndex else { return nil }
+        for index in 1..<closingIndex {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            guard let colon = trimmed.firstIndex(of: ":") else { continue }
+            let fieldKey = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
+            guard fieldKey.caseInsensitiveCompare(key) == .orderedSame else { continue }
+            let rawValue = String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            let value = unquoteYAMLScalar(rawValue)
+            return value.isEmpty ? nil : value
+        }
+        return nil
+    }
+
+    /// Reverse `MeetingObsidianExporter.yamlScalar`'s quoting: strip surrounding double quotes and
+    /// unescape `\"`/`\\`. A plain (unquoted) scalar is returned unchanged.
+    private static func unquoteYAMLScalar(_ value: String) -> String {
+        guard value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") else { return value }
+        let inner = String(value.dropFirst().dropLast())
+        return inner
+            .replacingOccurrences(of: "\\\"", with: "\"")
+            .replacingOccurrences(of: "\\\\", with: "\\")
+    }
+
     // MARK: - Read-only listing (Amendment 1, DA8 — shared vault-enumeration primitive)
 
     /// Every note and folder in the vault as lightweight `VaultEntry` values — no body parse (cheaper

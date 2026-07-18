@@ -271,6 +271,40 @@ final class MeetingObsidianExporterTests: XCTestCase {
         XCTAssertEqual((file.path as NSString).deletingLastPathComponent, vaultDir.path)
     }
 
+    // MARK: - typewhisper-meeting bridge frontmatter (Track E, ME-2 / D2)
+
+    /// Every export carries a `typewhisper-meeting: <uuid>` frontmatter line whose value is the
+    /// meeting's id, as valid (unquoted) YAML, and it round-trips back through the vault reader's
+    /// `meetingID(inNoteAt:)` to exactly `meeting.id`.
+    func testExportEmitsMeetingUUIDFrontmatterThatRoundTrips() throws {
+        let meeting = makeRichMeeting(folder: "Meetings/Acme")
+        let urls = try exporter.export(meeting, sections: [.summary], combined: true)
+        let file = try XCTUnwrap(urls.first)
+
+        // Present, correct UUID, and inside the YAML block (before the closing `---`).
+        let body = try contents(of: file)
+        XCTAssertTrue(
+            body.contains("typewhisper-meeting: \(meeting.id.uuidString)"),
+            "expected the meeting UUID line in \(body)")
+        let frontmatterEnd = try XCTUnwrap(body.range(of: "\n---", range: body.index(body.startIndex, offsetBy: 3)..<body.endIndex))
+        let frontmatter = String(body[..<frontmatterEnd.lowerBound])
+        XCTAssertTrue(frontmatter.contains("typewhisper-meeting:"), "UUID line must live inside the frontmatter")
+
+        // Round-trips through the reader: the note's vault-relative path resolves to the same id.
+        let rel = String(file.path.dropFirst(vaultDir.path.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        XCTAssertEqual(vault.meetingID(inNoteAt: rel), meeting.id)
+    }
+
+    /// The bridge line is stable across a re-export: the second (never-overwriting) note carries the
+    /// same meeting UUID, so `testRepeatedExportNeverOverwrites`'s guarantee and the bridge coexist.
+    func testReExportKeepsSameMeetingUUID() throws {
+        let meeting = makeRichMeeting(folder: nil)
+        _ = try exporter.export(meeting, sections: [.summary], combined: true)
+        let second = try exporter.export(meeting, sections: [.summary], combined: true)
+        let body = try contents(of: try XCTUnwrap(second.first))
+        XCTAssertTrue(body.contains("typewhisper-meeting: \(meeting.id.uuidString)"))
+    }
+
     // MARK: - Metadata setters
 
     func testFolderAndTagSettersNormalizeAndPersist() throws {

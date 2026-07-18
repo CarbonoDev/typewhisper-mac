@@ -32642,6 +32642,86 @@
           }
         }
       }
+    },
+    "meetingdoc.overflow.revealInSpace": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal in Space"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Space anzeigen"
+          }
+        }
+      }
+    },
+    "space.note.openMeeting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open meeting"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting öffnen"
+          }
+        }
+      }
+    },
+    "space.note.openInObsidian": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Obsidian"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Obsidian öffnen"
+          }
+        }
+      }
+    },
+    "space.note.missing.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note not found"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz nicht gefunden"
+          }
+        }
+      }
+    },
+    "space.note.missing.message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This note may have been moved or deleted outside TypeWhisper."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Notiz wurde möglicherweise außerhalb von TypeWhisper verschoben oder gelöscht."
+          }
+        }
+      }
     }
   },
   "version": "1.1"

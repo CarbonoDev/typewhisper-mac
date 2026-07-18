@@ -215,6 +215,20 @@ struct MeetingDocumentHeader: View {
             } label: {
                 Label(String(localized: "meetingdoc.chip.export"), systemImage: "square.and.arrow.up")
             }
+            // [Track E, ME-2] "Reveal in Space" — one overflow item (the redesign's one-menu rule, V11),
+            // gated on a prior export (`lastObsidianExportAt`) so it appears only when there's an aligned
+            // Space folder to land in. Folder-precise: routes 1:1 to the meeting's Space folder (D2).
+            if let route = SpaceReveal.route(
+                rootFolder: UserDefaults.standard.string(forKey: UserDefaultsKeys.meetingsObsidianRootFolder) ?? "",
+                meetingFolder: meeting.obsidianFolder,
+                hasExported: meeting.lastObsidianExportAt != nil
+            ) {
+                Button {
+                    MainWindowCoordinator.shared.show(route)
+                } label: {
+                    Label(String(localized: "meetingdoc.overflow.revealInSpace"), systemImage: "externaldrive")
+                }
+            }
             // Merge-import must never race the live-capture writer (a merge rewrites all
             // segments): keep the old chip's `showsImportMergeAction` gate, plus the pre-meeting
             // empty state where import builds the document.

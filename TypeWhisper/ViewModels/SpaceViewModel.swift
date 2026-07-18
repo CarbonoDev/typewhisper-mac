@@ -87,6 +87,42 @@ final class SpaceViewModel: ObservableObject {
         refresh()
     }
 
+    // MARK: - Note reading (Track E, ME-2)
+
+    /// The raw text of a single vault note (frontmatter included), or `nil` when unreadable / missing /
+    /// out of the vault. A direct single read off the enumeration path (`ObsidianVaultService.readNote`);
+    /// callers load it into view `@State` on appear, never in a `body`.
+    func noteBody(at path: String) -> String? {
+        vaultService.readNote(path)
+    }
+
+    /// The `typewhisper-meeting` backlink UUID parsed from a note's frontmatter, or `nil` (tolerant).
+    /// Existence of the referenced meeting is resolved separately (`SpaceReveal.linkedMeeting`).
+    func linkedMeetingUUID(at path: String) -> UUID? {
+        vaultService.meetingID(inNoteAt: path)
+    }
+
+    /// Focus a meeting document from a Space note's "Open meeting" bridge row — the single navigation
+    /// channel (`MainWindowCoordinator`), no second mechanism (plan V12).
+    func openMeeting(id: UUID) {
+        MainWindowCoordinator.shared.openMeeting(id: id)
+    }
+
+    /// Open a vault note in Obsidian via the `obsidian://open` URL scheme (quiet-row affordance).
+    /// No-op when disconnected or Obsidian can't be reached (silent — editing lives in Obsidian, D1).
+    func openInObsidian(_ relativePath: String) {
+        guard let vaultName else { return }
+        var components = URLComponents()
+        components.scheme = "obsidian"
+        components.host = "open"
+        components.queryItems = [
+            URLQueryItem(name: "vault", value: vaultName),
+            URLQueryItem(name: "file", value: relativePath),
+        ]
+        guard let url = components.url else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     /// Reveal a vault-relative path in Finder (folder-index / note toolbar). No-op when disconnected.
     func revealInFinder(_ relativePath: String) {
         guard let vaultPath = vaultService.vaultPath else { return }

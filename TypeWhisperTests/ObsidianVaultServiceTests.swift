@@ -132,4 +132,103 @@ final class ObsidianVaultServiceTests: XCTestCase {
         service.connect(to: vault.path)
         XCTAssertTrue(service.retrieve(query: "quantum astrophysics submarine").isEmpty)
     }
+
+    // MARK: - Single-note read (Track E, ME-2)
+
+    func testReadNoteReturnsFullBodyAndNilForMissing() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+
+        let body = try XCTUnwrap(service.readNote("Notes/Acme 1-1.md"))
+        XCTAssertTrue(body.contains("Follow-ups from the acme sync about the roadmap."))
+        // Leading/surrounding slashes are tolerated (normalized).
+        XCTAssertEqual(service.readNote("/Notes/Acme 1-1.md"), body)
+
+        XCTAssertNil(service.readNote("Notes/Nope.md"))
+        XCTAssertNil(service.readNote(""))
+    }
+
+    func testReadNoteReturnsNilWhenNotConnected() {
+        let service = ObsidianVaultService(defaults: makeDefaults())
+        XCTAssertNil(service.readNote("Cooking.md"))
+    }
+
+    /// A `..`-escaping relative path must never read a file outside the connected vault.
+    func testReadNoteRejectsTraversalOutsideVault() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        // A secret sibling to the vault (in the vault's parent dir), reachable only via traversal.
+        let outside = vault.deletingLastPathComponent().appendingPathComponent("outside-secret.md")
+        try "TOP SECRET".write(to: outside, atomically: true, encoding: .utf8)
+        addTeardownBlock { try? FileManager.default.removeItem(at: outside) }
+
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+
+        XCTAssertNil(service.readNote("../outside-secret.md"))
+        XCTAssertNil(service.readNote("Notes/../../outside-secret.md"))
+        // A traversal that resolves back inside the vault still reads.
+        XCTAssertNotNil(service.readNote("Notes/../Cooking.md"))
+    }
+
+    // MARK: - typewhisper-meeting frontmatter (Track E, ME-2 bridge)
+
+    func testMeetingIDExtractsValidFrontmatterUUID() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let uuid = UUID()
+        try writeNote("Meetings/Linked.md", contents: """
+        ---
+        title: Linked meeting
+        typewhisper-meeting: \(uuid.uuidString)
+        tags: [meeting]
+        ---
+        # Linked meeting
+        Body text.
+        """, in: vault)
+
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        XCTAssertEqual(service.meetingID(inNoteAt: "Meetings/Linked.md"), uuid)
+    }
+
+    func testMeetingIDNilForMissingFrontmatter() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        // Cooking.md has no frontmatter block at all.
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        XCTAssertNil(service.meetingID(inNoteAt: "Cooking.md"))
+    }
+
+    func testMeetingIDNilForMalformedFrontmatter() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        // An unterminated frontmatter block (no closing `---`) is tolerated as "no field".
+        try writeNote("Meetings/Malformed.md", contents: """
+        ---
+        typewhisper-meeting: \(UUID().uuidString)
+        # Malformed heading, block never closed
+        body
+        """, in: vault)
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        XCTAssertNil(service.meetingID(inNoteAt: "Meetings/Malformed.md"))
+    }
+
+    func testMeetingIDNilForNonUUIDValue() throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        try writeNote("Meetings/Bad.md", contents: """
+        ---
+        typewhisper-meeting: not-a-uuid
+        ---
+        body
+        """, in: vault)
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        XCTAssertNil(service.meetingID(inNoteAt: "Meetings/Bad.md"))
+    }
 }

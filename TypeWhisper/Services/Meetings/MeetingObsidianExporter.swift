@@ -220,6 +220,10 @@ final class MeetingObsidianExporter: ObservableObject {
     private func buildFrontmatter(for meeting: Meeting) -> String {
         var lines = ["---"]
         lines.append("title: \(yamlScalar(meeting.title))")
+        // The Space↔meeting bridge key (Track E, D2): a stable meeting UUID that lets a Space note
+        // resolve back to its meeting ("Open meeting") and the meeting reveal back to its Space folder.
+        // Emitted only on new/re-exports — existing notes are never rewritten to backfill it.
+        lines.append("typewhisper-meeting: \(yamlScalar(meeting.id.uuidString))")
 
         let date = meeting.startDate ?? meeting.createdAt
         let formatter = ISO8601DateFormatter()
