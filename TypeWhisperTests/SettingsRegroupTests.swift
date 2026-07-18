@@ -66,7 +66,7 @@ final class SettingsGroupingTests: XCTestCase {
         // Old Home dashboard → Dictation › Overview.
         XCTAssertEqual(group(of: .home), .dictation)
         XCTAssertEqual(group(of: .general), .dictation)
-        XCTAssertEqual(group(of: .recording), .dictation)
+        XCTAssertEqual(group(of: .dictation), .dictation)
         XCTAssertEqual(group(of: .hotkeys), .dictation)
         XCTAssertEqual(group(of: .dictionary), .dictation)
         XCTAssertEqual(group(of: .snippets), .dictation)
