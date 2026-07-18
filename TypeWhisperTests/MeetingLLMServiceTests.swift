@@ -424,8 +424,9 @@ final class MeetingLLMServiceTests: XCTestCase {
 
         _ = try await llm.answerQuestion(for: meeting, question: "acme roadmap")
 
-        // Redesign: the default (pass-1) grounding still surfaces EXPLICITLY curated notes — only broad
-        // vault retrieval is off. With a non-marker answer there is exactly one pass and no escalation.
+        // Redesign: the default (pass-1) grounding still surfaces the meeting's related documents
+        // (a manual one here; auto-discovered ones the user can remove count too) — only broad vault
+        // retrieval is off. With a non-marker answer there is exactly one pass and no escalation.
         XCTAssertEqual(stub.calls.count, 1, "curated notes need no escalation")
         let call = try XCTUnwrap(stub.calls.first)
         XCTAssertTrue(call.text.contains("QA_CURATED_MARKER"), "curated notes still appear in the default pass")

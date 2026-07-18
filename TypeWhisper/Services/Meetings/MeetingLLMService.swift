@@ -153,9 +153,9 @@ final class MeetingLLMService: ObservableObject {
     ///
     /// Grounding is **meeting-first, escalation-on-demand** (owner decision):
     ///  - Pass 1 (default) grounds ONLY on the meeting's own material — transcript so far, prior Q&A
-    ///    turns, and EXPLICITLY curated notes (the meeting's related docs ∪ the folder's configured note
-    ///    attachments). NO broad vault retrieval: neither the whole-vault default fallback nor any
-    ///    folder-prefix *search* runs here.
+    ///    turns, and the meeting's related documents (including auto-discovered ones the user can
+    ///    remove) and explicit folder attachments. NO broad vault retrieval: neither the whole-vault
+    ///    default fallback nor any folder-prefix *search* runs here.
     ///  - Pass 2 (escalation, model-chosen, at most one round) runs only if the model replies with a
     ///    single `VAULT_SEARCH: <terms>` line — its signal that the meeting material does not cover the
     ///    question but vault knowledge plausibly would. The host then runs ONE retrieval round at the
@@ -219,9 +219,10 @@ final class MeetingLLMService: ObservableObject {
             .map { MeetingQAComposer.PriorTurn(question: $0.question, answer: $0.answer) }
 
         // ── PASS 1 (DEFAULT): ground ONLY on the meeting's own material ────────────────────────────
-        // Owner decision: broad vault retrieval is OFF by default. The vault contributes only
-        // EXPLICITLY curated notes (the meeting's user-selected related docs ∪ the folder's configured
-        // note attachments). `curatedScope` never expands a folder-prefix *search* and never falls back
+        // Owner decision: broad vault retrieval is OFF by default. The vault contributes only the
+        // meeting's related documents (including auto-discovered ones — user-visible on the meeting,
+        // removable, with sticky exclusions, so effectively under user curation) and explicit folder
+        // note attachments. `curatedScope` never expands a folder-prefix *search* and never falls back
         // to the whole-vault default — those are deferred to model-requested escalation below. `.none`
         // (nothing curated / `noVaultContext`) yields no passages.
         let curatedPassages = vaultService.isConnected
@@ -236,18 +237,29 @@ final class MeetingLLMService: ObservableObject {
             knowledgePassages: curatedPassages,
             charBudget: charBudget
         )
+        // The `VAULT_SEARCH` invitation is extended only when a vault is actually available to search —
+        // never invite the model to escalate into a void. The pass-2 no-vault degradation below stays
+        // as a safety net should the model emit the marker unprompted.
+        var pass1Base = String(localized: "meetings.qa.systemPrompt")
+        if vaultService.isConnected {
+            pass1Base += " " + String(localized: "meetings.qa.systemPrompt.vaultSearchInvitation")
+        }
         // Plan D4: the answer is the final output — append the meeting's language directive.
-        let pass1Prompt = MeetingLanguageDirective.appending(
-            for: meeting.languageCode,
-            to: String(localized: "meetings.qa.systemPrompt")
-        )
+        let pass1Prompt = MeetingLanguageDirective.appending(for: meeting.languageCode, to: pass1Base)
         let pass1Answer = try await runQA(userText: pass1Text, systemPrompt: pass1Prompt)
 
-        // The model is instructed to reply with exactly one line `VAULT_SEARCH: <terms>` — and nothing
-        // else — if, and only if, the meeting material does not cover the question and vault knowledge
-        // plausibly would. Anything else is a normal answer: persist it verbatim.
+        // The model is instructed to reply with exactly one `VAULT_SEARCH: <terms>` line and nothing
+        // else — but real replies sometimes wrap the marker in prose ("I couldn't find this…\nVAULT_
+        // SEARCH: …"), so a marker line at ANY line start counts as the escalation request. A reply
+        // with no marker line is a normal answer: persist it, stripped of marker lines as
+        // defense-in-depth (a no-op here by construction — detection and stripping match the same
+        // lines; mid-sentence mentions are neither markers nor stripped).
         guard let rawTerms = MeetingQAComposer.vaultSearchTerms(in: pass1Answer) else {
-            return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: pass1Answer)
+            return meetingService.addQATurn(
+                to: meeting,
+                question: trimmedQuestion,
+                answer: MeetingQAComposer.strippingVaultSearchLines(from: pass1Answer)
+            )
         }
         let searchTerms = rawTerms.isEmpty ? trimmedQuestion : rawTerms
 
@@ -284,8 +296,12 @@ final class MeetingLLMService: ObservableObject {
         )
         let pass2Answer = try await runQA(userText: pass2Text, systemPrompt: pass2Prompt)
 
-        // Loop guard: a `VAULT_SEARCH` reply in pass 2 is treated as "not covered" — never a third round.
-        guard MeetingQAComposer.vaultSearchTerms(in: pass2Answer) == nil else {
+        // Loop guard + sanitizer: there is never a third round, whatever pass 2 replies. Any marker
+        // line is stripped before persisting so the machine token can never surface to the user; if the
+        // model wrapped usable prose around a marker, the prose is kept, and if stripping leaves
+        // nothing (a pure re-request), degrade to the localized "not covered" answer.
+        let sanitizedPass2 = MeetingQAComposer.strippingVaultSearchLines(from: pass2Answer)
+        guard !sanitizedPass2.isEmpty else {
             return meetingService.addQATurn(
                 to: meeting,
                 question: trimmedQuestion,
@@ -296,7 +312,7 @@ final class MeetingLLMService: ObservableObject {
         // Disclose (localized, natural) that the answer consulted vault notes beyond the meeting.
         let disclosedAnswer = String(localized: "meetings.qa.answer.vaultConsultedPrefix")
             + "\n\n"
-            + pass2Answer
+            + sanitizedPass2
         return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: disclosedAnswer)
     }
 
@@ -315,12 +331,12 @@ final class MeetingLLMService: ObservableObject {
         )
     }
 
-    /// The **pass-1** (default) Q&A retrieval scope: EXPLICITLY curated material only — the meeting's
-    /// related notes ∪ the folder's configured note attachments (minus exclusions), never a folder-prefix
-    /// search and never the whole-vault fallback (owner decision — broad vault retrieval is off by
-    /// default). Delegates to the folder store when present; without a store, restricts to the meeting's
-    /// own curated related notes (`.none` when there are none, so retrieval yields nothing rather than
-    /// falling back to whole-vault).
+    /// The **pass-1** (default) Q&A retrieval scope: the meeting's related documents (including
+    /// auto-discovered ones the user can remove) ∪ the folder's explicitly attached notes (minus
+    /// exclusions), never a folder-prefix search and never the whole-vault fallback (owner decision —
+    /// broad vault retrieval is off by default). Delegates to the folder store when present; without a
+    /// store, restricts to the meeting's own related notes (`.none` when there are none, so retrieval
+    /// yields nothing rather than falling back to whole-vault).
     private func curatedScope(for meeting: Meeting) -> VaultRetrievalScope {
         let curated = meeting.relatedNotePaths.map(\.path)
         let excluded = meeting.excludedNotePaths
@@ -516,24 +532,39 @@ enum MeetingQAComposer {
         let answer: String
     }
 
-    /// The machine marker the model emits (as its *entire* reply) to request one vault-search
-    /// escalation round. NOT localized — it is a literal token the host greps for, embedded verbatim in
-    /// both the EN and DE system prompts.
+    /// The machine marker the model emits to request one vault-search escalation round (instructed to
+    /// be its entire reply; detected on any line start because models sometimes wrap it in prose). NOT
+    /// localized — it is a literal token the host greps for, embedded verbatim in the EN and DE
+    /// `meetings.qa.systemPrompt.vaultSearchInvitation` strings.
     static let vaultSearchMarker = "VAULT_SEARCH:"
 
-    /// Detects the model's escalation request. Returns the trimmed search terms when `answer` is a
-    /// `VAULT_SEARCH: <terms>` reply (the model is instructed to emit nothing else), else `nil` for a
-    /// normal answer. An empty-terms marker returns `""` so the caller can fall back to the question.
-    /// Case-insensitive on the marker; tolerant of surrounding whitespace; only the marker line's
-    /// remainder is taken as terms.
+    /// Detects the model's escalation request. The model is instructed to emit the marker as its
+    /// *entire* reply, but real replies sometimes wrap it in prose (e.g. "I couldn't find this in the
+    /// meeting.\nVAULT_SEARCH: acme roadmap"), so the FIRST line whose trimmed form begins with the
+    /// marker — at any line start, case-insensitive — is honored. Returns that line's remainder,
+    /// trimmed, as the search terms (`""` for a bare marker so the caller can fall back to the
+    /// question's text), or `nil` when no line starts with the marker. A mid-sentence mention (not at
+    /// a line start) never fires.
     static func vaultSearchTerms(in answer: String) -> String? {
-        let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.uppercased().hasPrefix(vaultSearchMarker) else { return nil }
-        let firstLine = trimmed
-            .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
-            .first
-            .map(String.init) ?? trimmed
-        return String(firstLine.dropFirst(vaultSearchMarker.count))
+        for line in answer.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            guard trimmedLine.uppercased().hasPrefix(vaultSearchMarker) else { continue }
+            return String(trimmedLine.dropFirst(vaultSearchMarker.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
+    }
+
+    /// Removes every line whose trimmed form begins with the escalation marker (case-insensitive,
+    /// matching `vaultSearchTerms`' line predicate exactly) so the machine token is never persisted or
+    /// shown, even when the model wraps it in prose. Mid-sentence mentions are kept — they are not
+    /// markers. Returns the remaining text with outer whitespace trimmed; an all-marker reply collapses
+    /// to `""` (the caller substitutes the localized "not covered" answer).
+    static func strippingVaultSearchLines(from answer: String) -> String {
+        answer
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).uppercased().hasPrefix(vaultSearchMarker) }
+            .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

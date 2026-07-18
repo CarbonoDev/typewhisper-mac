@@ -24100,13 +24100,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You are a meeting assistant answering a question about a meeting. Ground your answer only in the provided meeting material: the transcript, the curated notes, and prior questions and answers. Answer concisely and factually. If — and only if — the provided meeting material does not contain the answer and information elsewhere in the user's notes vault would plausibly cover it, do not guess: reply with exactly one line in the form `VAULT_SEARCH: <search terms>` and nothing else, so the app can look it up for you. If the question is simply not covered by the meeting, say so plainly rather than inventing details."
+            "value": "You are a meeting assistant answering a question about a meeting. Ground your answer only in the provided meeting material: the transcript, the curated notes, and prior questions and answers. Answer concisely and factually. If the question is simply not covered by the meeting, say so plainly rather than inventing details."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Stützen Sie Ihre Antwort ausschließlich auf das bereitgestellte Meeting-Material: das Transkript, die kuratierten Notizen sowie frühere Fragen und Antworten. Antworten Sie präzise und sachlich. Nur wenn das bereitgestellte Meeting-Material die Antwort nicht enthält und Informationen an anderer Stelle im Notiz-Vault des Nutzers sie plausibel abdecken würden, raten Sie nicht: Antworten Sie mit genau einer Zeile in der Form `VAULT_SEARCH: <Suchbegriffe>` und sonst nichts, damit die App sie für Sie nachschlagen kann. Wird die Frage vom Meeting schlicht nicht abgedeckt, sagen Sie das klar, anstatt Details zu erfinden."
+            "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Stützen Sie Ihre Antwort ausschließlich auf das bereitgestellte Meeting-Material: das Transkript, die kuratierten Notizen sowie frühere Fragen und Antworten. Antworten Sie präzise und sachlich. Wird die Frage vom Meeting schlicht nicht abgedeckt, sagen Sie das klar, anstatt Details zu erfinden."
           }
         }
       }
@@ -24123,6 +24123,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sie sind ein Meeting-Assistent und beantworten eine Frage zu einem Meeting. Aus dem Vault des Nutzers abgerufene Notizen wurden unterhalb des Meeting-Materials ergänzt und als nachrangig gekennzeichnet. Bevorzugen Sie das Meeting-Transkript; nutzen Sie die abgerufenen Vault-Notizen nur, um Lücken zu füllen. Antworten Sie präzise und sachlich. Fordern Sie keine weitere Suche an. Ist die Antwort weiterhin nicht enthalten, sagen Sie klar, dass das Meeting sie nicht abdeckt, anstatt Details zu erfinden."
+          }
+        }
+      }
+    },
+    "meetings.qa.systemPrompt.vaultSearchInvitation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exception: if — and only if — the provided meeting material does not contain the answer and information elsewhere in the user's notes vault would plausibly cover it, do not guess and do not declare it uncovered: reply with exactly one line in the form `VAULT_SEARCH: <search terms>` and nothing else, so the app can look it up for you."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausnahme: Nur wenn das bereitgestellte Meeting-Material die Antwort nicht enthält und Informationen an anderer Stelle im Notiz-Vault des Nutzers sie plausibel abdecken würden, raten Sie nicht und erklären Sie die Frage nicht für unbeantwortet: Antworten Sie mit genau einer Zeile in der Form `VAULT_SEARCH: <Suchbegriffe>` und sonst nichts, damit die App sie für Sie nachschlagen kann."
           }
         }
       }

@@ -351,14 +351,38 @@ final class MeetingQAComposerTests: XCTestCase {
 
     // MARK: - Model-requested vault-search escalation (owner decision)
 
-    /// The marker parser: a `VAULT_SEARCH:` reply yields its terms; anything else is `nil`. Tolerant of
-    /// case, surrounding whitespace, and any trailing lines (only the marker line's remainder is terms).
+    /// The marker parser: any LINE whose trimmed form begins with `VAULT_SEARCH:` yields its terms —
+    /// including a prose-then-marker reply — while a mid-sentence mention (not at a line start) never
+    /// fires. Tolerant of case and surrounding whitespace; only the marker line's remainder is terms.
     func testVaultSearchTermsParsing() {
         XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "VAULT_SEARCH: acme roadmap"), "acme roadmap")
         XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "  vault_search:  acme  \n more"), "acme")
         XCTAssertEqual(MeetingQAComposer.vaultSearchTerms(in: "VAULT_SEARCH:"), "", "empty terms ⇒ empty string, not nil")
+        XCTAssertEqual(
+            MeetingQAComposer.vaultSearchTerms(in: "I couldn't find this in the meeting.\nVAULT_SEARCH: acme roadmap"),
+            "acme roadmap",
+            "a marker line after prose is still the model asking for a search"
+        )
         XCTAssertNil(MeetingQAComposer.vaultSearchTerms(in: "The meeting decided to ship on Tuesday."))
-        XCTAssertNil(MeetingQAComposer.vaultSearchTerms(in: "See VAULT_SEARCH: in the middle of a sentence."))
+        XCTAssertNil(
+            MeetingQAComposer.vaultSearchTerms(in: "See VAULT_SEARCH: in the middle of a sentence."),
+            "a mention that does not start a line is not an escalation request"
+        )
+    }
+
+    /// The sanitizer strips exactly the marker lines (the parser's line predicate), keeps prose —
+    /// including mid-sentence mentions — and collapses an all-marker reply to the empty string.
+    func testStrippingVaultSearchLines() {
+        XCTAssertEqual(
+            MeetingQAComposer.strippingVaultSearchLines(from: "Prose first.\nVAULT_SEARCH: acme\nProse after."),
+            "Prose first.\nProse after."
+        )
+        XCTAssertEqual(MeetingQAComposer.strippingVaultSearchLines(from: "  vault_search: acme  "), "")
+        XCTAssertEqual(
+            MeetingQAComposer.strippingVaultSearchLines(from: "See VAULT_SEARCH: mid-sentence."),
+            "See VAULT_SEARCH: mid-sentence.",
+            "mid-sentence mentions are not markers and must not be stripped"
+        )
     }
 
     /// A `VAULT_SEARCH:` reply triggers exactly one escalation round: pass 1 carries no vault content,
@@ -437,6 +461,130 @@ final class MeetingQAComposerTests: XCTestCase {
         XCTAssertEqual(turn.answer, String(localized: "meetings.qa.answer.notCovered"))
         XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"), "the marker must never surface to the user")
         XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// A pass-1 reply that wraps the marker in prose ("I couldn't find this…\nVAULT_SEARCH: …") is
+    /// still the model asking for a search: it escalates (using the marker line's terms) instead of
+    /// persisting the prose-plus-marker reply verbatim.
+    func testProseThenMarkerInPass1StillEscalates() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.responder = { call in
+            call == 1
+                ? "I couldn't find this in the meeting.\nVAULT_SEARCH: acme roadmap"
+                : "PASS2_ANSWER_MARKER"
+        }
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+
+        XCTAssertEqual(stub.calls.count, 2, "the wrapped marker still triggers the escalation round")
+        XCTAssertTrue(stub.calls[1].text.contains("VAULT_MARKER_QA"), "the marker line's terms drive the retrieval")
+        XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"), "the marker must never surface to the user")
+        XCTAssertTrue(turn.answer.contains("PASS2_ANSWER_MARKER"))
+        XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// A pass-2 reply that wraps the marker in prose keeps the prose: the marker line is stripped from
+    /// the persisted turn, the loop guard still means no third call, and the vault-consulted disclosure
+    /// applies to the surviving answer.
+    func testProseThenMarkerInPass2IsStrippedWithoutThirdCall() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.responder = { call in
+            call == 1
+                ? "VAULT_SEARCH: acme roadmap"
+                : "The roadmap ships in Q3.\nVAULT_SEARCH: acme roadmap details"
+        }
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the acme roadmap?")
+
+        XCTAssertEqual(stub.calls.count, 2, "loop guard: never a third LLM call")
+        XCTAssertFalse(turn.answer.contains("VAULT_SEARCH"), "the marker line is stripped from the persisted turn")
+        XCTAssertTrue(turn.answer.contains("The roadmap ships in Q3."), "the prose around the marker survives")
+        XCTAssertTrue(turn.answer.contains(String(localized: "meetings.qa.answer.vaultConsultedPrefix")))
+        XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// A mid-sentence `VAULT_SEARCH:` mention (not at a line start) is not an escalation request: no
+    /// second pass, and the answer is persisted with the mention intact (not stripped).
+    func testMidSentenceMarkerMentionNeitherEscalatesNorIsStripped() async throws {
+        let service = try makeService()
+        let stub = StubProcessor()
+        stub.response = "The meeting explained that VAULT_SEARCH: is the app's escalation token."
+        let vault = try makeConnectedVault()
+        let llm = MeetingLLMService(meetingService: service, vaultService: vault, processor: stub)
+
+        let meeting = service.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        service.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meeting
+        )
+
+        let turn = try await llm.answerQuestion(for: meeting, question: "What is the escalation token?")
+
+        XCTAssertEqual(stub.calls.count, 1, "a mid-sentence mention is not an escalation request")
+        XCTAssertEqual(
+            turn.answer,
+            "The meeting explained that VAULT_SEARCH: is the app's escalation token.",
+            "a mid-sentence mention is not stripped from the persisted answer"
+        )
+        XCTAssertEqual(meeting.qaTurns.count, 1)
+    }
+
+    /// The `VAULT_SEARCH` invitation appears in the pass-1 system prompt only when a vault is available
+    /// to search — the model is never invited to escalate into a void.
+    func testVaultSearchInvitationOnlyWhenVaultAvailable() async throws {
+        let invitation = String(localized: "meetings.qa.systemPrompt.vaultSearchInvitation")
+
+        // No connected vault ⇒ no invitation in the composed system prompt.
+        let disconnectedService = try makeService()
+        let disconnectedStub = StubProcessor()
+        let disconnectedLLM = MeetingLLMService(
+            meetingService: disconnectedService, vaultService: makeDisconnectedVault(), processor: disconnectedStub
+        )
+        let meetingA = disconnectedService.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        disconnectedService.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meetingA
+        )
+        _ = try await disconnectedLLM.answerQuestion(for: meetingA, question: "What is the acme roadmap?")
+        let disconnectedPrompt = try XCTUnwrap(disconnectedStub.calls.first?.prompt)
+        XCTAssertFalse(
+            disconnectedPrompt.contains(invitation),
+            "no vault ⇒ the system prompt must not invite a VAULT_SEARCH escalation"
+        )
+        XCTAssertFalse(disconnectedPrompt.contains("VAULT_SEARCH"), "no marker mention at all without a vault")
+
+        // Connected vault ⇒ the invitation is present.
+        let connectedService = try makeService()
+        let connectedStub = StubProcessor()
+        let connectedLLM = MeetingLLMService(
+            meetingService: connectedService, vaultService: try makeConnectedVault(), processor: connectedStub
+        )
+        let meetingB = connectedService.createMeeting(title: "Acme", source: .adHoc, state: .completed)
+        connectedService.appendStableSegments(
+            [TranscriptionSegment(text: "Talking about the plan.", start: 0, end: 3)],
+            to: meetingB
+        )
+        _ = try await connectedLLM.answerQuestion(for: meetingB, question: "What is the acme roadmap?")
+        let connectedPrompt = try XCTUnwrap(connectedStub.calls.first?.prompt)
+        XCTAssertTrue(connectedPrompt.contains(invitation), "a connected vault restores the invitation")
     }
 
     /// Provenance/PART-M5: the per-purpose `.qa` provider/model overrides are honored on BOTH the default
