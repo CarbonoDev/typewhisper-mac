@@ -125,28 +125,34 @@ private struct MenuBarExtraLabel: View {
 
     var body: some View {
         Group {
-            if meetingTray.isRecording, !meetingTray.meetingTitle.isEmpty {
+            switch MeetingTrayIndicator.display(
+                isRecording: meetingTray.isRecording,
+                recordingTitle: meetingTray.meetingTitle,
+                elapsedSeconds: meetingTray.elapsedSeconds,
+                // An unrelated dictation/recorder capture owns the icon (red glyph), so suppress the
+                // upcoming title while it is active — recording state always takes precedence.
+                upcoming: isRecordingActive ? nil : meetingTray.upcomingEvent,
+                now: meetingTray.trayNow
+            ) {
+            case .recording(let label):
                 // Owner request 3: recording glyph + truncated meeting title + elapsed time.
                 Label {
-                    Text(MeetingTrayIndicator.recordingLabel(
-                        title: meetingTray.meetingTitle,
-                        elapsedSeconds: meetingTray.elapsedSeconds
-                    ))
+                    Text(label)
                 } icon: {
                     Image(systemName: "record.circle")
                 }
                 .accessibilityLabel(Text(String(localized: "Recording...")))
-            } else if !isRecordingActive,
-                      let event = meetingTray.upcomingEvent,
-                      let hint = MeetingTrayIndicator.upcomingHint(for: event, now: Date()) {
-                // Owner request 4: compact upcoming-meeting hint (recording takes precedence above).
+            case .upcoming(let label):
+                // Owner requests 1 & 2: Granola-style tray title — glyph + truncated meeting title +
+                // countdown ("test · in 39m"). `meetingTray.trayNow` is the ticked clock so the
+                // countdown re-renders while visible (no always-on timer).
                 Label {
-                    Text(hint)
+                    Text(label)
                 } icon: {
                     Image(systemName: "calendar")
                 }
-                .accessibilityLabel(Text(verbatim: "\(event.title) \(hint)"))
-            } else {
+                .accessibilityLabel(Text(verbatim: label))
+            case .idle:
                 Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
                     .resizable()
                     .renderingMode(isRecordingActive ? .original : .template)

@@ -30971,6 +30971,54 @@
         }
       }
     },
+    "meetings.tray.upcoming.inHours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %ldh"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %ld Std."
+          }
+        }
+      }
+    },
+    "meetings.tray.upcoming.inHoursMinutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %1$ldh %2$ldm"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %1$ld Std. %2$ld Min."
+          }
+        }
+      }
+    },
+    "meetings.tray.countdown.now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "now"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jetzt"
+          }
+        }
+      }
+    },
     "meetings.menu.recording": {
       "localizations": {
         "en": {
