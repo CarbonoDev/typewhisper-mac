@@ -2,12 +2,12 @@ import SwiftUI
 import AppKit
 import TypeWhisperPluginSDK
 
-enum SettingsTab: Hashable {
+enum SettingsTab: Hashable, CaseIterable {
     case home, general, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
 }
 
-private struct SettingsDestination: Identifiable, Hashable {
+struct SettingsDestination: Identifiable, Hashable {
     let tab: SettingsTab
     let title: String
     let systemImage: String
@@ -16,7 +16,7 @@ private struct SettingsDestination: Identifiable, Hashable {
     var id: SettingsTab { tab }
 }
 
-private struct SettingsDestinationSection: Identifiable {
+struct SettingsDestinationSection: Identifiable {
     let id: String
     let destinations: [SettingsDestination]
 }
@@ -62,6 +62,18 @@ struct SettingsView: View {
                 tab: .workflows,
                 title: localizedAppText("Workflows", de: "Workflows"),
                 systemImage: "point.3.connected.trianglepath.dotted",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .prompts,
+                title: localizedAppText("Prompts", de: "Prompts"),
+                systemImage: "text.bubble",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .profiles,
+                title: localizedAppText("Rules", de: "Regeln"),
+                systemImage: "list.bullet.rectangle",
                 badge: nil
             ),
             SettingsDestination(
@@ -129,10 +141,12 @@ struct SettingsView: View {
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
             switch request.tab {
-            case .profiles, .prompts, .workflows:
+            case .workflows:
+                // Reset the Workflows pane to its list root when navigated to directly.
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
+                // Every tab — including .prompts and .profiles — resolves to its own pane.
                 selectedTab = Self.availableTab(request.tab)
             }
         }
@@ -176,9 +190,9 @@ struct SettingsView: View {
         case .workflows:
             WorkflowsSettingsView()
         case .profiles:
-            WorkflowsSettingsView()
+            ProfilesSettingsView()
         case .prompts:
-            WorkflowsSettingsView()
+            PromptActionsSettingsView()
         case .premium:
             PremiumSettingsView()
         case .integrations:
@@ -434,7 +448,7 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
     settingsDestination(destinations, tab).badge
 }
 
-private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
+func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
     var coreDestinations = [
         settingsDestination(destinations, .general),
         settingsDestination(destinations, .dictation)
@@ -454,6 +468,8 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .dictionary),
         settingsDestination(destinations, .snippets),
         settingsDestination(destinations, .workflows),
+        settingsDestination(destinations, .prompts),
+        settingsDestination(destinations, .profiles),
         settingsDestination(destinations, .premium)
     ]
 
