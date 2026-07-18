@@ -799,6 +799,31 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
     }
 
+    func testGemma4ReplacementLoadKeepsDownloadWatchdogActive() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        plugin.activate(host: host)
+        plugin.setLoadedModelIdForTesting("gemma-4-e2b-it-4bit")
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(40))
+
+        plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+        try await waitUntil("replacement Gemma 4 timeout error") {
+            if case .error = plugin.modelState {
+                return true
+            }
+            return false
+        }
+
+        guard case .error(let message) = plugin.modelState else {
+            return XCTFail("Expected a stalled replacement load to time out")
+        }
+        XCTAssertTrue(message.contains("Gemma 4 E4B"))
+        XCTAssertFalse(plugin.isAvailable)
+    }
+
     func testGemma4CompletedDownloadUsesLongerPreparationTimeout() async throws {
         let plugin = Gemma4Plugin()
         plugin.setModelLoadTimeoutsForTesting(

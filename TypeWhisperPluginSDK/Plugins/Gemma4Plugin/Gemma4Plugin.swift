@@ -903,7 +903,6 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             while !Task.isCancelled {
                 guard let self,
                       self.isCurrentModelLoad(generation),
-                      self.loadedModelId == nil,
                       let phase = self.modelLoadPhase else {
                     return
                 }
@@ -1064,6 +1063,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     func invalidateModelLoadForTesting() {
         invalidateModelLoad()
+    }
+
+    func setLoadedModelIdForTesting(_ modelId: String?) {
+        loadedModelId = modelId
     }
 
     func isCurrentModelLoadForTesting(_ generation: Int) -> Bool {
