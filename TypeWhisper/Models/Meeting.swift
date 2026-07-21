@@ -64,6 +64,12 @@ final class Meeting {
     /// for keep-live meetings whose segments still carry coarse batch-boundary times; Identify then
     /// offers/needs the timing re-pass. Additive/optional ⇒ no migration.
     var timestampsRefined: Bool?
+    /// Stable identity of an external live-capture session that feeds this meeting — currently the
+    /// Google Meet call code (`abc-defg-hij`) reported by the browser extension. Makes
+    /// `POST /v1/meetings/live` idempotent: an MV3 service worker that is evicted and respawned
+    /// mid-call (or a second tab on the same call) resumes the same meeting instead of forking a
+    /// duplicate. Additive/optional ⇒ no migration. `nil` for every locally-captured meeting.
+    var externalSessionKey: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -103,6 +109,7 @@ final class Meeting {
         relatedDiscoveryAt: Date? = nil,
         twoPersonCall: Bool? = nil,
         timestampsRefined: Bool? = nil,
+        externalSessionKey: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -129,6 +136,7 @@ final class Meeting {
         self.relatedDiscoveryAt = relatedDiscoveryAt
         self.twoPersonCall = twoPersonCall
         self.timestampsRefined = timestampsRefined
+        self.externalSessionKey = externalSessionKey
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.segments = []

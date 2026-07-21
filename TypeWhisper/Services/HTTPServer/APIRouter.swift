@@ -20,8 +20,10 @@ final class APIRouter: Sendable {
     }
 
     func route(_ request: HTTPRequest) async -> HTTPResponse {
+        let cors = Self.corsHeaders(for: request)
+
         if request.method == "OPTIONS" {
-            return HTTPResponse(status: 204, contentType: "text/plain", body: Data())
+            return HTTPResponse(status: 204, contentType: "text/plain", body: Data()).adding(headers: cors)
         }
 
         let registeredRoutes = routes.withLock { $0 }
@@ -30,15 +32,15 @@ final class APIRouter: Sendable {
         // `/v1/meetings/import-transcript` is never shadowed by `/v1/meetings/{id}`.
         for route in registeredRoutes where !route.path.contains("{") {
             if route.method == request.method && route.path == request.path {
-                guard isAuthorized(request) else { return Self.unauthorized }
-                return await route.handler(request)
+                guard isAuthorized(request) else { return Self.unauthorized.adding(headers: cors) }
+                return await route.handler(request).adding(headers: cors)
             }
         }
 
         for route in registeredRoutes where route.path.contains("{") {
             guard route.method == request.method,
                   let pathParams = Self.matchPattern(route.path, path: request.path) else { continue }
-            guard isAuthorized(request) else { return Self.unauthorized }
+            guard isAuthorized(request) else { return Self.unauthorized.adding(headers: cors) }
             let matched = HTTPRequest(
                 method: request.method,
                 path: request.path,
@@ -47,10 +49,34 @@ final class APIRouter: Sendable {
                 body: request.body,
                 pathParams: pathParams
             )
-            return await route.handler(matched)
+            return await route.handler(matched).adding(headers: cors)
         }
 
-        return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
+        return HTTPResponse
+            .error(status: 404, message: "Not found: \(request.method) \(request.path)")
+            .adding(headers: cors)
+    }
+
+    /// CORS headers for browser-extension callers (the Google Meet caption bridge).
+    ///
+    /// Deliberately **not** `Access-Control-Allow-Origin: *`. The API token is optional — when it is
+    /// unset every route is authorized — so a wildcard would let any web page the user happens to
+    /// have open drive the local API. A `chrome-extension://` origin cannot be forged by page
+    /// JavaScript (the browser sets `Origin` itself), so echoing only those origins keeps ordinary
+    /// web content locked out while letting the extension through. Anything else gets no CORS
+    /// headers at all, which is what the browser needs to see in order to block the response.
+    static func corsHeaders(for request: HTTPRequest) -> [String: String] {
+        guard let origin = request.headers["origin"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              origin.hasPrefix("chrome-extension://") || origin.hasPrefix("moz-extension://") else {
+            return [:]
+        }
+        return [
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type, X-TypeWhisper-API-Token",
+            "Access-Control-Max-Age": "600",
+            "Vary": "Origin",
+        ]
     }
 
     private static let unauthorized = HTTPResponse.error(

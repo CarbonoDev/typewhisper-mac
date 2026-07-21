@@ -162,6 +162,18 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    /// Bind a meeting to an external live-capture session (currently the Google Meet call code
+    /// reported by the browser caption bridge). This is the key `POST /v1/meetings/live` resumes on,
+    /// so a respawned extension worker rejoins the same meeting instead of forking a duplicate.
+    /// `nil` unbinds. Single-writer on the MainActor.
+    func setExternalSessionKey(_ key: String?, for meeting: Meeting) {
+        guard meeting.externalSessionKey != key else { return }
+        meeting.externalSessionKey = key
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+    }
+
     /// Link a meeting to a (typically historical) calendar event: adopt its `calendarEventID`,
     /// `seriesID`, `attendees`, and start/end date so the calendar pipeline dedupes on it and
     /// prior-meeting briefs can find it (owner requirement 3, powering the bulk archive import).
