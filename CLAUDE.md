@@ -32,7 +32,7 @@ swift test --package-path TypeWhisperPluginSDK
 # Python registry-script tests, plugin SDK tests
 scripts/pr-preflight.sh [base-ref]   # default base: origin/main
 
-# Build, install, and launch a local dev build (TypeWhisper-Dev.app)
+# Build, install, and launch a local dev build (MeetingWhisper-Dev.app)
 scripts/build-dev-local.sh
 ```
 
@@ -40,7 +40,7 @@ Building requires no signing setup (ad-hoc signing). To use a real identity: `ec
 
 `build-dev-local.sh` **auto-signs when `CodeSigning.local.xcconfig` is present**: it builds with the developer identity so keychain items and TCC grants (mic, calendar, accessibility) survive rebuilds. Without it, it falls back to ad-hoc signing and those grants reset every rebuild — a real pain when iterating on meetings/calendar permissions, so keep the xcconfig around for meetings work.
 
-Debug builds use a separate data directory (`TypeWhisper-Dev`) and keychain prefix, so they don't interfere with an installed release build.
+Debug builds use a separate data directory (`MeetingWhisper-Dev`) and keychain prefix, so they don't interfere with an installed release build.
 
 The meetings feature has extensive unit coverage in `TypeWhisperTests/` (e.g. `MeetingModelRouterTests`, `JobQueueServiceTests`, `MeetingDiarizationEnricherTests`, `CalendarServiceTests`, `MeetingLLMServiceTests`, `MeetingBriefServiceTests`, `ParticipantDirectory*Tests`). Most are pure-logic tests over fakeable seams (the diarization/import/rule-matching protocols), so they run without the plugin graph — scope to one class with `-only-testing:TypeWhisperTests/<Class>` when iterating.
 
@@ -49,7 +49,7 @@ The meetings feature has extensive unit coverage in `TypeWhisperTests/` (e.g. `M
 ### Two build units
 
 1. **`TypeWhisper.xcodeproj`** — the app (`TypeWhisper/`), tests (`TypeWhisperTests/`), widgets (`TypeWhisperWidgetExtension/` + `TypeWhisperWidgetShared/`), and CLI (`typewhisper-cli/`).
-2. **`TypeWhisperPluginSDK/`** — a Swift package with the plugin SDK *and* all first-party plugin sources under `TypeWhisperPluginSDK/Plugins/` (WhisperKit, Parakeet, Groq, OpenAI, Gemini, xAI/Grok, AssemblyAI, Linear, Webhook, MLX-based local models, etc.). The app depends on this package; plugins ship as macOS `.bundle` files loaded from `~/Library/Application Support/TypeWhisper/Plugins/`.
+2. **`TypeWhisperPluginSDK/`** — a Swift package with the plugin SDK *and* all first-party plugin sources under `TypeWhisperPluginSDK/Plugins/` (WhisperKit, Parakeet, Groq, OpenAI, Gemini, xAI/Grok, AssemblyAI, Linear, Webhook, MLX-based local models, etc.). The app depends on this package; plugins ship as macOS `.bundle` files loaded from `~/Library/Application Support/MeetingWhisper/Plugins/`.
 
 Bundled `.bundle` plugins each build via their own Xcode scheme (`GeminiPlugin`, `GroqPlugin`, `OpenAIPlugin`, `WebhookPlugin`, `XAIPlugin`, …); `swift test --package-path TypeWhisperPluginSDK` exercises the SDK and per-plugin test targets together.
 

@@ -23,10 +23,10 @@ enum CLIError: Error {
         switch self {
         case .connectionFailed(let port):
             return """
-                Error: Cannot connect to TypeWhisper on port \(port).
+                Error: Cannot connect to MeetingWhisper on port \(port).
 
-                Make sure TypeWhisper is running and the API server is enabled:
-                  1. Open TypeWhisper
+                Make sure MeetingWhisper is running and the API server is enabled:
+                  1. Open MeetingWhisper
                   2. Go to Settings > Advanced
                   3. Enable "API Server"
                 """
@@ -35,11 +35,11 @@ enum CLIError: Error {
                 return """
                     Error: API authentication failed.
 
-                    Restart TypeWhisper so the CLI can refresh its local API token, or pass --api-token / TYPEWHISPER_API_TOKEN when using a custom port.
+                    Restart MeetingWhisper so the CLI can refresh its local API token, or pass --api-token / MEETINGWHISPER_API_TOKEN when using a custom port.
                     """
             }
             if code == 503 {
-                return "Error: No model loaded in TypeWhisper. Load a model first."
+                return "Error: No model loaded in MeetingWhisper. Load a model first."
             }
             return "Error: Server returned \(code) - \(message)"
         case .invalidResponse:

@@ -210,8 +210,9 @@ private struct MyWorkflowsPage: View {
                     .font(.headline)
                 Text(
                     localizedAppText(
-                        "Create and manage the workflows TypeWhisper should actively run.",
-                        de: "Erstelle und verwalte die Workflows, die TypeWhisper aktiv ausführen soll."
+                        "Create and manage the workflows MeetingWhisper should actively run.",
+                        de: "Erstelle und verwalte die Workflows, die MeetingWhisper aktiv ausführen soll.",
+                        ja: "MeetingWhisperがアクティブに実行するワークフローを作成および管理します。"
                     )
                 )
                 .font(.subheadline)

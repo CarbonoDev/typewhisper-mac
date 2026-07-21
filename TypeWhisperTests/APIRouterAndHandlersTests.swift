@@ -6022,6 +6022,52 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    func testImportMeetingTranscriptPersistsNotesAndAttendees() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome to the sync.\nBob: Great to be here.",
+            "title": "Acme Sync",
+            "summary": "The team agreed to ship on Friday.",
+            "extended": "## Details\n\nRelease scope was cut to the payments fix.",
+            "attendees": [
+                ["name": "Alice Adams", "email": "alice@acme.test", "is_self": true],
+                ["name": "Bob Baker"],
+                ["name": "   "], // dropped: blank names never reach the roster
+            ]
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let id = try XCTUnwrap(json["id"] as? String)
+
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            let outputs = meeting?.outputs ?? []
+            XCTAssertEqual(outputs.first { $0.kind == .summary }?.content, "The team agreed to ship on Friday.")
+            XCTAssertEqual(
+                outputs.first { $0.kind == .extended }?.content,
+                "## Details\n\nRelease scope was cut to the payments fix."
+            )
+            XCTAssertEqual(meeting?.attendees.map(\.name), ["Alice Adams", "Bob Baker"])
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.test")
+            XCTAssertEqual(meeting?.attendees.first?.isSelf, true)
+        }
+    }
+
     func testImportMeetingTranscriptFromLocalFilePath() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?

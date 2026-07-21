@@ -52,7 +52,7 @@ if [ ! -d "$APP_PATH" ]; then
   exit 1
 fi
 
-bash "$PROJECT_DIR/scripts/check_release_binary_instrumentation.sh" "$APP_PATH/Contents/MacOS/typewhisper-cli"
+bash "$PROJECT_DIR/scripts/check_release_binary_instrumentation.sh" "$APP_PATH/Contents/MacOS/meetingwhisper-cli"
 
 echo "--- App built at $APP_PATH ---"
 

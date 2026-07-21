@@ -286,7 +286,7 @@ private struct MenuBarExtraLabel: View {
     @StateObject private var meetingTray = MeetingTrayState()
 
     private var title: String {
-        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+        AppConstants.isDevelopment ? "MeetingWhisper Dev" : "MeetingWhisper"
     }
 
     private var isRecordingActive: Bool {
@@ -543,6 +543,12 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     init() {
         guard !AppConstants.isRunningTests else { return }
 
+        // MeetingWhisper rename: migrate legacy TypeWhisper data (app-support dir, UserDefaults
+        // domains, keychain items) BEFORE any service reads AppConstants.appSupportDirectory /
+        // UserDefaults / keychain — otherwise services would create fresh empty stores under the
+        // new name and the move would refuse. Idempotent + guarded against the test host.
+        DataMigrationService.runIfNeeded()
+
         // Trigger ServiceContainer initialization
         _ = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
@@ -743,7 +749,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
-    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+    // Sparkle NEUTRALIZED for the MeetingWhisper fork: startingUpdater is false so the updater
+    // never schedules a background check against a feed. Combined with the removal of SUFeedURL in
+    // Info.plist, no code path can reach upstream's appcast. Restore to true once a fork feed exists.
+    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)

@@ -109,7 +109,7 @@ private enum PluginLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .incompatibleHostVersion(let pluginName, let required, let current):
-            return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
+            return "\(pluginName) requires MeetingWhisper \(required) or newer (current: \(current))"
         case .failedToCreateBundle(let bundleName):
             return "Failed to create bundle for \(bundleName)"
         case .missingPrincipalClass(let className, let bundleName):
@@ -544,7 +544,7 @@ final class PluginManager: ObservableObject {
             let reason = PluginSDKCompatibility.incompatibilityReason(
                 manifestVersion: manifest.sdkCompatibilityVersion,
                 isBundled: isBundledSource
-            ) ?? "is not compatible with this TypeWhisper build"
+            ) ?? "is not compatible with this MeetingWhisper build"
             logger.info(
                 "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )

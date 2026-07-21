@@ -25,6 +25,10 @@ xcuserdata/
 *.xcodeproj/xcuserdata/**/*.xcscheme
 !*.xcodeproj/xcshareddata/xcschemes/*.xcscheme
 
+# Python
+__pycache__/
+*.pyc
+
 # CocoaPods (if used)
 Pods/
 

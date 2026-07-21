@@ -1611,13 +1611,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Betrifft nur Aufnahmen und Transkriptionen von TypeWhisper, nicht dein Live-Mikrofon in Meetings."
+            "value": "Betrifft nur Aufnahmen und Transkriptionen von MeetingWhisper, nicht dein Live-Mikrofon in Meetings."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affects only MeetingWhisper recordings and transcriptions, not your live meeting microphone."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper の録音および文字起こしのみに適用され、会議中のライブマイクには適用されません。"
+            "value": "MeetingWhisper の録音および文字起こしのみに適用され、会議中のライブマイクには適用されません。"
           }
         }
       }
@@ -2794,10 +2800,16 @@
     },
     "Browse add-ons on the TypeWhisper website and install them directly here.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse add-ons on the MeetingWhisper website and install them directly here."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperのウェブサイトでアドオンを探し、ここから直接インストールします。"
+            "value": "MeetingWhisperのウェブサイトでアドオンを探し、ここから直接インストールします。"
           }
         }
       }
@@ -3179,13 +3191,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wähle einen Cloud-synchronisierten Ordner für TypeWhisper."
+            "value": "Wähle einen Cloud-synchronisierten Ordner für MeetingWhisper."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a cloud-synced folder for MeetingWhisper."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper用のクラウド同期フォルダを選択してください。"
+            "value": "MeetingWhisper用のクラウド同期フォルダを選択してください。"
           }
         }
       }
@@ -4465,10 +4483,16 @@
     },
     "Create and manage the workflows TypeWhisper should actively run.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create and manage the workflows MeetingWhisper should actively run."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperがアクティブに実行するワークフローを作成および管理します。"
+            "value": "MeetingWhisperがアクティブに実行するワークフローを作成および管理します。"
           }
         }
       }
@@ -4885,10 +4909,16 @@
     },
     "Define how TypeWhisper should respond in this context.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Define how MeetingWhisper should respond in this context."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このコンテキストでTypeWhisperがどのように応答するかを定義します。"
+            "value": "このコンテキストでMeetingWhisperがどのように応答するかを定義します。"
           }
         }
       }
@@ -6150,10 +6180,16 @@
     },
     "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter any MeetingWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ここにTypeWhisperのキーを入力してください。アプリがSupporter、Individual、Team、Enterpriseのいずれであるかを自動的に検出します。"
+            "value": "ここにMeetingWhisperのキーを入力してください。アプリがSupporter、Individual、Team、Enterpriseのいずれであるかを自動的に検出します。"
           }
         }
       }
@@ -6244,10 +6280,16 @@
     },
     "Everything stays on this page. Pick the plan that matches how you use TypeWhisper.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything stays on this page. Pick the plan that matches how you use MeetingWhisper."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このページ内ですべて完結します。TypeWhisperの用途に合ったプランを選択してください。"
+            "value": "このページ内ですべて完結します。MeetingWhisperの用途に合ったプランを選択してください。"
           }
         }
       }
@@ -6572,10 +6614,16 @@
     },
     "External plugin bundle %@ was kept for an older TypeWhisper line.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "External plugin bundle %@ was kept for an older MeetingWhisper line."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "外部プラグインバンドル %@ は以前の TypeWhisper バージョン用に保持されました。"
+            "value": "外部プラグインバンドル %@ は以前の MeetingWhisper バージョン用に保持されました。"
           }
         }
       }
@@ -7516,10 +7564,16 @@
     },
     "How should TypeWhisper respond?": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How should MeetingWhisper respond?"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはどのように応答すべきですか？"
+            "value": "MeetingWhisperはどのように応答すべきですか？"
           }
         }
       }
@@ -7585,13 +7639,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ich nutze TypeWhisper"
+            "value": "Ich nutze MeetingWhisper"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I use MeetingWhisper"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "私はTypeWhisperを使用しています"
+            "value": "私はMeetingWhisperを使用しています"
           }
         }
       }
@@ -8219,18 +8279,18 @@
         }
       }
     },
-    "Installed at /usr/local/bin/typewhisper": {
+    "Installed at /usr/local/bin/meetingwhisper": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installiert unter /usr/local/bin/typewhisper"
+            "value": "Installiert unter /usr/local/bin/meetingwhisper"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "/usr/local/bin/typewhisperにインストール済み"
+            "value": "/usr/local/bin/meetingwhisperにインストール済み"
           }
         }
       }
@@ -8240,13 +8300,13 @@
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "Installing %1$@ %2$@ will replace an older external plugin bundle (%3$@) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+            "value": "Installing %1$@ %2$@ will replace an older external plugin bundle (%3$@) that was kept for another MeetingWhisper runtime. Older app versions may stop using that bundle after this replacement."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ %@のインストールは、別のTypeWhisperランタイム用に保持されていた古い外部プラグインバンドル(%@)を置き換えます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
+            "value": "%@ %@のインストールは、別のMeetingWhisperランタイム用に保持されていた古い外部プラグインバンドル(%@)を置き換えます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
           }
         }
       }
@@ -8270,10 +8330,16 @@
     },
     "Installing this plugin will replace an older external bundle that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing this plugin will replace an older external bundle that was kept for another MeetingWhisper runtime. Older app versions may stop using that bundle after this replacement."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このプラグインをインストールすると、別のTypeWhisperランタイム用に保持されていた古い外部バンドルが置き換えられます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
+            "value": "このプラグインをインストールすると、別のMeetingWhisperランタイム用に保持されていた古い外部バンドルが置き換えられます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
           }
         }
       }
@@ -9697,10 +9763,16 @@
     },
     "Missing SDK compatibility metadata for this TypeWhisper runtime.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing SDK compatibility metadata for this MeetingWhisper runtime."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このTypeWhisperランタイム用のSDK互換性メタデータがありません。"
+            "value": "このMeetingWhisperランタイム用のSDK互換性メタデータがありません。"
           }
         }
       }
@@ -11298,13 +11370,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Einmalzahlung. Nutze TypeWhisper kommerziell für immer ohne laufende Kosten."
+            "value": "Einmalzahlung. Nutze MeetingWhisper kommerziell für immer ohne laufende Kosten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time payment. Use MeetingWhisper commercially forever with no recurring fees."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "一回払い。TypeWhisperを商業利用で永遠に継続料金なしで使用できます。"
+            "value": "一回払い。MeetingWhisperを商業利用で永遠に継続料金なしで使用できます。"
           }
         }
       }
@@ -11447,10 +11525,16 @@
     },
     "Open TypeWhisper add-ons website": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open MeetingWhisper add-ons website"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperアドオンのウェブサイトを開く"
+            "value": "MeetingWhisperアドオンのウェブサイトを開く"
           }
         }
       }
@@ -14253,13 +14337,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API fuer schnelle Transkription ohne Modell-Kaltstart."
+            "value": "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit MeetingWhispers API fuer schnelle Transkription ohne Modell-Kaltstart."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires the API server to be running. The CLI tool connects to MeetingWhisper's API for fast transcription without model cold starts."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "稼働中のAPIサーバーが必要です。CLIツールはTypeWhispers APIに接続し、モデルのウォームアップなしで高速な文字起こしを実行します。"
+            "value": "稼働中のAPIサーバーが必要です。CLIツールはMeetingWhispers APIに接続し、モデルのウォームアップなしで高速な文字起こしを実行します。"
           }
         }
       }
@@ -14308,6 +14398,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "再起動が必要です"
+          }
+        }
+      }
+    },
+    "Restart TypeWhisper to finish updating.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starte MeetingWhisper neu, um die Aktualisierung abzuschließen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart MeetingWhisper to finish updating."
           }
         }
       }
@@ -14542,10 +14648,16 @@
     },
     "Rules tell TypeWhisper which language, engine, or output format should apply in which context.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules tell MeetingWhisper which language, engine, or output format should apply in which context."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ルールによって、TypeWhisperがどのコンテキストでどの言語、エンジン、または出力形式を適用するかを指定します。"
+            "value": "ルールによって、MeetingWhisperがどのコンテキストでどの言語、エンジン、または出力形式を適用するかを指定します。"
           }
         }
       }
@@ -15870,10 +15982,16 @@
     },
     "Start with TypeWhisper defaults. You can add term packs later.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start with MeetingWhisper defaults. You can add term packs later."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperのデフォルトから開始します。用語パックは後から追加できます。"
+            "value": "MeetingWhisperのデフォルトから開始します。用語パックは後から追加できます。"
           }
         }
       }
@@ -16145,13 +16263,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper unterstützen"
+            "value": "MeetingWhisper unterstützen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Support MeetingWhisper"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperをサポート"
+            "value": "MeetingWhisperをサポート"
           }
         }
       }
@@ -16451,7 +16575,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bringe TypeWhisper deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
+            "value": "Bringe MeetingWhisper deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teach MeetingWhisper your corrections and keep dictionaries and snippets in sync across Macs."
           }
         }
       }
@@ -16774,6 +16904,12 @@
             "value": "Danke für deine Unterstützung! Tritt unserem Discord bei, um deine Supporter-Rolle zu erhalten."
           }
         },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thank you for supporting MeetingWhisper! Join our Discord to claim your supporter role."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -16829,7 +16965,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die Datei ist keine gültige TypeWhisper-Einstellungssicherung."
+            "value": "Die Datei ist keine gültige MeetingWhisper-Einstellungssicherung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is not a valid MeetingWhisper settings backup."
           }
         }
       }
@@ -16881,13 +17023,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die Sprachänderung wird nach einem Neustart von TypeWhisper wirksam."
+            "value": "Die Sprachänderung wird nach einem Neustart von MeetingWhisper wirksam."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The language change will take effect after restarting MeetingWhisper."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "言語の変更はTypeWhisperを再起動した後に反映されます。"
+            "value": "言語の変更はMeetingWhisperを再起動した後に反映されます。"
           }
         }
       }
@@ -17245,20 +17393,32 @@
     },
     "This key could not be matched to a known TypeWhisper entitlement.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This key could not be matched to a known MeetingWhisper entitlement."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このキーを既知のTypeWhisperエンタイトルメントと照合できませんでした。"
+            "value": "このキーを既知のMeetingWhisperエンタイトルメントと照合できませんでした。"
           }
         }
       }
     },
     "This microphone can't be used by TypeWhisper for preview or recording.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This microphone can't be used by MeetingWhisper for preview or recording."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このマイクは、プレビューまたは録音のためにTypeWhisperで使用することはできません。"
+            "value": "このマイクは、プレビューまたは録音のためにMeetingWhisperで使用することはできません。"
           }
         }
       }
@@ -18174,13 +18334,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper"
+            "value": "MeetingWhisper"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper"
+            "value": "MeetingWhisper"
           }
         }
       }
@@ -18192,23 +18358,35 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper Dev"
+            "value": "MeetingWhisper Dev"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper Dev"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper Dev"
+            "value": "MeetingWhisper Dev"
           }
         }
       }
     },
     "TypeWhisper Setup": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper Setup"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper セットアップ"
+            "value": "MeetingWhisper セットアップ"
           }
         }
       }
@@ -18218,7 +18396,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
+            "value": "MeetingWhisper kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper can watch the target text field briefly after direct dictation insertion and learn only confident corrections. Ambiguous edits are skipped."
           }
         }
       }
@@ -18228,7 +18412,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper wird mit jedem Workflow besser"
+            "value": "MeetingWhisper wird mit jedem Workflow besser"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper gets better with every workflow"
           }
         }
       }
@@ -18238,13 +18428,35 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper über Spotlight oder den Programme-Ordner."
+            "value": "MeetingWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte MeetingWhisper über Spotlight oder den Programme-Ordner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper hides both icons until a window opens. To reopen Settings later, launch MeetingWhisper from Spotlight or the Applications folder."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperは、再度ウィンドウを開くまで両方のシンボルを非表示にします。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダーからTypeWhisperを起動してください。"
+            "value": "MeetingWhisperは、再度ウィンドウを開くまで両方のシンボルを非表示にします。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダーからMeetingWhisperを起動してください。"
+          }
+        }
+      }
+    },
+    "TypeWhisper is free and open source under the GPLv3 license. Every feature is unlocked for everyone — there is nothing to buy or activate.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper ist kostenlos und quelloffen unter der GPLv3-Lizenz. Jede Funktion ist für alle freigeschaltet — es gibt nichts zu kaufen oder zu aktivieren."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper is free and open source under the GPLv3 license. Every feature is unlocked for everyone — there is nothing to buy or activate."
           }
         }
       }
@@ -18254,13 +18466,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper ist Open Source unter GPLv3.\nDu darfst die GPL-Version unverändert installieren und ausführen.\nNutze eine kommerzielle Lizenz für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
+            "value": "MeetingWhisper ist Open Source unter GPLv3.\nDu darfst die GPL-Version unverändert installieren und ausführen.\nNutze eine kommerzielle Lizenz für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper is open source under GPLv3.\nYou can install and run the GPL version as-is.\nUse a commercial license for non-GPL terms, procurement, support, or proprietary redistribution."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはGPLv3に基づいてオープンソースです。\nGPLバージョンは変更せずにインストールおよび実行できます。\n商用ライセンスは、非GPL条件、調達、サポート、またはプロプライエタリな配布のために使用してください。"
+            "value": "MeetingWhisperはGPLv3に基づいてオープンソースです。\nGPLバージョンは変更せずにインストールおよび実行できます。\n商用ライセンスは、非GPL条件、調達、サポート、またはプロプライエタリな配布のために使用してください。"
           }
         }
       }
@@ -18270,23 +18488,35 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper ist Open Source unter GPLv3. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
+            "value": "MeetingWhisper ist Open Source unter GPLv3. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper is open source under GPLv3. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはGPLv3に基づいてオープンソースです。開発をサポートしたい場合は、Discordのロールとアプリ内バッジのためにサポート者ライセンスを取得してください。"
+            "value": "MeetingWhisperはGPLv3に基づいてオープンソースです。開発をサポートしたい場合は、Discordのロールとアプリ内バッジのためにサポート者ライセンスを取得してください。"
           }
         }
       }
     },
     "TypeWhisper is ready to help you work faster.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper is ready to help you work faster."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperで作業を効率化する準備が整いました。"
+            "value": "MeetingWhisperで作業を効率化する準備が整いました。"
           }
         }
       }
@@ -18298,13 +18528,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper kann jetzt in jeder App verwendet werden."
+            "value": "MeetingWhisper kann jetzt in jeder App verwendet werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper is ready to use in any app."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperは今やどのアプリでも使用可能です。"
+            "value": "MeetingWhisperは今やどのアプリでも使用可能です。"
           }
         }
       }
@@ -18314,17 +18550,29 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
+            "value": "MeetingWhisper lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper learns confident corrections after direct insertion, without asking for every edit."
           }
         }
       }
     },
     "TypeWhisper needs access to work on your Mac.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper needs access to work on your Mac."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperをMacで動作させるにはアクセス権が必要です。"
+            "value": "MeetingWhisperをMacで動作させるにはアクセス権が必要です。"
           }
         }
       }
@@ -18334,13 +18582,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper bleibt über das Dock-Symbol erreichbar."
+            "value": "MeetingWhisper bleibt über das Dock-Symbol erreichbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper stays accessible via the Dock icon."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはドックのシンボルを通じてアクセス可能です。"
+            "value": "MeetingWhisperはドックのシンボルを通じてアクセス可能です。"
           }
         }
       }
@@ -18350,13 +18604,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
+            "value": "MeetingWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper stays in the menu bar and hides its Dock icon while no window is open."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはメニューバーに表示され、ウィンドウが開いていない間はドックのシンボルを非表示にします。"
+            "value": "MeetingWhisperはメニューバーに表示され、ウィンドウが開いていない間はドックのシンボルを非表示にします。"
           }
         }
       }
@@ -18366,13 +18626,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper-Benutzerdaten sind nicht verfügbar."
+            "value": "MeetingWhisper-Benutzerdaten sind nicht verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper user data is unavailable."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperのユーザー情報が利用できません。"
+            "value": "MeetingWhisperのユーザー情報が利用できません。"
           }
         }
       }
@@ -18382,13 +18648,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper startet automatisch bei der Anmeldung."
+            "value": "MeetingWhisper startet automatisch bei der Anmeldung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper will start automatically when you log in."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ログイン時にTypeWhisperを自動起動します。"
+            "value": "ログイン時にMeetingWhisperを自動起動します。"
           }
         }
       }
@@ -18398,23 +18670,35 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper funktioniert mit Raycast. Starte Diktat und mehr direkt aus deinem Launcher."
+            "value": "MeetingWhisper funktioniert mit Raycast. Starte Diktat und mehr direkt aus deinem Launcher."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper works with Raycast. Start dictation and more directly from your launcher."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはRaycastと連携します。ランチャーから直接音声入力やその他の機能を起動できます。"
+            "value": "MeetingWhisperはRaycastと連携します。ランチャーから直接音声入力やその他の機能を起動できます。"
           }
         }
       }
     },
     "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MeetingWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperはRaycastと連携できます。ランチャーから直接ディクテーションなどを開始できます。APIサーバーが実行中である必要があります。"
+            "value": "MeetingWhisperはRaycastと連携できます。ランチャーから直接ディクテーションなどを開始できます。APIサーバーが実行中である必要があります。"
           }
         }
       }
@@ -19202,13 +19486,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Willkommen bei TypeWhisper"
+            "value": "Willkommen bei MeetingWhisper"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to MeetingWhisper"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperへようこそ"
+            "value": "MeetingWhisperへようこそ"
           }
         }
       }
@@ -19218,13 +19508,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Willkommen bei TypeWhisper!"
+            "value": "Willkommen bei MeetingWhisper!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to MeetingWhisper!"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperへようこそ！"
+            "value": "MeetingWhisperへようこそ！"
           }
         }
       }
@@ -19268,20 +19564,32 @@
     },
     "When context X is detected, TypeWhisper uses behavior Y.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When context X is detected, MeetingWhisper uses behavior Y."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コンテキストXが検出されると、TypeWhisperは動作Yを使用します。"
+            "value": "コンテキストXが検出されると、MeetingWhisperは動作Yを使用します。"
           }
         }
       }
     },
     "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When disabled, MeetingWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "無効にすると、TypeWhisperはインジケーター用のライブテキストリクエストをスキップし、録音を停止した後にのみ最終的なテキスト生成が実行されます。"
+            "value": "無効にすると、MeetingWhisperはインジケーター用のライブテキストリクエストをスキップし、録音を停止した後にのみ最終的なテキスト生成が実行されます。"
           }
         }
       }
@@ -19308,13 +19616,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn aktiviert, nutzt TypeWhisper Regeln der Ziel-App und verfügbaren Cursor-Kontext für intelligenteres Einfügen. Die Ausgabeformat-Einstellungen des Workflows bestimmen weiterhin das eingefügte Format für jeden Workflow."
+            "value": "Wenn aktiviert, nutzt MeetingWhisper Regeln der Ziel-App und verfügbaren Cursor-Kontext für intelligenteres Einfügen. Die Ausgabeformat-Einstellungen des Workflows bestimmen weiterhin das eingefügte Format für jeden Workflow."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, MeetingWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効にすると、TypeWhisper は対象アプリのルールと利用可能なカーソルの文脈を使って、よりスマートに挿入します。ワークフローの出力形式設定は、各ワークフローで挿入する形式を引き続き決定します。"
+            "value": "有効にすると、MeetingWhisper は対象アプリのルールと利用可能なカーソルの文脈を使って、よりスマートに挿入します。ワークフローの出力形式設定は、各ワークフローで挿入する形式を引き続き決定します。"
           }
         }
       }
@@ -19342,13 +19656,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein TypeWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper erneut über Spotlight oder den Programme-Ordner."
+            "value": "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein MeetingWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte MeetingWhisper erneut über Spotlight oder den Programme-Ordner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When hidden, the Dock icon only appears while a MeetingWhisper window is open. To reopen Settings later, launch MeetingWhisper again from Spotlight or the Applications folder."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "非表示にすると、ドックのアイコンはTypeWhisperのウィンドウが開いている間だけ表示されます。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダからTypeWhisperを再び起動してください。"
+            "value": "非表示にすると、ドックのアイコンはMeetingWhisperのウィンドウが開いている間だけ表示されます。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダからMeetingWhisperを再び起動してください。"
           }
         }
       }
@@ -19409,20 +19729,32 @@
     },
     "Whether TypeWhisper should translate the text automatically before inserting it.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whether MeetingWhisper should translate the text automatically before inserting it."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "テキストを挿入する前にTypeWhisperが自動的に翻訳するかどうか。"
+            "value": "テキストを挿入する前にMeetingWhisperが自動的に翻訳するかどうか。"
           }
         }
       }
     },
     "Which engine TypeWhisper should prefer here.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which engine MeetingWhisper should prefer here."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ここでTypeWhisperが優先するエンジン。"
+            "value": "ここでMeetingWhisperが優先するエンジン。"
           }
         }
       }
@@ -19449,10 +19781,16 @@
     },
     "Which language TypeWhisper should expect in this context.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which language MeetingWhisper should expect in this context."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このコンテキストでTypeWhisperが想定する言語。"
+            "value": "このコンテキストでMeetingWhisperが想定する言語。"
           }
         }
       }
@@ -19721,13 +20059,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Du kannst die TypeWhisper-Einstellungen über das Dock-Symbol öffnen."
+            "value": "Du kannst die MeetingWhisper-Einstellungen über das Dock-Symbol öffnen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can access MeetingWhisper settings via the Dock icon."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperの設定はDockのアイコンから開けます。"
+            "value": "MeetingWhisperの設定はDockのアイコンから開けます。"
           }
         }
       }
@@ -21634,13 +21978,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper"
+            "value": "MeetingWhisper"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper"
+            "value": "MeetingWhisper"
           }
         }
       }
@@ -21778,13 +22122,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper erstellt ein Briefing aus früheren Meetings und verknüpften Notizen."
+            "value": "MeetingWhisper erstellt ein Briefing aus früheren Meetings und verknüpften Notizen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper prepares a briefing from your prior meetings and connected notes."
+            "value": "MeetingWhisper prepares a briefing from your prior meetings and connected notes."
           }
         }
       }
@@ -23962,13 +24306,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vor einer geplanten Besprechung mit Teilnehmern erstellt TypeWhisper ein Briefing aus verwandten früheren Besprechungen und Ihrer Wissensdatenbank."
+            "value": "Vor einer geplanten Besprechung mit Teilnehmern erstellt MeetingWhisper ein Briefing aus verwandten früheren Besprechungen und Ihrer Wissensdatenbank."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Before a scheduled meeting with attendees, TypeWhisper prepares a brief from related past meetings and your knowledge base."
+            "value": "Before a scheduled meeting with attendees, MeetingWhisper prepares a brief from related past meetings and your knowledge base."
           }
         }
       }
@@ -30354,13 +30698,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper öffnen"
+            "value": "MeetingWhisper öffnen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open TypeWhisper"
+            "value": "Open MeetingWhisper"
           }
         }
       }
@@ -32122,13 +32466,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Öffnet das TypeWhisper-Fenster automatisch beim Start der App. Die App bleibt immer in der Menüleiste."
+            "value": "Öffnet das MeetingWhisper-Fenster automatisch beim Start der App. Die App bleibt immer in der Menüleiste."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Opens the TypeWhisper window automatically when the app starts. The app always stays in the menu bar."
+            "value": "Opens the MeetingWhisper window automatically when the app starts. The app always stays in the menu bar."
           }
         }
       }
@@ -32571,13 +32915,13 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Diese Notiz wurde möglicherweise außerhalb von TypeWhisper verschoben oder gelöscht."
+            "value": "Diese Notiz wurde möglicherweise außerhalb von MeetingWhisper verschoben oder gelöscht."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This note may have been moved or deleted outside TypeWhisper."
+            "value": "This note may have been moved or deleted outside MeetingWhisper."
           }
         }
       }
@@ -33614,13 +33958,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "© 2024-2026 TypeWhisper Contributors"
+            "value": "© 2024-2026 MeetingWhisper Contributors"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© 2024-2026 MeetingWhisper Contributors"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "© 2024-2026 TypeWhisper Contributors"
+            "value": "© 2024-2026 MeetingWhisper Contributors"
           }
         }
       }

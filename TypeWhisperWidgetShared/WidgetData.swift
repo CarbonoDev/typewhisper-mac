@@ -6,7 +6,7 @@ struct WidgetData: Codable {
     var recentHistory: [WidgetHistoryItem]
     var lastUpdated: Date
 
-    static let groupIdentifier = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String ?? "2D8ALY3LCL.com.typewhisper.mac"
+    static let groupIdentifier = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String ?? "642ZX8KQYX.com.meetingwhisper.mac"
     static let fileName = "widgetData.json"
 
     static var empty: WidgetData {

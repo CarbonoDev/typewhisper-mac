@@ -334,7 +334,7 @@ final class APIHandlers: @unchecked Sendable {
         if resolvedOverride.engineId == nil {
             let hasEngine = await modelManager.selectedProviderId != nil
             guard hasEngine else {
-                return .error(status: 503, message: "No engine selected. Select an engine in TypeWhisper first.")
+                return .error(status: 503, message: "No engine selected. Select an engine in MeetingWhisper first.")
             }
         }
 
@@ -1312,6 +1312,19 @@ final class APIHandlers: @unchecked Sendable {
 
     // MARK: - POST /v1/meetings/import-transcript
 
+    /// One attendee on an import payload. `email` and `is_self` are optional so a bare name list
+    /// still decodes.
+    private struct MeetingImportAttendee: Decodable {
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case name, email
+            case isSelf = "is_self"
+        }
+    }
+
     private struct MeetingImportRequest: Decodable {
         let path: String?
         let text: String?
@@ -1321,9 +1334,12 @@ final class APIHandlers: @unchecked Sendable {
         let tags: [String]?
         let language: String?
         let matchCalendar: Bool?
+        let summary: String?
+        let extended: String?
+        let attendees: [MeetingImportAttendee]?
 
         enum CodingKeys: String, CodingKey {
-            case path, text, title, date, folder, tags, language
+            case path, text, title, date, folder, tags, language, summary, extended, attendees
             case matchCalendar = "match_calendar"
         }
     }
@@ -1338,6 +1354,11 @@ final class APIHandlers: @unchecked Sendable {
         var tags: [String]?
         var language: String?
         var matchCalendar: Bool
+        /// Notes that arrived **with** the transcript (an export that carries the meeting-notes app's
+        /// own summary). Persisted verbatim as `.summary` / `.extended` outputs — JSON-body mode only.
+        var summary: String?
+        var extended: String?
+        var attendees: [Attendee]?
     }
 
     private struct MatchedEventResponse: Encodable {
@@ -1426,6 +1447,21 @@ final class APIHandlers: @unchecked Sendable {
                 )
             }
 
+            // 4) Attendees and pre-existing notes from the export. Attendees are applied **after**
+            //    calendar matching, because `linkToCalendarEvent` replaces the roster wholesale — an
+            //    event with no invitees would otherwise drop the ones parsed out of the export.
+            //    `mergeAttendees` dedupes by identity, so a roster the calendar already supplied is
+            //    not doubled — it only gains the names EventKit could not resolve.
+            if let attendees = inputs.attendees {
+                meetingService.mergeAttendees(attendees, into: meeting)
+            }
+            if let summary = inputs.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
+                meetingService.addOutput(to: meeting, kind: .summary, content: summary)
+            }
+            if let extended = inputs.extended?.trimmingCharacters(in: .whitespacesAndNewlines), !extended.isEmpty {
+                meetingService.addOutput(to: meeting, kind: .extended, content: extended)
+            }
+
             return .json(MeetingImportResponse(
                 id: meeting.id.uuidString,
                 title: meeting.title,
@@ -1468,6 +1504,20 @@ final class APIHandlers: @unchecked Sendable {
             inputs.tags = payload.tags
             inputs.language = payload.language
             inputs.matchCalendar = payload.matchCalendar ?? false
+            inputs.summary = payload.summary
+            inputs.extended = payload.extended
+            if let attendees = payload.attendees {
+                let parsed: [Attendee] = attendees.compactMap { entry in
+                    let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return nil }
+                    return Attendee(
+                        name: name,
+                        email: entry.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                        isSelf: entry.isSelf
+                    )
+                }
+                inputs.attendees = parsed.isEmpty ? nil : parsed
+            }
 
             if let dateString = payload.date?.trimmingCharacters(in: .whitespacesAndNewlines), !dateString.isEmpty {
                 guard let date = Self.parseISO8601Date(dateString) else {

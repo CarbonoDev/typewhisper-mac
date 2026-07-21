@@ -22,7 +22,7 @@
 		</dict>
 	</array>
 	<key>CFBundleName</key>
-	<string>TypeWhisper</string>
+	<string>MeetingWhisper</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
@@ -40,20 +40,23 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
+	<string>MeetingWhisper needs microphone access for speech-to-text transcription.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>TypeWhisper reads your calendar to show upcoming meetings and create meetings from events.</string>
+	<string>MeetingWhisper reads your calendar to show upcoming meetings and create meetings from events.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
+	<string>MeetingWhisper detects the current browser URL to apply language profiles automatically.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>SUFeedURL</key>
-	<string>https://typewhisper.github.io/typewhisper-mac/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
+	<!-- Sparkle auto-update is NEUTRALIZED for the MeetingWhisper fork: the fork must never
+	     update itself into upstream's app. SUFeedURL / SUPublicEDKey are intentionally removed
+	     and automatic checks are disabled until a dedicated fork appcast + EdDSA key exist.
+	     Re-enable by restoring SUFeedURL (fork feed), SUPublicEDKey (fork key), setting
+	     SUEnableAutomaticChecks=true, and flipping startingUpdater:true in TypeWhisperApp. -->
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 	<key>TypeWhisperReleaseChannel</key>
 	<string>stable</string>
 	<key>TypeWhisperDiscordClaimBaseURL</key>

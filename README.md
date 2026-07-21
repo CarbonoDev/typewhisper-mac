@@ -1,4 +1,4 @@
-# TypeWhisper Meetings (working title)
+# MeetingWhisper (working title)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-black.svg)](https://www.apple.com/macos/)
@@ -27,7 +27,7 @@ layer.
 
 A few things to be aware of:
 
-- **Name is a working title.** "TypeWhisper Meetings" is a placeholder pending a naming decision.
+- **Name is a working title.** "MeetingWhisper" is a placeholder pending a naming decision.
   The upstream [TRADEMARK.md](TRADEMARK.md) states that "TypeWhisper" and its logo/app icon are
   trademarks and that forks must be renamed and remove those trademarks before redistribution. If
   this fork is ever distributed, a distinct name (and icon) avoids trademark friction. Until then the
@@ -42,13 +42,13 @@ A few things to be aware of:
 
 ## Meetings
 
-Meetings are the headline of this fork. Open the app from the menu bar (**Open TypeWhisper**) and you
+Meetings are the headline of this fork. Open the app from the menu bar (**Open MeetingWhisper**) and you
 land in a meetings-first main window with a Home feed, a Meetings list, first-party Folders and Tags,
 and a Space vault browser in the sidebar.
 
 ### Calendar-aware capture
 
-- **EventKit calendar integration** — TypeWhisper reads your calendars (with permission) to surface
+- **EventKit calendar integration** — MeetingWhisper reads your calendars (with permission) to surface
   upcoming meetings, link a recording to the event it belongs to, and drive pre-meeting briefs.
 - **Mic + system audio, separate tracks** — Live capture records the microphone and system audio and
   keeps them as separate tracks, which the speaker pass can later split deterministically by channel.
@@ -76,7 +76,7 @@ named participants from the meeting's roster.
 
 ### Briefs, summaries, and analysis
 
-- **Pre-meeting briefs** — Before a meeting, TypeWhisper assembles a brief from summaries of prior
+- **Pre-meeting briefs** — Before a meeting, MeetingWhisper assembles a brief from summaries of prior
   related meetings (shared attendees or the same recurring series) plus relevant passages from your
   Obsidian vault, and makes one LLM call to draft it. Briefs can be generated automatically ahead of
   time (**Settings → Meetings → auto-brief**) or on demand. It degrades gracefully: no vault uses
@@ -106,7 +106,7 @@ named participants from the meeting's roster.
 
 - **Audio or transcript** — Import existing recordings (audio) or transcripts as meetings.
 - **Bulk archives via CLI / HTTP API** — Import a whole archive of old transcripts through the CLI
-  (`typewhisper meetings import-transcript`) or the local HTTP API, optionally driven by an external
+  (`meetingwhisper meetings import-transcript`) or the local HTTP API, optionally driven by an external
   agent, so historical meetings feed prior-meeting briefs. Supported transcript formats include
   Google Meet exports, `Speaker:` turns, timestamped lines, and plain text (`.txt`, `.md`).
 - **Calendar matching** — On import, optionally match a transcript to a historical calendar event by
@@ -176,7 +176,7 @@ changed behavior it is called out.
 
 ### Integration & extensibility
 
-- **Plugin system** — Extend TypeWhisper with custom LLM providers, transcription engines, TTS
+- **Plugin system** — Extend MeetingWhisper with custom LLM providers, transcription engines, TTS
   providers, post-processors, and action plugins. Bundled engines and integrations are reference
   implementations of the same SDK. See
   [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md).
@@ -269,7 +269,7 @@ This fork is not published to Homebrew or as a signed release. Build it from sou
 
 ## Gemma 4 Support
 
-TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on
+MeetingWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on
 Apple Silicon. In the current verified path, Gemma 4 support is limited to the dense `E2B 4-bit` and
 `E4B 4-bit` variants; larger or unverified variants stay visible in the UI but remain disabled.
 
@@ -361,7 +361,7 @@ Optional parameters:
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 - `apply_corrections` - Boolean, default `true`. Set to `false` to return raw transcription text without Dictionary Corrections. For raw body uploads, send `x-apply-corrections: false`.
 
-Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running TypeWhisper app instead of uploading the file bytes.
+Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running MeetingWhisper app instead of uploading the file bytes.
 
 ### List Models
 
@@ -447,11 +447,11 @@ curl http://localhost:8978/v1/dictation/status
 curl "http://localhost:8978/v1/dictation/transcription?id=<uuid>"
 ```
 
-Dictation control records microphone audio for system-wide insertion. A completed dictation session returns text that TypeWhisper can paste back into the active app.
+Dictation control records microphone audio for system-wide insertion. A completed dictation session returns text that MeetingWhisper can paste back into the active app.
 
 ### Recorder Control
 
-Recorder control uses the same recorder path as the TypeWhisper UI, including microphone capture, optional system audio capture, mixing, finalization, and final transcription. Use it for automations that need a saved recording file or meeting/system-audio transcription without auto-pasting into another app.
+Recorder control uses the same recorder path as the MeetingWhisper UI, including microphone capture, optional system audio capture, mixing, finalization, and final transcription. Use it for automations that need a saved recording file or meeting/system-audio transcription without auto-pasting into another app.
 
 ```bash
 # Start recorder with microphone and system audio
@@ -468,8 +468,8 @@ curl "http://localhost:8978/v1/recorder/session?id=<uuid>"
 ```
 
 `POST /v1/recorder/start` accepts optional query flags:
-- `mic` - `true`, `false`, `1`, or `0`. If omitted, TypeWhisper uses the current recorder microphone setting.
-- `system_audio` - `true`, `false`, `1`, or `0`. If omitted, TypeWhisper uses the current recorder system-audio setting.
+- `mic` - `true`, `false`, `1`, or `0`. If omitted, MeetingWhisper uses the current recorder microphone setting.
+- `system_audio` - `true`, `false`, `1`, or `0`. If omitted, MeetingWhisper uses the current recorder system-audio setting.
 
 At least one source must be enabled. If both resolved sources are disabled, the API returns `400 Bad Request`.
 
@@ -547,7 +547,7 @@ parameters. Optional fields: `title`, `date` (ISO 8601), `folder`, `tags[]`, `la
 `match_calendar`. Supported transcript formats are `.txt`, `.text`, `.md`, and `.markdown` (Google
 Meet exports, `Speaker:` turns, timestamped lines, and plain text).
 
-When `match_calendar` is `true` and a `date` is present, TypeWhisper searches historical calendar
+When `match_calendar` is `true` and a `date` is present, MeetingWhisper searches historical calendar
 events near that date and, if the best candidate clears a confidence threshold, links the meeting to
 it automatically. The response reports the matched event or `null`:
 
@@ -597,21 +597,21 @@ Behavior:
 
 ## CLI Tool
 
-TypeWhisper includes a command-line tool for shell-friendly transcription and meeting import. It is
+MeetingWhisper includes a command-line tool for shell-friendly transcription and meeting import. It is
 part of the advanced automation surface and connects to the running local API server.
 
 ### Installation
 
-Install via Settings > Advanced > CLI Tool > Install. This places the `typewhisper` binary in `/usr/local/bin`.
+Install via Settings > Advanced > CLI Tool > Install. This places the `meetingwhisper` binary in `/usr/local/bin`.
 
 ### Commands
 
 ```bash
-typewhisper status              # Show server status
-typewhisper models              # List available models
-typewhisper transcribe file.wav # Transcribe an audio file
-typewhisper meetings import-transcript notes.txt  # Import a transcript as a meeting
-typewhisper meetings list       # List meetings
+meetingwhisper status              # Show server status
+meetingwhisper models              # List available models
+meetingwhisper transcribe file.wav # Transcribe an audio file
+meetingwhisper meetings import-transcript notes.txt  # Import a transcript as a meeting
+meetingwhisper meetings list       # List meetings
 ```
 
 ### Options
@@ -634,36 +634,36 @@ Meeting options for `meetings import-transcript`: `--title`, `--date <iso8601>`,
 
 ```bash
 # Transcribe with language and JSON output
-typewhisper transcribe recording.wav --language de --json
+meetingwhisper transcribe recording.wav --language de --json
 
 # Restrict auto-detection to a shortlist
-typewhisper transcribe recording.wav --language-hint de --language-hint en
+meetingwhisper transcribe recording.wav --language-hint de --language-hint en
 
 # Pipe audio from stdin
-cat audio.wav | typewhisper transcribe -
+cat audio.wav | meetingwhisper transcribe -
 
 # Use in a script
-typewhisper transcribe meeting.m4a --json | jq -r '.text'
+meetingwhisper transcribe meeting.m4a --json | jq -r '.text'
 
 # Import an old transcript and auto-link a matching calendar event
-typewhisper meetings import-transcript 2026-01-05-sync.txt --date 2026-01-05 --match-calendar
+meetingwhisper meetings import-transcript 2026-01-05-sync.txt --date 2026-01-05 --match-calendar
 
 # Import into a folder with tags, then list that folder
-typewhisper meetings import-transcript call.txt --folder Clients/Acme --tags sales,q1
-typewhisper meetings list --folder Clients/Acme --json
+meetingwhisper meetings import-transcript call.txt --folder Clients/Acme --tags sales,q1
+meetingwhisper meetings list --folder Clients/Acme --json
 ```
 
 The CLI requires the API server to be running (Settings > Advanced).
 
-Local file paths are handed to the running TypeWhisper app directly, so large files do not need to
-fit inside an HTTP upload body. Stdin usage (`typewhisper transcribe -`) still uses the regular
+Local file paths are handed to the running MeetingWhisper app directly, so large files do not need to
+fit inside an HTTP upload body. Stdin usage (`meetingwhisper transcribe -`) still uses the regular
 `/v1/transcribe` upload endpoint and is limited to 256 MiB.
 
 ## Plugins
 
-TypeWhisper supports plugins for adding custom LLM providers, transcription engines, TTS providers,
+MeetingWhisper supports plugins for adding custom LLM providers, transcription engines, TTS providers,
 post-processors, and action plugins. Plugins are macOS `.bundle` files placed in
-`~/Library/Application Support/TypeWhisper/Plugins/`.
+`~/Library/Application Support/MeetingWhisper/Plugins/`.
 
 Bundled engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral,
 Supertonic, Groq, OpenAI, xAI/Grok, OpenAI Compatible, Gemini, Linear, Webhook, and more) are

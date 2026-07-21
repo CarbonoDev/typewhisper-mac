@@ -442,7 +442,7 @@ struct AdvancedSettingsView: View {
                         .font(.caption2)
                         .accessibilityHidden(true)
                     if cliInstalled {
-                        Text(String(localized: "Installed at /usr/local/bin/typewhisper"))
+                        Text(String(localized: "Installed at /usr/local/bin/meetingwhisper"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     } else {
@@ -725,10 +725,10 @@ struct AdvancedSettingsView: View {
 
     // MARK: - CLI Installation
 
-    private static let symlinkPath = "/usr/local/bin/typewhisper"
+    private static let symlinkPath = "/usr/local/bin/meetingwhisper"
 
     private var cliBinaryPath: String {
-        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/typewhisper-cli").path
+        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/meetingwhisper-cli").path
     }
 
     private func checkCLIInstallation() {

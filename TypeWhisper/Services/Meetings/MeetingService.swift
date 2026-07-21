@@ -217,6 +217,61 @@ final class MeetingService: ObservableObject {
         return true
     }
 
+    /// Merge a roster parsed out of an import into a meeting's existing one (M2 attendee choke point,
+    /// plan D7), in a **single** `save()`. Unlike `addAttendee`, a matching entry is not simply left
+    /// alone: EventKit hands us invitees whose `name` is just their address, so an incoming entry with
+    /// a real name upgrades that placeholder (and fills in an unknown `isSelf`). Matching is by
+    /// `Attendee.id` (email when present, else name), case-insensitively — the same identity the
+    /// participant directory dedupes on. Returns whether the roster changed.
+    @discardableResult
+    func mergeAttendees(_ attendees: [Attendee], into meeting: Meeting) -> Bool {
+        var roster = meeting.attendees
+        var ingested: [Attendee] = []
+
+        for attendee in attendees {
+            let name = attendee.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedEmail = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let email = (trimmedEmail?.isEmpty == false) ? trimmedEmail : nil
+            let cleaned = Attendee(name: name, email: email, isSelf: attendee.isSelf)
+            guard !cleaned.name.isEmpty || cleaned.email != nil else { continue }
+
+            guard let index = roster.firstIndex(where: {
+                $0.id.compare(cleaned.id, options: .caseInsensitive) == .orderedSame
+            }) else {
+                roster.append(cleaned)
+                ingested.append(cleaned)
+                continue
+            }
+
+            var existing = roster[index]
+            var changed = false
+            // A placeholder name is the address itself; a parsed one is the human's actual name.
+            if existing.name.contains("@"), !cleaned.name.isEmpty, !cleaned.name.contains("@") {
+                existing.name = cleaned.name
+                changed = true
+            }
+            if existing.email == nil, let email = cleaned.email {
+                existing.email = email
+                changed = true
+            }
+            if existing.isSelf == nil, let isSelf = cleaned.isSelf {
+                existing.isSelf = isSelf
+                changed = true
+            }
+            guard changed else { continue }
+            roster[index] = existing
+            ingested.append(existing)
+        }
+
+        guard !ingested.isEmpty else { return false }
+        meeting.attendees = roster
+        meeting.updatedAt = Date()
+        save()
+        fetchMeetings()
+        onAttendeesIngested?(ingested)
+        return true
+    }
+
     /// Remove an attendee from a meeting's roster (M2 attendee choke point, plan D7 / Part F #6). Matched
     /// by `Attendee.id`. This **never** deletes the backing `Person` — the directory is decoupled from a
     /// single meeting's roster (directory deletion is a separate settings action). Single-writer on the

@@ -55,21 +55,21 @@ enum AppConstants {
 
     static let appSupportDirectoryName: String = {
         #if DEBUG
-        return "TypeWhisper-Dev"
+        return "MeetingWhisper-Dev"
         #else
-        return "TypeWhisper"
+        return "MeetingWhisper"
         #endif
     }()
 
     static let keychainServicePrefix: String = {
         #if DEBUG
-        return "com.typewhisper.mac.dev.apikey."
+        return "com.meetingwhisper.mac.dev.apikey."
         #else
-        return "com.typewhisper.mac.apikey."
+        return "com.meetingwhisper.mac.apikey."
         #endif
     }()
 
-    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.meetingwhisper.mac"
 
     static var appSupportDirectory: URL {
         if let override = testAppSupportDirectoryOverride {

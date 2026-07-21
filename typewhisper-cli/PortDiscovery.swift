@@ -26,7 +26,9 @@ enum PortDiscovery {
     }
 
     private static func apiDirectory(dev: Bool, applicationSupportDirectory: URL?) -> URL {
-        let dirName = dev ? "TypeWhisper-Dev" : "TypeWhisper"
+        // Must match AppConstants.appSupportDirectoryName in the app, or the CLI cannot find the
+        // running app's API-discovery token file.
+        let dirName = dev ? "MeetingWhisper-Dev" : "MeetingWhisper"
         let baseDirectory = applicationSupportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return baseDirectory
             .appendingPathComponent(dirName)

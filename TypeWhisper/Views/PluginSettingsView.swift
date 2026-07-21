@@ -763,8 +763,8 @@ struct PluginSettingsView: View {
             discoverHeroContent
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
-        .accessibilityLabel(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
+        .help(localizedAppText("Open MeetingWhisper add-ons website", de: "MeetingWhisper-Add-ons-Webseite öffnen", ja: "MeetingWhisperアドオンのウェブサイトを開く"))
+        .accessibilityLabel(localizedAppText("Open MeetingWhisper add-ons website", de: "MeetingWhisper-Add-ons-Webseite öffnen", ja: "MeetingWhisperアドオンのウェブサイトを開く"))
     }
 
     private var discoverHeroContent: some View {
@@ -814,8 +814,9 @@ struct PluginSettingsView: View {
                 .foregroundStyle(.primary)
 
             Text(localizedAppText(
-                "Browse add-ons on the TypeWhisper website and install them directly here.",
-                de: "Durchsuche Add-ons auf der TypeWhisper-Webseite und installiere sie direkt hier."
+                "Browse add-ons on the MeetingWhisper website and install them directly here.",
+                de: "Durchsuche Add-ons auf der MeetingWhisper-Webseite und installiere sie direkt hier.",
+                ja: "MeetingWhisperのウェブサイトでアドオンを探し、ここから直接インストールします。"
             ))
             .font(.caption)
             .foregroundStyle(.secondary)

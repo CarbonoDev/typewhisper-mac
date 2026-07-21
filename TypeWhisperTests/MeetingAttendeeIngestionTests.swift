@@ -40,6 +40,36 @@ final class MeetingAttendeeIngestionTests: XCTestCase {
         XCTAssertEqual(directory.persons.count, 1)
     }
 
+    func testMergeAttendeesUpgradesAnEmailOnlyPlaceholderName() throws {
+        let (meetingService, directory, dir) = try makeWired()
+        defer { TestSupport.remove(dir) }
+        let meeting = meetingService.createMeeting(title: "Weekly", source: .adHoc)
+        // What EventKit hands over when an invitee has no resolved display name.
+        meetingService.addAttendee(Attendee(name: "alice@x.com", email: "alice@x.com"), to: meeting)
+
+        XCTAssertTrue(meetingService.mergeAttendees(
+            [Attendee(name: "Alice Adams", email: "ALICE@x.com", isSelf: true), Attendee(name: "Bob", email: "bob@x.com")],
+            into: meeting
+        ))
+        XCTAssertEqual(meeting.attendees.map(\.name), ["Alice Adams", "Bob"])
+        XCTAssertEqual(meeting.attendees.first?.email, "alice@x.com", "the placeholder's own email is kept")
+        XCTAssertEqual(meeting.attendees.first?.isSelf, true)
+        XCTAssertEqual(directory.persons.count, 2)
+    }
+
+    func testMergeAttendeesLeavesARealNameAlone() throws {
+        let (meetingService, _, dir) = try makeWired()
+        defer { TestSupport.remove(dir) }
+        let meeting = meetingService.createMeeting(title: "Weekly", source: .adHoc)
+        meetingService.addAttendee(Attendee(name: "Alice Adams", email: "alice@x.com"), to: meeting)
+
+        XCTAssertFalse(
+            meetingService.mergeAttendees([Attendee(name: "Alice", email: "alice@x.com")], into: meeting),
+            "a roster that already names the person is not rewritten by an import"
+        )
+        XCTAssertEqual(meeting.attendees.map(\.name), ["Alice Adams"])
+    }
+
     func testRemoveAttendeeKeepsPerson() throws {
         let (meetingService, directory, dir) = try makeWired()
         defer { TestSupport.remove(dir) }

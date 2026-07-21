@@ -4,11 +4,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data_path="$repo_root/.build/DerivedData-Dev"
 install_dir="$HOME/Applications"
-installed_app="$install_dir/TypeWhisper-Dev.app"
+installed_app="$install_dir/MeetingWhisper-Dev.app"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 log() {
-  printf '[typewhisper-dev-build] %s\n' "$*"
+  printf '[meetingwhisper-dev-build] %s\n' "$*"
 }
 
 quit_running_typewhisper() {
@@ -18,8 +18,8 @@ quit_running_typewhisper() {
     return
   fi
 
-  log "quitting running TypeWhisper-Dev before rebuilding"
-  osascript -e 'tell application id "com.typewhisper.mac.dev" to quit' >/dev/null 2>&1 || true
+  log "quitting running MeetingWhisper-Dev before rebuilding"
+  osascript -e 'tell application id "com.meetingwhisper.mac.dev" to quit' >/dev/null 2>&1 || true
 
   for _ in {1..20}; do
     if [[ -z "$(running_dev_typewhisper_pids)" ]]; then
@@ -87,7 +87,7 @@ write_build_marker() {
   built_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
   {
-    printf 'app=TypeWhisper-Dev\n'
+    printf 'app=MeetingWhisper-Dev\n'
     printf 'repo=%s\n' "$repo_root"
     printf 'branch=%s\n' "${branch:-unknown}"
     printf 'commit=%s\n' "${commit:-unknown}"

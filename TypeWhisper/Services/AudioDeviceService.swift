@@ -21,8 +21,9 @@ enum AudioInputDeviceCompatibilityIssue: Sendable, Equatable {
         switch self {
         case .cannotSetDevice, .invalidInputFormat, .engineStartFailed:
             return localizedAppText(
-                "This microphone can't be used by TypeWhisper for preview or recording.",
-                de: "Dieses Mikrofon kann von TypeWhisper nicht für Test oder Aufnahme verwendet werden."
+                "This microphone can't be used by MeetingWhisper for preview or recording.",
+                de: "Dieses Mikrofon kann von MeetingWhisper nicht für Test oder Aufnahme verwendet werden.",
+                ja: "このマイクは、プレビューまたは録音のためにMeetingWhisperで使用することはできません。"
             )
         }
     }

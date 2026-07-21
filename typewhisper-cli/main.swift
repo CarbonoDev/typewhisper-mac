@@ -3,7 +3,10 @@ import Foundation
 let args = CommandLine.arguments.dropFirst()
 
 var portOverride: UInt16?
-var apiTokenOverride = ProcessInfo.processInfo.environment["TYPEWHISPER_API_TOKEN"]
+// MeetingWhisper rename: prefer the new env var, fall back to the legacy one so existing user
+// scripts keep working for one transition period.
+var apiTokenOverride = ProcessInfo.processInfo.environment["MEETINGWHISPER_API_TOKEN"]
+    ?? ProcessInfo.processInfo.environment["TYPEWHISPER_API_TOKEN"]
 var jsonOutput = false
 var devMode = false
 var command: String?
@@ -260,7 +263,7 @@ func printError(_ message: String) {
 
 func printUsage() {
     let usage = """
-        Usage: typewhisper <command> [options]
+        Usage: meetingwhisper <command> [options]
 
         Commands:
           transcribe <file>    Transcribe an audio file (or - for stdin)
@@ -272,7 +275,7 @@ func printUsage() {
         Global options:
           --port <N>           Server port (default: auto-detect)
           --api-token <TOKEN>   API bearer token (default: auto-detect)
-          --dev                Connect to TypeWhisper Dev instance
+          --dev                Connect to MeetingWhisper Dev instance
           --json               Output as JSON
           --help, -h           Show help
           --version            Show version
@@ -302,22 +305,22 @@ func printUsage() {
           --to <iso8601>       Only meetings on/before this date
 
         Examples:
-          typewhisper status
-          typewhisper transcribe recording.wav
-          typewhisper transcribe recording.wav --language de --json
-          typewhisper transcribe recording.wav --language-hint de --language-hint en
-          typewhisper transcribe recording.wav --model whisper-large-v3-turbo
-          typewhisper transcribe recording.wav --engine groq
-          typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
-          typewhisper transcribe - < audio.wav
-          cat audio.wav | typewhisper transcribe -
-          typewhisper meetings import-transcript notes.txt --date 2026-01-05 --match-calendar
-          typewhisper meetings import-transcript call.txt --folder Clients/Acme --tags sales,q1
-          typewhisper meetings list --folder Clients/Acme --json
+          meetingwhisper status
+          meetingwhisper transcribe recording.wav
+          meetingwhisper transcribe recording.wav --language de --json
+          meetingwhisper transcribe recording.wav --language-hint de --language-hint en
+          meetingwhisper transcribe recording.wav --model whisper-large-v3-turbo
+          meetingwhisper transcribe recording.wav --engine groq
+          meetingwhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
+          meetingwhisper transcribe - < audio.wav
+          cat audio.wav | meetingwhisper transcribe -
+          meetingwhisper meetings import-transcript notes.txt --date 2026-01-05 --match-calendar
+          meetingwhisper meetings import-transcript call.txt --folder Clients/Acme --tags sales,q1
+          meetingwhisper meetings list --folder Clients/Acme --json
         """
     print(usage)
 }
 
 func printVersion() {
-    print("typewhisper 0.9.2")
+    print("meetingwhisper 0.9.2")
 }

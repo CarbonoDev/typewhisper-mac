@@ -32,7 +32,7 @@ final class CLISupportTests: XCTestCase {
         let applicationSupportRoot = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(applicationSupportRoot) }
 
-        let appDirectory = applicationSupportRoot.appendingPathComponent("TypeWhisper", isDirectory: true)
+        let appDirectory = applicationSupportRoot.appendingPathComponent("MeetingWhisper", isDirectory: true)
         try FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)
         try "9911".write(to: appDirectory.appendingPathComponent("api-port"), atomically: true, encoding: .utf8)
 
@@ -44,7 +44,7 @@ final class CLISupportTests: XCTestCase {
         let applicationSupportRoot = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(applicationSupportRoot) }
 
-        let appDirectory = applicationSupportRoot.appendingPathComponent("TypeWhisper", isDirectory: true)
+        let appDirectory = applicationSupportRoot.appendingPathComponent("MeetingWhisper", isDirectory: true)
         try FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)
         try "9911".write(to: appDirectory.appendingPathComponent("api-port"), atomically: true, encoding: .utf8)
         try """

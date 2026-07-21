@@ -709,8 +709,8 @@ enum IndicatorFullscreenSuppressionPolicy {
             return true
         }
 
-        return bundleIdentifier == "com.typewhisper.mac"
-            || bundleIdentifier == "com.typewhisper.mac.dev"
+        return bundleIdentifier == "com.meetingwhisper.mac"
+            || bundleIdentifier == "com.meetingwhisper.mac.dev"
     }
 
     private static func isSafariBundleIdentifier(_ bundleIdentifier: String?) -> Bool {

@@ -87,7 +87,7 @@ struct BackupImportSheet: View {
                     Text(localizedAppText("Import Settings", de: "Einstellungen importieren"))
                         .font(.headline)
                     Text(backup == nil
-                         ? localizedAppText("Choose a TypeWhisper settings backup file.", de: "Wähle eine TypeWhisper-Sicherungsdatei aus.")
+                         ? localizedAppText("Choose a MeetingWhisper settings backup file.", de: "Wähle eine MeetingWhisper-Sicherungsdatei aus.")
                          : localizedAppText("Choose what to restore from this file.", de: "Wähle aus, was aus dieser Datei wiederhergestellt werden soll."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
