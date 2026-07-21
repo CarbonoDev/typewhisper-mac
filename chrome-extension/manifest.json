@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "TypeWhisper Meet Bridge",
+  "version": "0.1.0",
+  "description": "Streams speaker-attributed Google Meet captions into the TypeWhisper meetings app.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["src/selectors.js", "src/stabilizer.js", "src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "TypeWhisper Meet Bridge",
+    "default_popup": "src/popup.html"
+  }
+}

@@ -58,4 +58,10 @@ enum MeetingSegmentSource: String, CaseIterable, Codable, Sendable {
     case liveCapture
     case importedAudio
     case importedTranscript
+    /// Speaker-attributed captions pushed in live by an external conferencing client (the Google
+    /// Meet browser extension). Kept distinct from `.liveCapture` because the two can coexist in one
+    /// meeting: captions carry authoritative *speaker* names while our own audio capture carries
+    /// authoritative *text*, and `replaceSegments(of:source:)` scopes replacement by source — a final
+    /// re-transcription of the audio must never delete the caption-derived speaker timeline.
+    case liveCaptions
 }

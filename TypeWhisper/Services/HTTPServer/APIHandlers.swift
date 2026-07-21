@@ -70,6 +70,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
         router.register("POST", "/v1/meetings/import-transcript", handler: handleImportMeetingTranscript)
+        router.register("POST", "/v1/meetings/live", handler: handleStartLiveMeeting)
+        router.register("POST", "/v1/meetings/live/{id}/segments", handler: handleAppendLiveSegments)
+        router.register("POST", "/v1/meetings/live/{id}/end", handler: handleEndLiveMeeting)
         router.register("GET", "/v1/meetings", handler: handleListMeetings)
         router.register("GET", "/v1/meetings/{id}", handler: handleGetMeeting)
     }
@@ -1509,6 +1512,243 @@ final class APIHandlers: @unchecked Sendable {
     private enum MeetingImportInputsResolution {
         case use(MeetingImportInputs)
         case reject(HTTPResponse)
+    }
+
+    // MARK: - Live meeting sessions (browser caption bridge)
+
+    /// Ceiling on one `POST .../segments` batch. The Meet extension flushes every few seconds, so a
+    /// healthy batch is single digits; anything near this bound is a malfunctioning or hostile client
+    /// and is rejected outright rather than silently truncated.
+    private static let maxLiveSegmentsPerBatch = 500
+
+    /// Ceiling on a single caption line. Meet caption lines are a sentence or two; this only exists so
+    /// a runaway client cannot write unbounded rows into the store.
+    private static let maxLiveSegmentTextLength = 8_000
+
+    private struct LiveSessionAttendee: Decodable {
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case name, email
+            case isSelf = "is_self"
+        }
+    }
+
+    private struct LiveSessionStartRequest: Decodable {
+        let sessionKey: String?
+        let title: String?
+        let startedAt: String?
+        let attendees: [LiveSessionAttendee]?
+
+        enum CodingKeys: String, CodingKey {
+            case title, attendees
+            case sessionKey = "session_key"
+            case startedAt = "started_at"
+        }
+    }
+
+    private struct LiveSegmentPayload: Decodable {
+        let text: String
+        let speaker: String?
+        let start: Double
+        let end: Double
+        let confidence: Double?
+    }
+
+    private struct LiveSegmentsRequest: Decodable {
+        let segments: [LiveSegmentPayload]
+    }
+
+    private struct LiveSessionEndRequest: Decodable {
+        let endedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case endedAt = "ended_at"
+        }
+    }
+
+    /// `POST /v1/meetings/live` — create or resume the meeting backing an external live session.
+    ///
+    /// Idempotent on `session_key` (the Meet call code): an MV3 service worker that Chrome evicts
+    /// mid-call, a page reload, or a second tab joined to the same call all resume the same meeting
+    /// instead of forking duplicates. Only a *non-completed* meeting is resumed, so rejoining a call
+    /// that was already ended starts a fresh one rather than reopening yesterday's.
+    private func handleStartLiveMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty,
+              let payload = try? JSONDecoder().decode(LiveSessionStartRequest.self, from: request.body) else {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+        guard let sessionKey = payload.sessionKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
+            return .error(status: 400, message: "Missing 'session_key'")
+        }
+        guard sessionKey.count <= 256 else {
+            return .error(status: 400, message: "'session_key' is too long")
+        }
+
+        var startDate: Date?
+        if let startedAt = payload.startedAt?.trimmingCharacters(in: .whitespacesAndNewlines), !startedAt.isEmpty {
+            guard let parsed = Self.parseISO8601Date(startedAt) else {
+                return .error(status: 400, message: "Invalid 'started_at' value")
+            }
+            startDate = parsed
+        }
+
+        let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? String(localized: "meetings.calendar.untitledEvent")
+        let attendees: [Attendee] = (payload.attendees ?? []).compactMap { entry in
+            let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            return Attendee(
+                name: name,
+                email: entry.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                isSelf: entry.isSelf
+            )
+        }
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            if let existing = meetingService.meetings.first(where: {
+                $0.externalSessionKey == sessionKey && $0.state != .completed
+            }) {
+                return .json(LiveSessionResponse(
+                    id: existing.id.uuidString,
+                    created: false,
+                    title: existing.title,
+                    state: existing.state.rawValue,
+                    segment_count: existing.segments.count
+                ))
+            }
+
+            let meeting = meetingService.createMeeting(
+                title: title,
+                source: .adHoc,
+                state: .live,
+                startDate: startDate ?? Date(),
+                attendees: attendees
+            )
+            meetingService.setExternalSessionKey(sessionKey, for: meeting)
+            apiLogger.info("Started live meeting session for key \(sessionKey, privacy: .public)")
+            return .json(LiveSessionResponse(
+                id: meeting.id.uuidString,
+                created: true,
+                title: meeting.title,
+                state: meeting.state.rawValue,
+                segment_count: 0
+            ))
+        }
+    }
+
+    /// `POST /v1/meetings/live/{id}/segments` — append a batch of speaker-attributed caption lines.
+    ///
+    /// Segments land with source `.liveCaptions` so a later re-transcription of our own audio (which
+    /// replaces `.liveCapture` rows) can never destroy the caption-derived speaker timeline.
+    /// `start`/`end` are seconds relative to the meeting start, as measured by the caller.
+    private func handleAppendLiveSegments(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+        guard !request.body.isEmpty,
+              let payload = try? JSONDecoder().decode(LiveSegmentsRequest.self, from: request.body) else {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+        guard !payload.segments.isEmpty else {
+            return .error(status: 400, message: "Missing 'segments'")
+        }
+        guard payload.segments.count <= Self.maxLiveSegmentsPerBatch else {
+            return .error(
+                status: 413,
+                message: "Too many segments in one batch (max \(Self.maxLiveSegmentsPerBatch))"
+            )
+        }
+
+        // Drop blank lines rather than failing the batch: the caption stabilizer can legitimately
+        // emit an empty tail when a speaker's turn is revised away mid-flush.
+        let segments: [TranscriptionSegment] = payload.segments.compactMap { entry in
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, text.count <= Self.maxLiveSegmentTextLength else { return nil }
+            guard entry.start.isFinite, entry.end.isFinite else { return nil }
+            let start = max(0, entry.start)
+            return TranscriptionSegment(
+                text: text,
+                start: start,
+                end: max(start, entry.end),
+                speakerLabel: entry.speaker?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                speakerConfidence: entry.confidence
+            )
+        }
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+            if !segments.isEmpty {
+                meetingService.appendStableSegments(segments, source: .liveCaptions, to: meeting)
+            }
+            return .json(LiveAppendResponse(
+                id: meeting.id.uuidString,
+                appended: segments.count,
+                segment_count: meeting.segments.count
+            ))
+        }
+    }
+
+    /// `POST /v1/meetings/live/{id}/end` — close out an external live session.
+    ///
+    /// Deliberately inert beyond the state transition: it does not kick off summarization, so leaving
+    /// a call never spends tokens without the user asking. The meeting simply becomes a normal
+    /// completed meeting the user can summarize, export, or identify speakers on.
+    private func handleEndLiveMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+
+        var endDate: Date?
+        if !request.body.isEmpty {
+            guard let payload = try? JSONDecoder().decode(LiveSessionEndRequest.self, from: request.body) else {
+                return .error(status: 400, message: "Invalid JSON body")
+            }
+            if let endedAt = payload.endedAt?.trimmingCharacters(in: .whitespacesAndNewlines), !endedAt.isEmpty {
+                guard let parsed = Self.parseISO8601Date(endedAt) else {
+                    return .error(status: 400, message: "Invalid 'ended_at' value")
+                }
+                endDate = parsed
+            }
+        }
+
+        let meetingService = self.meetingService
+        let resolvedEnd = endDate ?? Date()
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+            meeting.endDate = resolvedEnd
+            meeting.state = .completed
+            meetingService.update(meeting)
+            return .json(LiveSessionResponse(
+                id: meeting.id.uuidString,
+                created: false,
+                title: meeting.title,
+                state: meeting.state.rawValue,
+                segment_count: meeting.segments.count
+            ))
+        }
+    }
+
+    private struct LiveSessionResponse: Encodable {
+        let id: String
+        let created: Bool
+        let title: String
+        let state: String
+        let segment_count: Int
+    }
+
+    private struct LiveAppendResponse: Encodable {
+        let id: String
+        let appended: Int
+        let segment_count: Int
     }
 
     // MARK: - GET /v1/meetings
