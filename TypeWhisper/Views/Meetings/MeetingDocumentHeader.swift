@@ -27,6 +27,7 @@ struct MeetingDocumentHeader: View {
     @State private var activeEditor: EditorPopover?
     @State private var isPresentingParticipants = false
     @State private var isPresentingOverride = false
+    @State private var isConfirmingDelete = false
     /// Inline title-edit draft (folder-description idiom): committed on submit and on focus loss, so
     /// a rename never touches calendar linkage and never fetch-thrashes on every keystroke.
     @State private var titleDraft = ""
@@ -309,6 +310,12 @@ struct MeetingDocumentHeader: View {
                     Label(String(localized: "meetingdoc.finalPass.disclosure"), systemImage: "gearshape")
                 }
             }
+            Divider()
+            Button(role: .destructive) {
+                isConfirmingDelete = true
+            } label: {
+                Label(String(localized: "meetings.menu.delete"), systemImage: "trash")
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.title3)
@@ -318,6 +325,21 @@ struct MeetingDocumentHeader: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .confirmationDialog(
+            String(localized: "meetings.menu.delete.title"),
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "meetings.menu.delete"), role: .destructive) {
+                // Leave the document before its meeting disappears: the row/detail views tolerate
+                // one render on a deleted model (isDeletedFromStore), but there is no reason to
+                // keep an empty document open.
+                MainWindowCoordinator.shared.show(.meetings)
+                viewModel.deleteMeeting(meeting)
+            }
+        } message: {
+            Text(String(format: String(localized: "meetings.menu.delete.message"), meeting.title))
+        }
         .popover(item: $activeEditor, arrowEdge: .bottom) { editor in
             switch editor {
             case .language:
