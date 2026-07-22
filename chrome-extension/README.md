@@ -25,9 +25,30 @@ diarization is skipped entirely. No change to the ladder was needed.
    API token if you set one.
 2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select this directory.
 3. Open the extension's options and set the API URL and token, then hit **Test connection**.
-4. Join a Meet call and **turn captions on** (the CC button). Nothing is captured without them.
+4. Join a Meet call. Captions are required for capture; by default the extension **turns them on
+   for you** at call start (see Options below).
 
 The extension only ever talks to a loopback address; `config.js` hard-rejects any other host.
+
+## Options
+
+- **Capture captions on Google Meet** — master switch; off means nothing is observed or sent.
+- **Turn on captions automatically when a call starts** (default on) — Meet makes captions per-call
+  opt-in, so the extension clicks the CC button for you when a session starts without them. Strictly
+  bounded: at most 3 attempts, ~5 s apart, only within the first ~30 s of the call — turning
+  captions off yourself mid-call is never fought.
+- **Hide Meet's caption overlay** (default on) — visually hides the caption band while still reading
+  it. Implemented as `opacity: 0` + `pointer-events: none`, deliberately **not** `display: none` or
+  `visibility: hidden`: for non-rendered elements `innerText` falls back to `textContent`, which
+  loses the line structure the speaker/text parser depends on — captions would keep flowing while
+  silently mis-attributing turns.
+- **Caption language** (default "Leave as Meet has it") — for calls in mixed English/Spanish
+  households: one **best-effort** attempt per call to steer Meet's caption-language picker to
+  English or Spanish after captions come on. This is speculative DOM automation (open the
+  caption-settings control, click the matching option, press Escape); when any step misses, it logs
+  a `[tw-meet]` diagnostic dump of the picker's candidate options — like the caption ladder, it is
+  designed to be repaired in `selectors.js` from one real call's console output — and gives up
+  without touching capture.
 
 ## How it works
 
@@ -46,8 +67,10 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   touch the tail — it emits a settled *prefix* once enough text accumulates (never cutting inside a
   ~90-character guard, preferring sentence boundaries), and finalizes a block when it goes idle or
   leaves the DOM. Covered by `test/stabilizer.test.js`.
-- **`content.js`** — observation and port lifetime only. It does no fetching: a content script runs
-  in the page's origin and would be CORS-blocked, and it would also expose the API token to the page.
+- **`content.js`** — observation, port lifetime, and two bounded pieces of UI automation (the
+  captions auto-enable click and the one-shot language steering, both fail-soft). It does no
+  fetching: a content script runs in the page's origin and would be CORS-blocked, and it would also
+  expose the API token to the page.
 - **Noise filtering** — the lobby ("Ready to join?") shares the call's URL path, so capture waits for
   an in-call signal (the leave-call button, or a caption region found by a precise selector rung); a
   heuristic-found caption root must additionally *mutate* between two ticks before it is trusted.
@@ -79,16 +102,18 @@ re-transcription of your own audio can never delete the caption-derived speaker 
 ## Tests
 
 ```bash
-node --test chrome-extension/test/stabilizer.test.js chrome-extension/test/selectors.test.js
+node --test chrome-extension/test/stabilizer.test.js chrome-extension/test/selectors.test.js \
+  chrome-extension/test/language.test.js
 ```
 
 ## Known limits
 
-- **Captions must be on.** Meet resets this per call. The extension detects their absence and logs a
-  notice rather than clicking the CC button for you (the button's label is localized and clicking
-  blind is fragile).
+- **Captions must be on.** Meet resets this per call. Auto-enable (on by default) clicks the CC
+  button for you, but it depends on the localized `aria-label` ladder finding the button — in an
+  unlisted UI locale it logs a notice instead and you turn captions on by hand.
 - **Single language.** Meet locks captions to one selected language; multilingual meetings lose
-  labels on the off-language stretches.
+  labels on the off-language stretches. The caption-language option steers which single language
+  that is (one best-effort attempt per call), but cannot make captions bilingual.
 - **Overlapping speech collapses** to a single speaker — pyannote is genuinely better at crosstalk.
 - **Display name only.** Captions carry no email. Matching names to `PersonIdentity` via the calendar
   event's attendees is not wired up yet.

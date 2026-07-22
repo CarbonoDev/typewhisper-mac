@@ -1,15 +1,27 @@
 /**
  * Content script: watches the Meet caption region and ships stabilized turns to the service worker.
  *
- * It never talks to the network itself — see the note at the top of `background.js`. Its whole job
- * is DOM observation plus keeping a port open, because an open port is also what stops MV3 from
- * evicting the worker mid-call.
+ * It never talks to the network itself — see the note at the top of `background.js`. Its job is
+ * DOM observation plus keeping a port open (an open port is also what stops MV3 from evicting the
+ * worker mid-call), plus two pieces of tightly bounded UI automation: the captions auto-enable
+ * click and the one-shot caption-language steering. Both fail soft — a miss is logged and capture
+ * carries on untouched.
  */
 
 (() => {
   const TICK_MS = 1000;
   const PORT_RECYCLE_MS = 4 * 60 * 1000; // Chrome caps port lifetime at 5 minutes.
   const CAPTIONS_WARN_AFTER_MS = 25_000;
+
+  // Auto-enable bounds: never click-fight a user who deliberately turned captions off.
+  const AUTO_CC_MAX_ATTEMPTS = 3;
+  const AUTO_CC_COOLDOWN_MS = 5000;
+  const AUTO_CC_WINDOW_MS = 30_000; // only within the first ~30s of a session
+
+  // Language steering: how long (in ticks) to look for the settings entry point once captions are
+  // on, and how long to wait for an opened picker to render its options.
+  const LANG_ENTRY_SEARCH_TICKS = 20;
+  const LANG_DIALOG_WAIT_TICKS = 5;
 
   let port = null;
   let portTimer = null;
@@ -23,6 +35,14 @@
   let notInCallTicks = 0;
   let warnedAboutCaptions = false;
   let enabled = true;
+  let autoEnableCaptions = true;
+  let preferredCaptionLanguage = '';
+  let hideCaptionOverlay = true;
+  let ccAttempts = 0;
+  let lastCcAttemptAt = 0;
+  // One-shot state machine for caption-language steering: idle → opened → selected → done, with
+  // gave-up as the terminal failure state. Reset per session (and on a language-setting change).
+  let langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
 
   const log = (...args) => console.log('[tw-meet]', ...args);
 
@@ -75,6 +95,9 @@
     sessionStartedAt = new Date().toISOString();
     stabilizer = new CaptionStabilizer({ sessionStart: Date.now() });
     warnedAboutCaptions = false;
+    ccAttempts = 0;
+    lastCcAttemptAt = 0;
+    langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
     log('session started for call', sessionKey);
     connect();
     post({
@@ -124,7 +147,31 @@
     observer = new MutationObserver(() => tick());
     observer.observe(captionRoot, { childList: true, subtree: true, characterData: true });
     log('attached to caption region via', found.via);
+    if (hideCaptionOverlay) hideOverlay(captionRoot);
     return true;
+  }
+
+  /**
+   * Visually hide the caption overlay while keeping it fully readable.
+   *
+   * CRITICAL: this must stay `opacity` — never `display: none` or `visibility: hidden`. For
+   * non-rendered elements `innerText` falls back to `textContent`, which drops the layout-derived
+   * `\n` line structure that `parseCaptionBlock` uses to split speaker from speech; captions would
+   * keep "working" while silently mis-attributing every turn. An opacity-0 element still has
+   * layout, so `innerText` (and our parsing) is unaffected.
+   */
+  function hideOverlay(root) {
+    if (!root) return;
+    root.style.setProperty('opacity', '0', 'important');
+    root.style.setProperty('pointer-events', 'none', 'important');
+    log('caption overlay hidden (captions are still captured)');
+  }
+
+  function showOverlay(root) {
+    if (!root) return;
+    root.style.removeProperty('opacity');
+    root.style.removeProperty('pointer-events');
+    log('caption overlay restored');
   }
 
   function tick() {
@@ -135,6 +182,10 @@
         return;
       }
     }
+
+    // Meet occasionally rebuilds inline styles on the caption container; re-assert the hiding
+    // whenever it has been wiped (adoption of a rotated root re-applies it in attachObserver).
+    if (hideCaptionOverlay && captionRoot.style.opacity !== '0') hideOverlay(captionRoot);
 
     const blocks = TWSelectors.readCaptionBlocks(captionRoot);
     const segments = stabilizer.observe(blocks, Date.now());
@@ -152,13 +203,128 @@
     const toggle = TWSelectors.findCaptionToggle();
     if (toggle) {
       log(
-        'no captions detected — turn on captions in Meet (the CC button) for speaker-attributed transcript'
+        'no captions detected — turn on captions in Meet (the CC button) for speaker-attributed transcript' +
+          (ccAttempts > 0 ? ` (auto-enable clicked the toggle ${ccAttempts}x without effect)` : '')
       );
     } else {
       log(
         'no caption region found. Meet may have changed its DOM. Candidate containers:',
         TWSelectors.describeCandidates()
       );
+    }
+  }
+
+  /**
+   * Click the CC button when a session starts without captions. Meet makes captions per-call
+   * opt-in, so this runs early in every session — but strictly bounded (attempt cap, cooldown,
+   * first-30s window) so a user who deliberately turns captions off mid-call is never fought.
+   */
+  function maybeAutoEnableCaptions() {
+    if (!autoEnableCaptions || !sessionKey || !sessionStartedAt) return;
+    if (captionRoot && document.contains(captionRoot)) return; // captions already detected
+    if (TWSelectors.captionsAppearActive()) return;
+    if (Date.now() - Date.parse(sessionStartedAt) > AUTO_CC_WINDOW_MS) return;
+    if (ccAttempts >= AUTO_CC_MAX_ATTEMPTS) return;
+    if (Date.now() - lastCcAttemptAt < AUTO_CC_COOLDOWN_MS) return;
+
+    const toggle = TWSelectors.findCaptionToggle();
+    if (!toggle) return; // no localized label matched; maybeWarnAboutCaptions covers diagnostics
+
+    // `captionToggleState` is tri-state: true = on, false = off, null = no aria-pressed at all.
+    // With no attribute we fall back to what we already checked above — no caption region is
+    // rendering any text — and treat that as off.
+    const state = TWSelectors.captionToggleState(toggle);
+    if (state === true) return; // toggle says on; the region just has not rendered yet
+
+    ccAttempts += 1;
+    lastCcAttemptAt = Date.now();
+    log(
+      `auto-enabling captions: clicking the CC toggle (attempt ${ccAttempts}/${AUTO_CC_MAX_ATTEMPTS},` +
+        ` toggle reports ${state === null ? 'unknown (no aria-pressed)' : 'off'})`
+    );
+    toggle.click();
+  }
+
+  /** Close whatever Meet dialog/menu is open, the way a user would. */
+  function sendEscape() {
+    const target = document.activeElement || document.body;
+    for (const type of ['keydown', 'keyup']) {
+      target.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 27,
+          which: 27,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    }
+  }
+
+  /**
+   * One-shot, best-effort steering of Meet's caption language: open the caption-settings entry
+   * point, click the option matching `preferredCaptionLanguage`, close the dialog. This is
+   * speculative DOM automation over UI we do not control, so it is a state machine across ticks
+   * (idle → opened → selected → done / gave-up) with exactly one attempt per session: any failure
+   * presses Escape, dumps the open picker's candidates for ladder repair, and gives up cleanly —
+   * caption capture itself is never at risk.
+   */
+  function stepLanguageSteering() {
+    if (!preferredCaptionLanguage || !sessionKey) return;
+    if (langSteer.phase === 'done' || langSteer.phase === 'gave-up') return;
+
+    if (langSteer.phase === 'idle') {
+      // Only steer once captions are actually on — the language picker lives behind them.
+      if (!captionRoot || !document.contains(captionRoot)) return;
+
+      const entry = TWSelectors.findCaptionSettingsButton();
+      if (!entry) {
+        langSteer.entryTicks += 1;
+        if (langSteer.entryTicks >= LANG_ENTRY_SEARCH_TICKS) {
+          langSteer.phase = 'gave-up';
+          log(
+            'caption-language steering: no caption-settings entry point found; leaving the language as Meet has it.',
+            'If Meet renamed the control, repair CAPTION_SETTINGS_LABELS in selectors.js.'
+          );
+        }
+        return;
+      }
+      log(
+        `caption-language steering: opening caption settings to select "${preferredCaptionLanguage}"`,
+        '(one attempt per call)'
+      );
+      entry.click();
+      langSteer.phase = 'opened';
+      return;
+    }
+
+    if (langSteer.phase === 'opened') {
+      const candidates = TWSelectors.collectLanguageOptions();
+      const match = TWSelectors.matchLanguageOption(candidates, preferredCaptionLanguage);
+      if (match) {
+        log('caption-language steering: selecting', match.dataValue || match.label);
+        match.element.click();
+        langSteer.phase = 'selected';
+        return;
+      }
+      langSteer.dialogTicks += 1;
+      if (langSteer.dialogTicks >= LANG_DIALOG_WAIT_TICKS) {
+        langSteer.phase = 'gave-up';
+        log(
+          `caption-language steering: no option matched "${preferredCaptionLanguage}" — giving up.`,
+          'Candidates in the open picker (repair matchLanguageOption/CAPTION_LANGUAGE_NAMES from this):',
+          TWSelectors.describeLanguageCandidates()
+        );
+        sendEscape();
+      }
+      return;
+    }
+
+    if (langSteer.phase === 'selected') {
+      sendEscape();
+      langSteer.phase = 'done';
+      log('caption-language steering: language selected, dialog closed');
     }
   }
 
@@ -175,6 +341,8 @@
       notInCallTicks = 0;
       startSession();
       attachObserver();
+      maybeAutoEnableCaptions();
+      stepLanguageSteering();
       tick();
     } else if (sessionKey) {
       // Leaving must stick for a few ticks before we end the session: the leave-button probe can
@@ -188,28 +356,58 @@
     }
   }
 
-  chrome.storage.local.get({ enabled: true }).then((settings) => {
-    enabled = settings.enabled !== false;
-    if (!enabled) {
-      log('disabled in options; not observing');
-      return;
-    }
+  // This file is a classic content script (not a module), so it cannot import DEFAULT_SETTINGS
+  // from config.js — the inline defaults here must mirror it.
+  chrome.storage.local
+    .get({
+      enabled: true,
+      autoEnableCaptions: true,
+      preferredCaptionLanguage: '',
+      hideCaptionOverlay: true,
+    })
+    .then((settings) => {
+      enabled = settings.enabled !== false;
+      autoEnableCaptions = settings.autoEnableCaptions !== false;
+      preferredCaptionLanguage = settings.preferredCaptionLanguage || '';
+      hideCaptionOverlay = settings.hideCaptionOverlay !== false;
+      if (!enabled) {
+        log('disabled in options; not observing');
+        return;
+      }
 
-    tickTimer = setInterval(loop, TICK_MS);
-    portTimer = setInterval(() => {
-      // Proactive recycle: a port Chrome tears down at the 5-minute mark would otherwise take the
-      // service worker with it in the middle of a call.
-      port?.disconnect();
-      port = null;
-      connect();
-    }, PORT_RECYCLE_MS);
-    loop();
-  });
+      tickTimer = setInterval(loop, TICK_MS);
+      portTimer = setInterval(() => {
+        // Proactive recycle: a port Chrome tears down at the 5-minute mark would otherwise take the
+        // service worker with it in the middle of a call.
+        port?.disconnect();
+        port = null;
+        connect();
+      }, PORT_RECYCLE_MS);
+      loop();
+    });
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.enabled) {
       enabled = changes.enabled.newValue !== false;
       if (!enabled) endSession();
+    }
+    if (changes.autoEnableCaptions) {
+      autoEnableCaptions = changes.autoEnableCaptions.newValue !== false;
+    }
+    if (changes.preferredCaptionLanguage) {
+      preferredCaptionLanguage = changes.preferredCaptionLanguage.newValue || '';
+      // A newly chosen language mid-call gets its own single attempt.
+      langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
+      if (preferredCaptionLanguage) {
+        log(`caption language preference changed to "${preferredCaptionLanguage}"`);
+      }
+    }
+    if (changes.hideCaptionOverlay) {
+      hideCaptionOverlay = changes.hideCaptionOverlay.newValue !== false;
+      if (captionRoot && document.contains(captionRoot)) {
+        if (hideCaptionOverlay) hideOverlay(captionRoot);
+        else showOverlay(captionRoot);
+      }
     }
   });
 

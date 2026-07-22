@@ -11,6 +11,9 @@ function report(message, ok) {
 async function load() {
   const settings = await getSettings();
   $('enabled').checked = settings.enabled;
+  $('autoEnableCaptions').checked = settings.autoEnableCaptions;
+  $('hideCaptionOverlay').checked = settings.hideCaptionOverlay;
+  $('preferredCaptionLanguage').value = settings.preferredCaptionLanguage;
   $('baseUrl').value = settings.baseUrl;
   $('apiToken').value = settings.apiToken;
 }
@@ -23,6 +26,9 @@ $('save').addEventListener('click', async () => {
   }
   await setSettings({
     enabled: $('enabled').checked,
+    autoEnableCaptions: $('autoEnableCaptions').checked,
+    hideCaptionOverlay: $('hideCaptionOverlay').checked,
+    preferredCaptionLanguage: $('preferredCaptionLanguage').value,
     baseUrl,
     apiToken: $('apiToken').value.trim(),
   });

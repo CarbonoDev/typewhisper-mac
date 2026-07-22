@@ -14,15 +14,15 @@
       }
       @media (prefers-color-scheme: dark) {
         body { color: #e6edf3; background: #0d1117; }
-        input { color: #e6edf3; background: #161b22; border-color: #30363d; }
+        input, select { color: #e6edf3; background: #161b22; border-color: #30363d; }
         .hint { color: #8b949e; }
       }
       h1 { font-size: 18px; margin: 0 0 4px; }
       .sub { color: #656d76; margin: 0 0 24px; }
       label { display: block; margin: 16px 0 4px; font-weight: 600; }
-      input[type='text'], input[type='password'] {
+      input[type='text'], input[type='password'], select {
         width: 100%; padding: 8px 10px; border: 1px solid #d0d7de;
-        border-radius: 6px; box-sizing: border-box; font: inherit;
+        border-radius: 6px; box-sizing: border-box; font: inherit; background: #fff;
       }
       .row { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
       .hint { color: #656d76; font-size: 12px; margin-top: 4px; }
@@ -43,6 +43,26 @@
       <input type="checkbox" id="enabled" />
       <label for="enabled" style="margin: 0">Capture captions on Google Meet</label>
     </div>
+
+    <div class="row">
+      <input type="checkbox" id="autoEnableCaptions" />
+      <label for="autoEnableCaptions" style="margin: 0">Turn on captions automatically when a call starts</label>
+    </div>
+    <div class="hint">A few gentle attempts in the first 30 seconds only — turning captions off yourself is respected.</div>
+
+    <div class="row">
+      <input type="checkbox" id="hideCaptionOverlay" />
+      <label for="hideCaptionOverlay" style="margin: 0">Hide Meet's caption overlay</label>
+    </div>
+    <div class="hint">Captions are still read for the transcript; they just stop covering the screen.</div>
+
+    <label for="preferredCaptionLanguage">Caption language</label>
+    <select id="preferredCaptionLanguage">
+      <option value="">Leave as Meet has it</option>
+      <option value="en">English</option>
+      <option value="es">Español</option>
+    </select>
+    <div class="hint">Best-effort: one attempt per call to steer Meet's caption-language picker.</div>
 
     <label for="baseUrl">TypeWhisper local API</label>
     <input type="text" id="baseUrl" placeholder="http://127.0.0.1:8978" />

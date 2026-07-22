@@ -35,7 +35,7 @@ const CAPTION_REGION_LABELS = [
   'ondertiteling', // nl
 ];
 
-/** The CC toggle button, so we can tell the user whether captions are actually on. */
+/** The CC toggle button — used both to point the user at it and for the auto-enable click. */
 const CAPTION_TOGGLE_LABELS = [
   'captions',
   'untertitel',
@@ -46,6 +46,45 @@ const CAPTION_TOGGLE_LABELS = [
   'sottotitoli',
   'ondertiteling',
 ];
+
+/**
+ * aria-labels of the caption-settings entry point (the gear/language control on the caption bar or
+ * in the settings sheet), per locale — the door to the caption-language picker. Substring-matched
+ * case-insensitively like CAPTION_REGION_LABELS. Deliberately caption-specific: a bare "settings"
+ * would also match Meet's main gear. Speculative by nature — repair from a real call's
+ * `describeLanguageCandidates()` / `describeCandidates()` output when Meet renames it.
+ */
+const CAPTION_SETTINGS_LABELS = [
+  'caption settings', // en
+  'captions settings',
+  'change caption language',
+  'caption language',
+  'untertiteleinstellungen', // de
+  'einstellungen für untertitel',
+  'untertitelsprache',
+  'configuración de subtítulos', // es
+  'configuracion de subtitulos',
+  'idioma de los subtítulos',
+  'paramètres des sous-titres', // fr
+  'langue des sous-titres',
+  'configurações da legenda', // pt
+  'configurações de legendas',
+  'idioma das legendas',
+  'impostazioni dei sottotitoli', // it
+  'lingua dei sottotitoli',
+  'ondertitelinstellingen', // nl
+  'taal van ondertiteling',
+];
+
+/**
+ * How each supported caption language is *named* across major UI locales, for matching the
+ * language picker's options when they carry no machine-readable `data-value`. Accented and
+ * accent-stripped spellings are both listed because matching is a plain substring check.
+ */
+const CAPTION_LANGUAGE_NAMES = {
+  en: ['english', 'inglés', 'ingles', 'inglês', 'englisch', 'anglais', 'inglese', 'engels'],
+  es: ['spanish', 'español', 'espanol', 'spanisch', 'espagnol', 'espanhol', 'spagnolo', 'spaans'],
+};
 
 /** aria-labels of the leave/end-call button, per locale — present only once actually in the call. */
 const LEAVE_CALL_LABELS = [
@@ -219,13 +258,97 @@ function captionsAppearActive() {
   return (found.root.innerText || '').trim().length > 0;
 }
 
-/** Find the CC toggle so the UI can point the user at it (we never click it ourselves). */
+/**
+ * Find the CC toggle. Historically we only pointed the user at it; with `autoEnableCaptions` the
+ * content script may also click it — bounded, early-session-only, never against a deliberate off.
+ */
 function findCaptionToggle() {
   const buttons = document.querySelectorAll('button[aria-label], [role="button"][aria-label]');
   for (const button of buttons) {
     if (matchesAnyLabel(button, CAPTION_TOGGLE_LABELS)) return button;
   }
   return null;
+}
+
+/**
+ * Tri-state read of the CC toggle: `true`/`false` when `aria-pressed` says so, `null` when the
+ * attribute is absent (some Meet builds omit it). Callers must treat `null` as "unknown" and fall
+ * back to whether a caption region is actually rendering — never as "off" on its own.
+ */
+function captionToggleState(toggle) {
+  if (!toggle || typeof toggle.getAttribute !== 'function') return null;
+  const pressed = (toggle.getAttribute('aria-pressed') || '').toLowerCase();
+  if (pressed === 'true' || pressed === 'mixed') return true;
+  if (pressed === 'false') return false;
+  return null;
+}
+
+/** The caption-settings entry point (door to the language picker), by the aria-label ladder. */
+function findCaptionSettingsButton() {
+  const buttons = document.querySelectorAll('button[aria-label], [role="button"][aria-label]');
+  for (const button of buttons) {
+    if (matchesAnyLabel(button, CAPTION_SETTINGS_LABELS)) return button;
+  }
+  return null;
+}
+
+/**
+ * Candidate options of whatever picker/menu is currently open, as plain descriptors. The roles
+ * cover Meet's known widget shapes (listbox options, menu radio items, material `li[data-value]`
+ * rows); the descriptors feed `matchLanguageOption`, which is pure and testable without a DOM.
+ */
+function collectLanguageOptions() {
+  const nodes = document.querySelectorAll('[role="option"], [role="menuitemradio"], li[data-value]');
+  const candidates = [];
+  for (const el of nodes) {
+    candidates.push({
+      element: el,
+      dataValue: el.getAttribute('data-value') || '',
+      label: `${el.getAttribute('aria-label') || ''} ${(el.textContent || '').trim()}`.trim(),
+    });
+  }
+  return candidates;
+}
+
+/**
+ * Pure matcher for the caption-language picker. `candidates` are `{ dataValue, label }`
+ * descriptors (from `collectLanguageOptions`); `langCode` is `'en'` / `'es'`.
+ *
+ * Precedence: a machine-readable `data-value` beginning with the code (`en`, `en-US`, `es-419`)
+ * always beats the localized display name, because names need a translation table and Meet's
+ * `data-value`s do not. Returns the matched descriptor or `null`.
+ */
+function matchLanguageOption(candidates, langCode) {
+  const code = (langCode || '').trim().toLowerCase();
+  if (!code) return null;
+
+  for (const candidate of candidates) {
+    const dataValue = (candidate.dataValue || '').trim().toLowerCase();
+    if (dataValue && dataValue.startsWith(code)) return candidate;
+  }
+
+  const names = CAPTION_LANGUAGE_NAMES[code] || [];
+  for (const candidate of candidates) {
+    const label = (candidate.label || '').toLowerCase();
+    if (names.some((name) => label.includes(name))) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Diagnostic dump of the currently open picker's options — the language-steering counterpart of
+ * `describeCandidates()`. Logged when no option matched, so the ladder (labels, roles, data-values)
+ * can be repaired from one real call.
+ */
+function describeLanguageCandidates() {
+  return collectLanguageOptions()
+    .slice(0, 40)
+    .map(({ element, dataValue, label }) => ({
+      role: element.getAttribute('role'),
+      dataValue: dataValue || null,
+      ariaLabel: element.getAttribute('aria-label'),
+      preview: label.slice(0, 80),
+    }));
 }
 
 /**
@@ -312,6 +435,11 @@ const TWSelectorsAPI = {
   parseCaptionBlock,
   captionsAppearActive,
   findCaptionToggle,
+  captionToggleState,
+  findCaptionSettingsButton,
+  collectLanguageOptions,
+  matchLanguageOption,
+  describeLanguageCandidates,
   describeCandidates,
   inActiveCall,
   readAccountEmail,
