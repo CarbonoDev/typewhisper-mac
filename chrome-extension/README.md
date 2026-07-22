@@ -48,6 +48,12 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   leaves the DOM. Covered by `test/stabilizer.test.js`.
 - **`content.js`** — observation and port lifetime only. It does no fetching: a content script runs
   in the page's origin and would be CORS-blocked, and it would also expose the API token to the page.
+- **Noise filtering** — the lobby ("Ready to join?") shares the call's URL path, so capture waits for
+  an in-call signal (the leave-call button, or a caption region found by a precise selector rung); a
+  heuristic-found caption root must additionally *mutate* between two ticks before it is trusted.
+  Block-level filters then drop UI chrome by its locale-independent tells: Material icon ligature
+  text (`more_vert`, `frame_person`), keyboard-shortcut parentheticals ("(⌘ + d)"), emails in the
+  speaker slot, and tiles that echo a participant's name. Covered by `test/selectors.test.js`.
 - **`background.js`** — all networking. The meeting id and unsent buffer are mirrored to
   `chrome.storage.local` on every change, because MV3 evicts the worker aggressively. On wake it
   re-posts the same `session_key` and the app returns the same meeting.
@@ -60,13 +66,20 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
 | `POST /v1/meetings/live/{id}/segments` | Append a batch of caption turns. |
 | `POST /v1/meetings/live/{id}/end` | Close the session. Deliberately does **not** trigger summarization. |
 
+On create, the app tries to **match the call to a calendar event by title** (same scoring as import's
+`match_calendar`): a calendar-created Meet call carries the event's name as the tab title, so a
+confident title+date match links the meeting to the event and adopts its roster. When the tab title
+is just the call code (an ad-hoc call), no match is attempted and the meeting is named from the
+start time and the Google account the call was joined from (sent as `account`, read from the
+account button's aria-label) — e.g. `Meet – Jan 5, 2026, 10:01 (marco@example.com)`.
+
 Segments are stored with source `.liveCaptions`, kept distinct from `.liveCapture` so a later
 re-transcription of your own audio can never delete the caption-derived speaker timeline.
 
 ## Tests
 
 ```bash
-node --test chrome-extension/test/stabilizer.test.js
+node --test chrome-extension/test/stabilizer.test.js chrome-extension/test/selectors.test.js
 ```
 
 ## Known limits

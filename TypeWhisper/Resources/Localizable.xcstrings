@@ -27301,6 +27301,38 @@
         }
       }
     },
+    "meetings.live.fallbackTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet – %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet – %@"
+          }
+        }
+      }
+    },
+    "meetings.live.fallbackTitleWithAccount": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet – %1$@ (%2$@)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet – %1$@ (%2$@)"
+          }
+        }
+      }
+    },
     "meetings.menu.addTag": {
       "localizations": {
         "de": {

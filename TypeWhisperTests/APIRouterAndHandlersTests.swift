@@ -6192,6 +6192,102 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertNil(json["matched_event"] as? [String: Any])
     }
 
+    /// A calendar-created Meet call carries the event's own name as the tab title, so a live session
+    /// that starts with a real title should link to the matching calendar event and adopt its roster,
+    /// exactly like `match_calendar` on import.
+    func testLiveSessionCreateMatchesCalendarEventByTitle() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "acme-event#1",
+                title: "Acme Sync",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800),
+                attendees: [Attendee(name: "Alice", email: "alice@acme.com")]
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "session_key": "abc-defg-hij",
+            "title": "Acme Sync",
+            "started_at": "2026-01-05T10:01:00Z"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/live",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Acme Sync")
+        let matched = try XCTUnwrap(json["matched_event"] as? [String: Any])
+        XCTAssertEqual(matched["id"] as? String, "acme-event#1")
+
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.calendarEventID, "acme-event#1")
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.com")
+            XCTAssertEqual(meeting?.externalSessionKey, "abc-defg-hij")
+        }
+    }
+
+    /// When the tab title is just the Meet call code, it is a session identity, not a name: no
+    /// calendar match is attempted with it, and the meeting is named from the date and the account
+    /// the call was joined from instead.
+    func testLiveSessionCodeTitleFallsBackToDateAndAccountTitle() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "session_key": "abc-defg-hij",
+            "title": "abc-defg-hij",
+            "account": "marco@carbonodev.com",
+            "started_at": "2026-01-05T10:01:00Z"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/live",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let title = try XCTUnwrap(json["title"] as? String)
+        XCTAssertNotEqual(title, "abc-defg-hij")
+        XCTAssertTrue(title.contains("marco@carbonodev.com"), "fallback title names the account: \(title)")
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+    }
+
+    func testIsMeetCodeTitle() {
+        XCTAssertTrue(APIHandlers.isMeetCodeTitle("abc-defg-hij"))
+        XCTAssertTrue(APIHandlers.isMeetCodeTitle("XYZ-ABCD-EFG"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle("Weekly Sync"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle("abc-defg-hij extra"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle(""))
+    }
+
     func testImportMeetingTranscriptInvalidDateReturns400() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?

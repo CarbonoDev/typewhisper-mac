@@ -1589,14 +1589,39 @@ final class APIHandlers: @unchecked Sendable {
     private struct LiveSessionStartRequest: Decodable {
         let sessionKey: String?
         let title: String?
+        let account: String?
         let startedAt: String?
         let attendees: [LiveSessionAttendee]?
 
         enum CodingKeys: String, CodingKey {
-            case title, attendees
+            case title, account, attendees
             case sessionKey = "session_key"
             case startedAt = "started_at"
         }
+    }
+
+    /// Whether a live-session title is just the Meet call code (`abc-defg-hij`). The extension falls
+    /// back to it when the tab has no human title, and a call code is a session identity, not a
+    /// meeting name — treat it as absent for naming and calendar matching alike.
+    static func isMeetCodeTitle(_ title: String) -> Bool {
+        title.range(
+            of: "^[a-z]{3}-[a-z]{4}-[a-z]{3}$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    /// Title for a live meeting when neither the Meet tab nor a calendar match offers a real one:
+    /// built from the start time and, when known, the Google account the call was joined from.
+    static func liveFallbackTitle(startDate: Date, account: String?) -> String {
+        let dateText = startDate.formatted(date: .abbreviated, time: .shortened)
+        if let account, !account.isEmpty {
+            return String(
+                format: String(localized: "meetings.live.fallbackTitleWithAccount"),
+                dateText,
+                account
+            )
+        }
+        return String(format: String(localized: "meetings.live.fallbackTitle"), dateText)
     }
 
     private struct LiveSegmentPayload: Decodable {
@@ -1645,8 +1670,11 @@ final class APIHandlers: @unchecked Sendable {
             startDate = parsed
         }
 
-        let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? String(localized: "meetings.calendar.untitledEvent")
+        // A Meet tab carries a human title only when the call was created from a calendar event;
+        // otherwise the extension sends the bare call code, which is not a name.
+        let providedTitle = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let realTitle = providedTitle.flatMap { Self.isMeetCodeTitle($0) ? nil : $0 }
+        let account = payload.account?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let attendees: [Attendee] = (payload.attendees ?? []).compactMap { entry in
             let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
@@ -1658,6 +1686,7 @@ final class APIHandlers: @unchecked Sendable {
         }
 
         let meetingService = self.meetingService
+        let calendarService = self.calendarService
         return await MainActor.run {
             if let existing = meetingService.meetings.first(where: {
                 $0.externalSessionKey == sessionKey && $0.state != .completed
@@ -1667,17 +1696,56 @@ final class APIHandlers: @unchecked Sendable {
                     created: false,
                     title: existing.title,
                     state: existing.state.rawValue,
-                    segment_count: existing.segments.count
+                    segment_count: existing.segments.count,
+                    matched_event: nil
                 ))
             }
 
+            // Calendar matching mirrors the import path: for calendar-created calls the tab title
+            // *is* the event's name, so a confident title+date match links the live meeting to the
+            // event and adopts its roster. `bestAutoLinkCandidate`'s confidence floor keeps an
+            // ad-hoc call from linking to whatever else happens to be on the calendar right now.
+            let start = startDate ?? Date()
+            var matched: MatchedEventResponse?
+            var projection: CalendarService.MeetingProjection?
+            if let realTitle, let calendarService,
+               let candidate = calendarService.bestAutoLinkCandidate(title: realTitle, date: start) {
+                let eventProjection = CalendarService.meetingProjection(for: candidate.event)
+                projection = eventProjection
+                matched = MatchedEventResponse(
+                    id: candidate.event.id,
+                    title: eventProjection.title,
+                    date: candidate.event.startDate,
+                    confidence: candidate.score
+                )
+            }
+
+            let title = projection?.title
+                ?? realTitle
+                ?? Self.liveFallbackTitle(startDate: start, account: account)
             let meeting = meetingService.createMeeting(
                 title: title,
                 source: .adHoc,
                 state: .live,
-                startDate: startDate ?? Date(),
+                startDate: start,
                 attendees: attendees
             )
+            if let projection {
+                meetingService.linkToCalendarEvent(
+                    calendarEventID: projection.calendarEventID,
+                    seriesID: projection.seriesID,
+                    title: projection.title,
+                    startDate: projection.startDate,
+                    endDate: projection.endDate,
+                    attendees: projection.attendees,
+                    for: meeting
+                )
+                // After the link, because `linkToCalendarEvent` replaces the roster wholesale
+                // (same ordering as import); `mergeAttendees` dedupes by identity.
+                if !attendees.isEmpty {
+                    meetingService.mergeAttendees(attendees, into: meeting)
+                }
+            }
             meetingService.setExternalSessionKey(sessionKey, for: meeting)
             apiLogger.info("Started live meeting session for key \(sessionKey, privacy: .public)")
             return .json(LiveSessionResponse(
@@ -1685,7 +1753,8 @@ final class APIHandlers: @unchecked Sendable {
                 created: true,
                 title: meeting.title,
                 state: meeting.state.rawValue,
-                segment_count: 0
+                segment_count: 0,
+                matched_event: matched
             ))
         }
     }
@@ -1782,7 +1851,8 @@ final class APIHandlers: @unchecked Sendable {
                 created: false,
                 title: meeting.title,
                 state: meeting.state.rawValue,
-                segment_count: meeting.segments.count
+                segment_count: meeting.segments.count,
+                matched_event: nil
             ))
         }
     }
@@ -1793,6 +1863,7 @@ final class APIHandlers: @unchecked Sendable {
         let title: String
         let state: String
         let segment_count: Int
+        let matched_event: MatchedEventResponse?
     }
 
     private struct LiveAppendResponse: Encodable {

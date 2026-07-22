@@ -47,10 +47,57 @@ const CAPTION_TOGGLE_LABELS = [
   'ondertiteling',
 ];
 
+/** aria-labels of the leave/end-call button, per locale — present only once actually in the call. */
+const LEAVE_CALL_LABELS = [
+  'leave call', // en
+  'end call',
+  'anruf verlassen', // de
+  'salir de la llamada', // es
+  'abandonar la llamada',
+  'quitter l’appel', // fr
+  "quitter l'appel",
+  'sair da chamada', // pt
+  'abbandona la chiamata', // it
+  'gesprek verlaten', // nl
+];
+
 function matchesAnyLabel(el, labels) {
   const label = (el.getAttribute('aria-label') || '').toLowerCase();
   if (!label) return false;
   return labels.some((needle) => label.includes(needle));
+}
+
+/**
+ * Noise filters. Meet's UI chrome leaks into scraped text in ways that are detectable without a
+ * translation table: Material icon glyphs render as ligature *text* (`more_vert`, `frame_person`),
+ * menus carry keyboard shortcuts, and account chrome carries emails. Speech has none of those.
+ */
+
+/** `more_vert`, `present_to_all`, `visual_effects`… — a Material icon ligature, never a word of speech. */
+function isIconToken(value) {
+  return /^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(value.trim());
+}
+
+/** Remove icon ligature tokens that Meet renders inline with visible text. */
+function stripIconTokens(line) {
+  return line
+    .split(/\s+/)
+    .filter((word) => !isIconToken(word))
+    .join(' ');
+}
+
+/** Keyboard-shortcut chrome — "(⌘ + d)", "(Ctrl + E)" — appears in menus and tooltips, never in captions. */
+function looksLikeUIChrome(text) {
+  return /\((?:⌘|⌥|⌃|ctrl|cmd|alt|shift)\s*\+/i.test(text);
+}
+
+/** A caption speaker line is a display name: short, no icon tokens, and never an email address. */
+function isPlausibleSpeakerName(value) {
+  const name = value.trim();
+  if (!name || name.length > 48) return false;
+  if (/\S+@\S+\.\S+/.test(name)) return false; // account-switcher chrome, not a caption name
+  if (name.split(/\s+/).some(isIconToken)) return false;
+  return true;
 }
 
 /**
@@ -137,11 +184,17 @@ function readCaptionBlocks(root) {
 function parseCaptionBlock(element) {
   const raw = (element.innerText || '').trim();
   if (!raw) return null;
+  if (looksLikeUIChrome(raw)) return null; // a menu or tooltip, whatever container it sat in
 
-  const lines = raw
+  const rawLines = raw
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+  // A block *led* by a bare icon glyph is a UI control (menu anchor, tile overlay), not a caption
+  // turn — a caption block always leads with the speaker's name.
+  if (rawLines.length > 0 && rawLines[0].split(/\s+/).every(isIconToken)) return null;
+
+  const lines = rawLines.map((line) => stripIconTokens(line).trim()).filter(Boolean);
   if (lines.length === 0) return null;
 
   // The speaker line is short and has no sentence punctuation; anything else means Meet collapsed
@@ -150,7 +203,11 @@ function parseCaptionBlock(element) {
   const looksLikeName = first.length > 0 && first.length <= 48 && !/[.!?]$/.test(first);
 
   if (looksLikeName && lines.length > 1) {
-    return { speaker: first, text: lines.slice(1).join(' ') };
+    // A name slot holding an email or leftover chrome means the whole block is UI, not a turn.
+    if (!isPlausibleSpeakerName(first)) return null;
+    const text = lines.slice(1).join(' ');
+    if (text === first) return null; // a video tile echoing the participant's name
+    return { speaker: first, text };
   }
   return { speaker: null, text: lines.join(' ') };
 }
@@ -194,6 +251,44 @@ function describeCandidates() {
   return report.slice(0, 25);
 }
 
+/**
+ * Whether we are past the lobby. The green-room shows the same `/abc-defg-hij` path as the call
+ * itself, so the URL alone would start capture on the "Ready to join?" screen — where everything
+ * the heuristic can find is UI chrome (the source of the pre-join transcript noise). In-call is
+ * detected by the leave-call button; a caption region found by a precise rung also counts, so an
+ * unlisted locale still works the moment captions are on.
+ */
+function inActiveCall() {
+  const buttons = document.querySelectorAll('button[aria-label], [role="button"][aria-label]');
+  for (const button of buttons) {
+    if (matchesAnyLabel(button, LEAVE_CALL_LABELS)) return true;
+  }
+  for (const selector of CAPTION_CONTAINER_SELECTORS) {
+    if (document.querySelector(selector)) return true;
+  }
+  const regions = document.querySelectorAll('[role="region"][aria-label], [aria-label]');
+  for (const el of regions) {
+    if (matchesAnyLabel(el, CAPTION_REGION_LABELS) && el.tagName !== 'BUTTON') return true;
+  }
+  return false;
+}
+
+/**
+ * The Google account this call is joined from, for the app's fallback meeting title. The account
+ * button's aria-label embeds the email in every locale ("Google Account: Marco (m@x.com)"), so an
+ * email regex needs no translation table.
+ */
+function readAccountEmail() {
+  const candidates = document.querySelectorAll(
+    'a[href*="accounts.google.com"][aria-label], a[aria-label*="@"], [role="button"][aria-label*="@"]'
+  );
+  for (const el of candidates) {
+    const match = (el.getAttribute('aria-label') || '').match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
+    if (match) return match[0];
+  }
+  return null;
+}
+
 /** The Meet call code (`abc-defg-hij`) — our stable session identity. */
 function readCallCode() {
   const path = location.pathname.replace(/^\//, '').split('/')[0];
@@ -211,13 +306,26 @@ function readMeetingTitle() {
   return readCallCode();
 }
 
-self.TWSelectors = {
+const TWSelectorsAPI = {
   findCaptionRoot,
   readCaptionBlocks,
   parseCaptionBlock,
   captionsAppearActive,
   findCaptionToggle,
   describeCandidates,
+  inActiveCall,
+  readAccountEmail,
   readCallCode,
   readMeetingTitle,
+  isIconToken,
+  stripIconTokens,
+  looksLikeUIChrome,
+  isPlausibleSpeakerName,
 };
+
+// Usable both as a content-script global and as a CommonJS module under `node --test` (the pure
+// noise filters and `parseCaptionBlock` take plain `{ innerText }` objects, so they test without a DOM).
+if (typeof self !== 'undefined') self.TWSelectors = TWSelectorsAPI;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TWSelectorsAPI;
+}

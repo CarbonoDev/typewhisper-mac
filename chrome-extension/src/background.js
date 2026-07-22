@@ -19,7 +19,7 @@ const FLUSH_AT_COUNT = 20;
 const MAX_BUFFER = 2000;
 const MAX_BACKOFF_MS = 60_000;
 
-/** @type {Map<string, {meetingId: string|null, title: string, startedAt: string, buffer: any[], failures: number, flushing: boolean}>} */
+/** @type {Map<string, {meetingId: string|null, title: string, account: string, startedAt: string, buffer: any[], failures: number, flushing: boolean}>} */
 let sessions = new Map();
 let loaded = false;
 
@@ -42,6 +42,7 @@ async function persistSessions() {
     plain[key] = {
       meetingId: session.meetingId,
       title: session.title,
+      account: session.account,
       startedAt: session.startedAt,
       buffer: session.buffer,
     };
@@ -55,6 +56,7 @@ function getSession(sessionKey) {
     session = {
       meetingId: null,
       title: '',
+      account: '',
       startedAt: new Date().toISOString(),
       buffer: [],
       failures: 0,
@@ -94,6 +96,7 @@ async function ensureMeeting(sessionKey) {
   const result = await apiFetch('/v1/meetings/live', {
     session_key: sessionKey,
     title: session.title || sessionKey,
+    account: session.account || undefined,
     started_at: session.startedAt,
   });
   session.meetingId = result.id;
@@ -106,6 +109,7 @@ async function enqueue(sessionKey, segments, meta = {}) {
   await loadSessions();
   const session = getSession(sessionKey);
   if (meta.title) session.title = meta.title;
+  if (meta.account) session.account = meta.account;
   if (meta.startedAt) session.startedAt = meta.startedAt;
 
   session.buffer.push(...segments);
@@ -215,6 +219,7 @@ chrome.runtime.onConnect.addListener((port) => {
           getSession(sessionKey);
           await enqueue(sessionKey, [], {
             title: message.title,
+            account: message.account,
             startedAt: message.startedAt,
           });
           await ensureMeeting(sessionKey);

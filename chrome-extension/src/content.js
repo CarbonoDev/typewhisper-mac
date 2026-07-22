@@ -17,8 +17,10 @@
   let observer = null;
   let stabilizer = null;
   let captionRoot = null;
+  let pendingHeuristic = null; // { root, text } — heuristic roots must mutate before adoption
   let sessionKey = null;
   let sessionStartedAt = null;
+  let notInCallTicks = 0;
   let warnedAboutCaptions = false;
   let enabled = true;
 
@@ -44,6 +46,7 @@
         type: 'session-start',
         sessionKey,
         title: TWSelectors.readMeetingTitle(),
+        account: TWSelectors.readAccountEmail(),
         startedAt: sessionStartedAt,
       });
     }
@@ -78,6 +81,7 @@
       type: 'session-start',
       sessionKey,
       title: TWSelectors.readMeetingTitle(),
+      account: TWSelectors.readAccountEmail(),
       startedAt: sessionStartedAt,
     });
   }
@@ -96,8 +100,24 @@
 
   function attachObserver() {
     const found = TWSelectors.findCaptionRoot();
-    if (!found) return false;
+    if (!found) {
+      pendingHeuristic = null;
+      return false;
+    }
     if (captionRoot === found.root) return true;
+
+    if (found.via === 'heuristic') {
+      // A selector rung *identifies* captions; the heuristic only suspects them, and lobby tiles
+      // and open menus score on it too. So a heuristic root must first behave like captions —
+      // its text must change between two ticks — before we adopt it and start shipping its text.
+      const text = (found.root.innerText || '').trim();
+      if (!pendingHeuristic || pendingHeuristic.root !== found.root) {
+        pendingHeuristic = { root: found.root, text };
+        return false;
+      }
+      if (pendingHeuristic.text === text) return false;
+      pendingHeuristic = null;
+    }
 
     observer?.disconnect();
     captionRoot = found.root;
@@ -142,20 +162,29 @@
     }
   }
 
-  function inCall() {
-    // Meet uses the bare call-code path only once you are actually in the call; the lobby and the
-    // landing page do not carry one.
+  function onCallPath() {
+    // The call-code path appears for the lobby ("Ready to join?") as well as the call itself, so
+    // this alone must never start capture — the lobby's tiles and menus are what the heuristic
+    // used to scrape as "captions". `TWSelectors.inActiveCall()` supplies the joined signal.
     return /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i.test(location.pathname);
   }
 
   function loop() {
     if (!enabled) return;
-    if (inCall()) {
+    if (onCallPath() && TWSelectors.inActiveCall()) {
+      notInCallTicks = 0;
       startSession();
       attachObserver();
       tick();
     } else if (sessionKey) {
-      endSession();
+      // Leaving must stick for a few ticks before we end the session: the leave-button probe can
+      // miss for a frame during Meet's DOM churn, and a spurious end would complete the meeting
+      // and fork a fresh one on the next tick. A path change is unambiguous — end immediately.
+      notInCallTicks += 1;
+      if (!onCallPath() || notInCallTicks >= 3) {
+        endSession();
+        notInCallTicks = 0;
+      }
     }
   }
 
