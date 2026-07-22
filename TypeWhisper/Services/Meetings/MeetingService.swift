@@ -697,6 +697,154 @@ final class MeetingService: ObservableObject {
         fetchMeetings()
     }
 
+    // MARK: - Meeting merge (dedupe of duplicate meetings)
+
+    /// Apply a deterministic merge plan (`MeetingMergePlanner`): fold every absorbed meeting's
+    /// aggregate into the primary, then delete the absorbed rows. The single-writer counterpart of
+    /// `MeetingMergeService.merge` — all mutation happens here, on the MainActor, in this store's
+    /// one context.
+    ///
+    /// What happens, in order (each rule documented on `MeetingMergePlan`):
+    ///   1. **Attendees** — union through `mergeAttendees` (same dedupe/upgrade + directory ingest
+    ///      as every other attendee choke point).
+    ///   2. **Scalars** — adopt the plan's title (an LLM-resolved title, when provided, supersedes
+    ///      the deterministic pick), min–max time range, calendar link, session key, folder, tags
+    ///      (case-folded union), language, state. Speaker maps union with the primary winning on
+    ///      colliding keys — a generic `SPEAKER_xx` key can denote different humans in different
+    ///      meetings, a documented v1 limitation.
+    ///   3. **Audio** — each absorbed meeting's referenced audio file is preserved on disk under the
+    ///      primary's UUID (versioned suffix, never clobbering); the primary keeps pointing at its
+    ///      own audio unless it had none.
+    ///   4. **Children** — segments/notes are re-anchored by the plan's per-meeting offsets and
+    ///      re-parented; outputs and Q&A turns carry over unchanged (outputs keep their kinds and
+    ///      `createdAt`, so `latestOutput(ofKind:)` naturally surfaces the newest per kind). The
+    ///      union is renumbered chronologically with a stable tie-break. An intermediate save
+    ///      commits the re-parenting **before** the absorbed rows are deleted, so their cascade
+    ///      rules can never take the moved children with them.
+    ///   5. **Provenance** — a "Merged from N meetings" note is added to the primary.
+    ///   6. **Deletion** — absorbed meetings are deleted exactly like `deleteMeetings` (row +
+    ///      remaining audio sweep).
+    ///
+    /// Not carried over (v1, documented): the absorbed meetings' Obsidian export markers, related
+    /// note curation, and per-meeting toggles (`notesIncludedInOutputs`, `twoPersonCall`,
+    /// `timestampsRefined`) — the primary's own values stand.
+    ///
+    /// Returns the surviving meeting, or `nil` when the plan's ids cannot be resolved in the store.
+    @discardableResult
+    func applyMerge(_ plan: MeetingMergePlan, resolvedTitle: String? = nil) -> Meeting? {
+        guard let primary = meetings.first(where: { $0.id == plan.primaryID }) else { return nil }
+        let absorbed = plan.absorbedIDs.compactMap { id in meetings.first(where: { $0.id == id }) }
+        guard !absorbed.isEmpty, absorbed.count == plan.absorbedIDs.count else { return nil }
+
+        // 1) Attendee union through the existing choke point (dedupe by identity, placeholder
+        // upgrades, participant-directory ingest). Saves on its own; harmless mid-merge.
+        let incomingAttendees = absorbed.flatMap { $0.attendees }
+        if !incomingAttendees.isEmpty {
+            mergeAttendees(incomingAttendees, into: primary)
+        }
+
+        // 2) Scalar adoption from the plan. The LLM-resolved title (when non-blank) supersedes the
+        // deterministic pick; a blank/absent resolution keeps it (a merge never loses the title).
+        let trimmedResolved = resolvedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        primary.title = trimmedResolved.isEmpty ? plan.title : trimmedResolved
+        primary.startDate = plan.startDate
+        primary.endDate = plan.endDate
+        primary.calendarEventID = plan.calendarEventID
+        primary.seriesID = plan.seriesID
+        primary.externalSessionKey = plan.externalSessionKey
+        primary.folderPath = plan.folderPath
+        primary.languageCode = plan.languageCode
+        primary.languageProvenance = plan.languageCode == nil ? nil : plan.languageProvenance
+        primary.state = plan.state
+        primary.tags = Self.normalizedTags(primary.tags + absorbed.flatMap { $0.tags })
+        var speakerMap = primary.speakerMap
+        for meeting in absorbed {
+            speakerMap.merge(meeting.speakerMap) { current, _ in current }
+        }
+        primary.speakerMap = speakerMap
+
+        // 3) Preserve absorbed audio under the primary's UUID (versioned, never clobbering — the
+        // adoptAudioFile discipline). The primary's own audio reference wins when present.
+        for meeting in absorbed {
+            guard let fileName = meeting.audioFileName else { continue }
+            let source = audioDirectory.appendingPathComponent(fileName)
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            let ext = source.pathExtension.isEmpty ? "wav" : source.pathExtension
+            let destination = uniqueAudioDestination(for: primary, ext: ext)
+            do {
+                try FileManager.default.moveItem(at: source, to: destination)
+                if primary.audioFileName == nil {
+                    primary.audioFileName = destination.lastPathComponent
+                }
+            } catch {
+                logger.error("Failed to preserve merged audio file: \(error.localizedDescription)")
+            }
+        }
+
+        // 4) Re-anchor + re-parent children. The primary's own segments may shift too (it is not
+        // necessarily the earliest meeting — e.g. calendar-linked but started late). Child arrays
+        // are copied up front: re-parenting mutates the relationships being iterated.
+        let primaryOffset = plan.segmentOffsets[plan.primaryID] ?? 0
+        var provisional = primary.segments.sorted { $0.order < $1.order }
+        if primaryOffset != 0 {
+            for segment in provisional {
+                segment.start += primaryOffset
+                segment.end += primaryOffset
+            }
+            for note in primary.notes {
+                note.timestampOffset = note.timestampOffset.map { $0 + primaryOffset }
+            }
+        }
+        for meeting in absorbed {
+            let offset = plan.segmentOffsets[meeting.id] ?? 0
+            let segments = meeting.segments.sorted { $0.order < $1.order }
+            let notes = Array(meeting.notes)
+            let outputs = Array(meeting.outputs)
+            let turns = Array(meeting.qaTurns)
+            for segment in segments {
+                segment.start += offset
+                segment.end += offset
+                segment.meeting = primary
+                provisional.append(segment)
+            }
+            for note in notes {
+                note.timestampOffset = note.timestampOffset.map { $0 + offset }
+                note.meeting = primary
+            }
+            for output in outputs { output.meeting = primary }
+            for turn in turns { turn.meeting = primary }
+        }
+        // Sequential provisional orders keep equal-start segments in source order under `renumber`
+        // (Swift's sort is not stable — the `replaceSegments` idiom).
+        for (index, segment) in provisional.enumerated() { segment.order = index }
+        renumber(provisional)
+
+        // Commit the re-parenting before deleting the absorbed rows, so their cascade delete rules
+        // cannot take the just-moved children with them.
+        save()
+
+        // 5) Provenance note (v1 scope): the merge is visible on the surviving meeting.
+        let provenance = MeetingNote(
+            text: String(
+                format: String(localized: "meetings.merge.provenanceNote"),
+                absorbed.count + 1
+            ),
+            meeting: primary
+        )
+        modelContext.insert(provenance)
+
+        // 6) Delete the absorbed meetings through the normal path (row + remaining audio versions).
+        for meeting in absorbed {
+            deleteAudioFile(for: meeting)
+            modelContext.delete(meeting)
+        }
+
+        primary.updatedAt = Date()
+        save()
+        fetchMeetings()
+        return primary
+    }
+
     private func renumber(_ segments: [MeetingSegment]) {
         let ordered = segments.sorted {
             if $0.start != $1.start { return $0.start < $1.start }

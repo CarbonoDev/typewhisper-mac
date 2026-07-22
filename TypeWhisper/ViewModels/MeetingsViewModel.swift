@@ -561,6 +561,27 @@ final class MeetingsViewModel: ObservableObject {
         selectedMeetingIDs.subtract(meetings.map(\.id))
     }
 
+    /// Orchestrates the bulk "Merge N meetings…" action. Constructed over the meetings store's
+    /// single writer; v1 uses the deterministic conflict resolver (see
+    /// `DeterministicMergeConflictResolver` for why no LLM is wired yet).
+    private lazy var mergeService = MeetingMergeService(meetingService: meetingService)
+
+    /// Merge the given meetings into one (bulk context-menu "Merge N meetings…"). The deterministic
+    /// planner assembles the best data; absorbed meetings are deleted, their checklist state
+    /// dropped (like `deleteMeetings`), and the selection collapses to the surviving meeting.
+    /// Callers gate on a confirmation dialog and `MeetingMergeService.canMerge`.
+    func mergeMeetings(_ meetings: [Meeting]) {
+        guard MeetingMergeService.canMerge(meetings) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            guard let merged = await self.mergeService.merge(meetings) else { return }
+            for meeting in meetings where meeting.id != merged.id {
+                MeetingChecklistStore.shared.removeAll(meetingID: meeting.id)
+            }
+            self.selectedMeetingIDs = [merged.id]
+        }
+    }
+
     /// Generate a summary for a meeting using its default summary template (context-menu "Generate
     /// summary"). Enqueues an `llm`-lane `.summary` job via `generateOutput`; the queue's
     /// `(kind, meetingID)` dedupe collapses a double-fire. Surfaces an error when no summary template

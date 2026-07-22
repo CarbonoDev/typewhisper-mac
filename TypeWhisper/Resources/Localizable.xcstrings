@@ -27589,6 +27589,22 @@
         }
       }
     },
+    "meetings.menu.mergeCount": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Besprechungen zusammenführen …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge %lld Meetings…"
+          }
+        }
+      }
+    },
     "meetings.menu.moveToFolder": {
       "localizations": {
         "de": {
@@ -27841,6 +27857,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Upcoming: %@"
+          }
+        }
+      }
+    },
+    "meetings.merge.confirm.action": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenführen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge"
+          }
+        }
+      }
+    },
+    "meetings.merge.confirm.message": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Besprechungen zu einer zusammenführen? Transkripte, Notizen, Ausgaben und Fragen bleiben erhalten; die übrigen Besprechungen werden gelöscht. Dies kann nicht rückgängig gemacht werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combine %lld meetings into one? Transcripts, notes, outputs, and Q&A are kept; the other meetings are deleted. This cannot be undone."
+          }
+        }
+      }
+    },
+    "meetings.merge.confirm.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besprechungen zusammenführen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge Meetings"
+          }
+        }
+      }
+    },
+    "meetings.merge.provenanceNote": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus %lld Besprechungen zusammengeführt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merged from %lld meetings."
           }
         }
       }

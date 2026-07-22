@@ -22,6 +22,7 @@ struct MeetingRowContextMenu: ViewModifier {
     @State private var isRenaming = false
     @State private var renameText = ""
     @State private var isConfirmingDelete = false
+    @State private var isConfirmingMerge = false
     @State private var isPresentingNewFolder = false
     @State private var newFolderText = ""
     @State private var isPresentingLinkEvent = false
@@ -54,6 +55,18 @@ struct MeetingRowContextMenu: ViewModifier {
                 Button(String(localized: "Cancel"), role: .cancel) {}
             } message: {
                 Text(deleteMessage)
+            }
+            .confirmationDialog(
+                String(localized: "meetings.merge.confirm.title"),
+                isPresented: $isConfirmingMerge,
+                titleVisibility: .visible
+            ) {
+                Button(String(localized: "meetings.merge.confirm.action")) {
+                    viewModel.mergeMeetings(targets)
+                }
+                Button(String(localized: "Cancel"), role: .cancel) {}
+            } message: {
+                Text(String(format: String(localized: "meetings.merge.confirm.message"), targets.count))
             }
             .alert(String(localized: "meetings.menu.newFolder.title"), isPresented: $isPresentingNewFolder) {
                 TextField(String(localized: "meetings.menu.newFolder.placeholder"), text: $newFolderText)
@@ -129,6 +142,13 @@ struct MeetingRowContextMenu: ViewModifier {
         Button(String(format: String(localized: "meetings.menu.exportCount"), count)) {
             viewModel.exportToVault(targets)
         }
+        Divider()
+        // Merge duplicates (a caption-bridge meeting + its calendar twin, re-joins, overlapping
+        // imports) into one. Disabled while any target is live/processing — stop the capture first.
+        Button(String(format: String(localized: "meetings.menu.mergeCount"), count)) {
+            isConfirmingMerge = true
+        }
+        .disabled(!MeetingMergeService.canMerge(targets))
         Divider()
         Button(String(format: String(localized: "meetings.menu.deleteCount"), count), role: .destructive) {
             isConfirmingDelete = true
