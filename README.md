@@ -547,6 +547,13 @@ parameters. Optional fields: `title`, `date` (ISO 8601), `folder`, `tags[]`, `la
 `match_calendar`. Supported transcript formats are `.txt`, `.text`, `.md`, and `.markdown` (Google
 Meet exports, `Speaker:` turns, timestamped lines, and plain text).
 
+JSON-body imports accept three further optional fields for exports that already carry their own
+notes and roster: `summary` and `extended` are stored verbatim as the meeting's Summary and Extended
+outputs (no LLM call), and `attendees` (`[{"name":…, "email":…, "is_self":…}]`) seeds the roster and
+the participant directory. Attendees are merged after calendar matching, so a linked event's
+invitees are kept — and an invitee EventKit could only name by email address is upgraded to the real
+name supplied here.
+
 When `match_calendar` is `true` and a `date` is present, MeetingWhisper searches historical calendar
 events near that date and, if the best candidate clears a confidence threshold, links the meeting to
 it automatically. The response reports the matched event or `null`:
