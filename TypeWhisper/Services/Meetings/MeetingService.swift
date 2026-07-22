@@ -635,12 +635,20 @@ final class MeetingService: ObservableObject {
     /// Merge an imported transcript into an existing meeting (plan M8 / D12). Captured content is
     /// preserved; imported segments duplicating the overlap are dropped by `TranscriptMerger`; the
     /// union is re-numbered chronologically and deterministically (stable for equal start times).
+    ///
+    /// One deliberate exception to "captured content is preserved" (`ImportOverlapPlan`): when the
+    /// import carries real timing, existing **live** rows (`.liveCapture`/`.liveCaptions`) inside
+    /// its covered span are dropped first — a timed import (e.g. a Gemini Notes export) is a second
+    /// transcription of the same audio with its own speaker names, so keeping both would interleave
+    /// two phrasings of every sentence. Live rows outside the span, and all non-live rows, survive.
+    /// Returns the number of live segments dropped as overlapped (0 on the fallback path).
+    @discardableResult
     func mergeImport(
         into meeting: Meeting,
         segments: [TranscriptionSegment],
         source: MeetingSegmentSource = .importedTranscript
-    ) {
-        guard !segments.isEmpty else { return }
+    ) -> Int {
+        guard !segments.isEmpty else { return 0 }
 
         let existing = meeting.segments
             .sorted { $0.order < $1.order }
@@ -665,7 +673,16 @@ final class MeetingService: ObservableObject {
             )
         }
 
-        let merged = TranscriptMerger.merge(existing: existing, imported: imported)
+        // Authoritative merge (merge-import only, never final re-transcription): a timed import
+        // owns its covered span — `TranscriptMerger.mergeAuthoritativeImport` applies the
+        // `ImportOverlapPlan` policy after clock alignment and before dedupe.
+        let outcome = TranscriptMerger.mergeAuthoritativeImport(existing: existing, imported: imported)
+        if outcome.droppedOverlappedCount > 0 {
+            logger.info(
+                "mergeImport: dropped \(outcome.droppedOverlappedCount) live segment(s) overlapped by the imported transcript's covered span"
+            )
+        }
+        let merged = outcome.segments
 
         // Replace the meeting's segments with the merged set. The old rows are deleted and the
         // merged sequence re-inserted so provenance tags and ordering are authoritative. `renumber`
@@ -695,6 +712,7 @@ final class MeetingService: ObservableObject {
         meeting.updatedAt = Date()
         save()
         fetchMeetings()
+        return outcome.droppedOverlappedCount
     }
 
     // MARK: - Meeting merge (dedupe of duplicate meetings)

@@ -196,10 +196,17 @@ final class MeetingImportService: ObservableObject {
     // MARK: - Merge a transcript into an existing meeting
 
     /// Parse a transcript file and merge it into `meeting`, time-ordered and source-tagged, deduping
-    /// the overlap with already-captured content (plan D12).
-    func mergeTranscriptFile(at url: URL, into meeting: Meeting) throws {
+    /// the overlap with already-captured content (plan D12). A timed import is authoritative for its
+    /// covered span (`ImportOverlapPlan`): live rows it overlaps are dropped, and the count is
+    /// returned (and logged) so callers can report it.
+    @discardableResult
+    func mergeTranscriptFile(at url: URL, into meeting: Meeting) throws -> Int {
         let segments = try parseTranscriptFile(at: url)
-        meetingService.mergeImport(into: meeting, segments: segments, source: .importedTranscript)
+        let dropped = meetingService.mergeImport(into: meeting, segments: segments, source: .importedTranscript)
+        if dropped > 0 {
+            logger.info("Merge-import replaced \(dropped) overlapped live segment(s) in meeting \(meeting.id)")
+        }
+        return dropped
     }
 
     // MARK: - Helpers

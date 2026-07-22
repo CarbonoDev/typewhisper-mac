@@ -190,6 +190,7 @@
 		JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000004 /* MeetingActivityIndicator.swift */; };
 		JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000005 /* JobQueueServiceTests.swift */; };
 		SPAB000000000000000001 /* SpeakerSourcePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000001 /* SpeakerSourcePlan.swift */; };
+		IOVB000000000000000001 /* ImportOverlapPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = IOVF000000000000000001 /* ImportOverlapPlan.swift */; };
 		SPAB000000000000000002 /* SpeakerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000002 /* SpeakerSection.swift */; };
 		SPAB000000000000000003 /* SpeakerSourcePlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */; };
 		SPAB000000000000000004 /* MeetingTwoPersonSpeakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */; };
@@ -855,6 +856,7 @@
 		JQF0000000000000000004 /* MeetingActivityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityIndicator.swift; sourceTree = "<group>"; };
 		JQF0000000000000000005 /* JobQueueServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JobQueueServiceTests.swift; sourceTree = "<group>"; };
 		SPAF000000000000000001 /* SpeakerSourcePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSourcePlan.swift; sourceTree = "<group>"; };
+		IOVF000000000000000001 /* ImportOverlapPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportOverlapPlan.swift; sourceTree = "<group>"; };
 		MGAF000000000000000001 /* MeetingMergePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingMergePlan.swift; sourceTree = "<group>"; };
 		MGAF000000000000000002 /* MeetingMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingMergeService.swift; sourceTree = "<group>"; };
 		MGAF000000000000000003 /* MeetingMergeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingMergeTests.swift; sourceTree = "<group>"; };
@@ -2211,6 +2213,7 @@
 				BB00000000000000000408 /* TranscriptFileParser.swift */,
 				BB00000000000000000409 /* MeetingImportService.swift */,
 				BB00000000000000000410 /* TranscriptMerger.swift */,
+				IOVF000000000000000001 /* ImportOverlapPlan.swift */,
 				BB00000000000000000412 /* MeetingDiarizationEnricher.swift */,
 				BB00000000000000000501 /* MeetingLanguageDirective.swift */,
 				BB00000000000000000502 /* MeetingLanguageService.swift */,
@@ -4630,6 +4633,7 @@
 				JQB0000000000000000001 /* MeetingJob.swift in Sources */,
 				JQB0000000000000000003 /* MeetingJobClock.swift in Sources */,
 				SPAB000000000000000001 /* SpeakerSourcePlan.swift in Sources */,
+				IOVB000000000000000001 /* ImportOverlapPlan.swift in Sources */,
 				MGAB000000000000000001 /* MeetingMergePlan.swift in Sources */,
 				MGAB000000000000000002 /* MeetingMergeService.swift in Sources */,
 				SPBB000000000000000001 /* SpeakerTimingAligner.swift in Sources */,

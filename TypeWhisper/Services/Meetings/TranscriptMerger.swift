@@ -1,10 +1,14 @@
 import Foundation
 
 /// Pure, deterministic merge of an imported transcript into an existing meeting's segments
-/// (plan D12). Captured content is authoritative and is **never dropped**; imported segments that
-/// merely restate already-captured content are omitted so the overlap region is not duplicated
-/// (plan reminder 3 — a user who joined late imports the full transcript). Non-overlapping imported
-/// segments (e.g. the pre-capture gap for a late joiner) are kept and time-ordered into place.
+/// (plan D12). In the base `merge`, captured content is authoritative and is **never dropped**;
+/// imported segments that merely restate already-captured content are omitted so the overlap region
+/// is not duplicated (plan reminder 3 — a user who joined late imports the full transcript).
+/// Non-overlapping imported segments (e.g. the pre-capture gap for a late joiner) are kept and
+/// time-ordered into place. `mergeAuthoritativeImport` adds one deliberate exception for the
+/// merge-import path: a *timed* import owns its covered span, so existing live rows inside it are
+/// dropped per `ImportOverlapPlan` (two transcriptions of the same audio never text-match, so text
+/// dedupe alone would interleave them).
 ///
 /// ## Two clocks
 /// Captured segments are **capture-session-relative** (0-based; `MeetingCaptureService` offsets only
@@ -57,6 +61,13 @@ enum TranscriptMerger {
         }
     }
 
+    /// The result of an authoritative merge-import: the merged transcript plus how many existing
+    /// live segments the `ImportOverlapPlan` policy dropped as overlapped.
+    struct MergeOutcome: Equatable, Sendable {
+        var segments: [Segment]
+        var droppedOverlappedCount: Int
+    }
+
     /// Merge `imported` into `existing`, returning the time-ordered, deduped union.
     ///
     /// - `overlapThreshold`: fraction (0–1) of the shorter segment that must overlap in time (after
@@ -79,8 +90,64 @@ enum TranscriptMerger {
         anchorThreshold: Double = 0.6,
         minContentTokens: Int = 2
     ) -> [Segment] {
-        guard !imported.isEmpty else { return stableSortByStart(existing) }
-        guard !existing.isEmpty else { return stableSortByStart(imported) }
+        mergeCore(
+            existing: existing,
+            imported: imported,
+            overlapThreshold: overlapThreshold,
+            textThreshold: textThreshold,
+            corroborationThreshold: corroborationThreshold,
+            anchorThreshold: anchorThreshold,
+            minContentTokens: minContentTokens,
+            applyOverlapPolicy: false
+        ).segments
+    }
+
+    /// The merge for the merge-import path (`MeetingService.mergeImport`): identical alignment and
+    /// dedupe to `merge`, plus the `ImportOverlapPlan` policy — a *timed* import is authoritative
+    /// for its covered span, so existing live rows (captions/capture) inside that span are dropped.
+    ///
+    /// Sequencing matters and is why the policy lives inside the pipeline rather than before it:
+    /// the plan runs **after clock alignment** (the span comparison must happen on the captured
+    /// clock, and dropping live rows first could remove the very anchors the offset estimate needs,
+    /// letting a weaker cross-match win and corrupt the whole timeline) and **before dedupe** (an
+    /// imported row must not be deduped against a live row it is about to replace).
+    static func mergeAuthoritativeImport(
+        existing: [Segment],
+        imported: [Segment],
+        overlapThreshold: Double = 0.5,
+        textThreshold: Double = 0.8,
+        corroborationThreshold: Double = 0.5,
+        anchorThreshold: Double = 0.6,
+        minContentTokens: Int = 2
+    ) -> MergeOutcome {
+        mergeCore(
+            existing: existing,
+            imported: imported,
+            overlapThreshold: overlapThreshold,
+            textThreshold: textThreshold,
+            corroborationThreshold: corroborationThreshold,
+            anchorThreshold: anchorThreshold,
+            minContentTokens: minContentTokens,
+            applyOverlapPolicy: true
+        )
+    }
+
+    private static func mergeCore(
+        existing: [Segment],
+        imported: [Segment],
+        overlapThreshold: Double,
+        textThreshold: Double,
+        corroborationThreshold: Double,
+        anchorThreshold: Double,
+        minContentTokens: Int,
+        applyOverlapPolicy: Bool
+    ) -> MergeOutcome {
+        guard !imported.isEmpty else {
+            return MergeOutcome(segments: stableSortByStart(existing), droppedOverlappedCount: 0)
+        }
+        guard !existing.isEmpty else {
+            return MergeOutcome(segments: stableSortByStart(imported), droppedOverlappedCount: 0)
+        }
 
         // Precompute content-token sets once (M8 review 2): both `estimateClockOffset` and
         // `isDuplicate` previously retokenized every existing segment inside their inner loops
@@ -112,15 +179,36 @@ enum TranscriptMerger {
             aligned = imported
         }
 
-        // 2) Pairwise, corroborated dedup against the captured segments.
+        // 1.5) Overlap policy (merge-import path only): now that both timelines share one clock,
+        // a timed import is authoritative for its covered span — existing live rows inside it are
+        // dropped (`ImportOverlapPlan` documents the full rationale). Must run after alignment
+        // (span on the captured clock; anchors intact) and before dedupe (imported rows must not
+        // dedupe against rows they replace).
+        let survivingExisting: [Segment]
+        let survivingTokenSets: [Set<String>]
+        let droppedOverlapped: Int
+        if applyOverlapPolicy {
+            let plan = ImportOverlapPlan.resolve(existing: existing, imported: aligned)
+            droppedOverlapped = plan.droppedOverlappedCount
+            survivingExisting = plan.survivingExisting
+            survivingTokenSets = droppedOverlapped == 0
+                ? existingTokenSets
+                : survivingExisting.map { Set(contentTokens($0.text)) }
+        } else {
+            droppedOverlapped = 0
+            survivingExisting = existing
+            survivingTokenSets = existingTokenSets
+        }
+
+        // 2) Pairwise, corroborated dedup against the (surviving) captured segments.
         var kept: [Segment] = []
         kept.reserveCapacity(aligned.count)
         for (index, candidate) in aligned.enumerated() {
             if isDuplicate(
                 candidate,
                 candidateTokens: importedTokenArrays[index],
-                existing: existing,
-                existingTokenSets: existingTokenSets,
+                existing: survivingExisting,
+                existingTokenSets: survivingTokenSets,
                 overlapThreshold: overlapThreshold,
                 textThreshold: textThreshold,
                 corroborationThreshold: corroborationThreshold,
@@ -131,7 +219,7 @@ enum TranscriptMerger {
             kept.append(candidate)
         }
 
-        let combined = stableSortByStart(existing + kept)
+        let combined = stableSortByStart(survivingExisting + kept)
 
         // 3) Clock-alignment can map imported segments to negative times (M8 review 1): a late joiner
         // captures a 0-based clock while importing a meeting-relative transcript, so the estimated
@@ -140,13 +228,16 @@ enum TranscriptMerger {
         // the merged set uniformly so its minimum start is 0, preserving relative timing and order.
         let minStart = combined.map(\.start).min() ?? 0
         let shift = -min(0, minStart)
-        guard shift != 0 else { return combined }
-        return combined.map {
-            var lifted = $0
-            lifted.start += shift
-            lifted.end += shift
-            return lifted
+        guard shift != 0 else {
+            return MergeOutcome(segments: combined, droppedOverlappedCount: droppedOverlapped)
         }
+        let lifted = combined.map {
+            var segment = $0
+            segment.start += shift
+            segment.end += shift
+            return segment
+        }
+        return MergeOutcome(segments: lifted, droppedOverlappedCount: droppedOverlapped)
     }
 
     // MARK: - Clock alignment
