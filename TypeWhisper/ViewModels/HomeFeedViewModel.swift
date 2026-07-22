@@ -113,8 +113,13 @@ final class HomeFeedViewModel: ObservableObject {
     /// done-subtraction reads `MeetingChecklistStore` uncached (a dictionary lookup) so views
     /// observing the store update live as items are checked off in the document.
     func actionFacts(for meeting: Meeting) -> MeetingActionFacts? {
+        // Same deletion window as the badges (see `isDeletedFromStore`): the row outlives its
+        // meeting by one render, and every output this reads is already gone from the store.
+        guard !meeting.isDeletedFromStore else { return nil }
         let sources = [MeetingOutputKind.summary, .extended].compactMap { kind in
-            meeting.outputs.filter { $0.kind == kind }.max { $0.createdAt < $1.createdAt }
+            meeting.outputs
+                .filter { !$0.isDeletedFromStore && $0.kind == kind }
+                .max { $0.createdAt < $1.createdAt }
         }
         guard !sources.isEmpty else { return nil }
         let dates = sources.map(\.createdAt).sorted()

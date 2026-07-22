@@ -173,7 +173,19 @@ extension MeetingsViewModel {
     /// Extract the badge facts from a live `Meeting`. `isRunningLong` comes from the seam
     /// (`HomeFeedViewModel`) because it depends on "now" and, later, M10's real running-long API.
     static func homeBadgeFacts(for meeting: Meeting, isRunningLong: Bool) -> MeetingBadgeFacts {
-        let kinds = Set(meeting.outputs.map(\.kind))
+        // A row that is being deleted gets one more body evaluation while SwiftUI still holds the
+        // meeting; its outputs are already gone from the store, and reading one would trap. Badge it
+        // as bare rather than take the app down — the row disappears on the next update anyway.
+        guard !meeting.isDeletedFromStore else {
+            return MeetingBadgeFacts(
+                hasSummary: false,
+                hasExtended: false,
+                hasBrief: false,
+                isInVault: false,
+                isRunningLong: isRunningLong
+            )
+        }
+        let kinds = Set(meeting.outputs.lazy.filter { !$0.isDeletedFromStore }.map(\.kind))
         return MeetingBadgeFacts(
             hasSummary: kinds.contains(.summary),
             hasExtended: kinds.contains(.extended),

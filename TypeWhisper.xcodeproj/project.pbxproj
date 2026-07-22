@@ -162,6 +162,7 @@
 		AA00000000000000000376 /* MeetingSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000376 /* MeetingSegment.swift */; };
 		AA00000000000000000377 /* MeetingNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000377 /* MeetingNote.swift */; };
 		AA00000000000000000378 /* MeetingOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000378 /* MeetingOutput.swift */; };
+		AA00000000000000000701 /* PersistentModel+Deleted.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000701 /* PersistentModel+Deleted.swift */; };
 		AA00000000000000000379 /* MeetingQATurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000379 /* MeetingQATurn.swift */; };
 		AA00000000000000000380 /* MeetingTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000380 /* MeetingTemplate.swift */; };
 		AA00000000000000000381 /* MeetingEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000381 /* MeetingEnums.swift */; };
@@ -823,6 +824,7 @@
 		BB00000000000000000376 /* MeetingSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSegment.swift; sourceTree = "<group>"; };
 		BB00000000000000000377 /* MeetingNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNote.swift; sourceTree = "<group>"; };
 		BB00000000000000000378 /* MeetingOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOutput.swift; sourceTree = "<group>"; };
+		BB00000000000000000701 /* PersistentModel+Deleted.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentModel+Deleted.swift"; sourceTree = "<group>"; };
 		BB00000000000000000379 /* MeetingQATurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingQATurn.swift; sourceTree = "<group>"; };
 		BB00000000000000000380 /* MeetingTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplate.swift; sourceTree = "<group>"; };
 		BB00000000000000000381 /* MeetingEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEnums.swift; sourceTree = "<group>"; };
@@ -1903,6 +1905,7 @@
 				BB00000000000000000379 /* MeetingQATurn.swift */,
 				BB00000000000000000380 /* MeetingTemplate.swift */,
 				BBB0000000000000000B01 /* PromptSurface.swift */,
+				BB00000000000000000701 /* PersistentModel+Deleted.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -4661,6 +4664,7 @@
 				AA00000000000000000376 /* MeetingSegment.swift in Sources */,
 				AA00000000000000000377 /* MeetingNote.swift in Sources */,
 				AA00000000000000000378 /* MeetingOutput.swift in Sources */,
+				AA00000000000000000701 /* PersistentModel+Deleted.swift in Sources */,
 				AA00000000000000000379 /* MeetingQATurn.swift in Sources */,
 				AA00000000000000000380 /* MeetingTemplate.swift in Sources */,
 				AA00000000000000000383 /* MeetingService.swift in Sources */,

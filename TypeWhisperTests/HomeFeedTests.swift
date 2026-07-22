@@ -162,6 +162,34 @@ final class MeetingStateBadgeTests: XCTestCase {
         XCTAssertFalse(facts.isInVault)
     }
 
+    /// Deleting a meeting leaves SwiftUI holding the row's `Meeting` for one more body evaluation,
+    /// and the cascade has already invalidated its `MeetingOutput`s — reading `kindRaw` on one of
+    /// those traps inside SwiftData. Badge extraction must survive that window (it is the last thing
+    /// a disappearing row touches) instead of taking the app down with it.
+    func testFactExtractionOnADeletedMeetingDoesNotTrap() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = MeetingService(appSupportDirectory: directory)
+        let meeting = service.createMeeting(title: "Doomed", source: .adHoc)
+        service.addOutput(to: meeting, kind: .summary, content: "…")
+        service.addOutput(to: meeting, kind: .brief, content: "…")
+        XCTAssertTrue(MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false).hasSummary)
+
+        service.deleteMeeting(meeting)
+
+        XCTAssertTrue(meeting.isDeletedFromStore)
+        XCTAssertFalse(
+            Meeting(title: "Never inserted").isDeletedFromStore,
+            "a detached fixture was never in a store — it stays readable"
+        )
+        let facts = MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: true)
+        XCTAssertFalse(facts.hasSummary)
+        XCTAssertFalse(facts.hasBrief)
+        XCTAssertFalse(facts.hasExtended)
+        XCTAssertFalse(facts.isInVault)
+        XCTAssertTrue(facts.isRunningLong, "facts the view already holds stay truthful")
+    }
+
     // Running-long seam.
 
     func testRunningLongMeetingLiveAndOverran() {
