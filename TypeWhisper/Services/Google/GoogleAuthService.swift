@@ -69,12 +69,43 @@ final class GoogleAuthService: ObservableObject {
         let expiresAt: Date
     }
 
+    /// An in-flight refresh paired with a generation id, so cleanup only evicts the exact entry it
+    /// created — an unconditional eviction could drop a *successor's* in-flight task after a
+    /// disconnect/reconnect race and break single-flight (SR review).
+    private struct RefreshEntry {
+        let id: UUID
+        let task: Task<CachedToken, Error>
+    }
+
+    /// Everything one authorization flow owns (SR review): the flow's `defer` tears down only its
+    /// own session and clears `activeSession` only while it still points at this session, so a
+    /// restarted connect can never clobber the successor flow's server, timeout task, or parked
+    /// continuation.
+    @MainActor
+    private final class ConnectSession {
+        let server: any GoogleLoopbackServing
+        var continuation: CheckedContinuation<URL, Error>?
+        /// Callback that raced in before the continuation was parked (redirects can be fast).
+        var bufferedCallbackURL: URL?
+        var timeoutTask: Task<Void, Never>?
+        /// Failure recorded before the continuation was parked (cancel/timeout/restart racing the
+        /// flow's synchronous prefix) — a late park resumes with it immediately instead of hanging.
+        var failedError: GoogleAuthError?
+
+        init(server: any GoogleLoopbackServing) {
+            self.server = server
+        }
+    }
+
     private let store: GoogleAccountStore
     private let transport: GoogleHTTPTransport
     /// Injected clock so expiry-skew tests are time-deterministic (§7).
     private let now: () -> Date
     /// Injected browser seam (`NSWorkspace.shared.open` in production).
     private let openBrowser: (URL) -> Void
+    /// Injected listener factory (real `GoogleLoopbackServer` in production). Receives the flow's
+    /// `state` so the server only treats the matching redirect as the callback (SR review).
+    private let makeServer: (String) -> any GoogleLoopbackServing
     /// Refresh when the cached token expires within this window, so a token handed out is never
     /// on the verge of dying mid-request (D-G2).
     private let refreshSkew: TimeInterval = 60
@@ -83,25 +114,24 @@ final class GoogleAuthService: ObservableObject {
     private var tokenCache: [String: CachedToken] = [:]
     /// Single-flight refresh per account: a second caller awaits the in-flight task instead of
     /// issuing a second network call (D-G2).
-    private var refreshTasks: [String: Task<CachedToken, Error>] = [:]
+    private var refreshTasks: [String: RefreshEntry] = [:]
 
-    // Connect-flow state (one flow at a time; a new connect cancels a stale one).
-    private var activeServer: GoogleLoopbackServer?
-    private var pendingCallback: CheckedContinuation<URL, Error>?
-    /// Callback that raced in before the continuation was parked (browser redirects can be fast).
-    private var bufferedCallbackURL: URL?
-    private var timeoutTask: Task<Void, Never>?
+    /// The authorization flow currently awaiting its redirect, if any (one at a time; a new
+    /// connect cancels a stale one).
+    private var activeSession: ConnectSession?
 
     init(
         store: GoogleAccountStore,
         transport: GoogleHTTPTransport = URLSessionGoogleTransport(),
         now: @escaping () -> Date = Date.init,
-        openBrowser: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
+        openBrowser: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
+        makeServer: @escaping (String) -> any GoogleLoopbackServing = { GoogleLoopbackServer(expectedState: $0) }
     ) {
         self.store = store
         self.transport = transport
         self.now = now
         self.openBrowser = openBrowser
+        self.makeServer = makeServer
     }
 
     // MARK: - Connect / reauthorize
@@ -133,17 +163,23 @@ final class GoogleAuthService: ObservableObject {
     /// Cancels a connect flow in progress: stops the loopback listener and fails the pending wait
     /// with `.cancelled`. The M2 settings row's cancel affordance calls this (D-G2).
     func cancelConnect() {
-        failPendingCallback(with: .cancelled)
+        if let session = activeSession {
+            fail(session, with: .cancelled)
+        }
     }
 
     /// Best-effort revocation (D-G2): the revoke call may fail (offline, already revoked) — the
     /// account is removed from the index and its Keychain prefix swept regardless.
+    ///
+    /// Note for consumers (M3+): cancelling the in-flight refresh here surfaces a plain
+    /// `CancellationError` — not a `GoogleAuthError` — to any concurrent `accessToken(for:)`
+    /// awaiter. The error taxonomy is not closed; treat unknown errors as transient.
     func disconnect(accountID: String) async {
         if let refreshToken = store.refreshToken(for: accountID) {
             let request = GoogleOAuthFlow.revokeRequest(token: refreshToken)
             _ = try? await transport.send(request)
         }
-        refreshTasks[accountID]?.cancel()
+        refreshTasks[accountID]?.task.cancel()
         refreshTasks[accountID] = nil
         tokenCache[accountID] = nil
         store.remove(accountID: accountID)
@@ -155,20 +191,31 @@ final class GoogleAuthService: ObservableObject {
     /// missing or expires within the 60 s skew; concurrent callers share one refresh
     /// (single-flight). `invalid_grant` flips the account to `.needsReauth` and throws
     /// `.needsReauth` (D-G2).
+    ///
+    /// Errors are not limited to `GoogleAuthError`: a disconnect racing this call surfaces
+    /// `CancellationError`, and the transport can throw `URLError`. Consumers (M3's sync engine)
+    /// should special-case `.needsReauth` and treat anything unknown as transient.
     func accessToken(for accountID: String) async throws -> String {
         if let cached = tokenCache[accountID],
            cached.expiresAt > now().addingTimeInterval(refreshSkew) {
             return cached.token
         }
         if let inFlight = refreshTasks[accountID] {
-            return try await inFlight.value.token
+            return try await inFlight.task.value.token
         }
         let task = Task { [weak self] () throws -> CachedToken in
             guard let self else { throw GoogleAuthError.refreshFailed("service deallocated") }
             return try await self.refreshAccessToken(for: accountID)
         }
-        refreshTasks[accountID] = task
-        defer { refreshTasks[accountID] = nil }
+        let entry = RefreshEntry(id: UUID(), task: task)
+        refreshTasks[accountID] = entry
+        // Generation-matched cleanup (SR review): a disconnect/reconnect may already have replaced
+        // this entry — evict only our own so a successor's in-flight refresh keeps single-flight.
+        defer {
+            if refreshTasks[accountID]?.id == entry.id {
+                refreshTasks[accountID] = nil
+            }
+        }
         do {
             let refreshed = try await task.value
             tokenCache[accountID] = refreshed
@@ -216,21 +263,22 @@ final class GoogleAuthService: ObservableObject {
             throw GoogleAuthError.notConfigured
         }
         // One flow at a time — a stale flow left waiting (browser tab abandoned) is cancelled so
-        // its listener frees up before the new one starts.
-        if activeServer != nil {
-            failPendingCallback(with: .cancelled)
+        // its listener frees up before the new one starts. Failing it only touches the *stale*
+        // session object; this flow's state below is untouchable by the old flow's unwind.
+        if let stale = activeSession {
+            fail(stale, with: .cancelled)
         }
 
         let pkce = GoogleOAuthFlow.GooglePKCE.generate()
         let state = GoogleOAuthFlow.generateState()
 
-        let server = GoogleLoopbackServer()
+        let server = makeServer(state)
+        let session = ConnectSession(server: server)
         server.onCallback = { [weak self] url in
-            self?.handleCallback(url)
+            self?.deliver(url, to: session)
         }
         let port = try server.start()
-        activeServer = server
-        bufferedCallbackURL = nil
+        activeSession = session
         let redirectURI = "http://127.0.0.1:\(port)"
 
         let authorizationURL = GoogleOAuthFlow.authorizationURL(
@@ -243,27 +291,34 @@ final class GoogleAuthService: ObservableObject {
         )
         openBrowser(authorizationURL)
 
-        timeoutTask = Task { [weak self] in
+        session.timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.connectTimeout * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            self?.failPendingCallback(with: .timedOut)
+            self?.fail(session, with: .timedOut)
         }
 
+        // Flow-scoped teardown (SR review): every mutation targets this flow's own session, and
+        // `activeSession` is cleared only if it still points here — a restarted connect that
+        // already installed a successor session is never clobbered by this unwind.
         defer {
-            timeoutTask?.cancel()
-            timeoutTask = nil
+            session.timeoutTask?.cancel()
+            session.timeoutTask = nil
             server.stop()
-            activeServer = nil
-            pendingCallback = nil
-            bufferedCallbackURL = nil
+            session.continuation = nil
+            if activeSession === session {
+                activeSession = nil
+            }
         }
 
         let callbackURL: URL = try await withCheckedThrowingContinuation { continuation in
-            if let buffered = bufferedCallbackURL {
-                bufferedCallbackURL = nil
+            if let failed = session.failedError {
+                // Cancelled/timed out/restarted before the continuation could park.
+                continuation.resume(throwing: failed)
+            } else if let buffered = session.bufferedCallbackURL {
+                session.bufferedCallbackURL = nil
                 continuation.resume(returning: buffered)
             } else {
-                pendingCallback = continuation
+                session.continuation = continuation
             }
         }
 
@@ -318,7 +373,13 @@ final class GoogleAuthService: ObservableObject {
             connectedAt: now(),
             statusRaw: GoogleAccountStatus.connected.rawValue
         )
-        store.upsert(account, refreshToken: refreshToken)
+        do {
+            // A Keychain save failure must fail the connect (SR review) — otherwise the UI would
+            // report success for an account that can never refresh.
+            try store.upsert(account, refreshToken: refreshToken)
+        } catch {
+            throw GoogleAuthError.exchangeFailed("failed to store refresh token in Keychain")
+        }
         tokenCache[claims.sub] = CachedToken(
             token: tokens.accessToken,
             expiresAt: now().addingTimeInterval(TimeInterval(tokens.expiresIn))
@@ -328,22 +389,29 @@ final class GoogleAuthService: ObservableObject {
         return store.account(id: claims.sub) ?? account
     }
 
-    // MARK: - Callback plumbing
+    // MARK: - Callback plumbing (session-scoped, SR review)
 
-    private func handleCallback(_ url: URL) {
-        if let continuation = pendingCallback {
-            pendingCallback = nil
+    /// Routes a redirect to the session whose server produced it — never to whatever flow happens
+    /// to be active, so a stale server's late callback cannot feed a successor flow.
+    private func deliver(_ url: URL, to session: ConnectSession) {
+        if let continuation = session.continuation {
+            session.continuation = nil
             continuation.resume(returning: url)
-        } else {
-            bufferedCallbackURL = url
+        } else if session.failedError == nil {
+            session.bufferedCallbackURL = url
         }
     }
 
-    private func failPendingCallback(with error: GoogleAuthError) {
-        activeServer?.stop()
-        if let continuation = pendingCallback {
-            pendingCallback = nil
+    /// Fails one specific session (cancel, timeout, restart). Resumes its parked continuation, or
+    /// records the failure for a park still in flight; idempotent for an already-finished session.
+    private func fail(_ session: ConnectSession, with error: GoogleAuthError) {
+        session.server.stop()
+        session.timeoutTask?.cancel()
+        if let continuation = session.continuation {
+            session.continuation = nil
             continuation.resume(throwing: error)
+        } else if session.failedError == nil {
+            session.failedError = error
         }
     }
 

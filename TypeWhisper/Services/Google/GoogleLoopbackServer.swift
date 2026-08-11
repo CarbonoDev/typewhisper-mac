@@ -1,38 +1,58 @@
 import Foundation
 import Network
 
+/// The seam `GoogleAuthService` drives its loopback listener through, so flow-state-machine tests
+/// can inject a fake, capture the redirect port, and invoke `onCallback` directly — no listener
+/// binds and no browser opens under test (§7).
+protocol GoogleLoopbackServing: AnyObject {
+    var onCallback: @MainActor (URL) -> Void { get set }
+    func start() throws -> UInt16
+    func stop()
+}
+
 /// Minimal loopback HTTP listener that catches Google's OAuth redirect (D-G2). Binds an ephemeral
 /// port on `127.0.0.1` (Desktop-app clients accept any loopback port, so no registration is
-/// needed), hands the first callback URL to `onCallback`, and answers the browser with a tiny
-/// localized "you can close this window" page.
+/// needed), hands the callback URL to `onCallback`, and answers the browser with a tiny
+/// localized "you can close this window" page. Only a request echoing `expectedState` consumes
+/// the one-shot callback slot, so a stray local request can never use it up before the real
+/// redirect lands (SR review; precedent: `OpenAILoopbackOAuthServer`'s state binding).
 ///
 /// Concurrency: queue-confined `@unchecked Sendable` — all listener/connection state is touched
 /// only on `queue`, and the single exit point hops to the main actor for `onCallback`. This is the
 /// proven loopback-OAuth shape (`OpenAILoopbackOAuthServer` precedent, per M1); `@MainActor`
 /// internals are not viable because Network framework callbacks arrive on their own queue.
 /// App-side reimplementation — deliberately does not import the OpenAI plugin (D-G1).
-final class GoogleLoopbackServer: @unchecked Sendable {
+final class GoogleLoopbackServer: GoogleLoopbackServing, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.meetingwhisper.google.oauth-loopback")
+    /// The `state` value a request must echo before it is treated as the OAuth redirect.
+    private let expectedState: String
     private var listener: NWListener?
-    /// Set once the callback has been delivered so stray follow-up requests (browser refresh,
-    /// favicon probes) never fire `onCallback` twice.
+    /// Set once the callback has been delivered so follow-up requests (browser refresh) never
+    /// fire `onCallback` twice.
     private var delivered = false
 
     /// Receives the full redirect URL (query string included) exactly once. Set this **before**
     /// `start()`; `GoogleAuthService` resumes its pending continuation here.
     var onCallback: @MainActor (URL) -> Void = { _ in }
 
+    init(expectedState: String) {
+        self.expectedState = expectedState
+    }
+
     /// Starts listening on an ephemeral loopback port and returns the assigned port number, from
-    /// which the caller builds the `redirect_uri`. Blocks briefly (on a semaphore, off the listener
-    /// queue) until the listener reports ready so the port is known synchronously.
+    /// which the caller builds the `redirect_uri`. Blocks the calling thread (the main actor, in
+    /// practice) on a semaphore until the listener reports ready — a deliberate, tightly bounded
+    /// exception to the "nothing blocks the main thread" discipline: binding a local socket is
+    /// near-instant and the spec mandates the synchronous `start() throws -> UInt16` shape (M1).
     func start() throws -> UInt16 {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
         let listener = try NWListener(using: params)
 
         let ready = DispatchSemaphore(value: 0)
-        // nonisolated(unsafe): written only from the listener's state handler before `ready` is
-        // signaled, read only after the semaphore wait — sequenced, never concurrent.
+        // nonisolated(unsafe): the handler below is the only writer and runs on the listener
+        // queue; `start()` reads only after the semaphore wait, and the handler is detached as
+        // soon as the wait returns — so a post-ready `.failed` transition can no longer write.
         nonisolated(unsafe) var startupError: Error?
         listener.stateUpdateHandler = { state in
             switch state {
@@ -50,7 +70,12 @@ final class GoogleLoopbackServer: @unchecked Sendable {
         }
         listener.start(queue: queue)
 
-        guard ready.wait(timeout: .now() + 5) == .success else {
+        let waited = ready.wait(timeout: .now() + 5)
+        // Startup is decided; drop the handler so later transitions cannot race the
+        // `startupError` read (a runtime failure after this surfaces as a redirect that never
+        // arrives, which the flow's 5-minute timeout handles).
+        listener.stateUpdateHandler = nil
+        guard waited == .success else {
             listener.cancel()
             throw GoogleAuthError.timedOut
         }
@@ -108,13 +133,17 @@ final class GoogleLoopbackServer: @unchecked Sendable {
         }
     }
 
-    /// Serves the callback request. Only a GET carrying a query string counts as the OAuth
-    /// redirect — anything else (favicon, health probes) gets the page without firing `onCallback`.
+    /// Serves the callback request. Only a GET whose query echoes `expectedState` counts as the
+    /// OAuth redirect — anything else (favicon, health probes, stray local requests) gets the
+    /// page without firing `onCallback` and without consuming the one-shot slot (SR review).
+    /// Google echoes `state` on error redirects too, so denial callbacks still qualify.
     private func respond(toRequestLine line: String, on connection: NWConnection) {
         let callbackURL = Self.callbackURL(fromRequestLine: line)
         send(Self.doneHTML, status: "200 OK", on: connection)
 
-        guard let callbackURL, !delivered else { return }
+        guard let callbackURL, Self.stateValue(of: callbackURL) == expectedState, !delivered else {
+            return
+        }
         delivered = true
         let callback = onCallback
         Task { @MainActor in
@@ -138,6 +167,14 @@ final class GoogleLoopbackServer: @unchecked Sendable {
     private static func requestLine(from data: Data) -> String? {
         guard let range = data.range(of: Data("\r\n".utf8)) else { return nil }
         return String(data: data.subdata(in: data.startIndex..<range.lowerBound), encoding: .utf8)
+    }
+
+    /// The `state` query parameter of a callback URL, if present.
+    private static func stateValue(of url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "state" })?
+            .value
     }
 
     /// `"GET /?code=…&state=… HTTP/1.1"` → a parseable URL, or nil when the request carries no
