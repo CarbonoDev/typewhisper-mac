@@ -116,9 +116,20 @@ final class GoogleAuthService: ObservableObject {
     /// issuing a second network call (D-G2).
     private var refreshTasks: [String: RefreshEntry] = [:]
 
+    /// Whether an authorization flow (connect or reauthorize) is in flight — i.e. `activeSession`
+    /// is installed. Published for the M2 settings section's progress + cancel affordance
+    /// (M2 review finding 1): derived from session identity in `didSet`, so a stale flow's unwind
+    /// — which only clears `activeSession` while it still points at itself — can never drop the
+    /// flag while a successor flow is waiting (the same generation discipline as `RefreshEntry`),
+    /// and, living on the service rather than in view `@State`, it survives the settings pane
+    /// being closed and reopened mid-connect.
+    @Published private(set) var isAuthorizing = false
+
     /// The authorization flow currently awaiting its redirect, if any (one at a time; a new
     /// connect cancels a stale one).
-    private var activeSession: ConnectSession?
+    private var activeSession: ConnectSession? {
+        didSet { isAuthorizing = activeSession != nil }
+    }
 
     init(
         store: GoogleAccountStore,
