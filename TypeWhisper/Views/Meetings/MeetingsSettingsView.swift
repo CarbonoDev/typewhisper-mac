@@ -21,7 +21,21 @@ struct MeetingsSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                UpcomingMeetingsSection()
+                // [Settings polish] Delimited, fixed-height scroll container: toggling calendars
+                // below changes how many upcoming rows render, and an unconstrained section would
+                // reflow the whole pane and move the viewport under the pointer. The fixed frame
+                // pins the layout; overflow scrolls inside. Settings-pane presentation only — the
+                // home window has its own surface (`HomeNextSection`) and is untouched.
+                ScrollView {
+                    UpcomingMeetingsSection()
+                        .padding(12)
+                }
+                .frame(height: 300)
+                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Color.primary.opacity(0.08))
+                )
 
                 Divider()
 

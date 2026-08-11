@@ -525,6 +525,14 @@ final class MeetingsViewModel: ObservableObject {
         loadUpcoming(now: now)
     }
 
+    /// Batched inclusion toggle for a whole selection group ([Google Phase 1 · settings polish]):
+    /// one service republish + one re-query for N calendars, instead of N of each through the
+    /// single-calendar path.
+    func setCalendarsSelected(_ selected: Bool, for calendarIDs: [String], now: Date = Date()) {
+        calendarService.setCalendarsSelected(selected, for: calendarIDs)
+        loadUpcoming(now: now)
+    }
+
     /// Pure list-rendering projection for the "Calendars" settings section (M11), unit-testable
     /// without EventKit or the full view model: pairs each calendar with its selection state and
     /// sorts by account then title for a stable order.

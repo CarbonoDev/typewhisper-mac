@@ -204,6 +204,18 @@ final class CalendarService: ObservableObject {
         republish()
     }
 
+    /// Batched variant of `setCalendarSelected` for the per-group "Select all / Unselect all"
+    /// affordance ([Google Phase 1 · settings polish]): writes every id through the same
+    /// single-writer selection seam, then republishes **once** — toggling a group of N calendars
+    /// one-by-one would otherwise republish (and let the VM re-query) N times.
+    func setCalendarsSelected(_ selected: Bool, for calendarIDs: [String]) {
+        guard !calendarIDs.isEmpty else { return }
+        for calendarID in calendarIDs {
+            selectionStore.setSelected(selected, for: calendarID)
+        }
+        republish()
+    }
+
     /// Start of `now`'s calendar day — the lookback boundary for the Earlier section.
     static func lookbackStart(for now: Date, calendar: Calendar = .current) -> Date {
         calendar.startOfDay(for: now)
