@@ -49,6 +49,10 @@ final class ServiceContainer: ObservableObject {
     let meetingEventBus: MeetingEventBus
     let meetingService: MeetingService
     let calendarService: CalendarService
+    // [Google Phase 1 · M1] OAuth foundation (spec D-G1/D-G5): single-writer account index +
+    // Keychain-backed tokens, and the connect/refresh flow service. Calendar wiring lands in M3/M4.
+    let googleAccountStore: GoogleAccountStore
+    let googleAuthService: GoogleAuthService
     let meetingCaptureService: MeetingCaptureService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
@@ -182,6 +186,13 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService
         )
         calendarService = CalendarService()
+        // [Google Phase 1 · M1] Constructed beside the calendar service they will extend: the
+        // account store is the sole writer of the `google.*` defaults keys + Keychain namespace
+        // (D-G5); the auth service runs the D-G2 loopback/PKCE flow and refreshes access tokens on
+        // demand. No calendar wiring yet — the sync engine/provider fan-in arrives in M3/M4.
+        let googleAccountStore = GoogleAccountStore()
+        self.googleAccountStore = googleAccountStore
+        googleAuthService = GoogleAuthService(store: googleAccountStore)
         // [M3] Derived tag/organization index (plan D6). Subscribes to `meetingService.$meetings`, so
         // it is constructed right after the service; publishes low-cardinality tag counts the sidebar,
         // chips, and filters observe. `_shared` assigned below beside the view models.

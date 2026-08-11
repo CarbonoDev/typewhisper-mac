@@ -238,4 +238,15 @@ enum UserDefaultsKeys {
     /// Whether provider (cloud) speaker labels are adopted when a speaker-capable engine returns them,
     /// taking precedence over local diarization (D-A2/D-A7). Registered default ON.
     static let meetingsPreferProviderSpeakerLabels = "meetings.speakers.preferProviderLabels"
+
+    // MARK: - Meetings · Google accounts (D-G5)
+    // All `google.*` keys are written only by `GoogleAccountStore` (single-writer); secrets
+    // (refresh tokens, client secret) live in the Keychain, never here.
+    /// JSON-encoded `[GoogleAccount]` — the connected-accounts index (non-secret metadata only).
+    static let googleAccountsIndex = "google.accounts.index"
+    /// The pasted Google OAuth client ID (a public identifier, so plain defaults is fine).
+    static let googleOAuthClientID = "google.oauth.clientID"
+    /// `sub`s of accounts whose one-time duplicate-calendars prompt already ran (D-G6). Written only
+    /// through `GoogleAccountStore.markTwinPromptHandled(_:)`.
+    static let googleTwinPromptHandled = "google.twinPrompt.handled"
 }
