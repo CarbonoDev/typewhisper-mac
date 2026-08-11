@@ -22,6 +22,8 @@ struct GoogleAccountsSection: View {
     /// view `@State`, so it stays correct across overlapping flows and survives the settings
     /// pane being closed and reopened mid-connect.
     @ObservedObject private var authService = ServiceContainer.shared.googleAuthService
+    /// Observed for the M3 sync status line (`lastSyncAt`/`lastSyncError`) and "Refresh now".
+    @ObservedObject private var syncEngine = ServiceContainer.shared.googleCalendarSyncEngine
 
     /// Local drafts of the client credentials, seeded from the store on appear and written
     /// through on change (`GoogleAccountStore` stays the single writer of the persisted values —
@@ -49,6 +51,7 @@ struct GoogleAccountsSection: View {
                         }
                     }
                 }
+                syncStatusRow
             }
 
             if authService.isAuthorizing {
@@ -161,6 +164,36 @@ struct GoogleAccountsSection: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(tint.opacity(0.12), in: Capsule())
+    }
+
+    // MARK: - Calendar sync status ([Google Phase 1 · M3], D-G7)
+
+    /// Last-sync time + "Refresh now" under the account rows, with the engine's sync error (if
+    /// any) inline. Rendered only while accounts exist — with none connected the engine has
+    /// nothing to sync.
+    private var syncStatusRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                if let lastSyncAt = syncEngine.lastSyncAt {
+                    Text(String(
+                        format: String(localized: "google.calendar.lastSync"),
+                        lastSyncAt.formatted(date: .abbreviated, time: .shortened)
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Button(String(localized: "google.calendar.refreshNow")) {
+                    Task { await syncEngine.syncNow() }
+                }
+                .controlSize(.small)
+            }
+            if let syncError = syncEngine.lastSyncError {
+                Text(syncError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(.top, 2)
     }
 
     // MARK: - Connect / reconnect / disconnect

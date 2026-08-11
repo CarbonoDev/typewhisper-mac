@@ -53,6 +53,11 @@ final class ServiceContainer: ObservableObject {
     // Keychain-backed tokens, and the connect/refresh flow service. Calendar wiring lands in M3/M4.
     let googleAccountStore: GoogleAccountStore
     let googleAuthService: GoogleAuthService
+    // [Google Phase 1 · M3] Calendar snapshot sync (D-G7) + the `CalendarEventProviding` provider
+    // over it. Built and started here but NOT yet passed to `CalendarService` — the fan-in flip is
+    // M4, so this milestone ships with zero calendar-pipeline behavior change.
+    let googleCalendarSyncEngine: GoogleCalendarSyncEngine
+    let googleCalendarProvider: GoogleCalendarProvider
     let meetingCaptureService: MeetingCaptureService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
@@ -192,7 +197,21 @@ final class ServiceContainer: ObservableObject {
         // demand. No calendar wiring yet — the sync engine/provider fan-in arrives in M3/M4.
         let googleAccountStore = GoogleAccountStore()
         self.googleAccountStore = googleAccountStore
-        googleAuthService = GoogleAuthService(store: googleAccountStore)
+        let googleAuthService = GoogleAuthService(store: googleAccountStore)
+        self.googleAuthService = googleAuthService
+        // [Google Phase 1 · M3] The engine syncs every connected account into an in-memory
+        // snapshot (5-min cadence, started in `initialize()`); the provider serves that snapshot
+        // through the synchronous `CalendarEventProviding` seam (D-G7). Deliberately not wired
+        // into `calendarService` yet — the D-G4 fan-in lands in M4.
+        let googleCalendarSyncEngine = GoogleCalendarSyncEngine(
+            store: googleAccountStore,
+            tokenProvider: googleAuthService
+        )
+        self.googleCalendarSyncEngine = googleCalendarSyncEngine
+        googleCalendarProvider = GoogleCalendarProvider(
+            accountStore: googleAccountStore,
+            engine: googleCalendarSyncEngine
+        )
         // [M3] Derived tag/organization index (plan D6). Subscribes to `meetingService.$meetings`, so
         // it is constructed right after the service; publishes low-cardinality tag counts the sidebar,
         // chips, and filters observe. `_shared` assigned below beside the view models.
@@ -558,6 +577,11 @@ final class ServiceContainer: ObservableObject {
         // Crash recovery: mark any meeting left `.live` by a crash/force-quit as `.interrupted`
         // while keeping its persisted transcript segments visible (plan D2).
         meetingService.recoverInterruptedMeetings()
+
+        // [Google Phase 1 · M3] App-lifetime calendar sync cadence (D-G7 — deliberately not the
+        // UI-visibility-scoped poll). Immediate first sync, then every 5 minutes, plus an
+        // immediate re-sync on account connect/disconnect. Guarded out of tests above.
+        googleCalendarSyncEngine.start()
 
         // [M2-Participants] One-time, idempotent backfill of the participant directory over every
         // existing meeting's roster (plan D7). Runs inline for a normally-sized archive; a large archive
