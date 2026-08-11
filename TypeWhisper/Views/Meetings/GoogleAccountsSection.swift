@@ -186,11 +186,75 @@ struct GoogleAccountsSection: View {
                 }
             }
             linkOpeningPicker(account)
+            // [Rebase M6] Both per-account feature toggles anchor below the link-opening picker
+            // (spec §10): Drive first, Gmail second — one consistent read order.
             if rowState.showsDriveToggle {
                 driveImportRow(account)
             }
+            gmailToggleRow(account) // [Google Phase 3 · M2] D-M7 per-account Gmail toggle
         }
         .padding(.vertical, 6)
+    }
+
+    // MARK: - Gmail search toggle ([Google Phase 3 · M2], D-M7)
+
+    /// Per-account "Search Gmail for meeting context" toggle. ON with the scope already granted
+    /// just sets the store flag; ON without it runs the incremental-consent
+    /// `reauthorize(additionalScopes: [gmailScope])` through the shared `runAuthFlow` driver and
+    /// sets the flag **only after** the flow succeeds — a cancelled/failed consent leaves the
+    /// toggle off. OFF clears the flag immediately with no revocation (Google revokes whole
+    /// tokens, so de-scoping would kill Calendar too; the caption notes searches stop at once).
+    /// The toggle reflects the STORED flag even on a `.needsReauth` row — eligibility gating
+    /// lives in the fetch layer (`GmailAccountEligibility`), not here.
+    private func gmailToggleRow(_ account: GoogleAccount) -> some View {
+        let state = GmailToggleState.make(
+            for: account,
+            flagged: accountStore.isGmailEnabled(for: account.id)
+        )
+        return VStack(alignment: .leading, spacing: 2) {
+            Toggle(
+                String(localized: "google.gmail.toggle"),
+                isOn: Binding(
+                    get: { state.isOn },
+                    set: { setGmailEnabled($0, for: account, state: state) }
+                )
+            )
+            .controlSize(.small)
+            .font(.caption)
+            // Same gating as Reconnect / "Add Google Account…" (Phase 1 M2 review finding 1):
+            // starting a second auth flow mid-wait belongs to Cancel-then-retry, not this toggle.
+            .disabled(authService.isAuthorizing)
+            Text(String(localized: "google.gmail.toggleCaption"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !state.isOn && state.needsReauthFlow {
+                Text(String(localized: "google.gmail.consentHint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: 360, alignment: .leading)
+        .padding(.top, 2)
+    }
+
+    private func setGmailEnabled(_ enabled: Bool, for account: GoogleAccount, state: GmailToggleState) {
+        guard enabled else {
+            // OFF is immediate and local — no de-scope call (D-M7).
+            accountStore.setGmailEnabled(false, for: account.id)
+            return
+        }
+        guard state.needsReauthFlow else {
+            // Scope already granted (e.g. toggled off and on again) — no consent prompt.
+            accountStore.setGmailEnabled(true, for: account.id)
+            return
+        }
+        // Consent first, flag only on success (GmailToggleState.enable is the tested ordering
+        // seam); failures surface through the section's inline error line like every auth flow.
+        runAuthFlow {
+            try await GmailToggleState.enable(account: account, store: accountStore) { id, scopes in
+                try await authService.reauthorize(accountID: id, additionalScopes: scopes)
+            }
+        }
     }
 
     // MARK: - Join-link opening preference ([Join links])
@@ -539,6 +603,39 @@ struct GoogleAccountRowState: Equatable {
                 showsDriveBackfill: false
             )
         }
+    }
+}
+
+/// Pure `(GoogleAccount, stored flag)` → Gmail-toggle view-state mapping ([Google Phase 3 · M2],
+/// D-M7): `isOn` mirrors the STORED flag (even for `.needsReauth` accounts — eligibility gating
+/// lives in `GmailAccountEligibility`, not the toggle), and `needsReauthFlow` is true exactly
+/// when turning ON must run the incremental-consent reauthorize because the Gmail scope was
+/// never granted. Extracted so the view stays logic-free (`GmailToggleStateTests`, the
+/// `GoogleAccountRowState` precedent).
+struct GmailToggleState: Equatable {
+    let isOn: Bool
+    let needsReauthFlow: Bool
+
+    static func make(for account: GoogleAccount, flagged: Bool) -> GmailToggleState {
+        GmailToggleState(
+            isOn: flagged,
+            needsReauthFlow: !account.grantedScopes.contains(GmailContextService.gmailScope)
+        )
+    }
+
+    /// The ON flow's ordering seam, tested without SwiftUI: consent (when the scope is missing)
+    /// runs FIRST, and the flag is set **only after** it returns — a thrown/cancelled reauthorize
+    /// propagates with the flag untouched, so the toggle stays off (D-M7).
+    @MainActor
+    static func enable(
+        account: GoogleAccount,
+        store: GoogleAccountStore,
+        reauthorize: (_ accountID: String, _ additionalScopes: [String]) async throws -> Void
+    ) async throws {
+        if !account.grantedScopes.contains(GmailContextService.gmailScope) {
+            try await reauthorize(account.id, [GmailContextService.gmailScope])
+        }
+        store.setGmailEnabled(true, for: account.id)
     }
 }
 
