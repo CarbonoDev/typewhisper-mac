@@ -135,17 +135,22 @@ final class MeetingImportService: ObservableObject {
 
     /// Parse raw transcript **text** (not a file) into a new `.importedTranscript` meeting. Same
     /// parser as `importTranscriptFile`, for callers that already hold the transcript in memory (the
-    /// HTTP API's raw-text body / bulk archive import). Throws `.emptyTranscript` when nothing
-    /// parseable is found.
+    /// HTTP API's raw-text body / bulk archive import / Drive auto-import). Throws
+    /// `.emptyTranscript` when nothing parseable is found.
+    ///
+    /// `startDate` ([Google Phase 2 · M1], D-D4): the Drive importer dates a created meeting from
+    /// the export filename (falling back to the doc's `createdTime`), so historical transcripts
+    /// land on their real dates. `nil` (every pre-existing call site) keeps today's behavior.
     @discardableResult
-    func importTranscriptText(_ text: String, title: String? = nil) throws -> Meeting {
+    func importTranscriptText(_ text: String, title: String? = nil, startDate: Date? = nil) throws -> Meeting {
         let segments = TranscriptFileParser.parse(text)
         guard !segments.isEmpty else { throw ImportError.emptyTranscript }
         return meetingService.createFromImport(
             title: resolvedTitle(title, fallbackText: text),
             source: .importedTranscript,
             segments: segments,
-            segmentSource: .importedTranscript
+            segmentSource: .importedTranscript,
+            startDate: startDate
         )
     }
 
@@ -202,6 +207,22 @@ final class MeetingImportService: ObservableObject {
     @discardableResult
     func mergeTranscriptFile(at url: URL, into meeting: Meeting) throws -> Int {
         let segments = try parseTranscriptFile(at: url)
+        let dropped = meetingService.mergeImport(into: meeting, segments: segments, source: .importedTranscript)
+        if dropped > 0 {
+            logger.info("Merge-import replaced \(dropped) overlapped live segment(s) in meeting \(meeting.id)")
+        }
+        return dropped
+    }
+
+    /// The text twin of `mergeTranscriptFile` ([Google Phase 2 · M1], D-D4): parse raw transcript
+    /// text and merge it into `meeting`, for callers that already hold the content in memory (the
+    /// Drive importer's `files.export` result). Same overlap policy (`ImportOverlapPlan`): a timed
+    /// import is authoritative for its covered span, so overlapped live rows are dropped and the
+    /// count returned. Throws `.emptyTranscript` when nothing parseable is found.
+    @discardableResult
+    func mergeTranscriptText(_ text: String, into meeting: Meeting) throws -> Int {
+        let segments = TranscriptFileParser.parse(text)
+        guard !segments.isEmpty else { throw ImportError.emptyTranscript }
         let dropped = meetingService.mergeImport(into: meeting, segments: segments, source: .importedTranscript)
         if dropped > 0 {
             logger.info("Merge-import replaced \(dropped) overlapped live segment(s) in meeting \(meeting.id)")
