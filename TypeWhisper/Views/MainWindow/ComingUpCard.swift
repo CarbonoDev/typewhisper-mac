@@ -106,7 +106,6 @@ private struct HomeNextHeroCard: View {
 
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
-    @Environment(\.openURL) private var openURL
 
     /// [Google Phase 1 · M5] The event's video-conference join link, when it carries one.
     private var joinURL: URL? {
@@ -285,10 +284,14 @@ private struct HomeNextHeroCard: View {
                 .buttonStyle(.bordered)
             }
             // [Google Phase 1 · M5] Join link when the event carries a conference URL — opens in
-            // the browser, independent of the card's open-the-document action.
+            // the browser, independent of the card's open-the-document action. Routed through the
+            // launcher so a Google event opens in its account's Chrome profile ([join links]).
             if let joinURL {
                 Button {
-                    openURL(joinURL)
+                    MeetingJoinLauncher.open(
+                        url: joinURL,
+                        accountSub: GoogleCalendarID.accountSub(fromNamespacedID: item.event.id)
+                    )
                 } label: {
                     Label(String(localized: "meetings.event.join"), systemImage: "video")
                 }
@@ -307,7 +310,6 @@ private struct HomeScheduleRow: View {
     let action: () -> Void
 
     @ObservedObject private var viewModel = MeetingsViewModel.shared
-    @Environment(\.openURL) private var openURL
     @State private var isHovering = false
 
     private var hasBrief: Bool {
@@ -342,9 +344,13 @@ private struct HomeScheduleRow: View {
                         .help(String(localized: "home.badge.briefReady"))
                 }
                 // [Google Phase 1 · M5] Quiet join glyph when the event carries a conference URL.
+                // Routed through the launcher for per-account Chrome profiles ([join links]).
                 if let joinURL = item.event.conferencingURL.flatMap(URL.init(string:)) {
                     Button {
-                        openURL(joinURL)
+                        MeetingJoinLauncher.open(
+                            url: joinURL,
+                            accountSub: GoogleCalendarID.accountSub(fromNamespacedID: item.event.id)
+                        )
                     } label: {
                         Image(systemName: "video")
                             .font(.system(size: 11))

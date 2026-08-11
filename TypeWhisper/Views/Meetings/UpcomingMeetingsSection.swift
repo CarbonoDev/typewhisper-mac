@@ -12,7 +12,6 @@ struct UpcomingMeetingsSection: View {
     /// [M10] The "Earlier" (past events, lookback) section is collapsed by default so the primary
     /// visual focus stays on current + upcoming.
     @State private var isEarlierExpanded = false
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -119,10 +118,15 @@ struct UpcomingMeetingsSection: View {
                 .help(String(localized: "meetings.calendar.dismiss"))
             }
             // [Google Phase 1 · M5] Join link when the event carries a conference URL (spec §5 M5):
-            // opens in the browser without creating/opening a meeting.
+            // opens in the browser without creating/opening a meeting. Routed through the launcher
+            // so a Google event opens in its account's Chrome profile ([join links]); EventKit
+            // events carry no sub and keep the system browser.
             if let joinURL = event.conferencingURL.flatMap(URL.init(string:)) {
                 Button {
-                    openURL(joinURL)
+                    MeetingJoinLauncher.open(
+                        url: joinURL,
+                        accountSub: GoogleCalendarID.accountSub(fromNamespacedID: event.id)
+                    )
                 } label: {
                     Image(systemName: "video")
                 }

@@ -195,4 +195,49 @@ final class GoogleAccountStoreTests: XCTestCase {
             defaults.stringArray(forKey: UserDefaultsKeys.googleTwinPromptHandled), ["sub-1"]
         )
     }
+
+    // MARK: - Join-link opening preference ([Join links])
+
+    func testLinkOpeningPreferenceDefaultsToAutoAndRoundTrips() {
+        let store = makeStore()
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .auto)
+
+        store.setLinkOpeningPreference(.chromeProfile(directory: "Profile 3"), for: "sub-1")
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .chromeProfile(directory: "Profile 3"))
+        XCTAssertEqual(defaults.string(forKey: "google.account.sub-1.chromeProfile"), "chrome:Profile 3")
+
+        store.setLinkOpeningPreference(.system, for: "sub-1")
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .system)
+
+        // `.auto` clears the key back to the default (absent ⇒ auto).
+        store.setLinkOpeningPreference(.auto, for: "sub-1")
+        XCTAssertNil(defaults.string(forKey: "google.account.sub-1.chromeProfile"))
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .auto)
+
+        // Per-account isolation.
+        store.setLinkOpeningPreference(.system, for: "sub-1")
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-2"), .auto)
+    }
+
+    func testLinkOpeningRawValueParsingIsLenient() {
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: "system"), .system)
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: "chrome:Default"), .chromeProfile(directory: "Default"))
+        // Unknown/legacy/degenerate values read as the safe default.
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: "auto"), .auto)
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: "garbage"), .auto)
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: "chrome:"), .auto)
+        XCTAssertEqual(GoogleAccountLinkOpening(rawValue: ""), .auto)
+    }
+
+    func testRemoveSweepsTheLinkOpeningPreference() throws {
+        let store = makeStore()
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        store.setLinkOpeningPreference(.chromeProfile(directory: "Default"), for: "sub-1")
+
+        store.remove(accountID: "sub-1")
+
+        // The Keychain prefix sweep cannot reach UserDefaults — `remove` clears the key itself.
+        XCTAssertNil(defaults.string(forKey: "google.account.sub-1.chromeProfile"))
+        XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .auto)
+    }
 }

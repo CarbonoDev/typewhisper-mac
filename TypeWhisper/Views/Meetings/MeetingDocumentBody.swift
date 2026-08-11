@@ -18,7 +18,6 @@ struct MeetingDocumentBody: View {
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
 
-    @Environment(\.openURL) private var openURL
     /// [Google Phase 1 · M5] The event-details disclosure starts collapsed (spec §5 M5) — the
     /// briefing page's hero stays the brief.
     @State private var isEventDetailsExpanded = false
@@ -58,7 +57,15 @@ struct MeetingDocumentBody: View {
                 VStack(alignment: .leading, spacing: MeetingTheme.s2) {
                     if let joinURL {
                         Button {
-                            openURL(joinURL)
+                            // [Join links] Route through the launcher: the meeting's namespaced
+                            // `calendarEventID` attributes it to its Google account, whose Chrome
+                            // profile preference decides the browser; bare EventKit IDs (no sub)
+                            // keep the system browser.
+                            MeetingJoinLauncher.open(
+                                url: joinURL,
+                                accountSub: meeting.calendarEventID
+                                    .flatMap(GoogleCalendarID.accountSub(fromNamespacedID:))
+                            )
                         } label: {
                             Label(String(localized: "meetings.event.join"), systemImage: "video")
                         }
