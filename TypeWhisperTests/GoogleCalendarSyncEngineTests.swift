@@ -46,9 +46,14 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
         private let lock = NSLock()
         private var stubs: [Stub]
         private var _requests: [URLRequest] = []
+        /// Applied to the *first* request only: holds cycle 1 open long enough for a test to act
+        /// mid-cycle (the connect-during-cycle test), leaving follow-up cycles fast.
+        private let firstRequestDelayNanoseconds: UInt64
+        private var delayedOnce = false
 
-        init(stubs: [Stub]) {
+        init(stubs: [Stub], firstRequestDelayNanoseconds: UInt64 = 0) {
             self.stubs = stubs
+            self.firstRequestDelayNanoseconds = firstRequestDelayNanoseconds
         }
 
         var requests: [URLRequest] {
@@ -65,19 +70,26 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
 
         /// Records the request and dequeues the first matching stub under the lock — a synchronous
         /// helper so the async `send` never calls `lock()` from an async context (M1 precedent).
-        private func recordAndMatch(_ request: URLRequest) -> Stub? {
+        /// Returns whether the first-request hold should apply to this request.
+        private func recordAndMatch(_ request: URLRequest) -> (stub: Stub?, delay: UInt64) {
             lock.lock()
             defer { lock.unlock() }
             _requests.append(request)
+            let delay = delayedOnce ? 0 : firstRequestDelayNanoseconds
+            delayedOnce = true
             let url = request.url?.absoluteString ?? ""
             guard let index = stubs.firstIndex(where: { url.contains($0.urlContains) }) else {
-                return nil
+                return (nil, delay)
             }
-            return stubs.remove(at: index)
+            return (stubs.remove(at: index), delay)
         }
 
         func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-            guard let stub = recordAndMatch(request) else {
+            let (matched, delay) = recordAndMatch(request)
+            if delay > 0 {
+                try await Task.sleep(nanoseconds: delay)
+            }
+            guard let stub = matched else {
                 throw URLError(.unsupportedURL)
             }
             let response = HTTPURLResponse(
@@ -247,6 +259,65 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
             .filter { $0.url?.absoluteString.contains("/events") == true }
             .map { queryValue("pageToken", of: $0) }
         XCTAssertEqual(pageTokens, [nil, "page-2"], "second request follows nextPageToken")
+    }
+
+    // MARK: - Coalescing (M3 review finding 1)
+
+    func testAccountConnectedDuringCycleIsFetchedByAnImmediateFollowUpCycle() async throws {
+        // Cycle 1 read `store.accounts` before subB existed; the coalescing `syncNow` must make
+        // the driver loop one more full cycle so subB's events land without waiting for the next
+        // 5-min tick (QA step 6: "events within ~1 min of connect").
+        let a1 = Self.event("a1", start: "2026-08-10T10:00:00Z", end: "2026-08-10T11:00:00Z")
+        let b1 = Self.event("b1", start: "2026-08-10T14:00:00Z", end: "2026-08-10T15:00:00Z")
+        let transport = FakeCalendarTransport(
+            stubs: [
+                // Cycle 1 (subA only) — the first request is held open so the connect lands mid-cycle.
+                .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["calA"])),
+                .init(urlContains: "/calendars/calA/events", statusCode: 200, body: Self.eventsBody(events: [a1])),
+                // Cycle 2 (subA + subB).
+                .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["calA"])),
+                .init(urlContains: "/calendars/calA/events", statusCode: 200, body: Self.eventsBody(events: [a1])),
+                .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["calB"])),
+                .init(urlContains: "/calendars/calB/events", statusCode: 200, body: Self.eventsBody(events: [b1])),
+            ],
+            firstRequestDelayNanoseconds: 100_000_000
+        )
+        let tokens = FakeTokenProvider()
+        let (engine, store) = try makeEngine(transport: transport, tokenProvider: tokens, accountIDs: ["subA"])
+
+        let firstCall = Task { await engine.syncNow() }
+        // Wait until cycle 1 is provably in flight (its first request recorded, response held).
+        while transport.requests.isEmpty {
+            await Task.yield()
+        }
+
+        // Connect subB mid-cycle, then trigger the immediate re-sync (in production `start()`'s
+        // `$accounts` subscription calls `syncNow()`; tests drive it directly). This call must
+        // coalesce into the running driver and request one more cycle — not silently no-op.
+        tokens.results["subB"] = .success("token-subB")
+        try store.upsert(
+            GoogleAccount(
+                id: "subB",
+                email: "subB@example.com",
+                displayName: nil,
+                grantedScopes: ["openid"],
+                connectedAt: fixedNow,
+                statusRaw: GoogleAccountStatus.connected.rawValue
+            ),
+            refreshToken: "rt-subB"
+        )
+        await engine.syncNow()
+        await firstCall.value
+
+        XCTAssertEqual(
+            engine.snapshot.flatMap(\.events).map(\.id),
+            ["google:subA:a1", "google:subB:b1"],
+            "the follow-up cycle fetched the mid-cycle connect — no 5-min tick needed"
+        )
+        let calendarListFetches = transport.requests.filter {
+            $0.url?.absoluteString.contains("calendarList") == true
+        }
+        XCTAssertEqual(calendarListFetches.count, 3, "cycle 1 (subA) + cycle 2 (subA and subB) — exactly one extra cycle")
     }
 
     // MARK: - Error isolation

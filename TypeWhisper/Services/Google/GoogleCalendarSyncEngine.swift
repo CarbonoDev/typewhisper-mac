@@ -70,6 +70,11 @@ final class GoogleCalendarSyncEngine: ObservableObject {
     /// Single-flight: a "Refresh now" landing while the timer's sync runs awaits it instead of
     /// racing a second fetch.
     private var inFlightSync: Task<Void, Never>?
+    /// Set when `syncNow` coalesces into a running driver (M3 review finding 1): that cycle read
+    /// `store.accounts` at its start, so an account connected mid-cycle — or a "Refresh now"
+    /// landing during a tick — would otherwise be a no-op until the next 5-min tick. The driver
+    /// runs one more full cycle while this is set.
+    private var resyncRequested = false
     private var timerTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
     /// Pagination hard stop — a defensive bound, far above any real calendar's page count.
@@ -121,17 +126,36 @@ final class GoogleCalendarSyncEngine: ObservableObject {
 
     // MARK: - Sync
 
-    /// One full sync cycle across every `.connected` account. Coalesces with an in-flight cycle
-    /// (the caller awaits it rather than starting a second). Also the "Refresh now" entry point.
+    /// One full sync cycle across every `.connected` account. Also the "Refresh now" entry point.
+    ///
+    /// Coalescing (M3 review findings 1+2): a call landing while a driver runs never races a
+    /// second fetch — it flags `resyncRequested` and awaits the driver, which loops one more
+    /// *full* cycle (re-reading `store.accounts`) before exiting, so an account connected
+    /// mid-cycle is fetched immediately rather than on the next tick. The driver's final
+    /// flag-check and its clearing of `inFlightSync` happen in one synchronous main-actor
+    /// stretch, so there is no window in which a request can land on an already-finished driver
+    /// and be lost: a caller either flags a driver that will still check, or finds
+    /// `inFlightSync == nil` and starts a fresh one.
     func syncNow() async {
         if let inFlightSync {
+            resyncRequested = true
             await inFlightSync.value
             return
         }
-        let task = Task { await performSync() }
+        let task = Task { [weak self] in
+            while true {
+                guard let self else { return }
+                self.resyncRequested = false
+                await self.performSync()
+                // No suspension between this check and the clear below — the exit is atomic
+                // with respect to other main-actor code (finding 2).
+                if self.resyncRequested { continue }
+                self.inFlightSync = nil
+                return
+            }
+        }
         inFlightSync = task
         await task.value
-        inFlightSync = nil
     }
 
     private func performSync() async {
@@ -154,6 +178,11 @@ final class GoogleCalendarSyncEngine: ObservableObject {
                 // Terminal auth loss: the auth service already flipped the account's status (M1
                 // handoff — do NOT retry). Keep the last good slice; the provider's authorization
                 // status clears events once no account is left `.connected`.
+                //
+                // M3 review finding 4 (documented, accepted): while a sibling account stays
+                // connected, this account's stale slice keeps being served indefinitely — only
+                // full auth loss clears events via the provider status. An M4+ consideration
+                // (e.g. drop or age out the slice) if per-account clearing turns out to matter.
                 logger.warning("Sync skipped account \(account.id, privacy: .private): needs reauth")
                 firstError = firstError ?? syncErrorMessage(accountEmail: account.email, detail: error.localizedDescription)
             } catch {
@@ -171,6 +200,10 @@ final class GoogleCalendarSyncEngine: ObservableObject {
             NotificationCenter.default.post(name: .googleCalendarSnapshotDidChange, object: nil)
         }
         lastSyncError = firstError
+        // M3 review finding 3 (documented, accepted): `lastSyncAt` deliberately reads "last time
+        // a sync had something to try", so it does not bump when no account is `.connected` —
+        // in the all-needsReauth state "Refresh now" appears inert, which matches reality (there
+        // is nothing to refresh; the rows' "Needs attention" badges point at the remedy).
         if attemptedAnyAccount {
             lastSyncAt = now()
         }
