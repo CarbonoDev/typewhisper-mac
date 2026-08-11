@@ -97,6 +97,10 @@ struct CalendarSelectionSection: View {
                 }
             }
             .padding(.top, 2)
+            // DisclosureGroup lays its content out centered — it does not inherit the section's
+            // outer leading alignment — so pin the row stack to the leading edge explicitly
+            // (Marco QA: checkbox rows rendered horizontally centered).
+            .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             HStack(spacing: 8) {
                 groupHeader(
