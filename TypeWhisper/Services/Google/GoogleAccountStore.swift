@@ -24,6 +24,41 @@ enum GoogleAccountStatus: String, Codable, Sendable {
     case needsReauth
 }
 
+/// Per-account choice of where this account's meeting join links open ([Google Phase 1 · join
+/// links]). Persisted as a raw string under `google.account.<sub>.chromeProfile` (written only by
+/// `GoogleAccountStore`, D-G5): `"auto"` | `"system"` | `"chrome:<profileDirectory>"`.
+enum GoogleAccountLinkOpening: Equatable, Sendable {
+    /// Default: the Chrome profile whose signed-in email matches the account
+    /// (`ChromeProfileDetector.autoMatch`), else the system browser.
+    case auto
+    /// Always the system default browser.
+    case system
+    /// Always this Chrome profile (a `--profile-directory=` value).
+    case chromeProfile(directory: String)
+
+    private static let chromePrefix = "chrome:"
+
+    var rawValue: String {
+        switch self {
+        case .auto: return "auto"
+        case .system: return "system"
+        case .chromeProfile(let directory): return Self.chromePrefix + directory
+        }
+    }
+
+    /// Unknown/legacy raw values read as `.auto` — the safe default, since auto still validates
+    /// any Chrome launch against the currently detected profiles.
+    init(rawValue: String) {
+        if rawValue == "system" {
+            self = .system
+        } else if rawValue.hasPrefix(Self.chromePrefix), rawValue.count > Self.chromePrefix.count {
+            self = .chromeProfile(directory: String(rawValue.dropFirst(Self.chromePrefix.count)))
+        } else {
+            self = .auto
+        }
+    }
+}
+
 /// Single writer of all Google account state (D-G5): the JSON account index and OAuth client ID in
 /// UserDefaults, plus refresh tokens and the client secret in the Keychain (via the injected
 /// `GoogleSecretStoring` seam). Every `google.*` defaults key and every `google.*` Keychain
@@ -125,10 +160,13 @@ final class GoogleAccountStore: ObservableObject {
         persistIndex()
     }
 
-    /// Removes the account from the index and sweeps its whole Keychain prefix (D-G5).
+    /// Removes the account from the index and sweeps its whole Keychain prefix (D-G5) plus its
+    /// per-account defaults keys (the Keychain prefix sweep cannot reach UserDefaults, so the
+    /// link-opening preference is removed explicitly here).
     func remove(accountID: String) {
         accounts.removeAll { $0.id == accountID }
         try? secretStore.deleteAll(prefix: SecretService.accountPrefix(sub: accountID))
+        defaults.removeObject(forKey: Self.linkOpeningKey(sub: accountID))
         persistIndex()
     }
 
@@ -140,6 +178,36 @@ final class GoogleAccountStore: ObservableObject {
         guard let index = accounts.firstIndex(where: { $0.id == accountID }) else { return }
         accounts[index].statusRaw = status.rawValue
         persistIndex()
+    }
+
+    // MARK: - Join-link opening preference ([Google Phase 1 · join links])
+
+    /// The per-account defaults key. Dynamic (one per `sub`), so it lives here beside the
+    /// analogous `SecretService` helpers rather than as a `UserDefaultsKeys` constant; the store
+    /// stays the sole writer of every `google.*` defaults key (D-G5).
+    private static func linkOpeningKey(sub: String) -> String {
+        "google.account.\(sub).chromeProfile"
+    }
+
+    /// Where this account's meeting join links open. Absent key ⇒ `.auto` (the default).
+    func linkOpeningPreference(for accountID: String) -> GoogleAccountLinkOpening {
+        guard let raw = defaults.string(forKey: Self.linkOpeningKey(sub: accountID)) else {
+            return .auto
+        }
+        return GoogleAccountLinkOpening(rawValue: raw)
+    }
+
+    /// Persists the preference (`.auto` clears the key back to the default). Announces via
+    /// `objectWillChange` so the settings picker re-renders — the preference deliberately does not
+    /// ride the `accounts` index (it is not account *identity*, and republishing the index would
+    /// ripple into the sync engine's account-change trigger).
+    func setLinkOpeningPreference(_ preference: GoogleAccountLinkOpening, for accountID: String) {
+        objectWillChange.send()
+        if preference == .auto {
+            defaults.removeObject(forKey: Self.linkOpeningKey(sub: accountID))
+        } else {
+            defaults.set(preference.rawValue, forKey: Self.linkOpeningKey(sub: accountID))
+        }
     }
 
     // MARK: - Twin-calendar prompt bookkeeping (D-G6, consumed in M4)

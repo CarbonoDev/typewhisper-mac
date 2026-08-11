@@ -39,6 +39,10 @@ struct GoogleAccountsSection: View {
     @State private var isClientExpanded = false
     /// Inline error from the last failed connect/reauthorize (nil after cancel — not an error).
     @State private var connectError: String?
+    /// [Join links] Chrome profiles detected on appear (one `Local State` read), feeding each
+    /// account row's "Open links in" picker. Empty when Chrome is not installed — the picker then
+    /// offers only Automatic / System browser, so the no-Chrome case is unchanged.
+    @State private var chromeProfiles: [ChromeProfile] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -136,33 +140,83 @@ struct GoogleAccountsSection: View {
 
     private func accountRow(_ account: GoogleAccount) -> some View {
         let rowState = GoogleAccountRowState.make(for: account)
-        return HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.email)
-                    .font(.callout)
-                if let name = account.displayName, !name.isEmpty {
-                    Text(name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(account.email)
+                        .font(.callout)
+                    if let name = account.displayName, !name.isEmpty {
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                statusBadge(rowState, status: account.status)
+                if rowState.showsReconnect {
+                    Button(String(localized: "google.accounts.reconnect")) {
+                        reconnect(account)
+                    }
+                    // Same gating as "Add Google Account…" (M2 review finding 1): starting a second
+                    // flow mid-wait belongs to the explicit Cancel-then-retry path, not a row button.
+                    .disabled(authService.isAuthorizing)
+                }
+                if rowState.showsDisconnect {
+                    Button(String(localized: "google.accounts.disconnect")) {
+                        disconnect(account)
+                    }
                 }
             }
-            Spacer(minLength: 8)
-            statusBadge(rowState, status: account.status)
-            if rowState.showsReconnect {
-                Button(String(localized: "google.accounts.reconnect")) {
-                    reconnect(account)
-                }
-                // Same gating as "Add Google Account…" (M2 review finding 1): starting a second
-                // flow mid-wait belongs to the explicit Cancel-then-retry path, not a row button.
-                .disabled(authService.isAuthorizing)
-            }
-            if rowState.showsDisconnect {
-                Button(String(localized: "google.accounts.disconnect")) {
-                    disconnect(account)
-                }
-            }
+            linkOpeningPicker(account)
         }
         .padding(.vertical, 6)
+    }
+
+    // MARK: - Join-link opening preference ([Join links])
+
+    /// Per-account "Open links in" choice: Automatic (Chrome profile auto-matched by the signed-in
+    /// email, else system browser), the system browser, or an explicit detected Chrome profile.
+    /// Reads/writes through `GoogleAccountStore` (single writer of the `google.*` keys).
+    private func linkOpeningPicker(_ account: GoogleAccount) -> some View {
+        let current = accountStore.linkOpeningPreference(for: account.id)
+        return Picker(
+            String(localized: "google.links.openIn"),
+            selection: Binding(
+                get: { current.rawValue },
+                set: { raw in
+                    accountStore.setLinkOpeningPreference(
+                        GoogleAccountLinkOpening(rawValue: raw),
+                        for: account.id
+                    )
+                }
+            )
+        ) {
+            Text(String(localized: "google.links.auto"))
+                .tag(GoogleAccountLinkOpening.auto.rawValue)
+            Text(String(localized: "google.links.system"))
+                .tag(GoogleAccountLinkOpening.system.rawValue)
+            ForEach(chromeProfiles) { profile in
+                Text(chromeProfileLabel(profile))
+                    .tag(GoogleAccountLinkOpening.chromeProfile(directory: profile.directory).rawValue)
+            }
+            // A persisted profile that is no longer detected (deleted/renamed in Chrome) still
+            // renders as the selection — an invisible selection would silently reset the picker.
+            // The launcher already falls back to the system browser for it at open time.
+            if case .chromeProfile(let directory) = current,
+               !chromeProfiles.contains(where: { $0.directory == directory }) {
+                Text(String(format: String(localized: "google.links.chromeProfile"), directory))
+                    .tag(current.rawValue)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .font(.caption)
+        .frame(maxWidth: 360, alignment: .leading)
+    }
+
+    private func chromeProfileLabel(_ profile: ChromeProfile) -> String {
+        let detail = profile.email.map { "\(profile.displayName) (\($0))" } ?? profile.displayName
+        return String(format: String(localized: "google.links.chromeProfile"), detail)
     }
 
     private func statusBadge(_ rowState: GoogleAccountRowState, status: GoogleAccountStatus) -> some View {
@@ -308,6 +362,8 @@ struct GoogleAccountsSection: View {
         clientIDDraft = accountStore.clientID ?? ""
         clientSecretDraft = accountStore.clientSecret ?? ""
         isClientExpanded = !accountStore.isConfigured
+        // [Join links] One Local State read per appearance; missing Chrome ⇒ empty (no error).
+        chromeProfiles = ChromeProfileDetector.detectProfiles()
     }
 }
 
