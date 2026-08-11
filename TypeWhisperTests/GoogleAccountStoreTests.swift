@@ -240,4 +240,34 @@ final class GoogleAccountStoreTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: "google.account.sub-1.chromeProfile"))
         XCTAssertEqual(store.linkOpeningPreference(for: "sub-1"), .auto)
     }
+
+    // MARK: - Drive import toggle ([Google Phase 2 · M2], D-D8)
+
+    func testDriveImportToggleDefaultsOffAndRoundTrips() throws {
+        let store = makeStore()
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+
+        // Default off — the engine polls nothing until the M3 UI enables it.
+        XCTAssertFalse(store.isDriveImportEnabled(for: "sub-1"))
+
+        store.setDriveImportEnabled(true, for: "sub-1")
+        XCTAssertTrue(store.isDriveImportEnabled(for: "sub-1"))
+        XCTAssertEqual(defaults.string(forKey: "google.account.sub-1.driveImport"), "1")
+
+        // Off clears the key back to the absent default (the chromeProfile precedent).
+        store.setDriveImportEnabled(false, for: "sub-1")
+        XCTAssertFalse(store.isDriveImportEnabled(for: "sub-1"))
+        XCTAssertNil(defaults.string(forKey: "google.account.sub-1.driveImport"))
+    }
+
+    func testRemoveSweepsTheDriveImportToggle() throws {
+        let store = makeStore()
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        store.setDriveImportEnabled(true, for: "sub-1")
+
+        store.remove(accountID: "sub-1")
+
+        XCTAssertNil(defaults.string(forKey: "google.account.sub-1.driveImport"))
+        XCTAssertFalse(store.isDriveImportEnabled(for: "sub-1"))
+    }
 }

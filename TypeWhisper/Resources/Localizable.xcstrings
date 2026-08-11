@@ -20986,6 +20986,22 @@
         }
       }
     },
+    "google.drive.syncError": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive-Transkript-Synchronisierung fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive transcript sync failed: %@"
+          }
+        }
+      }
+    },
     "google.links.auto": {
       "localizations": {
         "de": {
@@ -27619,6 +27635,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speaker identification"
+          }
+        }
+      }
+    },
+    "meetings.jobs.kind.driveBackfill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import früherer Drive-Transkripte"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Past Drive transcripts import"
+          }
+        }
+      }
+    },
+    "meetings.jobs.kind.driveImport": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive-Transkript-Import"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive transcript import"
           }
         }
       }

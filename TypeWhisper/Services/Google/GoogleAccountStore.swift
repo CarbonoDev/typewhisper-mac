@@ -167,6 +167,7 @@ final class GoogleAccountStore: ObservableObject {
         accounts.removeAll { $0.id == accountID }
         try? secretStore.deleteAll(prefix: SecretService.accountPrefix(sub: accountID))
         defaults.removeObject(forKey: Self.linkOpeningKey(sub: accountID))
+        defaults.removeObject(forKey: Self.driveImportKey(sub: accountID))
         persistIndex()
     }
 
@@ -207,6 +208,33 @@ final class GoogleAccountStore: ObservableObject {
             defaults.removeObject(forKey: Self.linkOpeningKey(sub: accountID))
         } else {
             defaults.set(preference.rawValue, forKey: Self.linkOpeningKey(sub: accountID))
+        }
+    }
+
+    // MARK: - Drive import toggle ([Google Phase 2 · M2], D-D8)
+
+    /// The per-account defaults key ("1"/absent) — the exact `chromeProfile` precedent: dynamic
+    /// per-`sub`, written only here, swept by `remove(accountID:)`.
+    private static func driveImportKey(sub: String) -> String {
+        "google.account.\(sub).driveImport"
+    }
+
+    /// Whether Drive transcript auto-import is enabled for this account. Absent key ⇒ `false`
+    /// (default off — the Drive engine polls nothing until the M3 UI turns a toggle on).
+    func isDriveImportEnabled(for accountID: String) -> Bool {
+        defaults.string(forKey: Self.driveImportKey(sub: accountID)) == "1"
+    }
+
+    /// Persists the toggle (`false` clears the key back to the default). Announces via
+    /// `objectWillChange`, not the accounts index (enabled-ness is not account identity, and
+    /// republishing the index would ripple into the sync engines' account-change triggers) —
+    /// the D-D8 enable flow calls the Drive engine's `syncNow()` explicitly instead.
+    func setDriveImportEnabled(_ enabled: Bool, for accountID: String) {
+        objectWillChange.send()
+        if enabled {
+            defaults.set("1", forKey: Self.driveImportKey(sub: accountID))
+        } else {
+            defaults.removeObject(forKey: Self.driveImportKey(sub: accountID))
         }
     }
 

@@ -99,6 +99,30 @@ final class MeetingJobPresentationTests: XCTestCase {
         XCTAssertTrue(MeetingJobPresentation.canCancel(job(kind: .diarization, state: .running, started: 1)))
     }
 
+    // MARK: - Drive job kinds ([Google Phase 2 · M2])
+
+    /// The two Drive kinds ride the io lane (network + parse + main-actor store writes — no LLM
+    /// or transcription contention, D-D6) and stay ordinarily cancellable: `canCancel` needs no
+    /// new special case (only `.export` and a queued `.finalTranscription` are withheld).
+    func testDriveKindsMapToIOLaneAndAreCancellable() {
+        XCTAssertEqual(MeetingJobKind.driveImport.lane, .io)
+        XCTAssertEqual(MeetingJobKind.driveBackfill.lane, .io)
+        XCTAssertTrue(MeetingJobPresentation.canCancel(job(kind: .driveImport, state: .running, started: 1, meetingID: nil)))
+        XCTAssertTrue(MeetingJobPresentation.canCancel(job(kind: .driveBackfill, state: .queued, meetingID: nil)))
+        XCTAssertTrue(MeetingJobPresentation.canCancel(job(kind: .driveBackfill, state: .running, started: 1, meetingID: nil)))
+        XCTAssertFalse(MeetingJobPresentation.canCancel(job(kind: .driveImport, state: .succeeded, finished: 1, meetingID: nil)))
+    }
+
+    /// Both kinds section like any other job — a running Drive import shows in Running, a queued
+    /// backfill in Queued.
+    func testDriveKindsSectionNormally() {
+        let running = job(kind: .driveImport, state: .running, started: 1, meetingID: nil)
+        let queued = job(kind: .driveBackfill, state: .queued, meetingID: nil)
+        let sections = MeetingJobPresentation.sections(from: [running, queued])
+        XCTAssertEqual(sections.running.map(\.id), [running.id])
+        XCTAssertEqual(sections.queued.map(\.id), [queued.id])
+    }
+
     // MARK: - Home working badge
 
     func testHomeActivityBadgeIsNilWhenNothingRunning() {

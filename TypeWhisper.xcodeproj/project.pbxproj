@@ -209,6 +209,10 @@
 		GGB0000000000000000043 /* GoogleDriveAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000043 /* GoogleDriveAPITests.swift */; };
 		GGB0000000000000000044 /* GoogleDriveImportLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */; };
 		GGB0000000000000000045 /* DriveTranscriptMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */; };
+		GGB0000000000000000046 /* GoogleDriveTranscriptImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */; };
+		GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */; };
+		GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */; };
+		GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */; };
 		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
 		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
 		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
@@ -914,6 +918,10 @@
 		GGF0000000000000000043 /* GoogleDriveAPITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveAPITests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveImportLedgerTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveTranscriptMatcherTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveTranscriptImporter.swift; sourceTree = "<group>"; };
+		GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngine.swift; sourceTree = "<group>"; };
+		GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngineTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveTranscriptImporterTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
 		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
@@ -2386,6 +2394,8 @@
 				GGF0000000000000000040 /* GoogleDriveAPI.swift */,
 				GGF0000000000000000041 /* GoogleDriveImportLedger.swift */,
 				GGF0000000000000000042 /* DriveTranscriptMatcher.swift */,
+				GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */,
+				GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */,
 				GGF0000000000000000015 /* ChromeProfileDetector.swift */,
 				GGF0000000000000000016 /* MeetingJoinLauncher.swift */,
 			);
@@ -3045,6 +3055,8 @@
 				GGF0000000000000000043 /* GoogleDriveAPITests.swift */,
 				GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */,
 				GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */,
+				GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */,
+				GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */,
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
@@ -4629,6 +4641,8 @@
 				GGB0000000000000000043 /* GoogleDriveAPITests.swift in Sources */,
 				GGB0000000000000000044 /* GoogleDriveImportLedgerTests.swift in Sources */,
 				GGB0000000000000000045 /* DriveTranscriptMatcherTests.swift in Sources */,
+				GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */,
+				GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */,
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
@@ -4851,6 +4865,8 @@
 				GGB0000000000000000040 /* GoogleDriveAPI.swift in Sources */,
 				GGB0000000000000000041 /* GoogleDriveImportLedger.swift in Sources */,
 				GGB0000000000000000042 /* DriveTranscriptMatcher.swift in Sources */,
+				GGB0000000000000000046 /* GoogleDriveTranscriptImporter.swift in Sources */,
+				GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */,
 				GGB0000000000000000015 /* ChromeProfileDetector.swift in Sources */,
 				GGB0000000000000000016 /* MeetingJoinLauncher.swift in Sources */,
 				CA11000000000000000001 /* CalendarColor.swift in Sources */,
