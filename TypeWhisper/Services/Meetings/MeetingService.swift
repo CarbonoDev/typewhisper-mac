@@ -97,7 +97,9 @@ final class MeetingService: ObservableObject {
         endDate: Date? = nil,
         calendarEventID: String? = nil,
         seriesID: String? = nil,
-        attendees: [Attendee] = []
+        attendees: [Attendee] = [],
+        calendarNotes: String? = nil,
+        conferencingURL: String? = nil
     ) -> Meeting {
         let meeting = Meeting(
             title: title,
@@ -106,7 +108,9 @@ final class MeetingService: ObservableObject {
             startDate: startDate,
             endDate: endDate,
             calendarEventID: calendarEventID,
-            seriesID: seriesID
+            seriesID: seriesID,
+            calendarNotes: calendarNotes,
+            conferencingURL: conferencingURL
         )
         if !attendees.isEmpty {
             meeting.attendees = attendees
@@ -187,6 +191,8 @@ final class MeetingService: ObservableObject {
         startDate: Date,
         endDate: Date?,
         attendees: [Attendee],
+        calendarNotes: String? = nil,
+        conferencingURL: String? = nil,
         for meeting: Meeting
     ) {
         meeting.calendarEventID = calendarEventID
@@ -194,6 +200,11 @@ final class MeetingService: ObservableObject {
         meeting.startDate = startDate
         meeting.endDate = endDate
         meeting.attendees = attendees
+        // [Google Phase 1 · M5] Adopted wholesale, like `seriesID`: linking (or re-linking) means
+        // this event's rich detail replaces whatever a previous link snapshotted — including back
+        // to `nil` when the new event carries none.
+        meeting.calendarNotes = calendarNotes
+        meeting.conferencingURL = conferencingURL
         let trimmedEventTitle = eventTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if Self.isDefaultOrEmptyTitle(meeting.title), !trimmedEventTitle.isEmpty {
             meeting.title = trimmedEventTitle

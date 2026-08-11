@@ -18,7 +18,9 @@ protocol MeetingBriefSchedulerStore: AnyObject {
         endDate: Date?,
         calendarEventID: String?,
         seriesID: String?,
-        attendees: [Attendee]
+        attendees: [Attendee],
+        calendarNotes: String?,
+        conferencingURL: String?
     ) -> Meeting
     func latestOutput(ofKind kind: MeetingOutputKind, for meeting: Meeting) -> MeetingOutput?
 }
@@ -192,7 +194,11 @@ final class MeetingBriefScheduler: ObservableObject {
             endDate: projection.endDate,
             calendarEventID: projection.calendarEventID,
             seriesID: projection.seriesID,
-            attendees: projection.attendees
+            attendees: projection.attendees,
+            // [Google Phase 1 · M5] Auto-created meetings snapshot the event's rich detail too, so
+            // a meeting pre-created for its brief still shows notes + join link.
+            calendarNotes: projection.calendarNotes,
+            conferencingURL: projection.conferencingURL
         )
     }
 

@@ -565,7 +565,9 @@ final class MeetingsViewModel: ObservableObject {
             endDate: projection.endDate,
             calendarEventID: projection.calendarEventID,
             seriesID: projection.seriesID,
-            attendees: projection.attendees
+            attendees: projection.attendees,
+            calendarNotes: projection.calendarNotes,
+            conferencingURL: projection.conferencingURL
         )
         loadUpcoming()
         return meeting
@@ -627,6 +629,8 @@ final class MeetingsViewModel: ObservableObject {
             startDate: projection.startDate,
             endDate: projection.endDate,
             attendees: projection.attendees,
+            calendarNotes: projection.calendarNotes,
+            conferencingURL: projection.conferencingURL,
             for: meeting
         )
         loadUpcoming()

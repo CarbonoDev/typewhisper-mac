@@ -70,6 +70,15 @@ final class Meeting {
     /// mid-call (or a second tab on the same call) resumes the same meeting instead of forking a
     /// duplicate. Additive/optional ⇒ no migration. `nil` for every locally-captured meeting.
     var externalSessionKey: String?
+    /// Description/notes of the linked calendar event, snapshotted at meeting creation/link time
+    /// ([Google Phase 1 · M5], spec §4). Additive/optional ⇒ no migration (D-G, Phase 1). `nil` for
+    /// non-calendar meetings and for events without a description. Written only by the
+    /// single-writer `MeetingService` (`createMeeting` / `linkToCalendarEvent`).
+    var calendarNotes: String?
+    /// Video-conference join URL from the linked calendar event ([Google Phase 1 · M5], spec §4).
+    /// Additive/optional ⇒ no migration. `nil` when the event carries no recognizable join link.
+    /// Written only by the single-writer `MeetingService`.
+    var conferencingURL: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -110,6 +119,8 @@ final class Meeting {
         twoPersonCall: Bool? = nil,
         timestampsRefined: Bool? = nil,
         externalSessionKey: String? = nil,
+        calendarNotes: String? = nil,
+        conferencingURL: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
     ) {
@@ -137,6 +148,8 @@ final class Meeting {
         self.twoPersonCall = twoPersonCall
         self.timestampsRefined = timestampsRefined
         self.externalSessionKey = externalSessionKey
+        self.calendarNotes = calendarNotes
+        self.conferencingURL = conferencingURL
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.segments = []
