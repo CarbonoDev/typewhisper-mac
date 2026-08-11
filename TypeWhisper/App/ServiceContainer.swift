@@ -57,6 +57,12 @@ final class ServiceContainer: ObservableObject {
     // provider over it, wired into `CalendarService` as a secondary provider (D-G4 fan-in).
     let googleCalendarSyncEngine: GoogleCalendarSyncEngine
     let googleCalendarProvider: GoogleCalendarProvider
+    // [Google Phase 2 · M2] Drive transcript auto-import: side ledger (D-D5), per-file importer
+    // (D-D4), and the 15-min discovery engine (D-D6) — idle until an account's Drive toggle is
+    // turned on (D-D8, default off).
+    let googleDriveImportLedger: GoogleDriveImportLedger
+    let googleDriveTranscriptImporter: GoogleDriveTranscriptImporter
+    let googleDriveSyncEngine: GoogleDriveSyncEngine
     let meetingCaptureService: MeetingCaptureService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
@@ -373,6 +379,30 @@ final class ServiceContainer: ObservableObject {
             await meetingDiarizationEnricher?.autoAssignSpeakers(for: meeting, preferProviderLabels: prefer)
         }
 
+        // [Google Phase 2 · M2] Drive transcript auto-import, constructed after every dependency
+        // (import service above, job queue, calendar service): the ledger is the D-D5 side store,
+        // the importer the sole entry/failure writer, the engine the D-D6 scheduler (watermarks
+        // only; started in `initialize()` beside the calendar engine). Default-off toggles keep
+        // the whole stack idle — zero behavior change until the M3 UI lands.
+        let googleDriveImportLedger = GoogleDriveImportLedger()
+        self.googleDriveImportLedger = googleDriveImportLedger
+        let googleDriveTranscriptImporter = GoogleDriveTranscriptImporter(
+            tokenProvider: googleAuthService,
+            transport: URLSessionGoogleTransport(),
+            importService: meetingImportService,
+            meetingService: meetingService,
+            autoLink: calendarService,
+            ledger: googleDriveImportLedger
+        )
+        self.googleDriveTranscriptImporter = googleDriveTranscriptImporter
+        googleDriveSyncEngine = GoogleDriveSyncEngine(
+            store: googleAccountStore,
+            tokenProvider: googleAuthService,
+            ledger: googleDriveImportLedger,
+            jobQueue: meetingJobQueue,
+            processor: googleDriveTranscriptImporter
+        )
+
         // [Track D] Automatic pre-meeting briefs (plan AD9). Hooked into the calendar poll via the
         // meetings view model; pre-creates backing meetings and generates briefs for events entering
         // the lead window, deduped/freshness-gated and concurrency-capped, failing silently.
@@ -585,6 +615,11 @@ final class ServiceContainer: ObservableObject {
         // UI-visibility-scoped poll). Immediate first sync, then every 5 minutes, plus an
         // immediate re-sync on account connect/disconnect. Guarded out of tests above.
         googleCalendarSyncEngine.start()
+
+        // [Google Phase 2 · M2] Drive discovery cadence (D-D6 — 15 min, app-lifetime). Polls only
+        // `.connected` + Drive-enabled accounts; with every toggle off (the default until M3's
+        // UI) it issues zero Drive requests. Guarded out of tests above.
+        googleDriveSyncEngine.start()
 
         // [M2-Participants] One-time, idempotent backfill of the participant directory over every
         // existing meeting's roster (plan D7). Runs inline for a normally-sized archive; a large archive

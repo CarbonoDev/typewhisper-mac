@@ -15,6 +15,12 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
     case export
     /// One-time startup fold of every meeting's roster into the participant directory (plan D7, M2).
     case participantBackfill
+    /// [Google Phase 2 · M2] One Drive Gemini-notes doc: export + parse + match + merge/create
+    /// (D-D6). `meetingID` is nil (no meeting yet / not known); per-file dedupe lives in the
+    /// ledger's pending guard (D-D5), since the queue cannot key external IDs.
+    case driveImport
+    /// [Google Phase 2 · M2] One user-selected historical batch (D-D7); cancellable between files.
+    case driveBackfill
 
     /// The serial-execution lane a kind runs in (plan §0.1 lane table). LLM generation, transcription
     /// work, and I/O each get their own lane so they never contend across categories.
@@ -29,6 +35,10 @@ enum MeetingJobKind: String, Sendable, CaseIterable {
             return .transcription
         case .export, .participantBackfill:
             // Both are pure I/O over the local stores — no LLM or transcription contention.
+            return .io
+        case .driveImport, .driveBackfill:
+            // Network fetch + parse + main-actor store writes — no LLM or transcription
+            // contention, so the io lane (D-D6).
             return .io
         }
     }
@@ -117,6 +127,8 @@ extension MeetingJobKind {
         case .diarization: return String(localized: "meetings.jobs.kind.diarization")
         case .export: return String(localized: "meetings.jobs.kind.export")
         case .participantBackfill: return String(localized: "meetings.jobs.kind.participantBackfill")
+        case .driveImport: return String(localized: "meetings.jobs.kind.driveImport")
+        case .driveBackfill: return String(localized: "meetings.jobs.kind.driveBackfill")
         }
     }
 }
