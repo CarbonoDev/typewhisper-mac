@@ -5,12 +5,17 @@ import XCTest
 /// no real Keychain, no standard defaults (§7).
 @MainActor
 final class GoogleAccountStoreTests: XCTestCase {
-    /// In-memory `GoogleSecretStoring` fake recording the prefix sweeps disconnect relies on.
+    /// In-memory `GoogleSecretStoring` fake recording the prefix sweeps disconnect relies on;
+    /// `saveError` simulates a Keychain write failure.
     private final class InMemorySecretStore: GoogleSecretStoring {
         private(set) var secrets: [String: String] = [:]
         private(set) var sweptPrefixes: [String] = []
+        var saveError: Error?
 
         func save(_ secret: String, service: String) throws {
+            if let saveError {
+                throw saveError
+            }
             secrets[service] = secret
         }
 
@@ -66,9 +71,9 @@ final class GoogleAccountStoreTests: XCTestCase {
 
     // MARK: - Upsert / dedupe
 
-    func testUpsertInsertsAndPersistsAcrossInstances() {
+    func testUpsertInsertsAndPersistsAcrossInstances() throws {
         let store = makeStore()
-        store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
 
         XCTAssertEqual(store.accounts.map(\.id), ["sub-1"])
         XCTAssertEqual(store.refreshToken(for: "sub-1"), "rt-1")
@@ -79,10 +84,10 @@ final class GoogleAccountStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.accounts.first?.email, "ada@example.com")
     }
 
-    func testUpsertDedupesBySubUnionsScopesAndReplacesToken() {
+    func testUpsertDedupesBySubUnionsScopesAndReplacesToken() throws {
         let store = makeStore()
-        store.upsert(account(sub: "sub-1", scopes: ["openid", "email"]), refreshToken: "rt-old")
-        store.upsert(
+        try store.upsert(account(sub: "sub-1", scopes: ["openid", "email"]), refreshToken: "rt-old")
+        try store.upsert(
             account(sub: "sub-1", email: "ada@new.example", scopes: ["openid", "drive.readonly"]),
             refreshToken: "rt-new"
         )
@@ -97,21 +102,32 @@ final class GoogleAccountStoreTests: XCTestCase {
         XCTAssertEqual(store.refreshToken(for: "sub-1"), "rt-new")
     }
 
-    func testUpsertKeepsDistinctAccountsApart() {
+    func testUpsertKeepsDistinctAccountsApart() throws {
         let store = makeStore()
-        store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
-        store.upsert(account(sub: "sub-2", email: "grace@example.com"), refreshToken: "rt-2")
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        try store.upsert(account(sub: "sub-2", email: "grace@example.com"), refreshToken: "rt-2")
 
         XCTAssertEqual(store.accounts.map(\.id), ["sub-1", "sub-2"])
         XCTAssertEqual(store.refreshToken(for: "sub-1"), "rt-1")
         XCTAssertEqual(store.refreshToken(for: "sub-2"), "rt-2")
     }
 
+    func testUpsertThrowsAndRecordsNothingWhenSecretSaveFails() {
+        // SR review: a row recorded without its refresh token would look .connected while being
+        // silently unable to refresh — the save failure must surface and leave the index untouched.
+        secretStore.saveError = KeychainError.saveFailed(-25299)
+        let store = makeStore()
+
+        XCTAssertThrowsError(try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1"))
+        XCTAssertTrue(store.accounts.isEmpty, "no account row without its refresh token")
+        XCTAssertTrue(makeStore().accounts.isEmpty, "nothing persisted either")
+    }
+
     // MARK: - Remove
 
     func testRemoveSweepsTheAccountKeychainPrefix() throws {
         let store = makeStore()
-        store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
         // A hypothetical future per-account secret under the same prefix must be swept too (D-G5).
         try secretStore.save("extra", service: "google.account.sub-1.future-secret")
 
@@ -125,9 +141,9 @@ final class GoogleAccountStoreTests: XCTestCase {
 
     // MARK: - Status
 
-    func testSetStatusPersists() {
+    func testSetStatusPersists() throws {
         let store = makeStore()
-        store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt-1")
 
         store.setStatus(.needsReauth, for: "sub-1")
         XCTAssertEqual(store.accounts.first?.status, .needsReauth)

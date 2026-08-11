@@ -1,13 +1,30 @@
 import XCTest
 @testable import TypeWhisper
 
-/// `GoogleAuthService`'s token management over a fake transport, an in-memory secret store, and an
-/// injected clock (§7): refresh on the 60 s expiry skew, single-flight per account, and
-/// `invalid_grant` → `.needsReauth`. The browser/loopback connect path is exercised manually
-/// (QA script §7), not here.
+/// `GoogleAuthService` over a fake transport, an in-memory secret store, a fake loopback server,
+/// and an injected clock (§7). Covers token management (refresh on the 60 s expiry skew,
+/// single-flight per account, `invalid_grant` → `.needsReauth`) and the connect-flow state
+/// machine (cancel mid-wait, restart-while-pending — SR review). No test binds a listener or
+/// opens a browser; redirects are delivered by invoking the fake server's `onCallback` directly.
 @MainActor
 final class GoogleAuthServiceTokenTests: XCTestCase {
     // MARK: - Fakes
+
+    /// Records start/stop and exposes `onCallback` so tests deliver the redirect directly.
+    private final class FakeLoopbackServer: GoogleLoopbackServing {
+        var onCallback: @MainActor (URL) -> Void = { _ in }
+        private(set) var started = false
+        private(set) var stopped = false
+
+        func start() throws -> UInt16 {
+            started = true
+            return 49152
+        }
+
+        func stop() {
+            stopped = true
+        }
+    }
 
     private final class InMemorySecretStore: GoogleSecretStoring {
         private var secrets: [String: String] = [:]
@@ -81,12 +98,15 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
     private var store: GoogleAccountStore!
     /// Mutable wall clock injected into the service so skew math is deterministic.
     private var currentDate = Date(timeIntervalSince1970: 1_700_000_000)
+    /// Authorization URLs the service "opened in the browser" (flow tests read `state` from them).
+    private var openedURLs: [URL] = []
 
     override func setUp() {
         super.setUp()
         suiteName = "GoogleAuthServiceTokenTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         currentDate = Date(timeIntervalSince1970: 1_700_000_000)
+        openedURLs = []
     }
 
     override func tearDown() {
@@ -96,12 +116,17 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
 
     /// Builds the store (configured client + one connected account with a stored refresh token)
     /// and the service under test. MainActor helper rather than `setUp` — the store and service
-    /// are MainActor-isolated, the inherited `setUp` override is not.
-    private func makeService(transport: FakeTransport) -> GoogleAuthService {
+    /// are MainActor-isolated, the inherited `setUp` override is not. Token-only tests pass no
+    /// `servers`: any browser open or server creation then fails the test; flow tests queue one
+    /// fake server per expected connect attempt.
+    private func makeService(
+        transport: FakeTransport,
+        servers: [FakeLoopbackServer] = []
+    ) throws -> GoogleAuthService {
         store = GoogleAccountStore(defaults: defaults, secretStore: InMemorySecretStore())
         store.clientID = "client-123"
         store.clientSecret = "secret-abc"
-        store.upsert(
+        try store.upsert(
             GoogleAccount(
                 id: "sub-1",
                 email: "ada@example.com",
@@ -112,12 +137,43 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             ),
             refreshToken: "rt-1"
         )
+        let flowExpected = !servers.isEmpty
+        var pendingServers = servers
         return GoogleAuthService(
             store: store,
             transport: transport,
             now: { self.currentDate },
-            openBrowser: { _ in XCTFail("token tests must never open a browser") }
+            openBrowser: { url in
+                if flowExpected {
+                    self.openedURLs.append(url)
+                } else {
+                    XCTFail("token tests must never open a browser")
+                }
+            },
+            makeServer: { _ in
+                guard !pendingServers.isEmpty else {
+                    XCTFail("no fake loopback server queued for this connect attempt")
+                    return FakeLoopbackServer()
+                }
+                return pendingServers.removeFirst()
+            }
         )
+    }
+
+    /// The named query parameter of a URL.
+    private func queryValue(_ name: String, of url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == name })?
+            .value
+    }
+
+    /// An unsigned fixture ID token (payload-only trust, matching `decodeIDToken`).
+    private func fixtureIDToken(sub: String, email: String, name: String) -> String {
+        let header = Data(#"{"alg":"RS256","typ":"JWT"}"#.utf8).base64URLEncodedStringNoPadding()
+        let payload = Data(#"{"sub":"\#(sub)","email":"\#(email)","name":"\#(name)"}"#.utf8)
+            .base64URLEncodedStringNoPadding()
+        return "\(header).\(payload).fixture-signature"
     }
 
     // MARK: - Refresh + cache
@@ -126,7 +182,7 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         let transport = FakeTransport(responses: [
             .init(statusCode: 200, body: Self.tokenBody(accessToken: "at-1")),
         ])
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
 
         let first = try await service.accessToken(for: "sub-1")
         XCTAssertEqual(first, "at-1")
@@ -147,7 +203,7 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             .init(statusCode: 200, body: Self.tokenBody(accessToken: "at-1", expiresIn: 3600)),
             .init(statusCode: 200, body: Self.tokenBody(accessToken: "at-2", expiresIn: 3600)),
         ])
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
         _ = try await service.accessToken(for: "sub-1")
 
         // 30 s of validity left — inside the 60 s skew, so the cached token must not be reused.
@@ -164,7 +220,7 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             responses: [.init(statusCode: 200, body: Self.tokenBody(accessToken: "at-1"))],
             delayNanoseconds: 50_000_000 // keep the refresh in flight while the second caller lands
         )
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
 
         async let first = service.accessToken(for: "sub-1")
         async let second = service.accessToken(for: "sub-1")
@@ -176,11 +232,11 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
 
     // MARK: - invalid_grant → needsReauth
 
-    func testInvalidGrantFlipsAccountToNeedsReauthAndThrows() async {
+    func testInvalidGrantFlipsAccountToNeedsReauthAndThrows() async throws {
         let transport = FakeTransport(responses: [
             .init(statusCode: 400, body: #"{"error": "invalid_grant", "error_description": "Token has been expired or revoked."}"#),
         ])
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
 
         do {
             _ = try await service.accessToken(for: "sub-1")
@@ -191,11 +247,11 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         XCTAssertEqual(store.accounts.first?.status, .needsReauth)
     }
 
-    func testTransientRefreshFailureDoesNotFlipStatus() async {
+    func testTransientRefreshFailureDoesNotFlipStatus() async throws {
         let transport = FakeTransport(responses: [
             .init(statusCode: 503, body: "upstream unavailable"),
         ])
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
 
         do {
             _ = try await service.accessToken(for: "sub-1")
@@ -206,11 +262,11 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         XCTAssertEqual(store.accounts.first?.status, .connected, "transient failures never demote the account")
     }
 
-    func testMissingRefreshTokenThrowsNeedsReauthWithoutANetworkCall() async {
+    func testMissingRefreshTokenThrowsNeedsReauthWithoutANetworkCall() async throws {
         // No stored token for this account (e.g. Keychain item swept externally): same remedy as a
         // rejected token — reconnect — and no pointless network round-trip.
         let transport = FakeTransport(responses: [])
-        let service = makeService(transport: transport)
+        let service = try makeService(transport: transport)
 
         do {
             _ = try await service.accessToken(for: "ghost-sub")
@@ -219,5 +275,69 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             XCTAssertEqual(error as? GoogleAuthError, .needsReauth)
         }
         XCTAssertTrue(transport.requests.isEmpty, "no network call without a refresh token")
+    }
+
+    // MARK: - Connect-flow state machine (SR review)
+
+    func testCancelMidWaitThrowsCancelledAndStopsListener() async throws {
+        let server = FakeLoopbackServer()
+        let service = try makeService(transport: FakeTransport(responses: []), servers: [server])
+
+        let connect = Task { try await service.connectAccount() }
+        // Let the flow run its synchronous prefix (server started, browser "opened").
+        while openedURLs.isEmpty {
+            await Task.yield()
+        }
+        service.cancelConnect()
+
+        do {
+            _ = try await connect.value
+            XCTFail("expected cancelled")
+        } catch {
+            XCTAssertEqual(error as? GoogleAuthError, .cancelled)
+        }
+        XCTAssertTrue(server.stopped, "cancel must stop the loopback listener")
+    }
+
+    func testRestartWhilePendingCancelsOldFlowAndNewFlowStillCompletes() async throws {
+        // The finding-1 scenario: flow B starts while flow A is awaiting its redirect. A must
+        // throw `.cancelled`; B's session (server, timeout, continuation) must survive A's unwind
+        // and complete when B's callback arrives.
+        let serverA = FakeLoopbackServer()
+        let serverB = FakeLoopbackServer()
+        let idToken = fixtureIDToken(sub: "sub-9", email: "new@example.com", name: "New Account")
+        let exchangeBody = """
+        {"access_token": "at-9", "expires_in": 3600, "refresh_token": "rt-9", \
+        "id_token": "\(idToken)", "scope": "openid email profile"}
+        """
+        let transport = FakeTransport(responses: [.init(statusCode: 200, body: exchangeBody)])
+        let service = try makeService(transport: transport, servers: [serverA, serverB])
+
+        let flowA = Task { try await service.connectAccount() }
+        while openedURLs.count < 1 {
+            await Task.yield()
+        }
+        let flowB = Task { try await service.connectAccount() }
+        while openedURLs.count < 2 {
+            await Task.yield()
+        }
+
+        do {
+            _ = try await flowA.value
+            XCTFail("flow A should have been cancelled by the restart")
+        } catch {
+            XCTAssertEqual(error as? GoogleAuthError, .cancelled)
+        }
+        XCTAssertTrue(serverA.stopped, "restart must stop the stale flow's listener")
+
+        // Deliver B's redirect directly, echoing the state from the URL B opened.
+        let stateB = try XCTUnwrap(queryValue("state", of: openedURLs[1]))
+        serverB.onCallback(URL(string: "http://127.0.0.1:49152/?state=\(stateB)&code=code-b")!)
+
+        let account = try await flowB.value
+        XCTAssertEqual(account.id, "sub-9")
+        XCTAssertEqual(account.email, "new@example.com")
+        XCTAssertEqual(store.refreshToken(for: "sub-9"), "rt-9")
+        XCTAssertEqual(transport.requests.count, 1, "exactly one exchange — flow B's")
     }
 }

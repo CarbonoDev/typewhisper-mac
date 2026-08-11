@@ -104,7 +104,12 @@ final class GoogleAccountStore: ObservableObject {
     /// Inserts or updates an account, deduped by `sub`. On a re-add the scopes are unioned (the
     /// incremental-scope contract, §9 — Google merges grants server-side, the index mirrors that)
     /// and the stored refresh token is replaced with the fresh one.
-    func upsert(_ account: GoogleAccount, refreshToken: String) {
+    ///
+    /// The token is saved **first** and a Keychain failure propagates (SR review): an account row
+    /// without its refresh token would report `.connected` while silently unable to ever refresh,
+    /// so the index is only touched once the secret is durably stored.
+    func upsert(_ account: GoogleAccount, refreshToken: String) throws {
+        try secretStore.save(refreshToken, service: SecretService.refreshToken(sub: account.id))
         var incoming = account
         if let index = accounts.firstIndex(where: { $0.id == account.id }) {
             let existing = accounts[index]
@@ -117,7 +122,6 @@ final class GoogleAccountStore: ObservableObject {
         } else {
             accounts.append(incoming)
         }
-        try? secretStore.save(refreshToken, service: SecretService.refreshToken(sub: account.id))
         persistIndex()
     }
 
