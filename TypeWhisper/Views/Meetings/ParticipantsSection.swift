@@ -75,6 +75,23 @@ struct ParticipantsSection: View {
                         .lineLimit(1)
                 }
             }
+            // [Google Phase 1 · M5] Display-only rich attendee detail (spec §5 M5): an organizer
+            // badge and a subtle RSVP glyph. Both degrade to nothing when the source (EventKit
+            // pre-M5, manual entries) didn't carry them.
+            if attendee.isOrganizer == true {
+                Text(String(localized: "meetings.attendee.organizer"))
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.secondary)
+            }
+            if let status = attendee.responseStatus {
+                Image(systemName: Self.rsvpGlyph(for: status))
+                    .font(.caption)
+                    .foregroundStyle(Self.rsvpTint(for: status))
+                    .help(Self.rsvpHelp(for: status))
+            }
             Spacer(minLength: 8)
             Button {
                 viewModel.removeAttendee(attendee, from: meeting)
@@ -127,6 +144,35 @@ struct ParticipantsSection: View {
         case .calendar: return "calendar"
         case .directory: return "person.crop.circle"
         case .createNew: return "plus.circle"
+        }
+    }
+
+    // MARK: - [Google Phase 1 · M5] RSVP presentation (display-only)
+
+    static func rsvpGlyph(for status: AttendeeResponseStatus) -> String {
+        switch status {
+        case .accepted: return "checkmark.circle"
+        case .declined: return "xmark.circle"
+        case .tentative: return "questionmark.circle"
+        case .needsAction: return "circle.dotted"
+        }
+    }
+
+    static func rsvpTint(for status: AttendeeResponseStatus) -> Color {
+        switch status {
+        case .accepted: return .green
+        case .declined: return .red
+        case .tentative: return .orange
+        case .needsAction: return .secondary
+        }
+    }
+
+    static func rsvpHelp(for status: AttendeeResponseStatus) -> String {
+        switch status {
+        case .accepted: return String(localized: "meetings.attendee.rsvp.accepted")
+        case .declined: return String(localized: "meetings.attendee.rsvp.declined")
+        case .tentative: return String(localized: "meetings.attendee.rsvp.tentative")
+        case .needsAction: return String(localized: "meetings.attendee.rsvp.needsAction")
         }
     }
 

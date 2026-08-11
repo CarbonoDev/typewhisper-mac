@@ -307,6 +307,10 @@ final class CalendarService: ObservableObject {
         var calendarEventID: String
         var seriesID: String?
         var attendees: [Attendee]
+        /// Event description/notes to snapshot onto the meeting ([Google Phase 1 · M5], spec §4).
+        var calendarNotes: String?
+        /// Video-conference join URL to snapshot onto the meeting ([Google Phase 1 · M5], spec §4).
+        var conferencingURL: String?
     }
 
     static func meetingProjection(for event: CalendarEventDTO) -> MeetingProjection {
@@ -318,7 +322,9 @@ final class CalendarService: ObservableObject {
             endDate: event.endDate,
             calendarEventID: event.id,
             seriesID: event.seriesID,
-            attendees: event.attendees
+            attendees: event.attendees,
+            calendarNotes: event.eventNotes,
+            conferencingURL: event.conferencingURL
         )
     }
 
@@ -526,8 +532,19 @@ final class EventKitCalendarProvider: CalendarEventProviding {
             calendarName: event.calendar?.title,
             calendarID: event.calendar?.calendarIdentifier,
             calendarColor: event.calendar.map { ($0.color as NSColor?).map(CalendarColor.init(nsColor:)) ?? .fallback },
-            attendees: attendees(from: event)
+            attendees: attendees(from: event),
+            // [Google Phase 1 · M5] Rich detail from EventKit too (spec §5 M5): notes verbatim
+            // (nil when blank, matching the Google mapper), and the join link from the event's
+            // URL field or — the EventKit-world precedent — the first conference link in the notes.
+            eventNotes: normalizedNotes(event.notes),
+            conferencingURL: ConferenceURLDetector.detect(url: event.url, notes: event.notes)
         )
+    }
+
+    /// Event notes normalized like the Google mapper's: whitespace-trimmed, blank ⇒ `nil`.
+    private static func normalizedNotes(_ notes: String?) -> String? {
+        let trimmed = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     /// Occurrence-scoped identifier. All occurrences of a recurring series returned by
@@ -546,13 +563,37 @@ final class EventKitCalendarProvider: CalendarEventProviding {
 
     private static func attendees(from event: EKEvent) -> [Attendee] {
         guard let participants = event.attendees else { return [] }
+        let organizerURL = event.organizer?.url
         return participants.map { participant in
             // Speaker-recognition amendment (D-A8): carry `isCurrentUser` additively so the two-person
             // channel path can name `SPEAKER_OTHERS` from the single non-self attendee. Stored only
             // when the participant *is* the current user (`true`); a non-self participant stays `nil`
             // so "indeterminate self" and "known other" both read as `isSelf != true`.
             let isSelf: Bool? = participant.isCurrentUser ? true : nil
-            return Attendee(name: participant.name ?? "", email: email(from: participant), isSelf: isSelf)
+            // [Google Phase 1 · M5] Organizer + RSVP from EventKit too ("EventKit follows in M5",
+            // Attendee.swift). Organizer is matched by participant URL against `event.organizer`
+            // and stored only when *true* (the `isSelf` convention — EventKit can't distinguish
+            // "not organizer" from "unknown" when the organizer isn't in the attendee list).
+            let isOrganizer: Bool? = (organizerURL != nil && participant.url == organizerURL) ? true : nil
+            return Attendee(
+                name: participant.name ?? "",
+                email: email(from: participant),
+                isSelf: isSelf,
+                isOrganizer: isOrganizer,
+                responseStatusRaw: responseStatusRaw(from: participant.participantStatus)
+            )
+        }
+    }
+
+    /// EventKit RSVP → the shared `AttendeeResponseStatus` vocabulary ([Google Phase 1 · M5]).
+    /// Statuses outside the four-value vocabulary (delegated, completed, …) degrade to `nil`.
+    private static func responseStatusRaw(from status: EKParticipantStatus) -> String? {
+        switch status {
+        case .accepted: return AttendeeResponseStatus.accepted.rawValue
+        case .declined: return AttendeeResponseStatus.declined.rawValue
+        case .tentative: return AttendeeResponseStatus.tentative.rawValue
+        case .pending: return AttendeeResponseStatus.needsAction.rawValue
+        default: return nil
         }
     }
 

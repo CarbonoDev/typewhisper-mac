@@ -18,6 +18,11 @@ struct MeetingDocumentBody: View {
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
 
+    @Environment(\.openURL) private var openURL
+    /// [Google Phase 1 · M5] The event-details disclosure starts collapsed (spec §5 M5) — the
+    /// briefing page's hero stays the brief.
+    @State private var isEventDetailsExpanded = false
+
     var body: some View {
         switch presentation.bodyMode {
         case .scheduledEmpty:
@@ -36,7 +41,42 @@ struct MeetingDocumentBody: View {
             MeetingBriefView(meeting: meeting) {
                 model.isPresentingImport = true
             }
+            eventDetailsSection
             MeetingRelatedDocsSection(meeting: meeting)
+        }
+    }
+
+    /// [Google Phase 1 · M5] The linked calendar event's snapshotted detail (spec §5 M5): a
+    /// collapsed disclosure with the event's notes, plus the join link when the event carries one.
+    /// Renders nothing for meetings without either — non-calendar meetings degrade gracefully.
+    @ViewBuilder
+    private var eventDetailsSection: some View {
+        let notes = meeting.calendarNotes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let joinURL = meeting.conferencingURL.flatMap(URL.init(string:))
+        if notes?.isEmpty == false || joinURL != nil {
+            DisclosureGroup(isExpanded: $isEventDetailsExpanded) {
+                VStack(alignment: .leading, spacing: MeetingTheme.s2) {
+                    if let joinURL {
+                        Button {
+                            openURL(joinURL)
+                        } label: {
+                            Label(String(localized: "meetings.event.join"), systemImage: "video")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    if let notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(MeetingTheme.meta)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.top, MeetingTheme.s2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                MeetingSectionLabel(String(localized: "meetings.event.detailsSection"))
+            }
         }
     }
 

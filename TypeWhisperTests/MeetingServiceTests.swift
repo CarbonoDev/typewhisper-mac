@@ -57,6 +57,64 @@ final class MeetingServiceTests: XCTestCase {
         XCTAssertEqual(meeting.qaTurns.count, 1)
     }
 
+    // MARK: - [Google Phase 1 · M5] Calendar rich-detail columns
+
+    func testCreateMeetingPersistsCalendarRichDetail() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        do {
+            let service = MeetingService(appSupportDirectory: dir)
+            service.createMeeting(
+                title: "Design Review",
+                source: .calendar,
+                calendarEventID: "evt-9",
+                calendarNotes: "Bring the mockups.",
+                conferencingURL: "https://meet.google.com/abc-defg-hij"
+            )
+        }
+
+        let reopened = MeetingService(appSupportDirectory: dir)
+        let meeting = try XCTUnwrap(reopened.meetings.first)
+        XCTAssertEqual(meeting.calendarNotes, "Bring the mockups.")
+        XCTAssertEqual(meeting.conferencingURL, "https://meet.google.com/abc-defg-hij")
+    }
+
+    func testLinkToCalendarEventAdoptsAndReplacesRichDetail() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Ad hoc", source: .adHoc)
+
+        service.linkToCalendarEvent(
+            calendarEventID: "evt-1",
+            seriesID: nil,
+            title: "Planning",
+            startDate: Date(timeIntervalSince1970: 1_000_000),
+            endDate: nil,
+            attendees: [],
+            calendarNotes: "Agenda in the doc.",
+            conferencingURL: "https://zoom.us/j/123",
+            for: meeting
+        )
+        XCTAssertEqual(meeting.calendarNotes, "Agenda in the doc.")
+        XCTAssertEqual(meeting.conferencingURL, "https://zoom.us/j/123")
+
+        // Re-linking adopts the new event wholesale: an event without rich detail clears the
+        // previous snapshot instead of leaving a stale join link behind.
+        service.linkToCalendarEvent(
+            calendarEventID: "evt-2",
+            seriesID: nil,
+            title: "Planning (moved)",
+            startDate: Date(timeIntervalSince1970: 2_000_000),
+            endDate: nil,
+            attendees: [],
+            for: meeting
+        )
+        XCTAssertNil(meeting.calendarNotes)
+        XCTAssertNil(meeting.conferencingURL)
+    }
+
     // MARK: - Cascade delete
 
     func testDeleteMeetingCascadesToChildren() throws {
