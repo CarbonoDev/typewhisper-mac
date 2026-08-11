@@ -171,6 +171,37 @@ final class DriveTranscriptMatcherTests: XCTestCase {
         XCTAssertEqual(meetingID, strongOtherAccount.id)
     }
 
+    /// Back-to-back recurring occurrences (the review's D-D4 ordering ruling): yesterday's
+    /// same-account "Weekly sync" still qualifies at 23 h distance (~0.66), but today's unlinked
+    /// occurrence scores ~1.0 — a gap far beyond the near-tie band, so score dominates and
+    /// affinity must NOT redirect the transcript into the wrong occurrence.
+    func testScoreDominatesAffinityBeyondTheNearTieBand() {
+        let yesterdaySameAccount = DriveTranscriptMatcher.Candidate(
+            title: "Weekly sync",
+            startDate: embeddedDate.addingTimeInterval(-23 * 60 * 60),
+            calendarEventID: "google:sub-1:evt-yesterday",
+            segmentCount: 80
+        )
+        let todayUnlinked = DriveTranscriptMatcher.Candidate(
+            title: "Weekly sync",
+            startDate: embeddedDate,
+            segmentCount: 3
+        )
+
+        let disposition = DriveTranscriptMatcher.disposition(
+            fileName: datedFileName,
+            createdTime: nil,
+            sub: "sub-1",
+            candidates: [yesterdaySameAccount, todayUnlinked]
+        )
+
+        guard case .merge(let meetingID, let score) = disposition else {
+            return XCTFail("expected merge, got \(disposition)")
+        }
+        XCTAssertEqual(meetingID, todayUnlinked.id, "score gap > 0.05 must be decided by score alone")
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
     func testMoreSegmentsBreaksRemainingTies() {
         let sparse = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync", startDate: embeddedDate, segmentCount: 2

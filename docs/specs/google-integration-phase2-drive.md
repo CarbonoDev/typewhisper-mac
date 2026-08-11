@@ -215,8 +215,14 @@ plus a value snapshot of candidate meetings
 0.65/0.35 `linkScore` blend (:395) — over candidates whose `startDate` lies within
 `CalendarService.defaultAutoLinkWindow` (±24 h, :441; deliberately narrow so a weekly recurring
 title can never hit the wrong occurrence). Threshold: `defaultAutoLinkConfidence` (0.6, :446).
-Ties: prefer a meeting whose `calendarEventID` is namespaced to the **same account**
-(`GoogleCalendarID.accountSub(fromNamespacedID:)`,
+Ranking among qualifying candidates (score ≥ threshold) is **score-dominant with a near-tie
+band** (review ruling, 2026-08-11): a score gap wider than **0.05**
+(`DriveTranscriptMatcher.affinityTieBand`) is decided by score alone — account affinity must
+never redirect a transcript away from a clearly better match (back-to-back recurring
+occurrences: yesterday's same-account meeting at ~0.66 would otherwise beat today's unlinked
+meeting at ~1.0, silently corrupting the wrong occurrence and breaking cross-account
+convergence). Within the band, prefer a meeting whose `calendarEventID` is namespaced to the
+**same account** (`GoogleCalendarID.accountSub(fromNamespacedID:)`,
 `Services/Google/GoogleCalendarMapper.swift:21-26` — the transcript and the calendar event came
 from the same Google account), then higher score, then more segments (the `ranksBefore` spirit,
 `MeetingMergePlan.swift`).
@@ -317,7 +323,12 @@ engine re-enqueues ledgered failures with `attempts < 3` each cycle regardless o
 then abandons (the record stays — surfaced in logs and as a selectable backfill row, D-D7).
 This keeps transient export errors from blocking the watermark indefinitely: a failed file has
 left the pending set, so the D-D6 rule no longer holds the watermark for it — the failure
-record, not the watermark, is what brings it back. **Pruning:** failure records past the retry
+record, not the watermark, is what brings it back. **The re-merge path is gated by the same
+cap** (review fix, 2026-08-11): a ledgered doc whose re-merges keep failing is skipped once
+`attempts ≥ 3` — UNLESS the doc was edited again *after* the last failed attempt
+(`modifiedTime > lastAttemptAt`), which **resets the attempt budget** before re-merging: an
+edit plausibly fixes a parse failure. (Failure records therefore carry `lastAttemptAt`
+alongside the attempt count — needed for this rule and for pruning.) **Pruning:** failure records past the retry
 cap are pruned 30 days after their last attempt (the backfill sheet remains the recovery);
 imported entries are kept indefinitely — bounded by the number of real docs, declared
 acceptable (§8).
@@ -661,7 +672,10 @@ twin, a no-date filename, a plain-text degraded export.
 4. Have a meeting with Gemini notes ("Take notes with Gemini") → after the doc lands in Drive,
    within ≤15 min (or **Check now**) a "Drive transcript import" job appears and the transcript
    attaches to the calendar meeting created for that event — verify speakers, timestamps, and
-   that the meeting was **merged, not duplicated**.
+   that the meeting was **merged, not duplicated**. This step also validates that the lowercase
+   `name contains` terms (derived from `ImportedMeetingTitle.notesSuffixes`) match Google's
+   title-case doc names — Drive matching is documented case-insensitive; if discovery fails
+   here, the fallback is emitting display-case variants derived from the same canonical list.
 5. **Flagship collision:** run a meeting captured with live captions, then let its Gemini doc
    import — verify overlapped live rows were replaced by the Gemini transcript
    (`ImportOverlapPlan`) and non-overlapped content survived.

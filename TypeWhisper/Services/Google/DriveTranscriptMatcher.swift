@@ -43,19 +43,28 @@ enum DriveTranscriptMatcher {
         case create(title: String, startDate: Date?)
     }
 
+    /// Scores within this band of each other count as a near-tie, where account affinity (then
+    /// segment count) may break the order; a wider gap is decided by score alone (D-D4, review
+    /// ruling on the tie-break ordering).
+    static let affinityTieBand: Double = 0.05
+
     /// Resolve the disposition for one Drive doc.
     ///
     /// Scoring reuses the Phase-1-proven pure statics unchanged — `CalendarService.titleSimilarity`
     /// (token Jaccard) / `dateProximity` / the 0.65/0.35 `linkScore` blend — over candidates whose
     /// `startDate` lies within ±`window` of the doc's date (`defaultAutoLinkWindow`, ±24 h:
     /// deliberately narrow so a weekly recurring title can never hit the wrong occurrence).
-    /// Disposition (D-D4): merge whenever **any** candidate clears `minimumConfidence` (0.6);
-    /// choosing among the qualifying candidates prefers one whose `calendarEventID` is namespaced
-    /// to the **same account** (the transcript and the calendar event came from the same Google
-    /// account), then higher score, then more segments (the `ranksBefore` spirit,
-    /// `MeetingMergePlan`). Below threshold is a near-miss and creates, never auto-merges: a wrong
-    /// merge silently corrupts a meeting, a duplicate is visible and foldable via the manual merge
-    /// flow (spec §1 non-goal).
+    /// Disposition (D-D4): merge whenever **any** candidate clears `minimumConfidence` (0.6).
+    /// Ranking among the qualifiers is **score-dominant**: a score gap wider than
+    /// `affinityTieBand` (0.05) wins outright — account affinity must never redirect a transcript
+    /// away from a clearly better match (back-to-back recurring occurrences: yesterday's
+    /// same-account meeting at ~0.66 must lose to today's unlinked meeting at ~1.0, or the merge
+    /// silently corrupts the wrong occurrence and breaks cross-account convergence). Within the
+    /// near-tie band, prefer a candidate whose `calendarEventID` is namespaced to the **same
+    /// account** (the transcript and the calendar event came from the same Google account), then
+    /// higher score, then more segments (the `ranksBefore` spirit, `MeetingMergePlan`). Below
+    /// threshold is a near-miss and creates, never auto-merges: a wrong merge silently corrupts a
+    /// meeting, a duplicate is visible and foldable via the manual merge flow (spec §1 non-goal).
     static func disposition(
         fileName: String,
         createdTime: Date?,
@@ -90,6 +99,8 @@ enum DriveTranscriptMatcher {
                 return (candidate, score, sameAccount)
             }
             .sorted { lhs, rhs in
+                // Score-dominant: affinity only ever breaks near-ties (see affinityTieBand).
+                if abs(lhs.score - rhs.score) > Self.affinityTieBand { return lhs.score > rhs.score }
                 if lhs.sameAccount != rhs.sameAccount { return lhs.sameAccount }
                 if lhs.score != rhs.score { return lhs.score > rhs.score }
                 return lhs.candidate.segmentCount > rhs.candidate.segmentCount

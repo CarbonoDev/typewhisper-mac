@@ -99,7 +99,9 @@ final class GoogleDriveImportLedger {
     }
 
     /// The per-file branch of the engine's cycle (and the backfill's execution-time re-check),
-    /// pure over ledger state — no writes, no clocks (`now` injected).
+    /// pure over ledger state — no clocks (`now` injected), and no writes except the one
+    /// documented self-heal: a fresh doc edit resetting an exhausted re-merge attempt budget
+    /// (review fix, D-D5).
     func action(for file: GoogleDriveAPI.GDriveFile, sub: String, now: Date) -> LedgerAction {
         let fileID = GoogleDriveAPI.fileID(sub: sub, raw: file.id)
         // In flight: enqueued but not yet ledgered — the concurrent-enqueue guard.
@@ -115,6 +117,15 @@ final class GoogleDriveImportLedger {
             // `touch` is what quiets the record when a re-merge resolve fails.
             if now.timeIntervalSince(entry.importedAt) <= Self.remergeHorizon,
                let meetingID = entry.meetingID {
+                // Re-merges are gated by the same retry cap (review fix, D-D5): a doc whose
+                // re-merge keeps failing is abandoned once attempts reach the cap — UNLESS the
+                // doc was edited again *after* the last failed attempt (an edit plausibly fixes
+                // a parse failure), which resets the attempt budget before re-merging.
+                if let failure = failures[fileID], failure.attempts >= Self.maxRetryAttempts {
+                    guard modified > failure.lastAttemptAt else { return .skip }
+                    failures.removeValue(forKey: fileID)
+                    save()
+                }
                 return .remerge(meetingID: meetingID)
             }
             return .skip
