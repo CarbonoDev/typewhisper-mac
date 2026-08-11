@@ -30,6 +30,11 @@ struct MeetingsSettingsView: View {
 
                 Divider()
 
+                // [Google Phase 1 · M2] Google account connect/disconnect (spec §M2, D-G2/D-G5).
+                GoogleAccountsSection()
+
+                Divider()
+
                 vaultSection
 
                 Divider()
