@@ -20954,6 +20954,70 @@
         }
       }
     },
+    "google.twins.hide": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplikate ausblenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide duplicates"
+          }
+        }
+      }
+    },
+    "google.twins.keep": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beide behalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep both"
+          }
+        }
+      }
+    },
+    "google.twins.message": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einige Kalender von %@ werden auch über den macOS-Kalender synchronisiert. Möchtest du die macOS-Kopien ausblenden, damit du nicht jeden Termin doppelt siehst?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some calendars from %@ are also synced through macOS Calendar. Hide the macOS copies to avoid seeing every event twice?"
+          }
+        }
+      }
+    },
+    "google.twins.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doppelte Kalender erkannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate calendars detected"
+          }
+        }
+      }
+    },
     "home.attention.caughtUp": {
       "localizations": {
         "de": {
@@ -25195,6 +25259,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "In progress"
+          }
+        }
+      }
+    },
+    "meetings.calendar.macosGroup": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS-Kalender"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS Calendar"
           }
         }
       }

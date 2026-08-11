@@ -25,7 +25,9 @@ struct MeetingLinkEventView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if viewModel.isCalendarAuthorized {
+            // [Google Phase 1 · M4] Gate on `hasAnyCalendarSource` (D-G4): the link picker's
+            // candidates fan in across providers, so a connected Google account is enough.
+            if viewModel.hasAnyCalendarSource {
                 content
             } else {
                 accessDenied

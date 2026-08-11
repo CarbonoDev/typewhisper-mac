@@ -14,7 +14,9 @@ struct HomeNextSection: View {
         VStack(alignment: .leading, spacing: MeetingTheme.s2) {
             MeetingSectionLabel(String(localized: "home.next.section"))
 
-            if viewModel.calendarAuthorizationStatus != .authorized {
+            // [Google Phase 1 · M4] Gate on `hasAnyCalendarSource`, not the EventKit status alone
+            // (D-G4): a Google-only user (EventKit denied, ≥1 account connected) has events to show.
+            if !viewModel.hasAnyCalendarSource {
                 connectCalendarCard
             } else if let error = viewModel.calendarErrorMessage {
                 calendarErrorRow(error)

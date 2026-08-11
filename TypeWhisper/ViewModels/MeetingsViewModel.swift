@@ -37,6 +37,17 @@ final class MeetingsViewModel: ObservableObject {
 
     // Calendar (M2)
     @Published private(set) var calendarAuthorizationStatus: CalendarAuthorizationStatus = .notDetermined
+    /// [Google Phase 1 · M4] Whether *any* calendar source can feed the meetings UI (D-G4):
+    /// the primary (EventKit) provider is authorized **or** ≥ 1 Google account is connected.
+    /// The calendar-UI availability gate (`HomeNextSection`, `UpcomingMeetingsSection`,
+    /// `MeetingLinkEventView`) — without it a Google-only user (EventKit denied) would get fan-in
+    /// events that never render. Fed from the status mirror plus `GoogleAccountStore.$accounts`.
+    @Published private(set) var hasAnyCalendarSource = false
+    /// [Google Phase 1 · M4] Pending "duplicate calendars detected" prompts (D-G6), one per
+    /// connected Google account whose EventKit CalDAV twins were found and whose prompt has not
+    /// been handled yet. Rendered inline by `GoogleAccountsSection`; re-evaluated on every Google
+    /// snapshot change while unhandled.
+    @Published private(set) var twinCalendarPrompts: [TwinCalendarPrompt] = []
     @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
     /// [M10] Already-ended events from the lookback window (since start of day) — the collapsible
     /// "Earlier" section. Mirrored from `CalendarService.earlierEvents`.
@@ -155,6 +166,11 @@ final class MeetingsViewModel: ObservableObject {
     // *writes* still flow through `meetingService`'s choke points (which fold into the directory via the
     // ingest seam) — the VM never mutates the directory except through explicit management actions.
     let participantDirectoryService: ParticipantDirectoryService
+    // [Google Phase 1 · M4] Read-only consumer for `hasAnyCalendarSource` and the twin-prompt
+    // bookkeeping (D-G4/D-G6). Optional so unit tests constructing the VM without the Google stack
+    // keep compiling; the store stays the single writer of all `google.*` state — the VM only
+    // reads `$accounts`/`isTwinPromptHandled` and routes handled-marks through it.
+    private let googleAccountStore: GoogleAccountStore?
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -178,8 +194,10 @@ final class MeetingsViewModel: ObservableObject {
         contextRuleService: MeetingContextRuleService,
         briefScheduler: MeetingBriefScheduler, // [Track D]
         jobQueue: JobQueueService, // [Track J]
-        participantDirectoryService: ParticipantDirectoryService // [M3-Participants]
+        participantDirectoryService: ParticipantDirectoryService, // [M3-Participants]
+        googleAccountStore: GoogleAccountStore? = nil // [Google Phase 1 · M4]
     ) {
+        self.googleAccountStore = googleAccountStore // [Google Phase 1 · M4]
         self.participantDirectoryService = participantDirectoryService // [M3-Participants]
         self.contextRuleService = contextRuleService
         self.jobQueue = jobQueue // [Track J]
@@ -202,6 +220,11 @@ final class MeetingsViewModel: ObservableObject {
         self.meetings = meetingService.meetings
         self.templates = promptActionService.meetingActions
         self.calendarAuthorizationStatus = calendarService.authorizationStatus
+        // [Google Phase 1 · M4] Seed the availability flag from both sources (D-G4).
+        self.hasAnyCalendarSource = Self.hasAnyCalendarSource(
+            authorization: calendarService.authorizationStatus,
+            accounts: googleAccountStore?.accounts ?? []
+        )
         self.upcomingEvents = calendarService.upcomingEvents
         self.earlierEvents = calendarService.earlierEvents
         self.calendarErrorMessage = calendarService.errorMessage
@@ -234,7 +257,33 @@ final class MeetingsViewModel: ObservableObject {
         calendarService.$authorizationStatus
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                self?.calendarAuthorizationStatus = status
+                guard let self else { return }
+                self.calendarAuthorizationStatus = status
+                // [Google Phase 1 · M4] Both inputs of the availability flag flow through here
+                // or the `$accounts` sink below, so it can never go stale (D-G4). EventKit
+                // authorization also gates twin detection (no EventKit calendars ⇒ no twins).
+                self.recomputeHasAnyCalendarSource()
+                self.evaluateTwinPrompts()
+            }
+            .store(in: &cancellables)
+        // [Google Phase 1 · M4] Google connect state is the second leg of `hasAnyCalendarSource`
+        // (D-G4) — the store publishes every index change (connect, disconnect, status flip).
+        googleAccountStore?.$accounts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recomputeHasAnyCalendarSource()
+            }
+            .store(in: &cancellables)
+        // [Google Phase 1 · M4] Snapshot changes re-run the same refresh as the 60 s tick, so new
+        // Google events appear without waiting for the next poll (D-G7) — and re-evaluate the
+        // pending twin prompts (D-G6: the first snapshot after connect can race the calendarList
+        // fetch, so unhandled accounts are re-checked on every change).
+        NotificationCenter.default.publisher(for: .googleCalendarSnapshotDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.loadUpcoming()
+                self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
         calendarService.$upcomingEvents
@@ -360,6 +409,57 @@ final class MeetingsViewModel: ObservableObject {
     // MARK: - Calendar
 
     var isCalendarAuthorized: Bool { calendarAuthorizationStatus == .authorized }
+
+    // MARK: - Calendar source availability + twin prompts ([Google Phase 1 · M4])
+
+    /// The D-G4 availability rule as a pure static so it is unit-testable without the full view
+    /// model (`CalendarSourceAvailabilityTests`): a calendar source exists when the primary
+    /// (EventKit) provider is authorized **or** ≥ 1 Google account is `.connected` — an account
+    /// stuck in `.needsReauth` is not a working source (its provider drops out of `.authorized`).
+    nonisolated static func hasAnyCalendarSource(
+        authorization: CalendarAuthorizationStatus,
+        accounts: [GoogleAccount]
+    ) -> Bool {
+        authorization == .authorized || accounts.contains { $0.status == .connected }
+    }
+
+    private func recomputeHasAnyCalendarSource() {
+        hasAnyCalendarSource = Self.hasAnyCalendarSource(
+            authorization: calendarAuthorizationStatus,
+            accounts: googleAccountStore?.accounts ?? []
+        )
+    }
+
+    /// Re-run twin detection (D-G6) over the fanned-in calendar list for every not-yet-handled
+    /// Google account. Called on every snapshot change and on EventKit status changes; pure logic
+    /// lives in `TwinCalendarDetector.prompts`.
+    private func evaluateTwinPrompts() {
+        guard let googleAccountStore else {
+            twinCalendarPrompts = []
+            return
+        }
+        twinCalendarPrompts = TwinCalendarDetector.prompts(
+            accounts: googleAccountStore.accounts,
+            eventKitAuthorized: calendarAuthorizationStatus == .authorized,
+            calendars: calendarService.availableCalendars(),
+            isHandled: googleAccountStore.isTwinPromptHandled
+        )
+    }
+
+    /// Resolve a pending twin prompt (D-G6): **Hide duplicates** deselects the twin EventKit
+    /// calendars through the normal selection choke point (reversible in the Calendars list);
+    /// **Keep both** does nothing. Either choice records the account's `sub` as handled through
+    /// the store's single-writer seam, so the prompt never returns for this account.
+    func resolveTwinPrompt(_ prompt: TwinCalendarPrompt, hideDuplicates: Bool, now: Date = Date()) {
+        if hideDuplicates {
+            for twin in prompt.twins {
+                calendarService.setCalendarSelected(false, for: twin.id)
+            }
+            loadUpcoming(now: now)
+        }
+        googleAccountStore?.markTwinPromptHandled(prompt.accountID)
+        twinCalendarPrompts.removeAll { $0.accountID == prompt.accountID }
+    }
 
     /// Prompt for calendar access; refreshes the upcoming list on success.
     func requestCalendarAccess() async {
