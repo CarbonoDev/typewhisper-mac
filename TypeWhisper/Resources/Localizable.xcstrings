@@ -20650,6 +20650,22 @@
         }
       }
     },
+    "google.oauth.browserDone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du bist angemeldet. Du kannst dieses Fenster schließen und zu MeetingWhisper zurückkehren."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're signed in. You can close this window and return to MeetingWhisper."
+          }
+        }
+      }
+    },
     "home.attention.caughtUp": {
       "localizations": {
         "de": {
