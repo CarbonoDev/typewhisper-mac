@@ -41,10 +41,13 @@ enum GmailBodyText {
     static func plainText(fromHTML html: String) -> String {
         var text = html
         for container in ["style", "script", "head"] {
+            // `(?is)`: dot-matches-newline is essential — real HTML mail carries multi-line
+            // style/script blocks, and without `s` their raw CSS/JS would survive into the
+            // passage text (review finding, M1).
             text = text.replacingOccurrences(
-                of: "<\(container)[^>]*>.*?</\(container)>",
+                of: "(?is)<\(container)[^>]*>.*?</\(container)>",
                 with: " ",
-                options: [.regularExpression, .caseInsensitive]
+                options: .regularExpression
             )
         }
         text = text.replacingOccurrences(
@@ -53,9 +56,12 @@ enum GmailBodyText {
             options: [.regularExpression, .caseInsensitive]
         )
         text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        // `&amp;` decodes LAST so double-escaped text ("&amp;lt;") yields the literal "&lt;"
+        // instead of being re-decoded to "<".
         let entities: [(String, String)] = [
-            ("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+            ("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"),
             ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"),
+            ("&amp;", "&"),
         ]
         for (entity, replacement) in entities {
             text = text.replacingOccurrences(of: entity, with: replacement)

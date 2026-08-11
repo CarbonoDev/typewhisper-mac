@@ -336,6 +336,36 @@ final class GmailContextServiceTests: XCTestCase {
         XCTAssertFalse(attendeeList.lowercased().contains("subb"), "connected-account email excluded")
     }
 
+    // MARK: - Request encoding (M1 review)
+
+    func testListRequestPercentEncodesPlusSoGoogleNeverDecodesItAsASpace() {
+        let request = GmailAPI.listRequest(
+            token: "t",
+            query: "(from:john+cal@x.com OR to:john+cal@x.com) after:2026/07/27",
+            maxResults: 25
+        )
+        let url = request.url!.absoluteString
+        XCTAssertTrue(url.contains("john%2Bcal@x.com"), "plus-addressed attendees stay intact: \(url)")
+        XCTAssertFalse(url.contains("john+cal"), "a literal + would decode server-side as a space")
+    }
+
+    func testPlusAddressedAttendeeSurvivesEndToEnd() async throws {
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: ["token-subA": []], metadata: [:]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true)], transport: transport)
+
+        _ = try await service.candidates(
+            for: makeMeeting(attendees: [Attendee(name: "John", email: "john+cal@x.com")])
+        )
+
+        let attendeeList = try XCTUnwrap(
+            transport.requests.compactMap(\.url).map(\.absoluteString).first { $0.contains("maxResults=25") }
+        )
+        XCTAssertTrue(attendeeList.contains("john%2Bcal@x.com"))
+        XCTAssertFalse(attendeeList.contains("john+cal"))
+    }
+
     // MARK: - Bounded concurrency (D-M1 step 3, normative)
 
     func testMetadataFetchesRunConcurrentlyBoundedAtWidthSix() async throws {
@@ -512,6 +542,30 @@ final class GmailContextServiceTests: XCTestCase {
         XCTAssertEqual(listRequestCount(transport), listsAfterFirst * 2, "refresh always refetches")
     }
 
+    // MARK: - Single-flight (M1 review)
+
+    func testConcurrentSameMeetingCallsShareOneNetworkPass() async throws {
+        let transport = FakeGmailTransport(
+            delayNanoseconds: 30_000_000, // holds the first fetch open so the second call joins it
+            handler: Self.mailboxHandler(
+                attendeeRefs: ["token-subA": [("m1", "t1")]],
+                metadata: ["m1": gmailMetadataBody(id: "m1", threadId: "t1", subject: "Hi", internalDate: "1786300000000")]
+            )
+        )
+        let (service, _, _) = try makeService(accounts: [("subA", true)], transport: transport)
+        let meeting = makeMeeting()
+
+        let first = Task { try await service.candidates(for: meeting) }
+        let second = Task { try await service.candidates(for: meeting) }
+        let firstResult = try await first.value
+        let secondResult = try await second.value
+
+        XCTAssertEqual(firstResult.map(\.id), ["google:subA:m1"])
+        XCTAssertEqual(firstResult, secondResult, "both callers get the shared pass's result")
+        XCTAssertEqual(listRequestCount(transport), 2, "one two-call pass — never doubled")
+        XCTAssertFalse(service.isFetching, "flag clears once the in-flight map empties")
+    }
+
     // MARK: - Multi-account resolution (D-M2) + error isolation
 
     func testMeetingOwnedByEnabledAccountSearchesOnlyThatAccount() async throws {
@@ -571,10 +625,29 @@ final class GmailContextServiceTests: XCTestCase {
             failingTokens: ["token-subB"]
         ))
         let (service, _, _) = try makeService(accounts: [("subA", true), ("subB", true)], transport: transport)
+        let meeting = makeMeeting()
 
-        let candidates = try await service.candidates(for: makeMeeting())
+        let candidates = try await service.candidates(for: meeting)
 
         XCTAssertEqual(candidates.map(\.accountSub), ["subA"], "subB's 500 never drops subA's candidates")
+        // The partial loss is surfaced, not hidden behind the merged remainder (M1 review
+        // adjudication) — and names the failing account.
+        let partial = try XCTUnwrap(service.lastPartialError(for: meeting))
+        XCTAssertTrue(partial.contains("subB@example.com"), "detail names the failing account: \(partial)")
+
+        // A fully clean refetch clears it.
+        transport.setHandler(Self.mailboxHandler(
+            attendeeRefs: [
+                "token-subA": [("a1", "t1")],
+                "token-subB": [("b1", "t9")],
+            ],
+            metadata: [
+                "a1": gmailMetadataBody(id: "a1", threadId: "t1", subject: "Hi", internalDate: "1786300000000"),
+                "b1": gmailMetadataBody(id: "b1", threadId: "t9", subject: "Yo", internalDate: "1786200000000"),
+            ]
+        ))
+        _ = try await service.refresh(for: meeting)
+        XCTAssertNil(service.lastPartialError(for: meeting), "cleared on full success")
     }
 
     func testThrowsOnlyWhenEveryAccountFails() async throws {

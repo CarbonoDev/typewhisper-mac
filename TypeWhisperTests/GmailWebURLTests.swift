@@ -21,7 +21,8 @@ final class GmailWebURLTests: XCTestCase {
         )
     }
 
-    func testEmptyMessageIDYieldsNil() {
+    func testEmptyMessageIDOrEmptyEmailYieldsNil() {
         XCTAssertNil(GmailWebURL.messageURL(messageID: "", accountEmail: "ada@example.com"))
+        XCTAssertNil(GmailWebURL.messageURL(messageID: "abc123", accountEmail: ""))
     }
 }

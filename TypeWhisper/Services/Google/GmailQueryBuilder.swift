@@ -36,6 +36,9 @@ enum GmailQueryBuilder {
     /// instant — the window-end day itself (including a meeting day's mid-meeting arrivals) is
     /// always covered (D-M1 normative rule).
     static func window(reference: Date, calendar: Calendar = .current) -> Window {
+        // Fixed 86,400 s day arithmetic: across a DST transition the instant drifts an hour,
+        // which at the date granularity serialized here shifts a boundary by at most one day at
+        // the 14-day horizon — accepted; the window is a recall heuristic, not a contract.
         let start = reference.addingTimeInterval(-TimeInterval(lookbackDays) * 86_400)
         let end = reference.addingTimeInterval(TimeInterval(lookaheadDays) * 86_400)
         let dayAfterEnd = calendar.date(byAdding: .day, value: 1, to: end) ?? end.addingTimeInterval(86_400)

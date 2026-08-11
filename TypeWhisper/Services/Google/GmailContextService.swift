@@ -75,7 +75,7 @@ enum GmailWebURL {
         guard
             let email = accountEmail.addingPercentEncoding(withAllowedCharacters: allowed),
             let id = messageID.addingPercentEncoding(withAllowedCharacters: allowed),
-            !messageID.isEmpty
+            !messageID.isEmpty, !accountEmail.isEmpty
         else { return nil }
         return URL(string: "https://mail.google.com/mail/?authuser=\(email)#all/\(id)")
     }
@@ -129,8 +129,23 @@ final class GmailContextService: ObservableObject {
         let candidates: [EmailCandidate]
     }
 
-    /// True while a network fetch is in flight (M5's refresh spinner observes this).
+    /// True while ≥1 candidate fetch is in flight (M5's refresh spinner observes this). Derived
+    /// from the single-flight map, so one meeting's early completion can never clear the flag
+    /// while another meeting's fetch still runs (review finding, M1).
     @Published private(set) var isFetching = false
+
+    /// The most recent fetch's *partial* failure per meeting — some accounts failed while the
+    /// others' candidates were merged and cached, which per-account isolation would otherwise
+    /// hide for a whole TTL (review adjudication; the `performSync` `firstError` precedent).
+    /// Cleared on a fully clean fetch; a totally failed fetch throws instead of recording here.
+    /// The detail is a debug-facing English string inside whatever localized frame the UI adds
+    /// (the M5 VM reads it for the D-M6 fetchFailed line).
+    @Published private(set) var lastPartialErrors: [UUID: String] = [:]
+
+    /// Convenience accessor for the D-M6 surface.
+    func lastPartialError(for meeting: Meeting) -> String? {
+        lastPartialErrors[meeting.id]
+    }
 
     private let store: GoogleAccountStore
     private let tokenProvider: GoogleAccessTokenProviding
@@ -140,6 +155,12 @@ final class GmailContextService: ObservableObject {
     private let cacheTTL: TimeInterval
     /// In-memory only — never persisted (D-M2).
     private var cache: [UUID: CacheEntry] = [:]
+    /// Single-flight per meeting (the `GoogleAuthService.refreshTasks` precedent): concurrent
+    /// same-meeting callers await one network pass instead of double-fetching and
+    /// last-writer-winning the cache. Only the installing call clears its entry (joiners return
+    /// via `.value` without installing anything), so no successor can install at the key before
+    /// the owner's unconditional clear runs — generation IDs are unnecessary here.
+    private var inFlightFetches: [UUID: Task<[EmailCandidate], Error>] = [:]
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -291,7 +312,27 @@ final class GmailContextService: ObservableObject {
 
     // MARK: - Private: fetch pipeline
 
+    /// Single-flight wrapper: a call landing while this meeting's fetch runs awaits the same
+    /// network pass. A joiner's scope may lag the running fetch's by one mutation — acceptable,
+    /// because the fingerprint check on the next call refetches (the cache backstop).
     private func fetchAndCache(meetingID: UUID, scope: EmailRetrievalScope) async throws -> [EmailCandidate] {
+        if let inFlight = inFlightFetches[meetingID] {
+            return try await inFlight.value
+        }
+        let task = Task { [weak self] () throws -> [EmailCandidate] in
+            guard let self else { return [] }
+            return try await self.performFetch(meetingID: meetingID, scope: scope)
+        }
+        inFlightFetches[meetingID] = task
+        isFetching = true
+        defer {
+            inFlightFetches[meetingID] = nil
+            isFetching = !inFlightFetches.isEmpty
+        }
+        return try await task.value
+    }
+
+    private func performFetch(meetingID: UUID, scope: EmailRetrievalScope) async throws -> [EmailCandidate] {
         let window = GmailQueryBuilder.Window(afterDay: scope.afterDay, beforeDay: scope.beforeDay)
         // Exclusion already applied in the scope (D-M2) — the builder receives the final list.
         let queries = GmailQueryBuilder.queries(
@@ -302,18 +343,17 @@ final class GmailContextService: ObservableObject {
         )
         // No signals (or no searchable account) ⇒ [] without a network call (D-M1 step 1).
         guard !queries.isEmpty, !scope.accountSubs.isEmpty else {
+            lastPartialErrors[meetingID] = nil
             cache[meetingID] = CacheEntry(fetchedAt: now(), scopeFingerprint: scope.fingerprint, candidates: [])
             return []
         }
 
-        isFetching = true
-        defer { isFetching = false }
-
         // Per-account isolation (the `performSync` pattern): one account's error never drops
         // another's candidates; only a total failure throws.
         var merged: [EmailCandidate] = []
-        var firstError: Error?
+        var firstError: String?
         var succeededAnyAccount = false
+        var totalFailure: Error?
         for sub in scope.accountSubs {
             guard let account = store.account(id: sub) else { continue }
             do {
@@ -321,12 +361,18 @@ final class GmailContextService: ObservableObject {
                 succeededAnyAccount = true
             } catch {
                 logger.warning("Gmail fetch failed for account \(sub, privacy: .private): \(error.localizedDescription)")
-                if firstError == nil { firstError = error }
+                if firstError == nil {
+                    firstError = "\(account.email): \(error.localizedDescription)"
+                    totalFailure = error
+                }
             }
         }
-        if !succeededAnyAccount, let firstError {
-            throw firstError
+        if !succeededAnyAccount, let totalFailure {
+            throw totalFailure
         }
+        // Surface a partial multi-account failure instead of hiding it behind the merged
+        // remainder for a whole TTL; `nil` on a fully clean pass.
+        lastPartialErrors[meetingID] = firstError
 
         merged.sort { $0.date > $1.date }
         cache[meetingID] = CacheEntry(fetchedAt: now(), scopeFingerprint: scope.fingerprint, candidates: merged)
