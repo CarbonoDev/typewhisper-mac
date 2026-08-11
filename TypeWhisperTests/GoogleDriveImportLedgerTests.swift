@@ -160,6 +160,40 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
         XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .skip)
     }
 
+    /// Review fix (D-D5): the re-merge path honors the same retry cap — a ledgered doc whose
+    /// re-merges keep failing is abandoned at the cap, UNLESS the doc was edited again *after*
+    /// the last failed attempt, which resets the attempt budget (an edit plausibly fixes a
+    /// parse failure).
+    func testRemergeAtFailureCapSkipsUnlessDocEditedAfterLastAttempt() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let ledger = makeLedger(in: dir)
+
+        let meetingID = UUID()
+        ledger.recordImported(
+            fileID: fileID, docModifiedTime: now, meetingID: meetingID, disposition: .merged, now: now
+        )
+        // The doc is edited at T+600; three re-merge attempts fail after that edit.
+        let editTime = now.addingTimeInterval(600)
+        let lastAttempt = now.addingTimeInterval(1_200)
+        for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
+            ledger.recordFailure(fileID: fileID, now: lastAttempt)
+        }
+
+        // The edit predates the last failed attempt → abandoned, record kept.
+        let staleEdit = try makeFile(id: "f1", modified: editTime)
+        XCTAssertEqual(ledger.action(for: staleEdit, sub: sub, now: now.addingTimeInterval(2_000)), .skip)
+        XCTAssertNotNil(ledger.failures[fileID], "the abandoned record survives a stale re-discovery")
+
+        // A fresh edit after the last failed attempt → budget reset, re-merge allowed again.
+        let freshEdit = try makeFile(id: "f1", modified: lastAttempt.addingTimeInterval(600))
+        XCTAssertEqual(
+            ledger.action(for: freshEdit, sub: sub, now: now.addingTimeInterval(2_400)),
+            .remerge(meetingID: meetingID)
+        )
+        XCTAssertNil(ledger.failures[fileID], "a fresh edit resets the attempt budget")
+    }
+
     func testRecordImportedClearsFailureAndPendingAndKeepsImportedAt() throws {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
         defer { TestSupport.remove(dir) }
