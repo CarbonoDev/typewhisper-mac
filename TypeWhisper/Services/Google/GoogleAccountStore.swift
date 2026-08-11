@@ -168,6 +168,7 @@ final class GoogleAccountStore: ObservableObject {
         try? secretStore.deleteAll(prefix: SecretService.accountPrefix(sub: accountID))
         defaults.removeObject(forKey: Self.linkOpeningKey(sub: accountID))
         defaults.removeObject(forKey: Self.driveImportKey(sub: accountID))
+        defaults.removeObject(forKey: Self.gmailEnabledKey(sub: accountID))
         persistIndex()
     }
 
@@ -235,6 +236,36 @@ final class GoogleAccountStore: ObservableObject {
             defaults.set("1", forKey: Self.driveImportKey(sub: accountID))
         } else {
             defaults.removeObject(forKey: Self.driveImportKey(sub: accountID))
+        }
+    }
+
+    // MARK: - Gmail search enablement ([Google Phase 3 · M1], D-M7)
+
+    /// The per-account Gmail flag key — the `linkOpeningKey` pattern: dynamic (one per `sub`),
+    /// written only here so the store stays the sole writer of every `google.*` defaults key
+    /// (D-G5). Cleared in `remove(accountID:)`.
+    private static func gmailEnabledKey(sub: String) -> String {
+        "google.account.\(sub).gmailEnabled"
+    }
+
+    /// Whether the user turned "Search Gmail for meeting context" on for this account. The
+    /// *effective* enablement additionally requires status + granted scope —
+    /// `GmailAccountEligibility.isEnabled` (D-M7).
+    func isGmailEnabled(for accountID: String) -> Bool {
+        defaults.bool(forKey: Self.gmailEnabledKey(sub: accountID))
+    }
+
+    /// Persists the flag (`false` clears the key back to the default). Announces via
+    /// `objectWillChange` — the flag is not account *identity*, so it deliberately does not ride
+    /// the `accounts` index (republishing would ripple the calendar sync trigger); consumers that
+    /// must see toggle flips (the D-M1 cache invalidation, the D-M6 `isGmailConnected` mirror)
+    /// therefore subscribe to `objectWillChange`, not `$accounts`.
+    func setGmailEnabled(_ enabled: Bool, for accountID: String) {
+        objectWillChange.send()
+        if enabled {
+            defaults.set(true, forKey: Self.gmailEnabledKey(sub: accountID))
+        } else {
+            defaults.removeObject(forKey: Self.gmailEnabledKey(sub: accountID))
         }
     }
 
