@@ -1440,6 +1440,8 @@ final class APIHandlers: @unchecked Sendable {
                     startDate: projection.startDate,
                     endDate: projection.endDate,
                     attendees: projection.attendees,
+                    calendarNotes: projection.calendarNotes,
+                    conferencingURL: projection.conferencingURL,
                     for: meeting
                 )
                 matched = MatchedEventResponse(
@@ -1781,6 +1783,8 @@ final class APIHandlers: @unchecked Sendable {
                     startDate: projection.startDate,
                     endDate: projection.endDate,
                     attendees: projection.attendees,
+                    calendarNotes: projection.calendarNotes,
+                    conferencingURL: projection.conferencingURL,
                     for: meeting
                 )
                 // After the link, because `linkToCalendarEvent` replaces the roster wholesale
