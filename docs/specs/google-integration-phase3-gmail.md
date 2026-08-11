@@ -390,7 +390,10 @@ masquerade as "Gmail not enabled". When no account exists at all the section ren
 `+RelatedDocs.swift` pattern): `relatedEmails(for:) -> [EmailRow]` served from a published
 `[UUID: [EmailRow]]`, `fetchRelatedEmails(for:)` / `refreshRelatedEmails(for:)` async methods
 calling the service (`candidates(for:)` / `refresh(for:)`), `isFetchingRelatedEmails(for:)`,
-`lastEmailFetchError(for:)`. The section triggers `fetchRelatedEmails` from `.task(id: meeting.id)`
+`lastEmailFetchError(for:)` — fed both by thrown fetch errors and by the service's per-meeting
+`lastPartialError(for:)`, which surfaces a partially failed multi-account fetch that would
+otherwise hide behind the merged remainder (§4, M1 review adjudication). The section triggers
+`fetchRelatedEmails` from `.task(id: meeting.id)`
 — served from the D-M1 cache when fresh, so re-navigation costs nothing.
 
 **Refresh cadence (normative)**: fetch on appear + a manual refresh button (progress spinner while
@@ -475,8 +478,10 @@ struct EmailPassage: Sendable, Equatable {
     let content: String       // body text, ≤2000 chars (D-M1)
 }
 
-/// A metadata-only candidate for the UI list (no body fetch).
-struct EmailCandidate: Sendable, Equatable, Identifiable { /* same fields minus content */ }
+/// A metadata-only candidate for the UI list (no body fetch). Same fields as EmailPassage minus
+/// `content`, plus `messageID: String` — the raw Gmail message id carried beside the namespaced
+/// `id` so the body fetch and GmailWebURL never re-parse it (M1 review).
+struct EmailCandidate: Sendable, Equatable, Identifiable { /* see above */ }
 
 /// SERVICE-computed retrieval scope (D-M1 — unlike the vault template's caller-computed scope,
 /// because scope resolution needs GoogleAccountStore access the meetings services rightly lack).
@@ -515,7 +520,13 @@ cacheTTL: TimeInterval = 300)`; `@Published private(set) var isFetching`; constr
 `MeetingLLMService` / the VM extension. Multi-account fetch failures isolate per account (one
 account's error never drops another's candidates — the `performSync` per-account pattern,
 `GoogleCalendarSyncEngine.swift:168-194`); `.needsReauth` is never retried (the auth service
-already flipped the badge).
+already flipped the badge). A **partial** multi-account failure (some accounts failed while the
+others' candidates were merged and cached) is surfaced per meeting via `lastPartialError(for:)`
+(`@Published lastPartialErrors: [UUID: String]`, cleared on a fully clean fetch) so the D-M6
+fetchFailed line can show partial loss — only a total failure throws (M1 review adjudication;
+the `firstError` precedent). Candidate fetches are single-flight per meeting: concurrent
+same-meeting callers await one network pass, and `isFetching` derives from the in-flight map
+(M1 review).
 
 ---
 

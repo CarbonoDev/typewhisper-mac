@@ -63,6 +63,11 @@ enum GmailAPI {
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "maxResults", value: String(maxResults)),
         ]
+        // URLQueryItem leaves a literal `+` unencoded and Google decodes `+` as a space, which
+        // would garble plus-addressed attendee clauses (john+cal@x.com) — escape it explicitly
+        // (the GmailWebURL precedent; review finding, M1).
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
         return authorizedGET(components.url!, token: token)
     }
 

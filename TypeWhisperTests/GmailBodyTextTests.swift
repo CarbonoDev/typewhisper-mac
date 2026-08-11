@@ -81,6 +81,34 @@ final class GmailBodyTextTests: XCTestCase {
         XCTAssertFalse(extracted.contains("color"), "style blocks dropped")
     }
 
+    func testMultiLineStyleBlockIsFullyStripped() {
+        // Real HTML mail always carries multi-line <style> blocks; without dot-matches-newline
+        // the raw CSS would land inside the extracted passage (M1 review finding).
+        let html = """
+        <html><head><STYLE type="text/css">
+        .body { color: red; }
+        .footer {
+            font-size: 10px;
+        }
+        </STYLE></head><body><p>Hello budget</p></body></html>
+        """
+        let payload = multipart("multipart/alternative", parts: [leaf(mime: "text/html", text: html)])
+        let extracted = GmailBodyText.extract(payload: payload, snippet: "snip")
+        XCTAssertEqual(extracted, "Hello budget")
+        XCTAssertFalse(extracted.contains("color"), "multi-line CSS must not survive")
+    }
+
+    func testAmpersandEntityDecodesLastSoDoubleEscapesStayLiteral() {
+        let payload = multipart("multipart/alternative", parts: [
+            leaf(mime: "text/html", text: "<p>a &amp;lt; b</p>"),
+        ])
+        XCTAssertEqual(
+            GmailBodyText.extract(payload: payload, snippet: ""),
+            "a &lt; b",
+            "&amp;lt; is the author writing the literal \"&lt;\" — never re-decoded to \"<\""
+        )
+    }
+
     // MARK: - Snippet fallback + cap
 
     func testFallsBackToSnippetWhenNoTextPartDecodes() {
