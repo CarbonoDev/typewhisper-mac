@@ -37,9 +37,25 @@ final class CalendarService: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let provider: CalendarEventProviding
+    /// [Google Phase 1 · M4] Additional event sources (D-G4: primary + `secondaryProviders`).
+    /// `provider` stays the primary/system provider (EventKit) and keeps owning the published
+    /// `authorizationStatus` — Google connect state is not a permission; it surfaces through
+    /// `GoogleAccountStore.$accounts` instead. Queries fan in across all providers; `republish()`
+    /// stays the single provider-agnostic filtering choke point (IDs are namespaced per D-G3).
+    private let secondaryProviders: [CalendarEventProviding]
     private let selectionStore: CalendarSelectionStoring
     private let lookAhead: TimeInterval
     private let grace: TimeInterval
+
+    /// Every provider, primary first — the fan-in query order (D-G4).
+    private var allProviders: [CalendarEventProviding] { [provider] + secondaryProviders }
+
+    /// D-G4 "any provider authorized" guard: a user who denies macOS calendar access but connects
+    /// Google still gets events. Providers never report `.denied` for connect-state (the Google
+    /// provider is `.authorized`/`.notDetermined` only), so `== .authorized` is the right test.
+    private var isAnyProviderAuthorized: Bool {
+        allProviders.contains { $0.authorizationStatus == .authorized }
+    }
 
     /// Last query inputs, retained so `dismiss(eventID:)` can re-publish both sections without a
     /// provider round-trip (and deterministically under test).
@@ -52,11 +68,13 @@ final class CalendarService: ObservableObject {
 
     init(
         provider: CalendarEventProviding = EventKitCalendarProvider(),
+        secondaryProviders: [CalendarEventProviding] = [],
         selectionStore: CalendarSelectionStoring = CalendarSelectionStore(),
         lookAhead: TimeInterval = CalendarService.defaultLookAhead,
         grace: TimeInterval = CalendarService.defaultGrace
     ) {
         self.provider = provider
+        self.secondaryProviders = secondaryProviders
         self.selectionStore = selectionStore
         self.lookAhead = lookAhead
         self.grace = grace
@@ -80,10 +98,16 @@ final class CalendarService: ObservableObject {
         }
     }
 
+    /// [Google Phase 1 · M4] The denied/restricted message is suppressed when at least one
+    /// secondary provider is authorized: EventKit-denied + Google-connected is a working
+    /// configuration, not an error (D-G4). Re-evaluated at the top of every `refresh` (60 s poll
+    /// + snapshot-change refreshes), so connecting/disconnecting a Google account updates the
+    /// message within one refresh cycle rather than requiring a restart.
     private func updateErrorMessage(for status: CalendarAuthorizationStatus) {
         switch status {
         case .denied, .restricted:
-            errorMessage = String(localized: "meetings.calendar.accessDenied")
+            let secondaryAuthorized = secondaryProviders.contains { $0.authorizationStatus == .authorized }
+            errorMessage = secondaryAuthorized ? nil : String(localized: "meetings.calendar.accessDenied")
         case .notDetermined, .authorized:
             errorMessage = nil
         }
@@ -96,7 +120,13 @@ final class CalendarService: ObservableObject {
     /// lookback list does not, so a past event whose meeting exists can still be opened (M10). The
     /// query window is widened back to the start of `now`'s day so the lookback list has data.
     func refresh(now: Date = Date(), existingCalendarEventIDs: Set<String> = []) {
-        guard authorizationStatus == .authorized else {
+        // [Google Phase 1 · M4] Re-evaluate the error message every refresh (D-G4): `init` and
+        // `requestAccess()` alone would leave a stale "access denied" banner (or a missing one)
+        // when a Google account connects/disconnects between permission events.
+        updateErrorMessage(for: authorizationStatus)
+        // D-G4 any-provider guard: a user who denied macOS calendar access but connected Google
+        // still gets events. Each unauthorized provider already returns `[]` from its query.
+        guard isAnyProviderAuthorized else {
             lastRawEvents = []
             lastNow = now
             lastExcludedEventIDs = []
@@ -105,7 +135,8 @@ final class CalendarService: ObservableObject {
             return
         }
         let from = CalendarService.lookbackStart(for: now)
-        let raw = provider.events(from: from, to: now.addingTimeInterval(lookAhead))
+        let to = now.addingTimeInterval(lookAhead)
+        let raw = allProviders.flatMap { $0.events(from: from, to: to) }
         lastRawEvents = raw
         lastNow = now
         lastExcludedEventIDs = existingCalendarEventIDs
@@ -153,8 +184,11 @@ final class CalendarService: ObservableObject {
     // MARK: - Calendar selection (M11)
 
     /// Every `.event` calendar across the user's accounts, for the "Calendars" settings list.
+    /// [Google Phase 1 · M4] Fans in across all providers (D-G4): macOS calendars first, then each
+    /// Google account's calendars (namespaced IDs, `sourceName` = account email — the "split by
+    /// account" attribution).
     func availableCalendars() -> [CalendarInfo] {
-        provider.calendars()
+        allProviders.flatMap { $0.calendars() }
     }
 
     /// Whether the given calendar is currently selected (new/unknown calendars default selected).
@@ -299,8 +333,10 @@ final class CalendarService: ObservableObject {
     /// so a deselected calendar never offers link candidates). All-day events are dropped. Returns
     /// the raw (unranked) set; `rankedLinkCandidates` orders them. Empty when access is not granted.
     func linkCandidates(around date: Date, window: TimeInterval = defaultLinkWindow) -> [CalendarEventDTO] {
-        guard authorizationStatus == .authorized else { return [] }
-        return provider.events(around: date, window: window)
+        // [Google Phase 1 · M4] Any-provider guard + fan-in (D-G4), mirroring `refresh`. The Google
+        // provider answers far-window queries best-effort from its −1 d/+48 h snapshot (D-G7, §8).
+        guard isAnyProviderAuthorized else { return [] }
+        return allProviders.flatMap { $0.events(around: date, window: window) }
             .filter { !$0.isAllDay }
             .filter { event in
                 guard let id = event.calendarID else { return true }

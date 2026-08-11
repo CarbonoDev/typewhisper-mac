@@ -24,6 +24,11 @@ struct GoogleAccountsSection: View {
     @ObservedObject private var authService = ServiceContainer.shared.googleAuthService
     /// Observed for the M3 sync status line (`lastSyncAt`/`lastSyncError`) and "Refresh now".
     @ObservedObject private var syncEngine = ServiceContainer.shared.googleCalendarSyncEngine
+    /// Observed for the pending twin-calendar prompts ([Google Phase 1 · M4], D-G6). The VM owns
+    /// evaluation (it observes the snapshot-change notification app-wide, so detection is not
+    /// tied to this section being visible) and routes both resolutions through the calendar
+    /// selection choke point / the account store's handled-mark.
+    @ObservedObject private var meetingsViewModel = MeetingsViewModel.shared
 
     /// Local drafts of the client credentials, seeded from the store on appear and written
     /// through on change (`GoogleAccountStore` stays the single writer of the persisted values —
@@ -52,6 +57,10 @@ struct GoogleAccountsSection: View {
                     }
                 }
                 syncStatusRow
+            }
+
+            ForEach(meetingsViewModel.twinCalendarPrompts) { prompt in
+                twinPromptView(prompt)
             }
 
             if authService.isAuthorizing {
@@ -194,6 +203,40 @@ struct GoogleAccountsSection: View {
             }
         }
         .padding(.top, 2)
+    }
+
+    // MARK: - Twin-calendar prompt ([Google Phase 1 · M4], D-G6)
+
+    /// One-time inline prompt shown when a connected account's Google calendars are also synced
+    /// into macOS Calendar via CalDAV. **Hide duplicates** (default) deselects the EventKit twins
+    /// through the normal selection path — coarse, visible, and reversible in the Calendars list;
+    /// **Keep both** does nothing. Either choice marks the account handled, so the prompt never
+    /// returns for it.
+    private func twinPromptView(_ prompt: TwinCalendarPrompt) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(
+                String(localized: "google.twins.title"),
+                systemImage: "calendar.badge.exclamationmark"
+            )
+            .font(.callout.weight(.semibold))
+            Text(String(format: String(localized: "google.twins.message"), prompt.accountEmail))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button(String(localized: "google.twins.hide")) {
+                    meetingsViewModel.resolveTwinPrompt(prompt, hideDuplicates: true)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                Button(String(localized: "google.twins.keep")) {
+                    meetingsViewModel.resolveTwinPrompt(prompt, hideDuplicates: false)
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Connect / reconnect / disconnect

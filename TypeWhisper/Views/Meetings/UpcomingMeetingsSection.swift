@@ -18,13 +18,16 @@ struct UpcomingMeetingsSection: View {
             Text(String(localized: "meetings.calendar.sectionTitle"))
                 .font(.headline)
 
-            switch viewModel.calendarAuthorizationStatus {
-            case .notDetermined:
-                permissionPrompt
-            case .denied, .restricted:
-                deniedState
-            case .authorized:
+            // [Google Phase 1 · M4] Availability gates on `hasAnyCalendarSource` (D-G4): with a
+            // Google account connected the section renders events even when EventKit access is
+            // denied or undecided — the macOS permission affordances only show when Google can't
+            // stand in for the missing source.
+            if viewModel.hasAnyCalendarSource {
                 authorizedContent
+            } else if viewModel.calendarAuthorizationStatus == .notDetermined {
+                permissionPrompt
+            } else {
+                deniedState
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

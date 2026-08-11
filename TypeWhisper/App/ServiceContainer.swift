@@ -53,9 +53,8 @@ final class ServiceContainer: ObservableObject {
     // Keychain-backed tokens, and the connect/refresh flow service. Calendar wiring lands in M3/M4.
     let googleAccountStore: GoogleAccountStore
     let googleAuthService: GoogleAuthService
-    // [Google Phase 1 · M3] Calendar snapshot sync (D-G7) + the `CalendarEventProviding` provider
-    // over it. Built and started here but NOT yet passed to `CalendarService` — the fan-in flip is
-    // M4, so this milestone ships with zero calendar-pipeline behavior change.
+    // [Google Phase 1 · M3/M4] Calendar snapshot sync (D-G7) + the `CalendarEventProviding`
+    // provider over it, wired into `CalendarService` as a secondary provider (D-G4 fan-in).
     let googleCalendarSyncEngine: GoogleCalendarSyncEngine
     let googleCalendarProvider: GoogleCalendarProvider
     let meetingCaptureService: MeetingCaptureService
@@ -190,28 +189,31 @@ final class ServiceContainer: ObservableObject {
             eventEmitter: meetingEventEmitter,
             promptActionService: promptActionService
         )
-        calendarService = CalendarService()
-        // [Google Phase 1 · M1] Constructed beside the calendar service they will extend: the
+        // [Google Phase 1 · M1] Constructed before the calendar service they extend: the
         // account store is the sole writer of the `google.*` defaults keys + Keychain namespace
         // (D-G5); the auth service runs the D-G2 loopback/PKCE flow and refreshes access tokens on
-        // demand. No calendar wiring yet — the sync engine/provider fan-in arrives in M3/M4.
+        // demand.
         let googleAccountStore = GoogleAccountStore()
         self.googleAccountStore = googleAccountStore
         let googleAuthService = GoogleAuthService(store: googleAccountStore)
         self.googleAuthService = googleAuthService
         // [Google Phase 1 · M3] The engine syncs every connected account into an in-memory
         // snapshot (5-min cadence, started in `initialize()`); the provider serves that snapshot
-        // through the synchronous `CalendarEventProviding` seam (D-G7). Deliberately not wired
-        // into `calendarService` yet — the D-G4 fan-in lands in M4.
+        // through the synchronous `CalendarEventProviding` seam (D-G7).
         let googleCalendarSyncEngine = GoogleCalendarSyncEngine(
             store: googleAccountStore,
             tokenProvider: googleAuthService
         )
         self.googleCalendarSyncEngine = googleCalendarSyncEngine
-        googleCalendarProvider = GoogleCalendarProvider(
+        let googleCalendarProvider = GoogleCalendarProvider(
             accountStore: googleAccountStore,
             engine: googleCalendarSyncEngine
         )
+        self.googleCalendarProvider = googleCalendarProvider
+        // [Google Phase 1 · M4] D-G4 fan-in: EventKit stays the primary/system provider (owns the
+        // published authorization status); the Google provider joins as a secondary, feeding the
+        // same republish/selection choke point through namespaced IDs (D-G3).
+        calendarService = CalendarService(secondaryProviders: [googleCalendarProvider])
         // [M3] Derived tag/organization index (plan D6). Subscribes to `meetingService.$meetings`, so
         // it is constructed right after the service; publishes low-cardinality tag counts the sidebar,
         // chips, and filters observe. `_shared` assigned below beside the view models.
@@ -521,7 +523,8 @@ final class ServiceContainer: ObservableObject {
             contextRuleService: meetingContextRuleService,
             briefScheduler: meetingBriefScheduler, // [Track D]
             jobQueue: meetingJobQueue, // [Track J]
-            participantDirectoryService: participantDirectoryService // [M3-Participants]
+            participantDirectoryService: participantDirectoryService, // [M3-Participants]
+            googleAccountStore: googleAccountStore // [Google Phase 1 · M4] hasAnyCalendarSource + twin prompts
         )
         homeFeedViewModel = HomeFeedViewModel() // [Track C]
         // [Track E] Space vault browser (ME-1): caches one `listEntries()` snapshot from the shared
