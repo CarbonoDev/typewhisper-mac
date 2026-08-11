@@ -53,10 +53,23 @@ enum MeetingJoinLauncher {
 
     // MARK: - Launch (IO)
 
+    /// Whether the URL is one the launcher will open at all: http(s) only. `conferencingURL` is
+    /// provider-fed data (Google/EventKit today, the Phase 2 Drive importer tomorrow), so the
+    /// choke point refuses any other scheme outright — no Chrome launch AND no system-browser
+    /// fallthrough, which would hand e.g. a `file:`/custom-scheme URL to an arbitrary handler.
+    nonisolated static func isLaunchableJoinURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
     /// Open `url` for the account behind `accountSub` (pass the sub parsed via
     /// `GoogleCalendarID.accountSub(fromNamespacedID:)`; `nil` for EventKit events keeps today's
-    /// system-browser behavior).
+    /// system-browser behavior). Non-http(s) URLs open nothing (`isLaunchableJoinURL`).
     static func open(url: URL, accountSub: String?) {
+        guard isLaunchableJoinURL(url) else {
+            logger.warning("Refusing to open join URL with non-http(s) scheme: \(url.scheme ?? "nil", privacy: .public)")
+            return
+        }
         let store = ServiceContainer.shared.googleAccountStore
         let account = accountSub.flatMap { store.account(id: $0) }
         let resolved = destination(

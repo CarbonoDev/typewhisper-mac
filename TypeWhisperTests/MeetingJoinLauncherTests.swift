@@ -107,6 +107,23 @@ final class MeetingJoinLauncherTests: XCTestCase {
         )
     }
 
+    // MARK: - Scheme guard (review NIT)
+
+    /// `open` refuses non-http(s) URLs outright — no Chrome launch, no system-browser
+    /// fallthrough. `conferencingURL` is provider-fed (Phase 2's Drive importer becomes a new
+    /// producer), so the choke point must never hand a `file:`/custom-scheme URL to a handler.
+    func testNonHTTPSchemesAreNotLaunchable() {
+        XCTAssertFalse(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "file:///etc/passwd")!))
+        XCTAssertFalse(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "javascript:alert(1)")!))
+        XCTAssertFalse(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "zoommtg://zoom.us/join?confno=1")!))
+        XCTAssertFalse(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "ftp://example.com/x")!))
+        XCTAssertFalse(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "relative/path")!))
+
+        XCTAssertTrue(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "https://meet.google.com/abc-defg-hij")!))
+        XCTAssertTrue(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "HTTPS://zoom.us/j/123")!))
+        XCTAssertTrue(MeetingJoinLauncher.isLaunchableJoinURL(URL(string: "http://example.com/join")!))
+    }
+
     // MARK: - Localization coverage (EN + DE)
 
     func testJoinLinkStringsHaveEnglishAndGermanEntries() throws {
