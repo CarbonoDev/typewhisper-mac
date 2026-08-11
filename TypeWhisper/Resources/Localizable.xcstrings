@@ -20890,6 +20890,54 @@
         }
       }
     },
+    "google.calendar.lastSync": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt synchronisiert: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last synced %@"
+          }
+        }
+      }
+    },
+    "google.calendar.refreshNow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt aktualisieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh now"
+          }
+        }
+      }
+    },
+    "google.calendar.syncError": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google-Kalender-Synchronisierung fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Calendar sync failed: %@"
+          }
+        }
+      }
+    },
     "google.oauth.browserDone": {
       "localizations": {
         "de": {

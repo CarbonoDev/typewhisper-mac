@@ -184,6 +184,14 @@
 		GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000012 /* GoogleAccountStoreTests.swift */; };
 		GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */; };
 		GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */; };
+		GGB0000000000000000021 /* GoogleCalendarAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000021 /* GoogleCalendarAPI.swift */; };
+		GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000022 /* GoogleCalendarMapper.swift */; };
+		GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */; };
+		GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000024 /* GoogleCalendarProvider.swift */; };
+		GGB0000000000000000031 /* GoogleCalendarMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */; };
+		GGB0000000000000000032 /* AttendeeCodableCompatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */; };
+		GGB0000000000000000033 /* GoogleCalendarSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */; };
+		GGB0000000000000000034 /* GoogleCalendarProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */; };
 		CA11000000000000000001 /* CalendarColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000001 /* CalendarColor.swift */; };
 		CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000002 /* CalendarSelectionStore.swift */; };
 		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
@@ -861,6 +869,14 @@
 		GGF0000000000000000012 /* GoogleAccountStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountStoreTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAuthServiceTokenTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountRowStateTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000021 /* GoogleCalendarAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarAPI.swift; sourceTree = "<group>"; };
+		GGF0000000000000000022 /* GoogleCalendarMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarMapper.swift; sourceTree = "<group>"; };
+		GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncEngine.swift; sourceTree = "<group>"; };
+		GGF0000000000000000024 /* GoogleCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarProvider.swift; sourceTree = "<group>"; };
+		GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarMapperTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AttendeeCodableCompatTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncEngineTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarProviderTests.swift; sourceTree = "<group>"; };
 		CA11F00000000000000001 /* CalendarColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColor.swift; sourceTree = "<group>"; };
 		CA11F00000000000000002 /* CalendarSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionStore.swift; sourceTree = "<group>"; };
 		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
@@ -2320,6 +2336,10 @@
 				GGF0000000000000000004 /* GoogleSecretStore.swift */,
 				GGF0000000000000000005 /* GoogleAccountStore.swift */,
 				GGF0000000000000000006 /* GoogleAuthService.swift */,
+				GGF0000000000000000021 /* GoogleCalendarAPI.swift */,
+				GGF0000000000000000022 /* GoogleCalendarMapper.swift */,
+				GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */,
+				GGF0000000000000000024 /* GoogleCalendarProvider.swift */,
 			);
 			path = Google;
 			sourceTree = "<group>";
@@ -2970,6 +2990,10 @@
 				GGF0000000000000000012 /* GoogleAccountStoreTests.swift */,
 				GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */,
 				GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */,
+				GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */,
+				GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */,
+				GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */,
+				GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */,
 				M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */,
 				M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
@@ -4538,6 +4562,10 @@
 				GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */,
 				GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */,
 				GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */,
+				GGB0000000000000000031 /* GoogleCalendarMapperTests.swift in Sources */,
+				GGB0000000000000000032 /* AttendeeCodableCompatTests.swift in Sources */,
+				GGB0000000000000000033 /* GoogleCalendarSyncEngineTests.swift in Sources */,
+				GGB0000000000000000034 /* GoogleCalendarProviderTests.swift in Sources */,
 				M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */,
 				M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
@@ -4741,6 +4769,10 @@
 				GGB0000000000000000005 /* GoogleAccountStore.swift in Sources */,
 				GGB0000000000000000006 /* GoogleAuthService.swift in Sources */,
 				GGB0000000000000000007 /* GoogleAccountsSection.swift in Sources */,
+				GGB0000000000000000021 /* GoogleCalendarAPI.swift in Sources */,
+				GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */,
+				GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */,
+				GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */,
 				CA11000000000000000001 /* CalendarColor.swift in Sources */,
 				CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */,
 				CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */,

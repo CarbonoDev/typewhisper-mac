@@ -40,6 +40,17 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
     /// (M11 color coding). nil when unknown.
     var calendarColor: CalendarColor?
     var attendees: [Attendee]
+    /// Event description/notes as plain text (Google `description`, EventKit `notes`). nil when
+    /// absent. Additive ([Google Phase 1 · M3], spec §4): the Google mapper populates it now; the
+    /// EventKit provider leaves it nil until M5.
+    var eventNotes: String?
+    /// Video-conference join URL (Google conferenceData/hangoutLink; EventKit `url` when it looks
+    /// like a known conference host). nil when absent (same M3/M5 split as `eventNotes`).
+    var conferencingURL: String?
+    /// Human label of the owning account for "split by account" attribution — the Google account
+    /// email; nil for EventKit events (the system calendar UI already shows source via
+    /// `CalendarInfo`).
+    var accountLabel: String?
 
     /// The owning calendar's title. Alias of `calendarName` (M11 spec calls this `calendarTitle`);
     /// kept as a computed accessor so the two names never diverge.
@@ -55,7 +66,10 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         calendarName: String? = nil,
         calendarID: String? = nil,
         calendarColor: CalendarColor? = nil,
-        attendees: [Attendee] = []
+        attendees: [Attendee] = [],
+        eventNotes: String? = nil,
+        conferencingURL: String? = nil,
+        accountLabel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -67,6 +81,9 @@ struct CalendarEventDTO: Equatable, Sendable, Identifiable {
         self.calendarID = calendarID
         self.calendarColor = calendarColor
         self.attendees = attendees
+        self.eventNotes = eventNotes
+        self.conferencingURL = conferencingURL
+        self.accountLabel = accountLabel
     }
 }
 
