@@ -25455,6 +25455,38 @@
         }
       }
     },
+    "meetings.calendar.selectAll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle auswählen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
+          }
+        }
+      }
+    },
+    "meetings.calendar.unselectAll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle abwählen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unselect all"
+          }
+        }
+      }
+    },
     "meetings.calendar.untitledEvent": {
       "localizations": {
         "de": {

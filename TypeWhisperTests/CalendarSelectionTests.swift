@@ -130,6 +130,34 @@ final class CalendarSelectionTests: XCTestCase {
         XCTAssertEqual(service.upcomingEvents.map(\.id), ["w"])
     }
 
+    /// [Settings polish] The per-group "Select all / Unselect all" path: one batched call writes
+    /// every id through the selection seam and republishes once — the lists must reflect the whole
+    /// group flip immediately, and re-selecting restores everything.
+    func testBatchedSelectionTogglesWholeGroupWithSingleRepublish() {
+        let work = event("w", startOffset: 30 * 60, endOffset: 90 * 60, calendarID: "cal-work")
+        let personal = event("p", startOffset: 60 * 60, endOffset: 2 * 60 * 60, calendarID: "cal-personal")
+        let other = event("o", startOffset: 45 * 60, endOffset: 100 * 60, calendarID: "cal-other")
+        let provider = FakeCalendarProvider(events: [work, personal, other])
+        let store = StubSelectionStore()
+        let service = CalendarService(provider: provider, selectionStore: store, lookAhead: lookAhead)
+        service.refresh(now: now)
+        XCTAssertEqual(service.upcomingEvents.count, 3)
+
+        // Unselect the whole two-calendar group at once: both drop, the third calendar stays.
+        service.setCalendarsSelected(false, for: ["cal-work", "cal-personal"])
+        XCTAssertEqual(service.upcomingEvents.map(\.id), ["o"])
+        XCTAssertEqual(store.deselectedCalendarIDs, ["cal-work", "cal-personal"])
+
+        // Select all → everything returns and the deselected set empties.
+        service.setCalendarsSelected(true, for: ["cal-work", "cal-personal"])
+        XCTAssertEqual(service.upcomingEvents.count, 3)
+        XCTAssertTrue(store.deselectedCalendarIDs.isEmpty)
+
+        // An empty batch is a no-op (guard path).
+        service.setCalendarsSelected(false, for: [])
+        XCTAssertEqual(service.upcomingEvents.count, 3)
+    }
+
     /// The auto-brief scheduler and start-notification service consume `CalendarService.upcomingEvents`
     /// exclusively; filtering there is the single seam that keeps deselected-calendar events out of
     /// briefs and notifications. This asserts that seam directly.

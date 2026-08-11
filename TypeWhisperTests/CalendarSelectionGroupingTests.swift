@@ -78,4 +78,41 @@ final class CalendarSelectionGroupingTests: XCTestCase {
     func testEmptyRowsYieldNoGroups() {
         XCTAssertTrue(CalendarSelectionGrouping.groups(from: []).isEmpty)
     }
+
+    // MARK: - Group-wide selection helpers ([Settings polish])
+
+    /// `allSelected` drives the header affordance's direction; `calendarIDs` feeds the batched
+    /// select/unselect path.
+    func testAllSelectedAndCalendarIDsReflectTheGroupsRows() {
+        let mixed = CalendarSelectionGrouping.groups(from: [
+            row(id: "ek-1", title: "Personal", sourceName: "iCloud", isSelected: true),
+            row(id: "ek-2", title: "Work", sourceName: "iCloud", isSelected: false)
+        ])[0]
+        XCTAssertFalse(mixed.allSelected)
+        XCTAssertEqual(mixed.calendarIDs, ["ek-1", "ek-2"])
+
+        let allOn = CalendarSelectionGrouping.groups(from: [
+            row(id: "ek-1", title: "Personal", sourceName: "iCloud", isSelected: true),
+            row(id: "ek-2", title: "Work", sourceName: "iCloud", isSelected: true)
+        ])[0]
+        XCTAssertTrue(allOn.allSelected)
+
+        let allOff = CalendarSelectionGrouping.groups(from: [
+            row(id: "ek-1", title: "Personal", sourceName: "iCloud", isSelected: false)
+        ])[0]
+        XCTAssertFalse(allOff.allSelected)
+    }
+
+    // MARK: - Localization coverage (EN + DE)
+
+    func testSelectionPolishStringsHaveEnglishAndGermanEntries() throws {
+        let keys = [
+            "meetings.calendar.selectAll",
+            "meetings.calendar.unselectAll"
+        ]
+        for key in keys {
+            XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "en").isEmpty, "EN missing for \(key)")
+            XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "de").isEmpty, "DE missing for \(key)")
+        }
+    }
 }

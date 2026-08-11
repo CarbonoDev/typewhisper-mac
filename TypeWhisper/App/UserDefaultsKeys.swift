@@ -186,6 +186,11 @@ enum UserDefaultsKeys {
     /// added later default to selected: an id absent from this set — including a brand-new one — is
     /// shown. Empty/absent ⇒ all calendars selected.
     static let meetingsCalendarDeselectedIDs = "meetings.calendar.deselectedIDs"
+    /// [Google Phase 1 · settings polish] Collapsed group ids of the Calendars settings list
+    /// (newline-separated `CalendarSelectionGroup.id`s). Absent/empty ⇒ every group expanded —
+    /// groups default open and only an explicit fold is remembered. Pure UI state (same
+    /// `@AppStorage` discipline as the other `meetings.*` view preferences).
+    static let meetingsCalendarCollapsedGroups = "meetings.calendar.collapsedGroups"
     // MARK: - Meetings · Final re-transcription (addendum AD8, Track C)
     /// Global default final re-transcription mode: "off" | "sameEngine" | "engine".
     static let meetingsFinalPassDefaultMode = "meetings.finalPass.defaultMode"

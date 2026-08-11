@@ -16,6 +16,10 @@ struct CalendarSelectionSection: View {
     /// changes, on Google snapshot changes, and after each toggle (selection state is read from
     /// the service, not a `@Published`).
     @State private var rows: [CalendarSelectionRow] = []
+    /// [Settings polish] Collapsed group ids, newline-separated (group ids never contain a
+    /// newline). Persisted so folds survive relaunch; absent ⇒ everything expanded (default
+    /// open). Kept as a raw string because `@AppStorage` has no `Set` support.
+    @AppStorage(UserDefaultsKeys.meetingsCalendarCollapsedGroups) private var collapsedGroupsRaw = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -81,15 +85,40 @@ struct CalendarSelectionSection: View {
 
     // MARK: - Groups
 
+    /// [Settings polish] Each source group is a collapsible disclosure (the house pattern —
+    /// `GoogleAccountsSection`'s OAuth-client disclosure, the Earlier section) whose header also
+    /// carries the group-wide Select all / Unselect all affordance. Default expanded; folds
+    /// persist via `collapsedGroupsRaw`.
     private func groupView(_ group: CalendarSelectionGroup) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            groupHeader(
-                group.sourceName.isEmpty
-                    ? String(localized: "meetings.calendar.macosGroup")
-                    : group.sourceName
-            )
-            ForEach(group.rows) { row in
-                calendarRow(row)
+        DisclosureGroup(isExpanded: isExpandedBinding(for: group.id)) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(group.rows) { row in
+                    calendarRow(row)
+                }
+            }
+            .padding(.top, 2)
+        } label: {
+            HStack(spacing: 8) {
+                groupHeader(
+                    group.sourceName.isEmpty
+                        ? String(localized: "meetings.calendar.macosGroup")
+                        : group.sourceName
+                )
+                Spacer(minLength: 8)
+                // One flip-flop affordance per group: everything on → offer "Unselect all",
+                // otherwise "Select all". Routes through the batched VM path — one republish +
+                // one re-query for the whole group, not one per calendar.
+                Button(
+                    group.allSelected
+                        ? String(localized: "meetings.calendar.unselectAll")
+                        : String(localized: "meetings.calendar.selectAll")
+                ) {
+                    viewModel.setCalendarsSelected(!group.allSelected, for: group.calendarIDs)
+                    reload()
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .font(.caption)
             }
         }
     }
@@ -99,6 +128,28 @@ struct CalendarSelectionSection: View {
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.top, 2)
+    }
+
+    // MARK: - Fold state ([Settings polish])
+
+    private var collapsedGroupIDs: Set<String> {
+        Set(collapsedGroupsRaw.split(separator: "\n").map(String.init))
+    }
+
+    /// Expanded is the default: a group is collapsed only while its id is in the persisted set.
+    private func isExpandedBinding(for groupID: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedGroupIDs.contains(groupID) },
+            set: { expanded in
+                var collapsed = collapsedGroupIDs
+                if expanded {
+                    collapsed.remove(groupID)
+                } else {
+                    collapsed.insert(groupID)
+                }
+                collapsedGroupsRaw = collapsed.sorted().joined(separator: "\n")
+            }
+        )
     }
 
     private func calendarRow(_ row: CalendarSelectionRow) -> some View {
@@ -136,6 +187,13 @@ struct CalendarSelectionGroup: Identifiable, Equatable {
     /// Disambiguated by side, so an EventKit CalDAV source literally titled with the account
     /// email never collides with the Google account's own group.
     var id: String { (isGoogle ? "google|" : "macos|") + sourceName }
+
+    /// [Settings polish] Whether every calendar in the group is currently selected — drives the
+    /// header affordance's direction (all on → "Unselect all", anything off → "Select all").
+    var allSelected: Bool { rows.allSatisfy(\.isSelected) }
+
+    /// The group's calendar ids, for the batched select/unselect path.
+    var calendarIDs: [String] { rows.map(\.calendar.id) }
 }
 
 /// Pure grouping of the flat selection rows by source ([Google Phase 1 · M4]). Rows arrive sorted
