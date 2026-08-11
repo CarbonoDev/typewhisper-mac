@@ -271,7 +271,12 @@ final class MeetingsViewModel: ObservableObject {
         googleAccountStore?.$accounts
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.recomputeHasAnyCalendarSource()
+                guard let self else { return }
+                self.recomputeHasAnyCalendarSource()
+                // [M4 review fix 3] Symmetry with the status/snapshot sinks: a disconnect (or an
+                // account change riding an index write) retracts or surfaces a pending twin
+                // prompt immediately instead of waiting for the next snapshot change.
+                self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
         // [Google Phase 1 · M4] Snapshot changes re-run the same refresh as the 60 s tick, so new
