@@ -20954,6 +20954,22 @@
         }
       }
     },
+    "google.twins.affected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Betroffene macOS-Kalender: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affected macOS calendars: %@"
+          }
+        }
+      }
+    },
     "google.twins.hide": {
       "localizations": {
         "de": {
@@ -25131,6 +25147,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose which calendars appear in meetings and generate briefs and notifications."
+          }
+        }
+      }
+    },
+    "meetings.calendar.calendarsGrantAccess": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugriff erlauben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grant access"
           }
         }
       }

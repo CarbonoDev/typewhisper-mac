@@ -153,6 +153,30 @@ final class TwinCalendarDetectorTests: XCTestCase {
         XCTAssertEqual(prompts.first?.twins.map(\.id), ["ek-1"])
     }
 
+    // MARK: - Prompt caption ([M4 review fix 2])
+
+    /// The prompt must name exactly which macOS calendars "Hide duplicates" would deselect —
+    /// the D-G6 heuristic can cross-match another account's CalDAV calendars, so the choice is
+    /// informed consent over a concrete list, not a blind default.
+    func testTwinTitlesListJoinsTitlesForThePromptCaption() {
+        let prompt = TwinCalendarPrompt(
+            accountID: "sub-1",
+            accountEmail: "m@x.com",
+            twins: [
+                calendar(id: "ek-1", title: "marco@example.com", sourceName: "Google"),
+                calendar(id: "ek-2", title: "Birthdays", sourceName: "Google")
+            ]
+        )
+        XCTAssertEqual(prompt.twinTitlesList, "marco@example.com, Birthdays")
+
+        let single = TwinCalendarPrompt(
+            accountID: "sub-1",
+            accountEmail: "m@x.com",
+            twins: [calendar(id: "ek-1", title: "Team", sourceName: "Google")]
+        )
+        XCTAssertEqual(single.twinTitlesList, "Team")
+    }
+
     // MARK: - Localization coverage (EN + DE)
 
     func testTwinPromptStringsHaveEnglishAndGermanEntries() throws {
@@ -161,7 +185,9 @@ final class TwinCalendarDetectorTests: XCTestCase {
             "google.twins.message",
             "google.twins.hide",
             "google.twins.keep",
-            "meetings.calendar.macosGroup"
+            "google.twins.affected",
+            "meetings.calendar.macosGroup",
+            "meetings.calendar.calendarsGrantAccess"
         ]
         for key in keys {
             XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: "en").isEmpty, "EN missing for \(key)")

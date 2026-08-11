@@ -11,6 +11,14 @@ struct TwinCalendarPrompt: Equatable, Identifiable {
     /// The EventKit calendars detected as CalDAV twins of the account's Google calendars.
     let twins: [CalendarInfo]
     var id: String { accountID }
+
+    /// The twins' titles as one display line ([M4 review fix 2]): the D-G6 heuristic can
+    /// cross-match (e.g. account B's CalDAV calendars under a generic "Google" EKSource whose
+    /// titles account A also has), so the prompt must name exactly which macOS calendars "Hide
+    /// duplicates" would deselect — informed consent, not a blind default. Pure, unit-tested.
+    var twinTitlesList: String {
+        twins.map(\.title).joined(separator: ", ")
+    }
 }
 
 /// Pure twin-calendar detection ([Google Phase 1 · M4], D-G6): when the same Google account is

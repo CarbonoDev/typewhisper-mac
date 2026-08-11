@@ -222,6 +222,12 @@ struct GoogleAccountsSection: View {
             Text(String(format: String(localized: "google.twins.message"), prompt.accountEmail))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            // [M4 review fix 2] Name the exact macOS calendars "Hide duplicates" would deselect —
+            // the detector can cross-match another account's CalDAV calendars, so the choice must
+            // be informed consent, not a blind default.
+            Text(String(format: String(localized: "google.twins.affected"), prompt.twinTitlesList))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button(String(localized: "google.twins.hide")) {
                     meetingsViewModel.resolveTwinPrompt(prompt, hideDuplicates: true)

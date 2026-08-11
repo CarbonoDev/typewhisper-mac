@@ -50,6 +50,18 @@ struct CalendarSelectionSection: View {
                     Text(String(localized: "meetings.calendar.calendarsNeedsAccess"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                    // [M4 review fix 1] With the Upcoming/Home gates switched to
+                    // `hasAnyCalendarSource`, a Google-first user whose EventKit status is still
+                    // `.notDetermined` has no other in-app path to the macOS calendar prompt
+                    // (System Settings doesn't list the app under Privacy → Calendars until it
+                    // has requested once). `.denied` keeps the text-only hint — re-prompting is
+                    // impossible then; the remedy lives in System Settings.
+                    if viewModel.calendarAuthorizationStatus == .notDetermined {
+                        Button(String(localized: "meetings.calendar.calendarsGrantAccess")) {
+                            Task { await viewModel.requestCalendarAccess() }
+                        }
+                        .controlSize(.small)
+                    }
                 }
             }
 
