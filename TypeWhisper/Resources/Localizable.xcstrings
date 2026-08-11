@@ -21306,6 +21306,54 @@
         }
       }
     },
+    "google.gmail.consentHint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google bittet dich, den Lesezugriff auf Gmail zu erlauben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google will ask you to allow read-only Gmail access."
+          }
+        }
+      }
+    },
+    "google.gmail.toggle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail nach Kontext für Meetings durchsuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Gmail for meeting context"
+          }
+        }
+      }
+    },
+    "google.gmail.toggleCaption": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Findet E-Mails zu deinen Meetings für Briefings, Q&A und die Liste „Relevante E-Mails“. Nur Lesezugriff; beim Ausschalten stoppt die Suche sofort."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finds emails related to your meetings for briefs, Q&A, and the Related emails list. Read-only; turning this off stops searches immediately."
+          }
+        }
+      }
+    },
     "google.links.auto": {
       "localizations": {
         "de": {
