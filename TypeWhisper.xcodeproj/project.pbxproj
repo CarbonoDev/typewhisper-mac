@@ -179,9 +179,11 @@
 		GGB0000000000000000004 /* GoogleSecretStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000004 /* GoogleSecretStore.swift */; };
 		GGB0000000000000000005 /* GoogleAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000005 /* GoogleAccountStore.swift */; };
 		GGB0000000000000000006 /* GoogleAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000006 /* GoogleAuthService.swift */; };
+		GGB0000000000000000007 /* GoogleAccountsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000007 /* GoogleAccountsSection.swift */; };
 		GGB0000000000000000011 /* GoogleOAuthFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */; };
 		GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000012 /* GoogleAccountStoreTests.swift */; };
 		GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */; };
+		GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */; };
 		CA11000000000000000001 /* CalendarColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000001 /* CalendarColor.swift */; };
 		CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000002 /* CalendarSelectionStore.swift */; };
 		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
@@ -854,9 +856,11 @@
 		GGF0000000000000000004 /* GoogleSecretStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleSecretStore.swift; sourceTree = "<group>"; };
 		GGF0000000000000000005 /* GoogleAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAccountStore.swift; sourceTree = "<group>"; };
 		GGF0000000000000000006 /* GoogleAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthService.swift; sourceTree = "<group>"; };
+		GGF0000000000000000007 /* GoogleAccountsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAccountsSection.swift; sourceTree = "<group>"; };
 		GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthFlowTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000012 /* GoogleAccountStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountStoreTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAuthServiceTokenTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountRowStateTests.swift; sourceTree = "<group>"; };
 		CA11F00000000000000001 /* CalendarColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColor.swift; sourceTree = "<group>"; };
 		CA11F00000000000000002 /* CalendarSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionStore.swift; sourceTree = "<group>"; };
 		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
@@ -2269,6 +2273,7 @@
 				CCB000000000000000000005 /* MeetingContextRulesView.swift */,
 				BB00000000000000000389 /* UpcomingMeetingsSection.swift */,
 				CA11F00000000000000003 /* CalendarSelectionSection.swift */,
+				GGF0000000000000000007 /* GoogleAccountsSection.swift */,
 				DDF0000000000000000003 /* AutoBriefSettingsView.swift */,
 				BB00000000000000000394 /* MeetingNotesPane.swift */,
 				MWF0000000000000000009 /* MeetingDocumentView.swift */,
@@ -2964,6 +2969,7 @@
 				GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */,
 				GGF0000000000000000012 /* GoogleAccountStoreTests.swift */,
 				GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */,
+				GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */,
 				M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */,
 				M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */,
 				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
@@ -4531,6 +4537,7 @@
 				GGB0000000000000000011 /* GoogleOAuthFlowTests.swift in Sources */,
 				GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */,
 				GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */,
+				GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */,
 				M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */,
 				M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */,
 				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
@@ -4733,6 +4740,7 @@
 				GGB0000000000000000004 /* GoogleSecretStore.swift in Sources */,
 				GGB0000000000000000005 /* GoogleAccountStore.swift in Sources */,
 				GGB0000000000000000006 /* GoogleAuthService.swift in Sources */,
+				GGB0000000000000000007 /* GoogleAccountsSection.swift in Sources */,
 				CA11000000000000000001 /* CalendarColor.swift in Sources */,
 				CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */,
 				CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */,
