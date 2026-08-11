@@ -17,7 +17,11 @@ import SwiftUI
 /// logic-free (`GoogleAccountRowStateTests`).
 struct GoogleAccountsSection: View {
     @ObservedObject private var accountStore = ServiceContainer.shared.googleAccountStore
-    private let authService = ServiceContainer.shared.googleAuthService
+    /// Observed for `isAuthorizing` (M2 review finding 1): the flow-active flag lives on the
+    /// service — where restart/cancel races are already resolved by session identity — not in
+    /// view `@State`, so it stays correct across overlapping flows and survives the settings
+    /// pane being closed and reopened mid-connect.
+    @ObservedObject private var authService = ServiceContainer.shared.googleAuthService
 
     /// Local drafts of the client credentials, seeded from the store on appear and written
     /// through on change (`GoogleAccountStore` stays the single writer of the persisted values —
@@ -26,8 +30,6 @@ struct GoogleAccountsSection: View {
     @State private var clientSecretDraft = ""
     /// Auto-expanded on appear while unconfigured so first-run users find the credential fields.
     @State private var isClientExpanded = false
-    /// A connect/reauthorize flow is waiting for the browser redirect.
-    @State private var isConnecting = false
     /// Inline error from the last failed connect/reauthorize (nil after cancel — not an error).
     @State private var connectError: String?
 
@@ -49,7 +51,7 @@ struct GoogleAccountsSection: View {
                 }
             }
 
-            if isConnecting {
+            if authService.isAuthorizing {
                 connectingRow
             } else {
                 VStack(alignment: .leading, spacing: 4) {
@@ -138,6 +140,9 @@ struct GoogleAccountsSection: View {
                 Button(String(localized: "google.accounts.reconnect")) {
                     reconnect(account)
                 }
+                // Same gating as "Add Google Account…" (M2 review finding 1): starting a second
+                // flow mid-wait belongs to the explicit Cancel-then-retry path, not a row button.
+                .disabled(authService.isAuthorizing)
             }
             if rowState.showsDisconnect {
                 Button(String(localized: "google.accounts.disconnect")) {
@@ -185,30 +190,35 @@ struct GoogleAccountsSection: View {
     }
 
     private func disconnect(_ account: GoogleAccount) {
+        // M2 review finding 4 (documented, accepted): Disconnect stays enabled while a
+        // reauthorize for this same account is pending. Disconnecting does not abort that flow —
+        // if the user then finishes the browser sign-in anyway, the exchange upserts the account
+        // again (M1's dedupe-by-sub contract), which is the correct outcome for "completed a
+        // Google sign-in": the row simply reappears as `.connected`.
         Task {
             await authService.disconnect(accountID: account.id)
         }
     }
 
-    /// Shared driver for connect/reauthorize: progress state around the flow, inline error on
-    /// failure (`nil` from the presenter — a user cancel — shows nothing).
+    /// Shared driver for connect/reauthorize: clears the previous inline error, runs the flow,
+    /// surfaces a failure through the presenter (`nil` — a user cancel — shows nothing). Progress
+    /// state is not managed here: the view renders `authService.isAuthorizing`, which the service
+    /// derives from its session identity (M2 review finding 1), so an overlapping flow's unwind
+    /// can never hide a successor's progress row.
     ///
     /// Cancel tolerance (M1 re-review): a Cancel that lands after the browser redirect cannot
     /// abort the token exchange — `connectAccount()` may still *succeed* and upsert an account.
     /// That is fine here by construction: the row list renders straight from `$accounts` (so a
-    /// post-cancel row simply appears), and `isConnecting` is cleared when the flow task itself
-    /// finishes — success or throw — never by the Cancel button, so the progress row always
-    /// resolves cleanly.
+    /// post-cancel row simply appears), and `isAuthorizing` clears when the flow itself resolves,
+    /// never on the Cancel click, so the progress row always resolves cleanly.
     private func runAuthFlow(_ flow: @escaping () async throws -> Void) {
         connectError = nil
-        isConnecting = true
         Task {
             do {
                 try await flow()
             } catch {
                 connectError = GoogleConnectErrorPresenter.message(for: error)
             }
-            isConnecting = false
         }
     }
 
@@ -265,6 +275,10 @@ enum GoogleConnectErrorPresenter {
         case .notConfigured:
             return String(localized: "google.accounts.notConfigured")
         case .stateMismatch, .exchangeFailed, .refreshFailed, .needsReauth:
+            // M2 review finding 3 (documented, accepted): the `%@` detail is M1's debug-facing
+            // English `errorDescription` inside a localized frame. Deliberate for Phase 1 — the
+            // detail is an OAuth error code / HTTP status useful verbatim in bug reports, and
+            // localizing the taxonomy belongs to the service, not this presenter.
             return String(
                 format: String(localized: "google.accounts.error.generic"),
                 authError.errorDescription ?? ""

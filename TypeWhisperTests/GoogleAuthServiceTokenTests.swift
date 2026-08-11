@@ -297,6 +297,44 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             XCTAssertEqual(error as? GoogleAuthError, .cancelled)
         }
         XCTAssertTrue(server.stopped, "cancel must stop the loopback listener")
+        XCTAssertFalse(service.isAuthorizing, "flag clears once the cancelled flow unwinds")
+    }
+
+    func testIsAuthorizingTracksFlowLifecycleAcrossRestart() async throws {
+        // M2 review finding 1: the flow-active flag the settings UI renders must survive a
+        // restart-while-pending — flow A's unwind may not clear it while flow B still waits.
+        // Derived from `activeSession` identity, so it shares the restart test's guarantees.
+        let serverA = FakeLoopbackServer()
+        let serverB = FakeLoopbackServer()
+        let idToken = fixtureIDToken(sub: "sub-9", email: "new@example.com", name: "New Account")
+        let exchangeBody = """
+        {"access_token": "at-9", "expires_in": 3600, "refresh_token": "rt-9", \
+        "id_token": "\(idToken)", "scope": "openid email profile"}
+        """
+        let transport = FakeTransport(responses: [.init(statusCode: 200, body: exchangeBody)])
+        let service = try makeService(transport: transport, servers: [serverA, serverB])
+        XCTAssertFalse(service.isAuthorizing, "idle before any flow")
+
+        let flowA = Task { try await service.connectAccount() }
+        while openedURLs.count < 1 {
+            await Task.yield()
+        }
+        XCTAssertTrue(service.isAuthorizing, "set while flow A awaits its redirect")
+
+        let flowB = Task { try await service.connectAccount() }
+        while openedURLs.count < 2 {
+            await Task.yield()
+        }
+        _ = try? await flowA.value // flow A fully unwound (threw .cancelled)
+        XCTAssertTrue(
+            service.isAuthorizing,
+            "flow A's unwind must not clear the flag while flow B is still waiting"
+        )
+
+        let stateB = try XCTUnwrap(queryValue("state", of: openedURLs[1]))
+        serverB.onCallback(URL(string: "http://127.0.0.1:49152/?state=\(stateB)&code=code-b")!)
+        _ = try await flowB.value
+        XCTAssertFalse(service.isAuthorizing, "clears when the surviving flow completes")
     }
 
     func testRestartWhilePendingCancelsOldFlowAndNewFlowStillCompletes() async throws {
