@@ -17,7 +17,13 @@ enum ImportedMeetingTitle {
 
     /// Known trailing notes-app markers (ES + EN Google Meet Gemini exports), matched
     /// case-insensitively after a dash separator.
-    private static let notesSuffixes = [
+    ///
+    /// Internal (not private) — this is the **canonical marker list** ([Google Phase 2 · M1],
+    /// D-D3/F3): `GoogleDriveAPI.filesListRequest` derives its `name contains '<phrase>'` query
+    /// terms from these same phrases (Drive matches case-insensitively), while this file wraps
+    /// them in its dash-separator suffix regex below — one list, two derivations, impossible to
+    /// drift (asserted by `GoogleDriveAPITests`).
+    static let notesSuffixes = [
         "notas de gemini",
         "notes by gemini",
         "gemini notes",

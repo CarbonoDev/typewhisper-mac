@@ -161,6 +161,30 @@ final class MeetingImportServiceTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.speakerLabel), ["Alice", "Bob"])
     }
 
+    /// [Google Phase 2 · M1] The additive `startDate:` lands on the created meeting (D-D4: the
+    /// Drive importer dates created meetings from the export filename / doc `createdTime`).
+    func testImportTranscriptTextStartDateLandsOnCreatedMeeting() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+        let startDate = Date(timeIntervalSince1970: 1_760_000_000)
+
+        let meeting = try service.importTranscriptText(
+            "Alice: Historical remark.",
+            title: "Backfilled",
+            startDate: startDate
+        )
+
+        XCTAssertEqual(meeting.startDate, startDate)
+        // …and the nil default keeps today's behavior for pre-existing call sites.
+        let undated = try service.importTranscriptText("Bob: No date given.", title: "Undated")
+        XCTAssertNil(undated.startDate)
+    }
+
     func testImportTranscriptTextEmptyThrows() throws {
         let dir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(dir) }
@@ -443,6 +467,66 @@ final class MeetingImportServiceTests: XCTestCase {
         XCTAssertFalse(texts.contains("Nota viva sobre calendario compartido."))
         XCTAssertTrue(texts.contains("Arranque del primer tramo."))
         XCTAssertTrue(texts.contains("Cierre del segundo tramo."))
+    }
+
+    /// [Google Phase 2 · M1] `mergeTranscriptText` — the text twin of `mergeTranscriptFile` the
+    /// Drive importer calls with `files.export` output — routes through the same real merger:
+    /// the timed Gemini import owns its covered span (`ImportOverlapPlan`), dropping overlapped
+    /// live-caption rows and keeping everything else.
+    func testMergeTranscriptTextDropsOverlappedLiveRowsViaRealMerger() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+
+        let meeting = meetingService.createMeeting(title: "Con captions", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [
+                TranscriptionSegment(text: "Caption antes del rango importado.", start: 0, end: 30),
+                TranscriptionSegment(text: "Caption dentro del rango.", start: 300, end: 330),
+                TranscriptionSegment(text: "Caption después del rango importado.", start: 600, end: 630)
+            ],
+            source: .liveCaptions,
+            to: meeting
+        )
+
+        let markdown = """
+        ## **Llamada de Prueba \\- Transcripción**
+
+        ### **00:04:00**
+
+        **Nora Ibáñez:** Frase importada desde Drive.
+
+        ### **La transcripción finalizó después de 00:08:00**
+        """
+
+        let dropped = try service.mergeTranscriptText(markdown, into: meeting)
+
+        XCTAssertEqual(dropped, 1, "exactly the in-span caption row is dropped")
+        let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
+        XCTAssertTrue(texts.contains("Caption antes del rango importado."))
+        XCTAssertTrue(texts.contains("Caption después del rango importado."))
+        XCTAssertFalse(texts.contains("Caption dentro del rango."))
+        XCTAssertTrue(texts.contains("Frase importada desde Drive."))
+    }
+
+    func testMergeTranscriptTextEmptyThrows() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+        let meeting = meetingService.createMeeting(title: "Vacío", source: .adHoc, state: .completed)
+
+        XCTAssertThrowsError(try service.mergeTranscriptText("   \n\n  ", into: meeting)) { error in
+            XCTAssertEqual(error as? MeetingImportService.ImportError, .emptyTranscript)
+        }
     }
 
     /// An import with no recoverable timing (plain `Speaker:` lines, all-zero timestamps) must fall
