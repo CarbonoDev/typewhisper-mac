@@ -63,6 +63,9 @@ final class ServiceContainer: ObservableObject {
     let googleDriveImportLedger: GoogleDriveImportLedger
     let googleDriveTranscriptImporter: GoogleDriveTranscriptImporter
     let googleDriveSyncEngine: GoogleDriveSyncEngine
+    // [Google Phase 3 · M1] Search-first related-email retrieval with an in-memory TTL cache
+    // (D-M1/D-M2). No consumers yet — brief/Q&A/UI wiring lands in M3–M5.
+    let gmailContextService: GmailContextService
     let meetingCaptureService: MeetingCaptureService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
@@ -216,6 +219,14 @@ final class ServiceContainer: ObservableObject {
             engine: googleCalendarSyncEngine
         )
         self.googleCalendarProvider = googleCalendarProvider
+        // [Google Phase 3 · M1] Gmail context retrieval (D-M1): meeting-centric seam, TTL cache,
+        // never persisted (D-M2). Handed to MeetingBriefService / MeetingLLMService / the VM
+        // extension in M3–M5.
+        let gmailContextService = GmailContextService(
+            store: googleAccountStore,
+            tokenProvider: googleAuthService
+        )
+        self.gmailContextService = gmailContextService
         // [Google Phase 1 · M4] D-G4 fan-in: EventKit stays the primary/system provider (owns the
         // published authorization status); the Google provider joins as a secondary, feeding the
         // same republish/selection choke point through namespaced IDs (D-G3).
