@@ -35,6 +35,11 @@ final class RelatedEmailsModel: ObservableObject {
     private let provider: RelatedEmailsProviding?
     /// Injected clock so row date labels and "Updated %@" are deterministic under test.
     private let now: () -> Date
+    /// Every meeting whose section has asked for a load this session — including the ones whose load
+    /// early-returned because Gmail was not connected yet. That set is exactly what a later
+    /// connect-flip must retry (`connectionDidChange`): the section's `.task(id: meeting.id)` never
+    /// re-runs for an already-open document, so nothing else would ever trigger the fetch.
+    private var trackedMeetings: [UUID: Meeting] = [:]
 
     init(provider: RelatedEmailsProviding?, now: @escaping () -> Date = Date.init) {
         self.provider = provider
@@ -71,7 +76,32 @@ final class RelatedEmailsModel: ObservableObject {
         await load(for: meeting, bypassCache: true)
     }
 
+    /// Reacts to the D-M7 Gmail connectivity flip (driven by `MeetingsViewModel`'s
+    /// `GoogleAccountStore.objectWillChange` recompute — the one hook both directions share):
+    ///
+    /// - **on**: re-run the load for every tracked meeting, so a document that was already open when
+    ///   the user enabled the toggle fills in instead of showing "No related emails" until the user
+    ///   navigates away and back.
+    /// - **off**: drop every cached row. The rows outlive the toggle otherwise, and the appendix gate
+    ///   (`isGmailConnected || !rows.isEmpty`) would keep advertising a count badge over a section
+    ///   that now renders only the "enable Gmail" hint — a badge pointing at content that is gone.
+    func connectionDidChange(isConnected: Bool) async {
+        guard isConnected else {
+            candidatesByMeeting.removeAll()
+            updatedAtByMeeting.removeAll()
+            fetchErrors.removeAll()
+            return
+        }
+        // Deterministic order so the (rare) multi-meeting case is testable.
+        for meeting in trackedMeetings.values.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            await load(for: meeting, bypassCache: false)
+        }
+    }
+
     private func load(for meeting: Meeting, bypassCache: Bool) async {
+        // Tracked BEFORE the connectivity guard — a load that early-returns here is precisely the
+        // one `connectionDidChange(isConnected: true)` has to retry.
+        trackedMeetings[meeting.id] = meeting
         guard let provider, provider.isConnected(for: meeting) else { return }
         // Per-meeting spinner sanity: a second call while one is in flight joins the service's
         // single-flight anyway; skip it here so the spinner state never double-toggles.

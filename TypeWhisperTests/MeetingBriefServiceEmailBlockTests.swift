@@ -28,15 +28,27 @@ final class MeetingBriefServiceEmailBlockTests: XCTestCase {
         }
     }
 
+    /// Mirrors the real service's D-M2 exclusion arithmetic (`GmailQueryBuilder.includedAddresses`
+    /// over self-flagged attendees ∪ every connected account email) so the brief's guard is exercised
+    /// against the clause the service would actually issue — the point of the shared signal.
     @MainActor
     private final class StubGmailRetriever: GmailContextRetrieving {
         var connected = true
         var passages: [EmailPassage] = []
         var errorToThrow: Error?
+        /// Emails of the user's connected Google accounts (D-M2 subtracts them all).
+        var connectedAccountEmails: [String] = []
         private(set) var retrieveCalls: [(query: String, limit: Int)] = []
 
         var isConnected: Bool { connected }
         func isConnected(for meeting: Meeting) -> Bool { connected }
+        func hasAttendeeQuery(for meeting: Meeting) -> Bool {
+            !GmailQueryBuilder.includedAddresses(
+                attendeeEmails: meeting.attendees.compactMap(\.email),
+                excludedEmails: connectedAccountEmails
+                    + meeting.attendees.filter { $0.isSelf == true }.compactMap(\.email)
+            ).isEmpty
+        }
         func retrieve(for meeting: Meeting, query: String, limit: Int) async throws -> [EmailPassage] {
             retrieveCalls.append((query, limit))
             if let errorToThrow { throw errorToThrow }
@@ -69,6 +81,19 @@ final class MeetingBriefServiceEmailBlockTests: XCTestCase {
         addTeardownBlock { TestSupport.remove(dir) }
         let filler = String(repeating: "acme sync roadmap filler ", count: 120)
         try "# Acme\nVAULT_HEAD_MARKER \(filler)"
+            .write(to: dir.appendingPathComponent("Acme Overview.md"), atomically: true, encoding: .utf8)
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: dir.path)
+        return service
+    }
+
+    /// A vault whose single matching note has a body of roughly `bodyChars` characters, framed by
+    /// head/tail markers so truncation is observable.
+    private func sizedVault(defaults: UserDefaults, bodyChars: Int) throws -> ObsidianVaultService {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingBriefEmailSizedVault")
+        addTeardownBlock { TestSupport.remove(dir) }
+        let filler = String(repeating: "acme sync roadmap filler ", count: max(0, bodyChars / 25))
+        try "# Acme\nVAULT_HEAD_MARKER \(filler)VAULT_TAIL_MARKER"
             .write(to: dir.appendingPathComponent("Acme Overview.md"), atomically: true, encoding: .utf8)
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: dir.path)
@@ -308,6 +333,103 @@ final class MeetingBriefServiceEmailBlockTests: XCTestCase {
         let email = try XCTUnwrap(text.range(of: "EMAIL_HEAD_MARKER"))
         XCTAssertLessThan(prior.lowerBound, vault.lowerBound, "meta → prior → knowledge base → emails")
         XCTAssertLessThan(vault.lowerBound, email.lowerBound)
+    }
+
+    // MARK: - Shared attendee-clause signal (review finding: guard ↔ query divergence)
+
+    func testAttendeeThatIsTheUsersOwnConnectedAccountNeverSolelyGroundsABrief() async throws {
+        let meetings = try makeMeetingService()
+        let processor = StubProcessor()
+        let gmail = StubGmailRetriever()
+        gmail.passages = [passage(content: "EMAIL_MARKER title-term match only.")]
+        // The lone non-self-flagged attendee email IS the user's second connected account, which
+        // D-M2 subtracts — so the attendee clause was nil and every match is title-anchored. The
+        // brief's own `isSelf`-only check used to call this "has a non-self attendee email" and
+        // ground a brief on loose subject matches (D-M3 bypass).
+        gmail.connectedAccountEmails = ["me@work.com", "me-second@work.com"]
+        let service = briefService(meetings: meetings, vault: disconnectedVault(), processor: processor, gmail: gmail)
+        let target = seedTarget(on: meetings, attendees: [Attendee(name: "My other account", email: "ME-SECOND@work.com")])
+
+        do {
+            _ = try await service.generateBrief(for: target)
+            XCTFail("a connected-account-only attendee list must not solely ground a brief")
+        } catch let error as MeetingBriefError {
+            XCTAssertEqual(error, .insufficientContext)
+        }
+        XCTAssertTrue(processor.texts.isEmpty, "no LLM call")
+        XCTAssertTrue(target.outputs.isEmpty, "nothing persisted")
+    }
+
+    // MARK: - Fast-fail ordering (review finding: no Gmail traffic when nothing can ground)
+
+    func testMeetingThatCanNeverGroundABriefFailsFastWithoutAnyGmailFetch() async throws {
+        let meetings = try makeMeetingService()
+        let processor = StubProcessor()
+        let gmail = StubGmailRetriever()
+        gmail.passages = [passage(content: "EMAIL_MARKER unreachable.")]
+        let service = briefService(meetings: meetings, vault: disconnectedVault(), processor: processor, gmail: gmail)
+        // No priors, no vault, no attendee clause ⇒ the outcome is insufficientContext whatever
+        // Gmail returns, so the network call must never be issued.
+        let target = seedTarget(on: meetings, attendees: [Attendee(name: "Me", email: "me@x.com", isSelf: true)])
+
+        do {
+            _ = try await service.generateBrief(for: target)
+            XCTFail("expected insufficientContext")
+        } catch let error as MeetingBriefError {
+            XCTAssertEqual(error, .insufficientContext)
+        }
+        XCTAssertTrue(gmail.retrieveCalls.isEmpty, "zero Gmail calls on the can-never-ground path")
+    }
+
+    func testGmailIsStillFetchedWhenLocalContextExists() async throws {
+        let meetings = try makeMeetingService()
+        let processor = StubProcessor()
+        let gmail = StubGmailRetriever()
+        gmail.passages = [passage(content: "EMAIL_MARKER augmenting.")]
+        let service = briefService(meetings: meetings, vault: disconnectedVault(), processor: processor, gmail: gmail)
+        // Prior meetings ground the brief, so the fast-fail must NOT short-circuit the email block.
+        let target = seedTarget(
+            on: meetings,
+            attendees: [Attendee(name: "Me", email: "me@x.com", isSelf: true)],
+            priors: 1
+        )
+
+        _ = try await service.generateBrief(for: target)
+
+        XCTAssertEqual(gmail.retrieveCalls.count, 1)
+        XCTAssertTrue(try XCTUnwrap(processor.texts.first).contains("EMAIL_MARKER"))
+    }
+
+    // MARK: - Reserve is capped at what the email block needs (review finding)
+
+    func testSmallEmailBlockDoesNotTruncateAKnowledgeBaseThatFits() async throws {
+        let defaults = makeDefaults()
+        let meetings = try makeMeetingService()
+        let processor = StubProcessor()
+        let gmail = StubGmailRetriever()
+        gmail.passages = [passage(content: "EMAIL_HEAD_MARKER tiny.")]
+        // A ~1,550-char KB block against a 2,000-char budget: it fits beside a ~60-char email
+        // section, but a fixed charBudget/4 (500) reserve would have cut ~150 chars off its tail.
+        let service = briefService(
+            meetings: meetings,
+            vault: try sizedVault(defaults: defaults, bodyChars: 1_550),
+            processor: processor,
+            gmail: gmail,
+            charBudget: 2_000
+        )
+        let target = seedTarget(on: meetings, attendees: attendeeAda)
+
+        _ = try await service.generateBrief(for: target)
+
+        let text = try XCTUnwrap(processor.texts.first)
+        XCTAssertTrue(text.contains("VAULT_HEAD_MARKER"))
+        XCTAssertTrue(text.contains("VAULT_TAIL_MARKER"), "the KB block is not truncated when everything fits")
+        XCTAssertFalse(
+            text.contains(String(localized: "meetings.output.truncationNotice")),
+            "nothing was cut: \(text.count) chars"
+        )
+        XCTAssertTrue(text.contains("EMAIL_HEAD_MARKER"))
+        XCTAssertLessThanOrEqual(text.count, 2_000)
     }
 
     func testNilGmailServiceProducesByteIdenticalContext() async throws {

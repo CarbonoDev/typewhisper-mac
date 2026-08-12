@@ -289,7 +289,19 @@ final class MeetingsViewModel: ObservableObject {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
                     guard let self else { return }
-                    self.isGmailConnected = self.gmailContextService?.isConnected ?? false
+                    let wasConnected = self.isGmailConnected
+                    let nowConnected = self.gmailContextService?.isConnected ?? false
+                    self.isGmailConnected = nowConnected
+                    // The flip is the single hook both related-emails corrections hang off: on
+                    // connect, refetch the meetings whose load early-returned while Gmail was off
+                    // (an already-open document never re-runs its `.task(id:)`); on disconnect,
+                    // drop the cached rows so the appendix gate stops advertising a count badge
+                    // over a section that can no longer render them.
+                    guard nowConnected != wasConnected else { return }
+                    let model = self.relatedEmailsModel
+                    Task { @MainActor in
+                        await model.connectionDidChange(isConnected: nowConnected)
+                    }
                 }
                 .store(in: &cancellables)
         }

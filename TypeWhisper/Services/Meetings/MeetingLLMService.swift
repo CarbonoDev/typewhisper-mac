@@ -270,13 +270,24 @@ final class MeetingLLMService: ObservableObject {
         // BOTH markers (D-M4): either or both trigger the single escalation round below. A reply
         // with no marker line is a normal answer: persist it, stripped of marker lines (both forms)
         // as defense-in-depth — mid-sentence mentions are neither markers nor stripped.
-        let vaultTerms = MeetingQAComposer.vaultSearchTerms(in: pass1Answer)
-        let emailTerms = MeetingQAComposer.emailSearchTerms(in: pass1Answer)
+        //
+        // A marker counts as an escalation request ONLY when its source's invitation could have been
+        // in the prompt — vault marker iff `vaultService.isConnected`, email marker iff Gmail is
+        // connected for this meeting (review finding, symmetric on both sources). An *unprompted*
+        // marker from a source that was never offered is not a request the host can serve: honoring
+        // it used to route a perfectly good pass-1 answer into the empty-retrieval guard below,
+        // which replaced the user's answer with the generic "not covered" text. Such a reply is a
+        // normal answer — persisted with its marker lines stripped (the token never surfaces), and
+        // degrading to "not covered" only when stripping leaves nothing behind.
+        let vaultTerms = vaultService.isConnected ? MeetingQAComposer.vaultSearchTerms(in: pass1Answer) : nil
+        let gmailConnected = gmailService?.isConnected(for: meeting) ?? false
+        let emailTerms = gmailConnected ? MeetingQAComposer.emailSearchTerms(in: pass1Answer) : nil
         guard vaultTerms != nil || emailTerms != nil else {
+            let sanitized = MeetingQAComposer.strippingEscalationLines(from: pass1Answer)
             return meetingService.addQATurn(
                 to: meeting,
                 question: trimmedQuestion,
-                answer: MeetingQAComposer.strippingEscalationLines(from: pass1Answer)
+                answer: sanitized.isEmpty ? String(localized: "meetings.qa.answer.notCovered") : sanitized
             )
         }
 
@@ -287,16 +298,18 @@ final class MeetingLLMService: ObservableObject {
         // marker falls back to the question text; the service's D-M2 window already covers the
         // meeting day). A Gmail failure degrades to "emails contributed nothing" — never fails the
         // answer (the M3 philosophy).
+        // Both `vaultTerms` and `emailTerms` are non-nil only for a source that is actually
+        // available (the gating above), so neither retrieval needs a second connectivity check.
         var retrievedPassages: [VaultPassage] = []
         if let vaultTerms {
             searchingVaultMeetingIDs.insert(meeting.id)
             let searchTerms = vaultTerms.isEmpty ? trimmedQuestion : vaultTerms
-            retrievedPassages = vaultService.isConnected
-                ? vaultService.retrieve(query: searchTerms, limit: 3, scope: retrievalScope(for: meeting))
-                : []
+            retrievedPassages = vaultService.retrieve(
+                query: searchTerms, limit: 3, scope: retrievalScope(for: meeting)
+            )
         }
         var retrievedEmails: [EmailPassage] = []
-        if let emailTerms, let gmailService, gmailService.isConnected(for: meeting) {
+        if let emailTerms, let gmailService {
             searchingEmailsMeetingIDs.insert(meeting.id)
             let searchTerms = emailTerms.isEmpty ? trimmedQuestion : emailTerms
             do {

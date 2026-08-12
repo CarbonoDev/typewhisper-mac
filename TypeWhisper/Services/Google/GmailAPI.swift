@@ -72,7 +72,9 @@ enum GmailAPI {
     }
 
     /// `GET users/me/messages/{id}?format=metadata` with the four headers the candidate list
-    /// renders; the response also carries `snippet` and `threadId` (D-M1 step 3).
+    /// renders plus `Message-ID` — the only mailbox-independent identity, which cross-account
+    /// dedupe keys on (message/thread ids differ per mailbox, D-M2). The response also carries
+    /// `snippet` and `threadId` (D-M1 step 3).
     static func messageMetadataRequest(token: String, id: String) -> URLRequest {
         var components = messageComponents(id: id)
         components.queryItems = [
@@ -81,6 +83,7 @@ enum GmailAPI {
             URLQueryItem(name: "metadataHeaders", value: "From"),
             URLQueryItem(name: "metadataHeaders", value: "To"),
             URLQueryItem(name: "metadataHeaders", value: "Date"),
+            URLQueryItem(name: "metadataHeaders", value: "Message-ID"),
         ]
         return authorizedGET(components.url!, token: token)
     }

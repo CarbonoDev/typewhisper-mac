@@ -83,15 +83,27 @@ final class MeetingBriefService: ObservableObject {
 
         let priorBlock = priorMeetingsBlock(for: meeting)
         let kbBlock = knowledgeBaseBlock(for: meeting)
+        // D-M3 sole-grounding restriction (normative): email context may SOLELY satisfy the guard
+        // only when the meeting's Gmail query carried a non-empty attendee clause — title-term-only
+        // matches augment a brief but never solely ground a persisted one. The signal comes from the
+        // Gmail service itself (`hasAttendeeQuery`), the single computer of the D-M2 exclusion set,
+        // so this guard and the issued query cannot diverge (review finding: a local `isSelf`-only
+        // check missed the connected-account emails the service also subtracts).
+        let hasAttendeeClause = gmailService?.hasAttendeeQuery(for: meeting) ?? false
+
+        // Fast-fail BEFORE any network work (review finding): when neither local block produced
+        // anything and email context could not ground a brief on its own, the outcome is
+        // `insufficientContext` whatever Gmail returns — so the fetch must not run at all (it would
+        // burn Gmail quota on every scheduled attempt for a meeting that can never ground).
+        guard !priorBlock.isEmpty || !kbBlock.isEmpty || hasAttendeeClause else {
+            throw MeetingBriefError.insufficientContext
+        }
+
         // [Google Phase 3 · M3] The third context block (D-M3). Runs inside the existing `.brief`
         // job — the 1–2 s fetch is invisible pre-meeting; no scheduler/queue change.
         let emailBlock = await relatedEmailsBlock(for: meeting)
 
-        // D-M3 sole-grounding restriction (normative): email context may SOLELY satisfy the
-        // guard only when the meeting has ≥1 non-self attendee email (the attendee query was
-        // non-nil) — title-term-only email matches augment a brief but never solely ground a
-        // persisted one.
-        let emailBlockSufficient = !emailBlock.isEmpty && hasNonSelfAttendeeEmail(meeting)
+        let emailBlockSufficient = !emailBlock.isEmpty && hasAttendeeClause
         guard !priorBlock.isEmpty || !kbBlock.isEmpty || emailBlockSufficient else {
             throw MeetingBriefError.insufficientContext
         }
@@ -254,15 +266,6 @@ final class MeetingBriefService: ObservableObject {
         }
     }
 
-    /// D-M3 sole-grounding input: whether the meeting carries at least one attendee email that is
-    /// not the user's own (`isSelf != true`) — i.e. the attendee clause of the Gmail query was
-    /// non-nil, so email matches are anchored to people, not just title terms.
-    private func hasNonSelfAttendeeEmail(_ meeting: Meeting) -> Bool {
-        meeting.attendees.contains { attendee in
-            attendee.isSelf != true && !(attendee.email ?? "").trimmingCharacters(in: .whitespaces).isEmpty
-        }
-    }
-
     // MARK: - Assembly
 
     /// Compose and bound the final brief context: meeting metadata, prior-meeting summaries,
@@ -271,8 +274,9 @@ final class MeetingBriefService: ObservableObject {
     ///
     /// Rather than truncate the whole joined string at the end — which let several substantial prior
     /// meetings silently truncate the trailing blocks away entirely (M5 review finding 2) — the KB
-    /// and email blocks each get a reserved slice (~a quarter of the budget) and the prior-meeting
-    /// block absorbs the remainder. **D-M3 budget fix (normative)**: the KB block, now a *middle*
+    /// and email blocks each get a reserved slice (at most ~a quarter of the budget; the email
+    /// reserve is additionally capped at what that block actually needs) and the prior-meeting block
+    /// absorbs the remainder. **D-M3 budget fix (normative)**: the KB block, now a *middle*
     /// section, must subtract the trailing email reserve — exactly as the prior block subtracts
     /// `kbReserve` — otherwise a large KB block eats the email section's slice. Each block carries a
     /// localized truncation notice when it is cut; final whole-string bound unchanged.
@@ -297,8 +301,16 @@ final class MeetingBriefService: ObservableObject {
         sections.append(metaSection)
 
         var runningLength = metaSection.count
+        let kbHeader = String(localized: "meetings.brief.context.knowledgeHeader")
+        let emailsHeader = String(localized: "meetings.brief.context.emailsHeader")
         let kbReserve = kbBlock.isEmpty ? 0 : charBudget / 4
-        let emailReserve = emailBlock.isEmpty ? 0 : charBudget / 4
+        // Reserve only what the email section can actually use (review finding): a fixed
+        // `charBudget / 4` truncated the KB block to hold space a 120-char email never occupied,
+        // dropping vault facts from a brief that fit under budget. The cap keeps the D-M3 guarantee
+        // (the email slice survives oversized upstream blocks) while a small block reserves small.
+        let emailReserve = emailBlock.isEmpty
+            ? 0
+            : min(emailBlock.count + emailsHeader.count + 4, charBudget / 4)
 
         if !priorBlock.isEmpty {
             let priorHeader = String(localized: "meetings.brief.context.priorHeader")
@@ -309,7 +321,6 @@ final class MeetingBriefService: ObservableObject {
             runningLength += section.count + 2
         }
         if !kbBlock.isEmpty {
-            let kbHeader = String(localized: "meetings.brief.context.knowledgeHeader")
             // Remaining budget minus the trailing email reserve (the D-M3 fix — "all remaining"
             // here would starve the email section below its slice).
             let kbBudget = max(0, charBudget - runningLength - emailReserve - kbHeader.count - 4)
@@ -319,7 +330,6 @@ final class MeetingBriefService: ObservableObject {
             runningLength += section.count + 2
         }
         if !emailBlock.isEmpty {
-            let emailsHeader = String(localized: "meetings.brief.context.emailsHeader")
             // The trailing block gets the remainder (≥ its reserve by construction).
             let emailBudget = max(0, charBudget - runningLength - emailsHeader.count - 4)
             let bounded = bound(emailBlock, to: emailBudget, notice: notice)
