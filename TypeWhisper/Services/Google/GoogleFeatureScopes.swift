@@ -11,14 +11,22 @@ import Foundation
 /// account store's per-feature toggle accessors). Later phases append theirs here.
 @MainActor
 enum GoogleFeatureScopes {
-    /// One per-account feature that composes an OAuth scope. Phase 3 adds `case gmail` here plus
-    /// its row in `all` — both the request side and the verification side then follow for free.
+    /// One per-account feature that composes an OAuth scope. Adding a case here wires the feature
+    /// into **both** the request side (`additionalScopes`) and the verification side
+    /// (`disableFeaturesWithMissingScopes`) at once — later phases append theirs the same way.
+    ///
+    /// [Google Phase 3 · M6] Gmail search (D-M7) joins Drive here, so a Reconnect / reauth-nudge
+    /// consent pass composes calendar + Drive + Gmail in ONE flow — essential under Testing-mode
+    /// weekly token expiry — and a declined Gmail checkbox turns the toggle back off instead of
+    /// wedging the search in a permanent 403 loop.
     enum Feature: String, CaseIterable {
         case driveImport
+        case gmail
 
         var scope: String {
             switch self {
             case .driveImport: GoogleDriveAPI.readonlyScope
+            case .gmail: GmailContextService.gmailScope
             }
         }
 
@@ -26,6 +34,7 @@ enum GoogleFeatureScopes {
         func isEnabled(_ accountID: String, in store: GoogleAccountStore) -> Bool {
             switch self {
             case .driveImport: store.isDriveImportEnabled(for: accountID)
+            case .gmail: store.isGmailEnabled(for: accountID)
             }
         }
 
@@ -33,6 +42,7 @@ enum GoogleFeatureScopes {
         func disable(_ accountID: String, in store: GoogleAccountStore) {
             switch self {
             case .driveImport: store.setDriveImportEnabled(false, for: accountID)
+            case .gmail: store.setGmailEnabled(false, for: accountID)
             }
         }
     }
