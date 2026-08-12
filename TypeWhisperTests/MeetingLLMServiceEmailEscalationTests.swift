@@ -43,6 +43,7 @@ final class MeetingLLMServiceEmailEscalationTests: XCTestCase {
 
         var isConnected: Bool { connected }
         func isConnected(for meeting: Meeting) -> Bool { connected }
+        func hasAttendeeQuery(for meeting: Meeting) -> Bool { true } // brief-only signal
         func retrieve(for meeting: Meeting, query: String, limit: Int) async throws -> [EmailPassage] {
             retrieveCalls.append((query, limit))
             if let errorToThrow { throw errorToThrow }
@@ -280,9 +281,8 @@ final class MeetingLLMServiceEmailEscalationTests: XCTestCase {
     }
 
     func testUnpromptedEmailMarkerWithNilSeamDegradesToNotCovered() async throws {
-        // Spec-decided (D-M4 stripping supersession): the marker is honored as an escalation
-        // request and both sources turn up empty ⇒ "not covered" — the token itself is never
-        // persisted (mirrors the vault marker's no-vault safety net).
+        // A marker-only reply carries no prose to keep: stripping leaves nothing, so the localized
+        // "not covered" answer stands in — the token itself is never persisted.
         let (service, _, processor, meeting) = try makeHarness(gmail: nil)
         processor.responder = { _ in "EMAIL_SEARCH: contract" }
 
@@ -290,5 +290,51 @@ final class MeetingLLMServiceEmailEscalationTests: XCTestCase {
 
         XCTAssertEqual(turn.answer, notCovered)
         XCTAssertEqual(processor.calls.count, 1)
+    }
+
+    // MARK: - Markers are honored only from an invited source (review finding)
+
+    func testUnpromptedEmailMarkerNeverDiscardsAValidAnswerWhenGmailIsNotConnected() async throws {
+        // Gmail off ⇒ no EMAIL_SEARCH invitation was ever extended, so a marker line is not an
+        // escalation request the host can serve. The surrounding prose is a real answer and must
+        // be persisted (pre-Phase-3 behavior) instead of being replaced by "not covered".
+        let gmailOff = StubGmailRetriever()
+        gmailOff.connected = false
+        let (service, _, processor, meeting) = try makeHarness(gmail: gmailOff)
+        processor.responder = { _ in "They agreed to ship on Friday.\nEMAIL_SEARCH: contract" }
+
+        let turn = try await service.answerQuestion(for: meeting, question: "When do they ship?")
+
+        XCTAssertEqual(turn.answer, "They agreed to ship on Friday.", "prose kept, marker line stripped")
+        XCTAssertEqual(processor.calls.count, 1, "no escalation round for an uninvited source")
+        XCTAssertTrue(gmailOff.retrieveCalls.isEmpty)
+    }
+
+    func testUnpromptedVaultMarkerNeverDiscardsAValidAnswerWithoutAVault() async throws {
+        // The symmetric vault case — the same defect, so the same rule (both sources stay in step).
+        let (service, _, processor, meeting) = try makeHarness(gmail: nil)
+        processor.responder = { _ in "The contract was signed in March.\nVAULT_SEARCH: acme roadmap" }
+
+        let turn = try await service.answerQuestion(for: meeting, question: "When was it signed?")
+
+        XCTAssertEqual(turn.answer, "The contract was signed in March.")
+        XCTAssertEqual(processor.calls.count, 1)
+    }
+
+    func testInvitedSourceStillEscalatesWhenTheOtherMarkerIsUninvited() async throws {
+        // Vault connected, Gmail off: the vault marker escalates as always; the uninvited email
+        // marker is ignored (no Gmail call) and stripped from the persisted answer.
+        let gmailOff = StubGmailRetriever()
+        gmailOff.connected = false
+        let (service, _, processor, meeting) = try makeHarness(vault: try connectedVault(), gmail: gmailOff)
+        processor.responder = { index in
+            index == 1 ? "VAULT_SEARCH: acme roadmap\nEMAIL_SEARCH: contract" : "From the note: on track."
+        }
+
+        let turn = try await service.answerQuestion(for: meeting, question: "Roadmap status?")
+
+        XCTAssertEqual(processor.calls.count, 2)
+        XCTAssertTrue(turn.answer.hasPrefix(vaultPrefix), "vault-only disclosure")
+        XCTAssertTrue(gmailOff.retrieveCalls.isEmpty)
     }
 }

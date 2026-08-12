@@ -124,6 +124,65 @@ final class RelatedEmailsFetchStateTests: XCTestCase {
         XCTAssertNil(model.lastFetchError(for: meeting))
     }
 
+    // MARK: - Connectivity flips (review findings: no refetch on enable, stale rows on disable)
+
+    func testConnectFlipRefetchesAMeetingWhoseLoadEarlyReturned() async {
+        // The section's `.task(id: meeting.id)` ran while Gmail was off and early-returned; the task
+        // id never changes for an already-open document, so the flip is the only chance to fetch.
+        let provider = StubProvider()
+        provider.connected = false
+        provider.result = .success([candidate()])
+        let model = makeModel(provider: provider)
+        let meeting = Meeting(title: "M")
+
+        await model.fetch(for: meeting)
+        XCTAssertEqual(provider.candidatesCalls, 0)
+
+        provider.connected = true
+        await model.connectionDidChange(isConnected: true)
+
+        XCTAssertEqual(provider.candidatesCalls, 1, "the enable flip re-triggers the load")
+        XCTAssertEqual(model.rows(for: meeting).map(\.id), ["google:subA:m1"])
+        XCTAssertEqual(model.updatedAt(for: meeting), fixedNow)
+    }
+
+    func testDisconnectClearsCachedRowsSoTheAppendixGateAgreesWithTheSection() async {
+        // The appendix gate is `isGmailConnected || !rows.isEmpty`: rows that outlive the toggle
+        // keep a count badge over a section that renders only the "enable Gmail" hint.
+        let provider = StubProvider()
+        provider.result = .success([candidate(), candidate(id: "google:subA:m2")])
+        let model = makeModel(provider: provider)
+        let meeting = Meeting(title: "M")
+        provider.partialErrors[meeting.id] = nil
+
+        await model.fetch(for: meeting)
+        XCTAssertEqual(model.rows(for: meeting).count, 2)
+
+        provider.connected = false
+        await model.connectionDidChange(isConnected: false)
+
+        XCTAssertTrue(model.rows(for: meeting).isEmpty, "rows dropped on disable/disconnect")
+        XCTAssertNil(model.updatedAt(for: meeting))
+        XCTAssertNil(model.lastFetchError(for: meeting))
+    }
+
+    func testReconnectAfterDisconnectRefillsTheClearedRows() async {
+        let provider = StubProvider()
+        provider.result = .success([candidate()])
+        let model = makeModel(provider: provider)
+        let meeting = Meeting(title: "M")
+
+        await model.fetch(for: meeting)
+        provider.connected = false
+        await model.connectionDidChange(isConnected: false)
+        XCTAssertTrue(model.rows(for: meeting).isEmpty)
+
+        provider.connected = true
+        await model.connectionDidChange(isConnected: true)
+
+        XCTAssertEqual(model.rows(for: meeting).count, 1, "the meeting stays tracked across the off/on cycle")
+    }
+
     func testPartialErrorSurfacesThroughLastFetchError() async {
         // D-M6: a partially failed multi-account fetch succeeds (merged remainder cached) but
         // must still surface — the model falls back to the service's per-meeting lastPartialError.

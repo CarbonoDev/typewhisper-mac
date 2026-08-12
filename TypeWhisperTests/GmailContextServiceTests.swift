@@ -16,14 +16,16 @@ private func gmailMetadataBody(
     subject: String,
     from: String = "Ada Lovelace <ada@x.com>",
     internalDate: String,
-    snippet: String = "snippet"
+    snippet: String = "snippet",
+    messageIDHeader: String? = nil
 ) -> String {
-    #"""
+    let messageIDEntry = messageIDHeader.map { #", {"name": "Message-ID", "value": "\#($0)"}"# } ?? ""
+    return #"""
     {"id": "\#(id)", "threadId": "\#(threadId)", "snippet": "\#(snippet)",
      "internalDate": "\#(internalDate)",
      "payload": {"mimeType": "text/plain",
                  "headers": [{"name": "Subject", "value": "\#(subject)"},
-                             {"name": "From", "value": "\#(from)"}]}}
+                             {"name": "From", "value": "\#(from)"}\#(messageIDEntry)]}}
     """#
 }
 
@@ -152,7 +154,9 @@ final class GmailContextServiceTests: XCTestCase {
         subjectRefs: [String: [(id: String, threadId: String)]] = [:],
         metadata: [String: String],
         fullBodies: [String: (statusCode: Int, body: String)] = [:],
-        failingTokens: Set<String> = []
+        failingTokens: Set<String> = [],
+        /// Message ids whose `format=metadata` get returns a transient 500 (per-message isolation).
+        failingMetadataIDs: Set<String> = []
     ) -> @Sendable (URLRequest) -> (statusCode: Int, body: String) {
         { request in
             let url = request.url!
@@ -164,6 +168,7 @@ final class GmailContextServiceTests: XCTestCase {
             }
             if urlString.contains("format=metadata") {
                 let id = gmailMessageID(in: url)
+                if failingMetadataIDs.contains(id) { return (429, "rate limited") }
                 return metadata[id].map { (200, $0) } ?? (404, "{}")
             }
             if urlString.contains("format=full") {
@@ -388,6 +393,135 @@ final class GmailContextServiceTests: XCTestCase {
         XCTAssertEqual(candidates.count, 15, "every ref's metadata landed")
         XCTAssertLessThanOrEqual(transport.maxInFlight, GmailContextService.metadataFetchWidth)
         XCTAssertGreaterThan(transport.maxInFlight, 1, "the fetches actually overlapped")
+    }
+
+    // MARK: - Per-message isolation (review finding)
+
+    func testOneFailedMetadataGetDropsOnlyThatMessage() async throws {
+        let refs = (1...5).map { (id: "m\($0)", threadId: "t\($0)") }
+        var metadata: [String: String] = [:]
+        for (index, ref) in refs.enumerated() {
+            metadata[ref.id] = gmailMetadataBody(
+                id: ref.id, threadId: ref.threadId, subject: "Mail \(index)",
+                internalDate: "\(1_786_000_000_000 + index * 1_000)"
+            )
+        }
+        // One transient 429 among the concurrent gets used to abort the entire account fetch.
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: ["token-subA": refs], metadata: metadata, failingMetadataIDs: ["m3"]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true)], transport: transport)
+
+        let candidates = try await service.candidates(for: makeMeeting())
+
+        XCTAssertEqual(candidates.count, 4, "N−1 candidates survive one failed get")
+        XCTAssertFalse(candidates.map(\.messageID).contains("m3"))
+        XCTAssertEqual(Set(candidates.map(\.messageID)), ["m1", "m2", "m4", "m5"])
+    }
+
+    func testEveryMetadataGetFailingStillSurfacesAsAFailure() async throws {
+        let refs = (1...3).map { (id: "m\($0)", threadId: "t\($0)") }
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: ["token-subA": refs], metadata: [:],
+            failingMetadataIDs: ["m1", "m2", "m3"]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true)], transport: transport)
+
+        do {
+            _ = try await service.candidates(for: makeMeeting())
+            XCTFail("a wholly failed metadata stage is an outage, not a dropped message")
+        } catch let error as GmailAPI.RequestFailed {
+            XCTAssertEqual(error.statusCode, 429)
+        }
+    }
+
+    // MARK: - Cross-account dedupe (review finding)
+
+    func testSameEmailInTwoMailboxesSurfacesOnceKeyedByMessageIDHeader() async throws {
+        // Same delivery, different per-mailbox ids AND different internalDates — only the RFC
+        // Message-ID header ties them together.
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: [
+                "token-subA": [("a1", "t1")],
+                "token-subB": [("b1", "t9")],
+            ],
+            metadata: [
+                "a1": gmailMetadataBody(
+                    id: "a1", threadId: "t1", subject: "Budget v2", internalDate: "1786300000000",
+                    messageIDHeader: "<abc123@mail.x.com>"
+                ),
+                "b1": gmailMetadataBody(
+                    id: "b1", threadId: "t9", subject: "Budget v2", internalDate: "1786300004000",
+                    messageIDHeader: "<ABC123@mail.x.com>"
+                ),
+            ]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true), ("subB", true)], transport: transport)
+
+        let candidates = try await service.candidates(for: makeMeeting(owningSub: nil))
+
+        XCTAssertEqual(candidates.count, 1, "one row per email, not one per mailbox")
+        XCTAssertEqual(candidates.first?.accountSub, "subA", "first searched account's copy wins")
+    }
+
+    func testCrossAccountDedupeFallsBackToSenderSubjectAndMinuteWithoutAMessageIDHeader() async throws {
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: [
+                "token-subA": [("a1", "t1")],
+                "token-subB": [("b1", "t9")],
+            ],
+            metadata: [
+                "a1": gmailMetadataBody(id: "a1", threadId: "t1", subject: "Budget v2", internalDate: "1786300000000"),
+                "b1": gmailMetadataBody(id: "b1", threadId: "t9", subject: "Budget v2", internalDate: "1786300000000"),
+            ]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true), ("subB", true)], transport: transport)
+
+        let candidates = try await service.candidates(for: makeMeeting(owningSub: nil))
+
+        XCTAssertEqual(candidates.count, 1)
+    }
+
+    func testDistinctEmailsFromTwoAccountsAreBothKept() async throws {
+        let transport = FakeGmailTransport(handler: Self.mailboxHandler(
+            attendeeRefs: [
+                "token-subA": [("a1", "t1")],
+                "token-subB": [("b1", "t9")],
+            ],
+            metadata: [
+                "a1": gmailMetadataBody(
+                    id: "a1", threadId: "t1", subject: "Budget v2", internalDate: "1786300000000",
+                    messageIDHeader: "<one@mail.x.com>"
+                ),
+                "b1": gmailMetadataBody(
+                    id: "b1", threadId: "t9", subject: "Kickoff", internalDate: "1786200000000",
+                    messageIDHeader: "<two@mail.x.com>"
+                ),
+            ]
+        ))
+        let (service, _, _) = try makeService(accounts: [("subA", true), ("subB", true)], transport: transport)
+
+        let candidates = try await service.candidates(for: makeMeeting(owningSub: nil))
+
+        XCTAssertEqual(candidates.map(\.accountSub), ["subA", "subB"], "distinct emails are never collapsed")
+    }
+
+    // MARK: - Attendee-clause signal (D-M3 sole grounding, review finding)
+
+    func testHasAttendeeQueryMirrorsTheIssuedAttendeeClause() throws {
+        let transport = FakeGmailTransport(handler: { _ in (500, "unused") })
+        let (service, _, _) = try makeService(accounts: [("subA", true), ("subB", true)], transport: transport)
+
+        XCTAssertTrue(service.hasAttendeeQuery(for: makeMeeting()))
+        XCTAssertFalse(
+            service.hasAttendeeQuery(for: makeMeeting(attendees: [Attendee(name: "Me", email: "me@x.com", isSelf: true)])),
+            "self-flagged attendees are excluded"
+        )
+        XCTAssertFalse(
+            service.hasAttendeeQuery(for: makeMeeting(attendees: [Attendee(name: "Other me", email: "SUBB@example.com")])),
+            "a connected account's own email is excluded too (D-M2) — the clause would be nil"
+        )
+        XCTAssertFalse(service.hasAttendeeQuery(for: makeMeeting(attendees: [Attendee(name: "Nameless")])))
     }
 
     // MARK: - Re-rank (D-M1 step 4) + bodies (step 5)

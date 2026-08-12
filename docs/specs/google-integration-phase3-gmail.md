@@ -144,12 +144,25 @@ handled by the cache below, not by local storage.
    all 25 slots with non-attendee noise and re-ranking cannot recover candidates that never
    arrived; per-clause caps guarantee attendee mail is never displaced, and `subject:(…)`
    AND-scoping keeps the title clause precise. No pagination in v1.
-3. **Candidates** — per id, `GET …/messages/{id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`
+3. **Candidates** — per id, `GET …/messages/{id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date&metadataHeaders=Message-ID`
    (response also carries `snippet` and `threadId`), fetched **concurrently per account via a
    bounded `withThrowingTaskGroup` (width 6)** — normative: a sequential loop over ~35 gets costs
    3–6 s, unacceptable on the live surface; the bounded group lands at ~1–2 s.
+   **Per-message isolation (normative):** each child's error is caught at its `group.next()` and
+   never escapes the group — one transient 429/500 drops exactly that message (logged with the
+   dropped count) and the other ~34 candidates survive. Letting it escape aborted the whole
+   account's candidate fetch — for a single-account meeting, the whole fetch — for a full TTL. A
+   stage in which **every** get failed still throws: that is an outage, and the per-account
+   isolation below must be able to see it.
    **Thread collapse**: keep only the newest message per `threadId` (D-M2 thread continuity — one
    row per conversation).
+   **Cross-account dedupe (normative):** thread and message ids are per-mailbox, so the merge across
+   accounts additionally dedupes on a mailbox-independent identity — the RFC 5322 `Message-ID`
+   header (hence the extra `metadataHeaders` above), falling back to sender + subject +
+   minute-granular timestamp when the header is absent (two mailboxes' `internalDate` for one
+   delivery can differ by seconds). Accounts merge owner-first (D-M2), so first occurrence wins.
+   Without it, one email received by two enabled accounts produced duplicate UI rows and spent two
+   of `retrieve(limit: 3)`'s three passage slots (and two body fetches) on the same content.
 4. **Re-rank** — `LexicalRetriever.rank` over `Document(id: messageID, text: subject + " " + from
    + " " + snippet)` against the caller's query text (meeting title + attendee names for the
    list/brief; the model's search terms for Q&A escalation). Rank output is truncated to the
@@ -162,6 +175,17 @@ handled by the cache below, not by local storage.
    snippet. Content capped at **2,000 chars** (mirrors `ObsidianVaultService.passageCharBudget`,
    `Services/Meetings/ObsidianVaultService.swift:102`). The UI list renders metadata + snippet only
    — no body fetch.
+   **A part wins only if it decodes to non-whitespace text (normative):** a `multipart/alternative`
+   whose `text/plain` alternative is whitespace-only (a common mailer shape) must fall through to
+   the `text/html` sibling and then to the snippet — trimming after the emptiness check let such a
+   part win and cite an email with zero content.
+   **Charset chain (normative):** bytes are decoded UTF-8 first, then the part's own declared
+   `Content-Type; charset=…`, then windows-1252, then ISO-8859-1. UTF-8 leads deliberately: a
+   mislabeled UTF-8 body is the common mailer bug, while genuine Latin-1/CP1252 high bytes (0xFC
+   "ü", 0xE4 "ä") are not valid UTF-8, so the reverse mistake self-corrects. ISO-8859-1 decodes any
+   byte sequence and therefore stays last. UTF-8-only decoding silently discarded whole
+   legacy-charset bodies (degrading them to a ~100-char snippet), which matters for this
+   EN+DE-localized app.
 
 **Caching (normative).** The vault recomputes fresh on every call
 (`ObsidianVaultService.retrieve`, `:183`) — viable for local disk, not for a network API feeding a
@@ -257,21 +281,33 @@ reserved KB slice in `assembleContext` (`:222`). The email block mirrors the KB 
 - The insufficiency guard becomes
   `!priorBlock.isEmpty || !kbBlock.isEmpty || emailBlockSufficient` — a meeting with rich email
   context but no prior meetings/vault can now get a brief. **Sole-grounding restriction
-  (normative):** `emailBlockSufficient` = the block is non-empty **and the meeting has ≥1
-  non-self attendee email** (i.e. the attendee query was non-nil) — title-term-only email matches
-  may *augment* a brief but never solely ground a persisted one.
-  *Documented approximation (M3 review, note-only):* the brief service's `hasNonSelfAttendeeEmail`
-  checks `isSelf` only — it cannot see the connected-account emails the D-M2 self-exclusion also
-  subtracts. In the narrow case where the sole non-self attendee email is one of the user's own
-  connected accounts, the guard passes while the actual attendee clause was nil (a non-empty
-  block is then title-anchored). Accepted: the block is still gated on a non-empty retrieval,
-  and threading the account list into the brief service for this edge is not worth the coupling.
+  (normative):** `emailBlockSufficient` = the block is non-empty **and the meeting's Gmail query
+  carried a non-empty attendee clause** — title-term-only email matches may *augment* a brief but
+  never solely ground a persisted one.
+  **One shared signal (normative):** that clause check is `GmailContextRetrieving.hasAttendeeQuery(
+  for:)` — computed by the service from the very same `retrievalScope(for:)` the fetch uses, so the
+  guard and the issued query cannot diverge. The brief service must NOT re-derive it: its former
+  local `hasNonSelfAttendeeEmail` checked `isSelf` only and could not see the connected-account
+  emails D-M2 also subtracts, so a meeting whose only "non-self" attendee was the user's own second
+  account passed the guard while the actual attendee clause was nil — a brief grounded solely on
+  generic title-word matches, exactly what this restriction exists to prevent.
+- **Fast-fail ordering (normative):** the prior/KB blocks (local, cheap) are computed first and, if
+  both are empty **and** `hasAttendeeQuery(for:)` is false, `insufficientContext` is thrown **before
+  any Gmail call** — the outcome cannot depend on what the fetch returns, so issuing it only burns
+  quota (every scheduled attempt for a titled ad-hoc meeting with no attendees, no priors and no
+  vault) and delays a failure that used to be instant. When any local block is non-empty the email
+  fetch still runs: title-only matches may augment.
 - `assembleContext(meeting:priorBlock:kbBlock:emailBlock:)`: the email block gets its own reserved
   slice, extending the existing reserve mechanics (`:240`) with one **explicit fix to the middle
   block's budget**: today the last section is given *all* remaining budget (`:250-256`), so a
   naively appended email section would be eaten by a large KB block. Normative budgets:
   `kbReserve = kbBlock.isEmpty ? 0 : charBudget / 4`;
-  `emailReserve = emailBlock.isEmpty ? 0 : charBudget / 4`;
+  `emailReserve = emailBlock.isEmpty ? 0 : min(emailBlock.count + header + 4, charBudget / 4)` —
+  **capped at what the block actually needs (normative)**: a flat `charBudget / 4` whenever *any*
+  email matched truncated the KB block to hold space a 120-char email never used, silently dropping
+  vault facts from a brief that fit under budget. The cap preserves the guarantee below (the email
+  slice survives oversized upstream blocks) because a large email block still reserves its full
+  quarter;
   prior block ≤ `charBudget − meta − kbReserve − emailReserve`;
   **KB block ≤ `charBudget − running − emailReserve`** (it must subtract the trailing email
   reserve, exactly as the prior block subtracts `kbReserve` today);
@@ -319,8 +355,19 @@ meetings files — upstream divergence is not at stake either way; minimal diff 
   `vaultService.isConnected` (`MeetingLLMService.swift:243-246`); identically, it appends a new
   `meetings.qa.systemPrompt.emailSearchInvitation` only when `gmailService.isConnected(for:
   meeting)`. Neither, one, or both may be extended.
+- **A marker is honored only from an invited source (normative):** the vault marker counts as an
+  escalation request only when `vaultService.isConnected`, the email marker only when
+  `gmailService.isConnected(for: meeting)` — i.e. only when that source's invitation could have been
+  in the prompt. A marker line from a source that was never offered is **not** a request the host
+  can serve; the reply is treated as an ordinary answer and persisted with its marker lines stripped
+  (the token never surfaces), degrading to the localized "not covered" text only when stripping
+  leaves nothing. Honoring an uninvited marker routed a perfectly good pass-1 answer into the
+  empty-retrieval guard, which replaced it with the generic "not covered" reply — a correct answer
+  destroyed, where pre-Phase-3 the same reply was persisted normally. Both sources follow this rule
+  identically (the vault path had the same defect).
 - **One-round cap across BOTH sources (normative):** there is exactly **one escalation round per
-  answer**, ever. Pass 1's reply is scanned for both markers; if **either or both** are present,
+  answer**, ever. Pass 1's reply is scanned for both markers; if **either or both** are present
+  (and invited, per the rule above),
   the host runs the requested retrievals **within that single round** (vault retrieval at the
   existing escalation scope `:359`; email retrieval via `gmailService.retrieve(for: meeting,
   query: terms, limit: 3)` with the marker's terms — falling back to the question text for a bare
@@ -401,6 +448,18 @@ calling the service (`candidates(for:)` / `refresh(for:)`), `isFetchingRelatedEm
 otherwise hide behind the merged remainder (§4, M1 review adjudication). The section triggers
 `fetchRelatedEmails` from `.task(id: meeting.id)`
 — served from the D-M1 cache when fresh, so re-navigation costs nothing.
+
+**Connectivity flips (normative).** `.task(id: meeting.id)` never re-runs for a document that stays
+open, so the `isGmailConnected` recompute above is also the single hook for both directions of a
+toggle flip, driving `RelatedEmailsModel.connectionDidChange(isConnected:)`:
+
+- **off → on**: re-run the load for every meeting tracked this session — including the ones whose
+  load early-returned while Gmail was disconnected (they are tracked *before* the connectivity
+  guard, precisely so this retry can find them). Without it, a document open when the user enables
+  the toggle showed "No related emails" forever, until a manual refresh or a navigate-away-and-back.
+- **on → off**: drop every cached row. Rows outlive the toggle otherwise, and the appendix gate
+  (`isGmailConnected || !relatedEmails(for:).isEmpty`) kept advertising a "Related emails — 3" count
+  badge over a section that, being disconnected, renders only the "Enable Gmail…" hint.
 
 **Refresh cadence (normative)**: fetch on appear + a manual refresh button (progress spinner while
 in flight, `MeetingRelatedDocsSection.findButton` pattern) in **all** modes; in the **live** mode
@@ -486,7 +545,9 @@ struct EmailPassage: Sendable, Equatable {
 
 /// A metadata-only candidate for the UI list (no body fetch). Same fields as EmailPassage minus
 /// `content`, plus `messageID: String` — the raw Gmail message id carried beside the namespaced
-/// `id` so the body fetch and GmailWebURL never re-parse it (M1 review).
+/// `id` so the body fetch and GmailWebURL never re-parse it (M1 review) — and
+/// `messageIDHeader: String?`, the RFC 5322 `Message-ID` that backs `dedupeKey`, the only identity
+/// stable across mailboxes (D-M1 step 3, cross-account dedupe).
 struct EmailCandidate: Sendable, Equatable, Identifiable { /* see above */ }
 
 /// SERVICE-computed retrieval scope (D-M1 — unlike the vault template's caller-computed scope,
@@ -510,6 +571,10 @@ precedent, `MeetingBriefScheduler.swift:31`):
 protocol GmailContextRetrieving: AnyObject {
     var isConnected: Bool { get }
     func isConnected(for meeting: Meeting) -> Bool
+    /// Whether this meeting's search carried a non-empty attendee clause (D-M3 sole grounding).
+    /// The service is the single computer of the D-M2 exclusion set, so a consumer's guard can
+    /// never diverge from the query actually issued. Purely local — no network.
+    func hasAttendeeQuery(for meeting: Meeting) -> Bool
     /// Meeting-centric (D-M1): the service resolves accounts, self-exclusion, and the date window
     /// from the meeting internally, and keys its TTL cache by `meeting.id` — so brief, Q&A, and
     /// the UI list share one candidate fetch. Callers never build a scope.

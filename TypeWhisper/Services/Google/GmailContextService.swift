@@ -31,6 +31,22 @@ struct EmailCandidate: Sendable, Equatable, Identifiable {
     let from: String
     let date: Date
     let snippet: String
+    /// The RFC 5322 `Message-ID` header — the ONE identity that is stable across mailboxes (Gmail
+    /// message/thread ids are per-mailbox), so it is what cross-account dedupe keys on. `nil` when
+    /// the header is absent; `dedupeKey` then falls back to the visible identity.
+    var messageIDHeader: String? = nil
+
+    /// Cross-account identity (D-M2): the same thread landing in two enabled mailboxes must produce
+    /// ONE row, not one per account. Falls back to sender + subject + minute-granular timestamp when
+    /// no `Message-ID` header came back — two mailboxes' `internalDate` for the same delivery can
+    /// differ by seconds.
+    var dedupeKey: String {
+        if let header = messageIDHeader?.trimmingCharacters(in: .whitespacesAndNewlines), !header.isEmpty {
+            return header.lowercased()
+        }
+        let minute = (date.timeIntervalSince1970 / 60).rounded(.down)
+        return "\(from.lowercased())|\(subject.lowercased())|\(minute)"
+    }
 }
 
 /// SERVICE-computed retrieval scope (D-M1 — unlike the vault template's caller-computed scope,
@@ -89,6 +105,13 @@ enum GmailWebURL {
 protocol GmailContextRetrieving: AnyObject {
     var isConnected: Bool { get }
     func isConnected(for meeting: Meeting) -> Bool
+    /// Whether this meeting's Gmail search carried a **non-empty attendee clause** — i.e. at least
+    /// one attendee address survived the D-M2 self-exclusion set (self-flagged attendees ∪ EVERY
+    /// connected account's email). The service is the single computer of this signal so a consumer's
+    /// guard can never diverge from the query that was actually issued (review finding: the brief's
+    /// own `isSelf`-only check missed connected-account addresses and let title-term-only matches
+    /// solely ground a brief, bypassing the D-M3 restriction). Purely local — no network.
+    func hasAttendeeQuery(for meeting: Meeting) -> Bool
     /// Meeting-centric (D-M1): the service resolves accounts, self-exclusion, and the date window
     /// from the meeting internally, and keys its TTL cache by `meeting.id` — so brief, Q&A, and
     /// the UI list share one candidate fetch. Callers never build a scope.
@@ -198,6 +221,13 @@ final class GmailContextService: ObservableObject {
     /// owner or not — makes the meeting connected.)
     func isConnected(for meeting: Meeting) -> Bool {
         !searchAccounts(for: meeting).isEmpty
+    }
+
+    /// The D-M3 sole-grounding signal (seam contract above): the attendee clause of THIS meeting's
+    /// query, computed from the very same `retrievalScope(for:)` the fetch uses — one signal, so the
+    /// consumer's guard and the issued query cannot drift apart.
+    func hasAttendeeQuery(for meeting: Meeting) -> Bool {
+        !retrievalScope(for: meeting).attendeeEmails.isEmpty
     }
 
     // MARK: - Retrieval (D-M1)
@@ -351,13 +381,22 @@ final class GmailContextService: ObservableObject {
         // Per-account isolation (the `performSync` pattern): one account's error never drops
         // another's candidates; only a total failure throws.
         var merged: [EmailCandidate] = []
+        // Cross-account dedupe (review finding): thread/message ids are per-mailbox, so the SAME
+        // email delivered to two enabled accounts would otherwise surface twice — duplicate UI rows,
+        // and two of `retrieve(limit: 3)`'s three passage slots (plus two body fetches) spent on one
+        // message. Accounts are processed owner-first (D-M2), so first-occurrence-wins keeps the
+        // most relevant mailbox's copy.
+        var seenAcrossAccounts = Set<String>()
         var firstError: String?
         var succeededAnyAccount = false
         var totalFailure: Error?
         for sub in scope.accountSubs {
             guard let account = store.account(id: sub) else { continue }
             do {
-                merged.append(contentsOf: try await fetchAccountCandidates(account: account, queries: queries))
+                let candidates = try await fetchAccountCandidates(account: account, queries: queries)
+                for candidate in candidates where seenAcrossAccounts.insert(candidate.dedupeKey).inserted {
+                    merged.append(candidate)
+                }
                 succeededAnyAccount = true
             } catch {
                 logger.warning("Gmail fetch failed for account \(sub, privacy: .private): \(error.localizedDescription)")
@@ -417,6 +456,14 @@ final class GmailContextService: ObservableObject {
 
     /// D-M1 normative: metadata gets run concurrently through a bounded `withThrowingTaskGroup`
     /// (width 6). Completion order is irrelevant — the merged list is date-sorted afterwards.
+    ///
+    /// **Per-message isolation (review finding):** each child's error is caught at its `group.next()`
+    /// instead of escaping the group, so one transient 429/500 among ~35 gets drops exactly that
+    /// message and keeps the other 34 — previously it aborted the whole account's candidate fetch
+    /// (and, for a single-account meeting, the whole fetch) for a full TTL. Catching at `next()`
+    /// leaves the siblings running: the group only auto-cancels when the *body* throws. A stage
+    /// where EVERY get failed still throws — that is an outage, not a dropped message, and the
+    /// per-account isolation above must be able to see it.
     private func fetchMetadataBounded(
         refs: [GmailAPI.GmailMessageRef],
         token: String
@@ -427,19 +474,34 @@ final class GmailContextService: ObservableObject {
             results.reserveCapacity(refs.count)
             var iterator = refs.makeIterator()
             var inFlight = 0
-            while inFlight < Self.metadataFetchWidth, let ref = iterator.next() {
+            var dropped = 0
+            var firstError: Error?
+            func addNext() -> Bool {
+                guard let ref = iterator.next() else { return false }
                 group.addTask {
                     try await Self.fetchMessage(transport: transport, request: GmailAPI.messageMetadataRequest(token: token, id: ref.id))
                 }
                 inFlight += 1
+                return true
             }
-            while let message = try await group.next() {
-                results.append(message)
-                if let ref = iterator.next() {
-                    group.addTask {
-                        try await Self.fetchMessage(transport: transport, request: GmailAPI.messageMetadataRequest(token: token, id: ref.id))
+            while inFlight < Self.metadataFetchWidth, addNext() {}
+            while inFlight > 0 {
+                do {
+                    if let message = try await group.next() {
+                        results.append(message)
                     }
+                } catch {
+                    dropped += 1
+                    if firstError == nil { firstError = error }
                 }
+                inFlight -= 1
+                _ = addNext()
+            }
+            if dropped > 0 {
+                logger.warning("Dropped \(dropped) of \(refs.count) Gmail metadata fetches; keeping \(results.count) candidates")
+            }
+            if results.isEmpty, let firstError {
+                throw firstError
             }
             return results
         }
@@ -468,7 +530,8 @@ final class GmailContextService: ObservableObject {
             subject: header("Subject", in: message) ?? "",
             from: header("From", in: message) ?? "",
             date: date(from: message),
-            snippet: message.snippet ?? ""
+            snippet: message.snippet ?? "",
+            messageIDHeader: header("Message-ID", in: message)
         )
     }
 
