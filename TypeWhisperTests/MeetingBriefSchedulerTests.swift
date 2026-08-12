@@ -149,6 +149,50 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         XCTAssertEqual(stub.calls.count, 1)
     }
 
+    func testCalDAVTwinsProduceOneMeetingAndOneBriefAfterCollapse() async throws {
+        // PR #7 review finding 4: the same real event fanned in from Google *and* EventKit reaches
+        // the scheduler as two events with unrelated ids, so `resolveMeeting`'s `calendarEventID`
+        // dedupe cannot see them as one. `MeetingsViewModel` therefore collapses cross-provider
+        // twins before this tick.
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
+        let now = Date()
+
+        let eventKitCopy = event(id: "UUID-1#\(now.timeIntervalSince1970)", now: now)
+        let googleCopy = event(id: "google:sub-1:evt-1", now: now)
+        let collapsed = CalendarEventTwinCollapser.collapse([eventKitCopy, googleCopy])
+        XCTAssertEqual(collapsed.map(\.id), ["google:sub-1:evt-1"], "one event reaches the scheduler")
+
+        scheduler.tick(events: collapsed, now: now)
+        await settle(scheduler)
+
+        XCTAssertEqual(stub.calls.count, 1, "one brief job, not two on the cap-1 llm lane")
+        XCTAssertEqual(store.meetings.count, 1, "one auto-created meeting document")
+        XCTAssertEqual(store.meetings.first?.calendarEventID, "google:sub-1:evt-1")
+    }
+
+    func testUncollapsedTwinsWouldDoubleUp() async throws {
+        // The regression this guards: fed both provider copies, the scheduler *does* act twice —
+        // which is exactly why the collapse happens at the consumer boundary.
+        let store = try makeStore()
+        let stub = StubBriefGenerator(store: store)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: makeDefaults())
+        let now = Date()
+
+        scheduler.tick(
+            events: [
+                event(id: "UUID-1#\(now.timeIntervalSince1970)", now: now),
+                event(id: "google:sub-1:evt-1", now: now),
+            ],
+            now: now
+        )
+        await settle(scheduler)
+
+        XCTAssertEqual(store.meetings.count, 2)
+        XCTAssertEqual(stub.calls.count, 2)
+    }
+
     func testSkipsOutsideLeadWindow() async throws {
         let store = try makeStore()
         let stub = StubBriefGenerator(store: store)

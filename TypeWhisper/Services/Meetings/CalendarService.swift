@@ -103,6 +103,12 @@ final class CalendarService: ObservableObject {
     /// configuration, not an error (D-G4). Re-evaluated at the top of every `refresh` (60 s poll
     /// + snapshot-change refreshes), so connecting/disconnecting a Google account updates the
     /// message within one refresh cycle rather than requiring a restart.
+    ///
+    /// `errorMessage` is therefore the **"no calendar source at all"** signal, and only that
+    /// (PR #7 review finding 5). "*One* source is broken" is a different question and is answered
+    /// separately by `MeetingsViewModel.showsSystemCalendarProblem`, which surfaces a dismissible
+    /// per-source row — otherwise a Google-connected user whose macOS calendars are denied loses
+    /// every iCloud/Exchange/local event with no hint outside Settings.
     private func updateErrorMessage(for status: CalendarAuthorizationStatus) {
         switch status {
         case .denied, .restricted:
