@@ -58,11 +58,32 @@ final class MeetingMergeService {
     /// deterministically; the conflict resolver settles only what the rules could not (v1: the
     /// title); the absorbed meetings are deleted through the service's normal delete path.
     /// Returns the surviving meeting, or `nil` when the set is not mergeable.
+    ///
+    /// `willAbsorb` is a pre-apply seam (review finding, single-plan design): it runs exactly once,
+    /// with the one deterministic plan's `absorbedIDs`, after `canMerge`/`MeetingMergePlanner.plan`
+    /// have both already succeeded and *before* `applyMerge` deletes those rows. A caller that needs
+    /// to react to "these ids are about to be absorbed" (cancel their queued/running jobs, navigate
+    /// off an open document) does it here instead of re-snapshotting and re-planning on its own side —
+    /// two independent plans over the same live `Meeting` rows can disagree if main-actor work lands
+    /// between them (a running transcription appending a segment shifts the segment-count tiebreak; a
+    /// caption-bridge resume or a state flip changes the primary pick), and a caller that acts on its
+    /// own early plan can cancel jobs / navigate away for a merge that this function then refuses
+    /// (returns `nil`) for completely unrelated reasons. Because this callback only ever fires once
+    /// `merge` is already committed to applying *this exact* plan, "abort" and "side effect" can never
+    /// diverge. Optional and `nil` by default so every existing call site (tests included) is
+    /// unaffected.
     @discardableResult
-    func merge(_ meetings: [Meeting]) async -> Meeting? {
+    func merge(
+        _ meetings: [Meeting],
+        willAbsorb: (@MainActor ([UUID]) async -> Void)? = nil
+    ) async -> Meeting? {
         guard Self.canMerge(meetings) else { return nil }
         let snapshots = meetings.map { MeetingMergeSnapshot(of: $0) }
         guard let plan = MeetingMergePlanner.plan(snapshots) else { return nil }
+
+        if let willAbsorb {
+            await willAbsorb(plan.absorbedIDs)
+        }
 
         var resolvedTitle: String?
         if plan.hasTitleConflict {

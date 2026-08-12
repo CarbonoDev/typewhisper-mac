@@ -334,6 +334,31 @@ final class JobQueueServiceTests: XCTestCase {
         XCTAssertTrue(queue.jobs.isEmpty)
     }
 
+    /// `cancelAllAndWait` is the stronger guarantee `cancelAll` deliberately doesn't make: by the time
+    /// it returns, a `.running` job's child `Task` has actually settled — no separate `drain()` is
+    /// needed. This is what the merge `willAbsorb` seam relies on to cancel a running job *before*
+    /// `applyMerge` deletes the row it might still be mid-`await` on.
+    func testCancelAllAndWaitAwaitsRunningJobsBeforeReturning() async {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        let meetingID = UUID()
+        let id = queue.enqueue(kind: .summary, meetingID: meetingID, operation: cancellableOp("job", recorder: recorder))
+
+        await waitUntil({ queue.runningCount == 1 }, "job should be running before cancel")
+        await queue.cancelAllAndWait(for: meetingID)
+
+        // No extra `drain()` — `cancelAllAndWait` already awaited the running handle to settle.
+        XCTAssertEqual(queue.jobs.first { $0.id == id }?.state, .cancelled)
+        XCTAssertEqual(queue.runningCount, 0)
+        XCTAssertFalse(recorder.committed.contains("job"), "the commit side-effect must not happen on cancel")
+    }
+
+    func testCancelAllAndWaitForMeetingWithNoJobsIsNoOp() async {
+        let queue = makeQueue()
+        await queue.cancelAllAndWait(for: UUID())
+        XCTAssertTrue(queue.jobs.isEmpty)
+    }
+
     // MARK: - Failure & retry
 
     func testFailedOperationMarksFailedWithMessage() async {

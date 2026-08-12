@@ -863,9 +863,9 @@ private struct ArchiveRow: View {
                 .foregroundStyle(.green)
                 .help(String(localized: "home.badge.briefReady"))
         }
-        // A quiet "there's a transcript here" marker (a row that outlives its deleted meeting for one
-        // render degrades to nothing rather than trapping — the `isDeletedFromStore` convention).
-        if !meeting.isDeletedFromStore, !meeting.segments.isEmpty {
+        // A quiet "there's a transcript here" marker. `hasTranscript` is memoized (keyed by
+        // `updatedAt`) so this doesn't fault the `segments` to-many relationship on every row render.
+        if homeViewModel.hasTranscript(for: meeting) {
             Image(systemName: "text.quote")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)

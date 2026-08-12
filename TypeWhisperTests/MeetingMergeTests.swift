@@ -504,15 +504,14 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertEqual(merged?.title, "Kickoff")
     }
 
-    // MARK: - VM-level merge safety (review findings: stale-model reads, job-queue leaks)
+    // MARK: - `willAbsorb` pre-apply seam (review findings: single-plan design, job-queue leaks)
 
-    /// Mirrors `MeetingsViewModel.mergeMeetings`'s fix: plan the merge (pure, cheap) *before* calling
-    /// `MeetingMergeService.merge`, purely to learn `plan.absorbedIDs` ahead of time, so a queued job
-    /// that holds a strong reference to the about-to-be-absorbed `Meeting` (exactly how
-    /// `generateOutput`'s job closure captures its target) can be cancelled before the merge deletes
-    /// the row out from under it. Without the cancel, the closure below would run
-    /// `llmService.generateOutput(for: meeting, ...)` against a deleted model after the merge commits.
-    func testCancellingAbsorbedMeetingJobsBeforeMergePreventsStaleClosureRun() async throws {
+    /// The seam's core guarantee: `willAbsorb` fires exactly once, with the *one* plan that is about
+    /// to be applied, before `applyMerge` deletes the absorbed row — so a job holding a strong
+    /// reference to that `Meeting` (exactly how `generateOutput`'s job closure captures its target)
+    /// can be cancelled and awaited (`cancelAllAndWait`) from inside the callback with no window for
+    /// it to resume against a deleted model afterward.
+    func testWillAbsorbSeamCancelsAbsorbedJobBeforeApplyDeletesTheRow() async throws {
         let dir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(dir) }
         let service = MeetingService(appSupportDirectory: dir)
@@ -521,12 +520,6 @@ final class MeetingMergeTests: XCTestCase {
         let primary = service.createMeeting(title: "Weekly Sync", state: .completed, startDate: date(0))
         let duplicate = service.createMeeting(title: "Re-join", state: .completed, startDate: date(600))
         let meetings = [primary, duplicate]
-
-        // The same early-planning step `mergeMeetings` performs: pure, over snapshots taken while both
-        // rows are still live.
-        let snapshots = meetings.map { MeetingMergeSnapshot(of: $0) }
-        let plan = try XCTUnwrap(MeetingMergePlanner.plan(snapshots))
-        XCTAssertEqual(plan.absorbedIDs, [duplicate.id]) // earlier start ⇒ primary; duplicate absorbed
 
         // A job "in flight" for the meeting about to be absorbed, closing over the live `Meeting` row
         // exactly like `MeetingsViewModel.generateOutput`'s enqueue does. Reference type because a
@@ -538,41 +531,44 @@ final class MeetingMergeTests: XCTestCase {
             _ = duplicate.title // would trap post-merge if this ever actually ran
         }
 
-        // The fix: cancel the absorbed meeting's active jobs before the merge proceeds.
-        for id in plan.absorbedIDs { queue.cancelAll(for: id) }
-        XCTAssertEqual(queue.jobs.first?.state, .cancelled)
+        var receivedAbsorbedIDs: [UUID]?
+        let merged = await MeetingMergeService(meetingService: service).merge(meetings) { absorbedIDs in
+            receivedAbsorbedIDs = absorbedIDs
+            for id in absorbedIDs {
+                await queue.cancelAllAndWait(for: id)
+            }
+        }
 
-        let merged = await MeetingMergeService(meetingService: service).merge(meetings)
-        await queue.drain()
-
+        XCTAssertEqual(receivedAbsorbedIDs, [duplicate.id]) // earlier start ⇒ primary; duplicate absorbed
         XCTAssertEqual(merged?.id, primary.id)
         XCTAssertFalse(ranFlag.ran, "a cancelled job must never touch the absorbed meeting")
         XCTAssertEqual(service.meetings.count, 1)
     }
 
-    /// Mirrors the other half of the same fix: everything the caller needs after `merge()` returns —
-    /// which ids to drop from `MeetingChecklistStore` — is captured from the *pre-merge* id list, never
-    /// read back off the (now-deleted) `Meeting` objects that were passed in.
-    func testAbsorbedIDsForPostMergeCleanupComeFromCapturedIDsNotDeletedModels() async throws {
+    /// The other half of the single-plan design (review finding): when the merge itself refuses
+    /// (`canMerge` false on the actual pre-flight — e.g. a meeting flipped `.live` between the
+    /// caller's decision to merge and this call), `willAbsorb` must never fire. A caller wiring
+    /// cancellation/navigation through this seam therefore can never produce a side effect for a
+    /// merge that didn't happen — the exact bug the old "plan locally, then call merge separately"
+    /// shape had (cancel/navigate already run by the time a since-refused `merge` returned `nil`).
+    func testMergeAbortsWithoutInvokingWillAbsorbWhenNotMergeable() async throws {
         let dir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(dir) }
         let service = MeetingService(appSupportDirectory: dir)
 
-        let primary = service.createMeeting(title: "Weekly Sync", state: .completed, startDate: date(0))
-        let duplicate = service.createMeeting(title: "Re-join", state: .completed, startDate: date(600))
-        let meetings = [primary, duplicate]
+        let a = service.createMeeting(title: "Weekly Sync", state: .completed, startDate: date(0))
+        // Simulates "state flipped between the caller's decision and the actual merge call" — e.g. a
+        // capture resumed on this meeting in the main-actor window before `merge` runs.
+        let b = service.createMeeting(title: "Re-join", state: .live, startDate: date(600))
 
-        // Captured before the merge — exactly what `mergeMeetings` does with `meetings.map(\.id)`.
-        let targetIDs = meetings.map(\.id)
+        let calledFlag = RanFlag()
+        let merged = await MeetingMergeService(meetingService: service).merge([a, b]) { _ in
+            calledFlag.mark()
+        }
 
-        let result = await MeetingMergeService(meetingService: service).merge(meetings)
-        let merged = try XCTUnwrap(result)
-
-        // Post-merge cleanup set derived from the captured ids, not from `meetings` (whose absorbed
-        // element is now a deleted row — reading `.id` off it is the exact trap this guards against).
-        let toClean = targetIDs.filter { $0 != merged.id }
-        XCTAssertEqual(toClean, [duplicate.id])
-        XCTAssertEqual(service.meetings.map(\.id), [merged.id])
+        XCTAssertNil(merged)
+        XCTAssertFalse(calledFlag.ran, "willAbsorb must not fire when the merge itself is refused")
+        XCTAssertEqual(service.meetings.count, 2, "neither meeting is touched when the merge aborts")
     }
 
     func testMergeRefusesLiveMeeting() async throws {

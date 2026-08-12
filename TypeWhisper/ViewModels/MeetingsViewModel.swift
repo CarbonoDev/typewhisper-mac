@@ -783,21 +783,33 @@ final class MeetingsViewModel: ObservableObject {
 
     /// Delete a single meeting (context-menu "Delete"), removing its audio blob, its action-item
     /// checklist state, and dropping it from the selection. Callers gate on a confirmation dialog.
+    ///
+    /// Parity fix (review finding, mirrors the merge crash fixes): `meetingService.deleteMeeting`
+    /// deletes the row synchronously, so `id` is captured *before* that call — reading `.id` off the
+    /// argument afterward would hit the same "backing data could no longer be found" trap the merge
+    /// fixes guard against. Its queued/running jobs are cancelled first too, for the same reason a
+    /// merge cancels an absorbed meeting's jobs: a job closure holding this `Meeting` must not resume
+    /// against a deleted row.
     func deleteMeeting(_ meeting: Meeting) {
+        let id = meeting.id
+        jobQueue.cancelAll(for: id)
         meetingService.deleteMeeting(meeting)
-        MeetingChecklistStore.shared.removeAll(meetingID: meeting.id)
-        selectedMeetingIDs.remove(meeting.id)
+        MeetingChecklistStore.shared.removeAll(meetingID: id)
+        selectedMeetingIDs.remove(id)
     }
 
     /// Delete a set of meetings in one save (bulk "Delete N meetings"), dropping them from the
-    /// selection. Callers gate on a count-aware confirmation dialog. No-op on an empty set.
+    /// selection. Callers gate on a count-aware confirmation dialog. No-op on an empty set. Same
+    /// parity fix as `deleteMeeting`: ids captured up front, jobs cancelled before the rows go away.
     func deleteMeetings(_ meetings: [Meeting]) {
         guard !meetings.isEmpty else { return }
+        let ids = meetings.map(\.id)
+        for id in ids { jobQueue.cancelAll(for: id) }
         meetingService.deleteMeetings(meetings)
-        for meeting in meetings {
-            MeetingChecklistStore.shared.removeAll(meetingID: meeting.id)
+        for id in ids {
+            MeetingChecklistStore.shared.removeAll(meetingID: id)
         }
-        selectedMeetingIDs.subtract(meetings.map(\.id))
+        selectedMeetingIDs.subtract(ids)
     }
 
     /// Orchestrates the bulk "Merge N meetings…" action. Constructed over the meetings store's
@@ -810,38 +822,48 @@ final class MeetingsViewModel: ObservableObject {
     /// dropped (like `deleteMeetings`), and the selection collapses to the surviving meeting.
     /// Callers gate on a confirmation dialog and `MeetingMergeService.canMerge`.
     ///
-    /// Two crash/leak traps this guards against (both found in review):
+    /// Crash/leak traps this guards against (review findings):
     ///  1. `meetings` are live `@Model` rows *now*, but `applyMerge` deletes the absorbed ones. Every
-    ///     id this function needs after the `await` — for checklist cleanup, for the open-document
-    ///     check — is captured up front; nothing below the `await` ever reads a property off one of
-    ///     the (possibly-deleted) `meetings` elements (`PersistentModel.isDeletedFromStore`'s "backing
-    ///     data could no longer be found" trap).
+    ///     id this function needs after the `await` — for checklist cleanup — is captured up front;
+    ///     nothing below the `await` ever reads a property off one of the (possibly-deleted)
+    ///     `meetings` elements (`PersistentModel.isDeletedFromStore`'s "backing data could no longer
+    ///     be found" trap).
     ///  2. A queued/running job can hold a strong reference to a `Meeting` that is about to be
     ///     absorbed (`generateOutput`'s job closure captures the model directly, keyed by its id for
-    ///     dedupe) — left alone, that closure could resume against a deleted row mid-merge. The
-    ///     about-to-be-absorbed ids are known ahead of time (the same deterministic, pure
-    ///     `MeetingMergePlanner.plan` that `MeetingMergeService.merge` runs internally — re-running it
-    ///     here is just an early look at its answer, not a second merge implementation), so their jobs
-    ///     are cancelled before the merge starts.
+    ///     dedupe) — left alone, that closure could resume against a deleted row mid-merge. Fixed via
+    ///     `MeetingMergeService.merge`'s `willAbsorb` pre-apply seam rather than a second plan
+    ///     computed here: an earlier version of this fix re-planned locally (over the same pure
+    ///     `MeetingMergePlanner`) to learn the about-to-be-absorbed ids ahead of time, but that is a
+    ///     SECOND plan over the same live rows — main-actor work between this call and `merge`'s own
+    ///     internal re-snapshot (a running transcription appending a segment, a caption-bridge resume,
+    ///     a state flip) can make the two plans disagree, cancelling the wrong meeting's jobs. Worse,
+    ///     `merge` can still refuse (return `nil`) for reasons this function cannot see, by which point
+    ///     the side effects had already run. `willAbsorb` fires exactly once, from *inside* `merge`,
+    ///     with the one plan that is actually about to be applied — cancellation and abort can no
+    ///     longer diverge. `cancelAllAndWait` (not `cancelAll`) is used here specifically because this
+    ///     seam runs immediately before `applyMerge` deletes the row: a merely-*requested* cancellation
+    ///     on a still-running job is not enough guarantee at that point.
+    ///  3. If an absorbed meeting's document is open, back out first — mirrors `MeetingDocumentHeader`'s
+    ///     delete flow (leave before the row disappears under the open document). `MainWindowCoordinator`
+    ///     is nil-guarded (not force-unwrapped via `.shared`) so this VM method stays callable from a
+    ///     unit test that never sets the coordinator singleton.
     func mergeMeetings(_ meetings: [Meeting]) {
         guard MeetingMergeService.canMerge(meetings) else { return }
         let targetIDs = meetings.map(\.id)
-        let snapshots = meetings.map { MeetingMergeSnapshot(of: $0) }
-        let absorbedIDs = MeetingMergePlanner.plan(snapshots)?.absorbedIDs ?? []
-
-        for id in absorbedIDs {
-            jobQueue.cancelAll(for: id)
-        }
-        // If an absorbed meeting's document is open, back out first — mirrors
-        // `MeetingDocumentHeader`'s delete flow (leave before the row disappears under the open
-        // document) rather than leaving the document to tolerate a deleted-model render.
-        if case let .meeting(openID) = MainWindowCoordinator.shared.route, absorbedIDs.contains(openID) {
-            MainWindowCoordinator.shared.show(.meetings)
-        }
 
         Task { [weak self] in
             guard let self else { return }
-            guard let merged = await self.mergeService.merge(meetings) else { return }
+            guard let merged = await self.mergeService.merge(meetings, willAbsorb: { [weak self] absorbedIDs in
+                guard let self else { return }
+                for id in absorbedIDs {
+                    await self.jobQueue.cancelAllAndWait(for: id)
+                }
+                if let coordinator = MainWindowCoordinator.shared,
+                   case let .meeting(openID) = coordinator.route,
+                   absorbedIDs.contains(openID) {
+                    coordinator.show(.meetings)
+                }
+            }) else { return }
             for id in targetIDs where id != merged.id {
                 MeetingChecklistStore.shared.removeAll(meetingID: id)
             }

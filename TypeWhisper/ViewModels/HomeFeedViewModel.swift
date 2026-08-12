@@ -147,6 +147,28 @@ final class HomeFeedViewModel: ObservableObject {
         return MeetingActionFacts(openCount: items.count - done, totalCount: items.count)
     }
 
+    // MARK: - Transcript-indicator fact
+
+    /// Memoized "has ≥1 transcript segment" per meeting, keyed by `updatedAt` (bumped on every
+    /// segment append/merge — see `MeetingService`) so a stale `false` never survives a live
+    /// transcript starting to fill in. Same reasoning as `actionItemCache`: the row's trailing-facts
+    /// badge row is read on every body evaluation (list scroll, timeline scroll), and faulting the
+    /// `segments` to-many relationship that often is wasted work `actionFacts`-style memoization
+    /// already avoids for outputs.
+    private var transcriptFactCache: [UUID: (updatedAt: Date, hasTranscript: Bool)] = [:]
+
+    func hasTranscript(for meeting: Meeting) -> Bool {
+        // Same deletion window as the badges/action facts: a row can render once more after its
+        // meeting is gone from the store.
+        guard !meeting.isDeletedFromStore else { return false }
+        if let cached = transcriptFactCache[meeting.id], cached.updatedAt == meeting.updatedAt {
+            return cached.hasTranscript
+        }
+        let value = !meeting.segments.isEmpty
+        transcriptFactCache[meeting.id] = (meeting.updatedAt, value)
+        return value
+    }
+
     // MARK: - Timeline projection
 
     /// Day-grouped meetings for the timeline, newest first.
