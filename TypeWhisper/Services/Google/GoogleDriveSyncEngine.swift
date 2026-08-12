@@ -17,8 +17,9 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// seed the watermark to now and import **nothing** — history is backfill's job, user-controlled)
 /// → per file the ledger's D-D5 decision → cap 25 enqueues per cycle (the remainder lands next
 /// cycle via the held/overlapped watermark). Job closures call the injected
-/// `GoogleDriveFileProcessing` seam (the importer); this engine writes **watermarks only** — the
-/// importer is the sole entry/failure writer (D-D5).
+/// `GoogleDriveFileProcessing` seam (the importer); this engine writes **watermarks +
+/// housekeeping** (the per-cycle `pruneStaleFailures` sweep) — the importer stays the sole
+/// entry/failure writer (D-D5).
 @MainActor
 final class GoogleDriveSyncEngine: ObservableObject {
     /// D-D6 cadence.

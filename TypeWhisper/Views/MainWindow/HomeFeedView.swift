@@ -12,6 +12,9 @@ struct HomeFeedView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
                 masthead
+                // [Google Phase 2 · M3] Weekly Testing-mode expiry surface (D-D8): visible at the
+                // top of Home whenever any Google account needs reconnecting.
+                GoogleReauthNudge()
                 HomeLiveBanner()
                 HomeNextSection()
                 HomeAttentionSection()

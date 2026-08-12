@@ -24,6 +24,9 @@ struct GoogleAccountsSection: View {
     @ObservedObject private var authService = ServiceContainer.shared.googleAuthService
     /// Observed for the M3 sync status line (`lastSyncAt`/`lastSyncError`) and "Refresh now".
     @ObservedObject private var syncEngine = ServiceContainer.shared.googleCalendarSyncEngine
+    /// [Google Phase 2 · M3] Observed for the Drive transcripts status line + "Check now" and to
+    /// kick the first cycle when a Drive toggle turns on (the engine does not observe the toggle).
+    @ObservedObject private var driveSyncEngine = ServiceContainer.shared.googleDriveSyncEngine
     /// Observed for the pending twin-calendar prompts ([Google Phase 1 · M4], D-G6). The VM owns
     /// evaluation (it observes the snapshot-change notification app-wide, so detection is not
     /// tied to this section being visible) and routes both resolutions through the calendar
@@ -43,6 +46,9 @@ struct GoogleAccountsSection: View {
     /// account row's "Open links in" picker. Empty when Chrome is not installed — the picker then
     /// offers only Automatic / System browser, so the no-Chrome case is unchanged.
     @State private var chromeProfiles: [ChromeProfile] = []
+    /// [Google Phase 2 · M3] Inline error from the last Drive-toggle flow, keyed to its account
+    /// row. `nil` after a user cancel — the toggle simply reverts (the flag was never set).
+    @State private var driveToggleError: (accountID: String, message: String)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -61,6 +67,9 @@ struct GoogleAccountsSection: View {
                     }
                 }
                 syncStatusRow
+                if hasDriveEnabledAccount {
+                    driveSyncStatusRow
+                }
             }
 
             ForEach(meetingsViewModel.twinCalendarPrompts) { prompt in
@@ -139,7 +148,10 @@ struct GoogleAccountsSection: View {
     // MARK: - Account rows
 
     private func accountRow(_ account: GoogleAccount) -> some View {
-        let rowState = GoogleAccountRowState.make(for: account)
+        let rowState = GoogleAccountRowState.make(
+            for: account,
+            isDriveImportEnabled: accountStore.isDriveImportEnabled(for: account.id)
+        )
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -168,6 +180,9 @@ struct GoogleAccountsSection: View {
                 }
             }
             linkOpeningPicker(account)
+            if rowState.showsDriveToggle {
+                driveImportRow(account)
+            }
         }
         .padding(.vertical, 6)
     }
@@ -259,6 +274,95 @@ struct GoogleAccountsSection: View {
         .padding(.top, 2)
     }
 
+    // MARK: - Drive transcript import ([Google Phase 2 · M3], D-D8)
+
+    /// Per-account "Import Meet transcripts from Drive" toggle with its help line and inline
+    /// error. Rendered only on `.connected` rows (`GoogleAccountRowState.showsDriveToggle`).
+    private func driveImportRow(_ account: GoogleAccount) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle(
+                String(localized: "google.drive.enableToggle"),
+                isOn: Binding(
+                    get: { accountStore.isDriveImportEnabled(for: account.id) },
+                    set: { enabled in runDriveToggle(account, enabled: enabled) }
+                )
+            )
+            .controlSize(.small)
+            .font(.caption)
+            // One auth flow at a time (the Phase 1 gating precedent): enabling may run a
+            // reauthorize, so the toggle waits out any in-flight flow.
+            .disabled(authService.isAuthorizing)
+            Text(String(localized: "google.drive.toggleHelp"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let error = driveToggleError, error.accountID == account.id {
+                Text(error.message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .frame(maxWidth: 420, alignment: .leading)
+    }
+
+    /// The D-D8 enable flow (ordering contract lives in `GoogleDriveToggleFlow`, unit-tested):
+    /// reauthorize FIRST when the scope is missing, flag only on success, then an immediate
+    /// `syncNow()`. Failure/cancel/denial leaves the flag off — the binding re-reads the store,
+    /// so the toggle reverts on its own; a scope denial gets the dedicated inline explanation.
+    private func runDriveToggle(_ account: GoogleAccount, enabled: Bool) {
+        driveToggleError = nil
+        Task {
+            do {
+                try await GoogleDriveToggleFlow.setEnabled(
+                    enabled,
+                    account: account,
+                    store: accountStore,
+                    reauthorize: { try await authService.reauthorize(accountID: $0, additionalScopes: $1) },
+                    syncNow: { await driveSyncEngine.syncNow() }
+                )
+            } catch GoogleDriveToggleFlow.FlowError.scopeDenied {
+                driveToggleError = (account.id, String(localized: "google.drive.scopeDenied"))
+            } catch {
+                if let message = GoogleConnectErrorPresenter.message(for: error) {
+                    driveToggleError = (account.id, message)
+                }
+            }
+        }
+    }
+
+    /// Whether any account has Drive import on — gates the transcripts status row (QA step 1:
+    /// with every toggle off, no "Transcripts checked" line ever appears).
+    private var hasDriveEnabledAccount: Bool {
+        accountStore.accounts.contains { accountStore.isDriveImportEnabled(for: $0.id) }
+    }
+
+    /// Drive transcripts status: last checked + "Check now" (the engine's coalesced `syncNow`,
+    /// meaningful even mid-cycle via its resync loop), with the engine's error inline — the
+    /// calendar status row's shape, one line below it.
+    private var driveSyncStatusRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                if let lastSyncAt = driveSyncEngine.lastSyncAt {
+                    Text(String(
+                        format: String(localized: "google.drive.lastSync"),
+                        lastSyncAt.formatted(date: .abbreviated, time: .shortened)
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Button(String(localized: "google.drive.checkNow")) {
+                    Task { await driveSyncEngine.syncNow() }
+                }
+                .controlSize(.small)
+            }
+            if let syncError = driveSyncEngine.lastSyncError {
+                Text(syncError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(.top, 2)
+    }
+
     // MARK: - Twin-calendar prompt ([Google Phase 1 · M4], D-G6)
 
     /// One-time inline prompt shown when a connected account's Google calendars are also synced
@@ -321,8 +425,11 @@ struct GoogleAccountsSection: View {
     }
 
     private func reconnect(_ account: GoogleAccount) {
-        // Empty `additionalScopes`: same grant, fresh refresh token (M1 handoff contract).
-        runAuthFlow { try await authService.reauthorize(accountID: account.id, additionalScopes: []) }
+        // [Google Phase 2 · M3] D-D8: a reconnect re-carries the account's enabled-feature scopes
+        // (Testing-mode weekly expiry hardening) — one consent pass restores calendar and every
+        // enabled feature, without leaning on `include_granted_scopes` alone.
+        let scopes = GoogleFeatureScopes.additionalScopes(for: account, store: accountStore)
+        runAuthFlow { try await authService.reauthorize(accountID: account.id, additionalScopes: scopes) }
     }
 
     private func disconnect(_ account: GoogleAccount) {
@@ -375,20 +482,28 @@ struct GoogleAccountRowState: Equatable {
     let badgeKey: String
     let showsReconnect: Bool
     let showsDisconnect: Bool
+    /// [Google Phase 2 · M3] Drive-feature affordances (D-D8): the toggle renders only on a
+    /// `.connected` row; the backfill entry point (M4) additionally requires the toggle on.
+    let showsDriveToggle: Bool
+    let showsDriveBackfill: Bool
 
-    static func make(for account: GoogleAccount) -> GoogleAccountRowState {
+    static func make(for account: GoogleAccount, isDriveImportEnabled: Bool = false) -> GoogleAccountRowState {
         switch account.status {
         case .connected:
             GoogleAccountRowState(
                 badgeKey: "google.accounts.statusConnected",
                 showsReconnect: false,
-                showsDisconnect: true
+                showsDisconnect: true,
+                showsDriveToggle: true,
+                showsDriveBackfill: isDriveImportEnabled
             )
         case .needsReauth:
             GoogleAccountRowState(
                 badgeKey: "google.accounts.statusNeedsReauth",
                 showsReconnect: true,
-                showsDisconnect: true
+                showsDisconnect: true,
+                showsDriveToggle: false,
+                showsDriveBackfill: false
             )
         }
     }
