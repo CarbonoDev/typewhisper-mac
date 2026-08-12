@@ -25,6 +25,30 @@ final class GmailBodyTextTests: XCTestCase {
         GmailAPI.GmailPayload(mimeType: mime, headers: nil, body: nil, parts: parts)
     }
 
+    /// A leaf whose raw bytes are encoded in `encoding`, carrying the matching `Content-Type`
+    /// header — the real wire shape for legacy-charset mail.
+    private func legacyLeaf(
+        mime: String,
+        text: String,
+        encoding: String.Encoding,
+        declaredCharset: String?
+    ) -> GmailAPI.GmailPayload {
+        let bytes = text.data(using: encoding)!
+        let base64url = bytes.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let headers = declaredCharset.map {
+            [GmailAPI.GmailHeader(name: "Content-Type", value: "\(mime); charset=\($0)")]
+        }
+        return GmailAPI.GmailPayload(
+            mimeType: mime,
+            headers: headers,
+            body: GmailAPI.GmailBody(data: base64url),
+            parts: nil
+        )
+    }
+
     // MARK: - base64url
 
     func testDecodesBase64URLAlphabetWithoutPadding() {
@@ -115,6 +139,64 @@ final class GmailBodyTextTests: XCTestCase {
         XCTAssertEqual(GmailBodyText.extract(payload: nil, snippet: "the snippet"), "the snippet")
         let attachmentOnly = multipart("multipart/mixed", parts: [leaf(mime: "application/pdf", text: "x")])
         XCTAssertEqual(GmailBodyText.extract(payload: attachmentOnly, snippet: "the snippet"), "the snippet")
+    }
+
+    // MARK: - Legacy charsets (review finding: UTF-8-only decoding dropped whole bodies)
+
+    func testDeclaredISO8859BodyWithUmlautsDecodes() throws {
+        // Real bytes: "ü" = 0xFC, "ä" = 0xE4 — invalid UTF-8, so the old decode returned nil and
+        // the message silently degraded to its ~100-char snippet.
+        let original = "Mueller-Nachtrag: Terminänderung, Größe der Lieferung geklärt"
+        let bytes = try XCTUnwrap(original.data(using: .isoLatin1))
+        XCTAssertTrue(bytes.contains(0xFC) || bytes.contains(0xE4), "fixture really carries legacy high bytes")
+        let payload = legacyLeaf(
+            mime: "text/plain", text: original, encoding: .isoLatin1, declaredCharset: "iso-8859-1"
+        )
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "snip"), original)
+    }
+
+    func testUndeclaredLegacyBodyStillDecodesThroughTheFallbackChain() {
+        let original = "Grüße aus München"
+        let payload = legacyLeaf(
+            mime: "text/plain", text: original, encoding: .isoLatin1, declaredCharset: nil
+        )
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "snip"), original)
+    }
+
+    func testMislabeledUTF8BodyDecodesAsUTF8NotAsTheDeclaredCharset() {
+        // UTF-8 is tried ahead of the declared charset precisely for this common mailer bug;
+        // genuine Latin-1 bytes are not valid UTF-8, so the reverse case is unaffected (above).
+        let original = "Zusammenfassung: Größe geklärt"
+        let payload = legacyLeaf(
+            mime: "text/plain", text: original, encoding: .utf8, declaredCharset: "iso-8859-1"
+        )
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "snip"), original)
+    }
+
+    func testWindows1252SmartQuotesDecode() {
+        let original = "He said \u{201C}ship it\u{201D} \u{2014} today"
+        let payload = legacyLeaf(
+            mime: "text/plain", text: original, encoding: .windowsCP1252, declaredCharset: "windows-1252"
+        )
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "snip"), original)
+    }
+
+    // MARK: - Whitespace-only parts (review finding: empty content won the search)
+
+    func testWhitespaceOnlyPlainPartFallsThroughToTheHTMLSibling() {
+        let payload = multipart("multipart/alternative", parts: [
+            leaf(mime: "text/plain", text: "\r\n \r\n"),
+            leaf(mime: "text/html", text: "<p>Real body here</p>"),
+        ])
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "snip"), "Real body here")
+    }
+
+    func testWhitespaceOnlyPartsFallThroughAllTheWayToTheSnippet() {
+        let payload = multipart("multipart/alternative", parts: [
+            leaf(mime: "text/plain", text: "   "),
+            leaf(mime: "text/html", text: "<div>\n  \n</div>"),
+        ])
+        XCTAssertEqual(GmailBodyText.extract(payload: payload, snippet: "the snippet"), "the snippet")
     }
 
     func testContentIsCappedAtTwoThousandChars() {
