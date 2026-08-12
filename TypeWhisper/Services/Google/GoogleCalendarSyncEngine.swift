@@ -34,6 +34,12 @@ extension Notification.Name {
 /// account is skipped with a user-facing `lastSyncError`, and once *every* account has dropped
 /// out of `.connected` the provider's authorization status clears its events — intended,
 /// mirroring EventKit-denied.
+///
+/// Failure granularity is *per calendar* inside an account (PR #7 review finding 1): a single
+/// calendar whose `events.list` keeps failing (revoked share, stale subscription) is skipped —
+/// keeping its own last good events — while every other calendar of that account still syncs, and
+/// the failure count is reported through `lastSyncError`. Only a `calendarList` failure fails the
+/// whole account slice.
 @MainActor
 final class GoogleCalendarSyncEngine: ObservableObject {
     /// D-G7 cadence.
@@ -173,7 +179,23 @@ final class GoogleCalendarSyncEngine: ObservableObject {
             attemptedAnyAccount = true
             do {
                 let token = try await tokenProvider.accessToken(for: account.id)
-                slices[account.id] = try await fetchAccountSlice(account: account, token: token)
+                // Per-calendar isolation (PR #7 review finding 1): one permanently failing
+                // calendar (revoked share, stale subscription ⇒ persistent 403/404) must never
+                // abort the account's whole slice — that would freeze the account's events at the
+                // last good snapshot forever. The good calendars land; the failed ones are
+                // reported as a per-account note.
+                let outcome = try await fetchAccountSlice(
+                    account: account,
+                    token: token,
+                    previous: slices[account.id] ?? []
+                )
+                slices[account.id] = outcome.slice
+                if outcome.failedCalendars > 0 {
+                    firstError = firstError ?? calendarFailureMessage(
+                        accountEmail: account.email,
+                        count: outcome.failedCalendars
+                    )
+                }
             } catch let error as GoogleAuthError where error == .needsReauth {
                 // Terminal auth loss: the auth service already flipped the account's status (M1
                 // handoff — do NOT retry). Keep the last good slice; the provider's authorization
@@ -211,25 +233,50 @@ final class GoogleCalendarSyncEngine: ObservableObject {
 
     /// One account's calendars + events: `calendarList`, then per calendar the events in the
     /// D-G7 window, both paginated.
-    private func fetchAccountSlice(account: GoogleAccount, token: String) async throws -> [CalendarEvents] {
+    ///
+    /// Failure granularity (D-G4, PR #7 review finding 1): the `calendarList` call still throws —
+    /// without the calendar list there is no slice to build, so the account keeps its last good
+    /// one. A *per-calendar* `events.list` failure, by contrast, is isolated: that calendar keeps
+    /// its previously fetched events (stale, never empty — `previous` is the account's last good
+    /// slice) or is skipped when it has none yet, every other calendar still syncs, and the count
+    /// of failed calendars comes back for `lastSyncError`.
+    private func fetchAccountSlice(
+        account: GoogleAccount,
+        token: String,
+        previous: [CalendarEvents]
+    ) async throws -> (slice: [CalendarEvents], failedCalendars: Int) {
         let window = Self.syncWindow(now: now())
+        let previousEvents = Dictionary(
+            previous.map { ($0.calendar.id, $0.events) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var slice: [CalendarEvents] = []
+        var failedCalendars = 0
         for entry in try await fetchCalendarList(token: token) {
             let info = GoogleCalendarMapper.calendarInfo(
                 from: entry,
                 sub: account.id,
                 accountEmail: account.email
             )
-            let events = try await fetchEvents(
-                calendarRawID: entry.id,
-                info: info,
-                account: account,
-                token: token,
-                window: window
-            )
-            slice.append(CalendarEvents(calendar: info, events: events))
+            do {
+                let events = try await fetchEvents(
+                    calendarRawID: entry.id,
+                    info: info,
+                    account: account,
+                    token: token,
+                    window: window
+                )
+                slice.append(CalendarEvents(calendar: info, events: events))
+            } catch {
+                failedCalendars += 1
+                logger.warning(
+                    "Sync failed for calendar \(info.id, privacy: .private): \(error.localizedDescription)"
+                )
+                guard let stale = previousEvents[info.id] else { continue }
+                slice.append(CalendarEvents(calendar: info, events: stale))
+            }
         }
-        return slice
+        return (slice, failedCalendars)
     }
 
     private func fetchCalendarList(token: String) async throws -> [GoogleCalendarAPI.GCalCalendarListEntry] {
@@ -307,6 +354,17 @@ final class GoogleCalendarSyncEngine: ObservableObject {
         String(
             format: String(localized: "google.calendar.syncError"),
             "\(accountEmail): \(detail)"
+        )
+    }
+
+    /// Partial-failure note (PR #7 review finding 1): the account synced, but N of its calendars
+    /// could not be read. Surfaced in the same `lastSyncError` line as a whole-account failure —
+    /// the good calendars' events are already published.
+    private func calendarFailureMessage(accountEmail: String, count: Int) -> String {
+        String(
+            format: String(localized: "google.calendar.calendarsFailed"),
+            accountEmail,
+            count
         )
     }
 }
