@@ -43,6 +43,25 @@ final class GoogleAccountRowStateTests: XCTestCase {
         XCTAssertFalse(state.showsReconnect)
     }
 
+    // MARK: - Drive-feature affordances ([Google Phase 2 · M3], D-D8)
+
+    func testConnectedRowShowsDriveToggleAndBackfillFollowsTheFlag() {
+        let off = GoogleAccountRowState.make(for: account(status: .connected), isDriveImportEnabled: false)
+        XCTAssertTrue(off.showsDriveToggle)
+        XCTAssertFalse(off.showsDriveBackfill, "backfill entry point requires the toggle on")
+
+        let on = GoogleAccountRowState.make(for: account(status: .connected), isDriveImportEnabled: true)
+        XCTAssertTrue(on.showsDriveToggle)
+        XCTAssertTrue(on.showsDriveBackfill)
+    }
+
+    func testNeedsReauthRowHidesDriveAffordancesEvenWhenEnabled() {
+        // A dead grant can neither poll nor consent-extend — reconnect first.
+        let state = GoogleAccountRowState.make(for: account(status: .needsReauth), isDriveImportEnabled: true)
+        XCTAssertFalse(state.showsDriveToggle)
+        XCTAssertFalse(state.showsDriveBackfill)
+    }
+
     // MARK: - Connect-error presenter
 
     func testCancelledIsSuppressed() {

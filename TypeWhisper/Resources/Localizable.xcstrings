@@ -20986,6 +20986,70 @@
         }
       }
     },
+    "google.drive.checkNow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt prüfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check now"
+          }
+        }
+      }
+    },
+    "google.drive.enableToggle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet-Transkripte aus Drive importieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Meet transcripts from Drive"
+          }
+        }
+      }
+    },
+    "google.drive.lastSync": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkripte geprüft %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripts checked %@"
+          }
+        }
+      }
+    },
+    "google.drive.scopeDenied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google hat den Drive-Zugriff nicht gewährt, daher wurde der Schalter deaktiviert. Versuche es erneut und genehmige die Drive-Berechtigung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google didn't grant Drive access, so the toggle was turned off. Try again and approve the Drive permission."
+          }
+        }
+      }
+    },
     "google.drive.syncError": {
       "localizations": {
         "de": {
@@ -20998,6 +21062,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Drive transcript sync failed: %@"
+          }
+        }
+      }
+    },
+    "google.drive.toggleHelp": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importiert automatisch die Gemini-Notizen dieses Kontos (\"Notes by Gemini\") aus Google Drive und ordnet sie dem passenden Meeting zu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically imports this account's Gemini meeting notes (\"Notes by Gemini\") from Google Drive and attaches them to the matching meeting."
           }
         }
       }
@@ -21078,6 +21158,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "You're signed in. You can close this window and return to MeetingWhisper."
+          }
+        }
+      }
+    },
+    "google.reauth.nudgeMessage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird nicht mehr synchronisiert. Verbinde das Konto neu, um Kalender- und Transkript-Updates fortzusetzen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ stopped syncing. Reconnect to resume calendar and transcript updates."
+          }
+        }
+      }
+    },
+    "google.reauth.nudgeReconnect": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu verbinden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect"
+          }
+        }
+      }
+    },
+    "google.reauth.nudgeSettings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
+    "google.reauth.nudgeTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google-Konto muss neu verbunden werden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google account needs reconnecting"
           }
         }
       }

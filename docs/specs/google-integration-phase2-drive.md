@@ -605,6 +605,13 @@ mixed accounts).
 ledger × matcher, D-D7); `Views/Meetings/GoogleDriveBackfillSheet.swift` (scan → preview →
 serial batch under one `.driveBackfill` job with progress + cancel → summary).
 
+**F4 execution-time re-check placement (M2 review carry-forward, binding):** the D-D7/F4
+per-file re-check lives INSIDE `GoogleDriveTranscriptImporter.processFile` — it calls
+`ledger.action(for:sub:now:)` at the top and returns a new `.skipped` outcome on `.skip` (with
+the importer exempting its own file's pending-guard entry so an auto-import job never
+self-blocks). The M4 batch therefore never re-exports unchanged or in-flight files, and the
+auto path stays robust to any future caller.
+
 **Modify:** `GoogleAccountsSection.swift` — "Import past transcripts…" row button presenting
 the sheet.
 

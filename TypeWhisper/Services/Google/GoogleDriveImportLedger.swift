@@ -12,7 +12,8 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// meeting must not resurrect its doc on the next poll).
 ///
 /// Single writer: `GoogleDriveTranscriptImporter` (entries + failures) and the sync engine
-/// (watermarks only). The in-memory `pending` map guards the enqueue-to-completion window so one
+/// (watermarks + housekeeping — the per-cycle `pruneStaleFailures` sweep). The in-memory
+/// `pending` map guards the enqueue-to-completion window so one
 /// file is never enqueued twice concurrently; its `modifiedTime` values feed the engine's
 /// crash-safe watermark rule (D-D6 — hold the watermark below the earliest
 /// enqueued-but-not-yet-ledgered file).

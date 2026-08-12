@@ -213,6 +213,10 @@
 		GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */; };
 		GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */; };
 		GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */; };
+		GGB0000000000000000050 /* GoogleFeatureScopes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000050 /* GoogleFeatureScopes.swift */; };
+		GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000051 /* GoogleReauthNudge.swift */; };
+		GGB0000000000000000052 /* GoogleFeatureScopesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */; };
+		GGB0000000000000000053 /* GoogleReauthNudgeRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */; };
 		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
 		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
 		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
@@ -922,6 +926,10 @@
 		GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngine.swift; sourceTree = "<group>"; };
 		GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngineTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveTranscriptImporterTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000050 /* GoogleFeatureScopes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleFeatureScopes.swift; sourceTree = "<group>"; };
+		GGF0000000000000000051 /* GoogleReauthNudge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleReauthNudge.swift; sourceTree = "<group>"; };
+		GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleFeatureScopesTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleReauthNudgeRuleTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
 		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
@@ -2234,6 +2242,7 @@
 				TCF0000000000000000001 /* ComingUpCard.swift */,
 				TCF0000000000000000002 /* MeetingTimeline.swift */,
 				TCF0000000000000000003 /* HomeLiveBanner.swift */,
+				GGF0000000000000000051 /* GoogleReauthNudge.swift */,
 			);
 			path = MainWindow;
 			sourceTree = "<group>";
@@ -2396,6 +2405,7 @@
 				GGF0000000000000000042 /* DriveTranscriptMatcher.swift */,
 				GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */,
 				GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */,
+				GGF0000000000000000050 /* GoogleFeatureScopes.swift */,
 				GGF0000000000000000015 /* ChromeProfileDetector.swift */,
 				GGF0000000000000000016 /* MeetingJoinLauncher.swift */,
 			);
@@ -3057,6 +3067,8 @@
 				GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */,
 				GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */,
 				GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */,
+				GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */,
+				GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */,
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
@@ -4643,6 +4655,8 @@
 				GGB0000000000000000045 /* DriveTranscriptMatcherTests.swift in Sources */,
 				GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */,
 				GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */,
+				GGB0000000000000000052 /* GoogleFeatureScopesTests.swift in Sources */,
+				GGB0000000000000000053 /* GoogleReauthNudgeRuleTests.swift in Sources */,
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
@@ -4805,6 +4819,7 @@
 				TCB0000000000000000001 /* ComingUpCard.swift in Sources */,
 				TCB0000000000000000002 /* MeetingTimeline.swift in Sources */,
 				TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */,
+				GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */,
 				TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */,
 				TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */,
 				TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */,
@@ -4867,6 +4882,7 @@
 				GGB0000000000000000042 /* DriveTranscriptMatcher.swift in Sources */,
 				GGB0000000000000000046 /* GoogleDriveTranscriptImporter.swift in Sources */,
 				GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */,
+				GGB0000000000000000050 /* GoogleFeatureScopes.swift in Sources */,
 				GGB0000000000000000015 /* ChromeProfileDetector.swift in Sources */,
 				GGB0000000000000000016 /* MeetingJoinLauncher.swift in Sources */,
 				CA11000000000000000001 /* CalendarColor.swift in Sources */,
