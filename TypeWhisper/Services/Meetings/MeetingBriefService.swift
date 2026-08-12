@@ -32,6 +32,10 @@ final class MeetingBriefService: ObservableObject {
     /// Per-purpose model router (plan D9/M4): resolves `template > purpose(briefs) > app default` per
     /// call. Defaulted so predating call sites/tests construct the service without it.
     private let modelRouter: MeetingModelRouter
+    /// Related-email retrieval ([Google Phase 3 · M3], D-M3): the meeting-centric Gmail seam.
+    /// Nil-defaulted so every predating call site and test compiles unchanged — a nil service
+    /// means "no email block" (the `folderMetadataStore`/`promptActionService` pattern).
+    private let gmailService: GmailContextRetrieving?
     private let charBudget: Int
 
     /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
@@ -45,6 +49,7 @@ final class MeetingBriefService: ObservableObject {
         promptActionService: PromptActionService? = nil,
         folderMetadataStore: MeetingFolderMetadataStore? = nil,
         modelRouter: MeetingModelRouter? = nil,
+        gmailService: GmailContextRetrieving? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
@@ -53,6 +58,7 @@ final class MeetingBriefService: ObservableObject {
         self.promptActionService = promptActionService
         self.folderMetadataStore = folderMetadataStore
         self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
+        self.gmailService = gmailService
         self.charBudget = charBudget
     }
 
@@ -77,12 +83,25 @@ final class MeetingBriefService: ObservableObject {
 
         let priorBlock = priorMeetingsBlock(for: meeting)
         let kbBlock = knowledgeBaseBlock(for: meeting)
+        // [Google Phase 3 · M3] The third context block (D-M3). Runs inside the existing `.brief`
+        // job — the 1–2 s fetch is invisible pre-meeting; no scheduler/queue change.
+        let emailBlock = await relatedEmailsBlock(for: meeting)
 
-        guard !priorBlock.isEmpty || !kbBlock.isEmpty else {
+        // D-M3 sole-grounding restriction (normative): email context may SOLELY satisfy the
+        // guard only when the meeting has ≥1 non-self attendee email (the attendee query was
+        // non-nil) — title-term-only email matches augment a brief but never solely ground a
+        // persisted one.
+        let emailBlockSufficient = !emailBlock.isEmpty && hasNonSelfAttendeeEmail(meeting)
+        guard !priorBlock.isEmpty || !kbBlock.isEmpty || emailBlockSufficient else {
             throw MeetingBriefError.insufficientContext
         }
 
-        let context = assembleContext(meeting: meeting, priorBlock: priorBlock, kbBlock: kbBlock)
+        let context = assembleContext(
+            meeting: meeting,
+            priorBlock: priorBlock,
+            kbBlock: kbBlock,
+            emailBlock: emailBlock
+        )
 
         // Plan M6 (amendment DA1/DA2): the brief prompt is now a user-editable `.brief` template.
         // Resolve the first `.brief` template (sort-ordered) as the system prompt — identical to how
@@ -209,17 +228,60 @@ final class MeetingBriefService: ObservableObject {
         return terms.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Related emails rendered as labeled excerpts ([Google Phase 3 · M3], D-M3 — the
+    /// `knowledgeBaseBlock` mirror). Empty when no Gmail-enabled account covers the meeting,
+    /// nothing matches, or the fetch fails: **a Gmail outage must never fail a brief** that prior
+    /// meetings or the vault could still ground — the error is logged, and `.needsReauth` already
+    /// drives the settings badge. The service resolves accounts/window/self-exclusion internally
+    /// (D-M1 meeting-centric seam); the query is the same title + attendee-names text the vault
+    /// retrieval uses.
+    private func relatedEmailsBlock(for meeting: Meeting) async -> String {
+        guard let gmailService, gmailService.isConnected(for: meeting) else { return "" }
+        let query = retrievalQuery(for: meeting)
+        guard !query.isEmpty else { return "" }
+        do {
+            let passages = try await gmailService.retrieve(for: meeting, query: query, limit: 3)
+            guard !passages.isEmpty else { return "" }
+            return passages
+                .map { passage in
+                    let dateLabel = passage.date.formatted(date: .abbreviated, time: .omitted)
+                    return "### \(passage.subject) — \(passage.from), \(dateLabel)\n\(passage.content)"
+                }
+                .joined(separator: "\n\n")
+        } catch {
+            logger.warning("Related-emails block degraded to empty: \(error.localizedDescription)")
+            return ""
+        }
+    }
+
+    /// D-M3 sole-grounding input: whether the meeting carries at least one attendee email that is
+    /// not the user's own (`isSelf != true`) — i.e. the attendee clause of the Gmail query was
+    /// non-nil, so email matches are anchored to people, not just title terms.
+    private func hasNonSelfAttendeeEmail(_ meeting: Meeting) -> Bool {
+        meeting.attendees.contains { attendee in
+            attendee.isSelf != true && !(attendee.email ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
     // MARK: - Assembly
 
-    /// Compose and bound the final brief context: meeting metadata, prior-meeting summaries, and
-    /// knowledge-base passages (plan D7). Section headers are localized so the scaffolding matches
-    /// the rest of the UI.
+    /// Compose and bound the final brief context: meeting metadata, prior-meeting summaries,
+    /// knowledge-base passages, and related emails (plan D7 + [Google Phase 3 · M3], D-M3).
+    /// Section headers are localized so the scaffolding matches the rest of the UI.
     ///
     /// Rather than truncate the whole joined string at the end — which let several substantial prior
-    /// meetings silently truncate the knowledge-base block away entirely (M5 review finding 2) — the
-    /// KB block is guaranteed a reserved slice (~a quarter of the budget) and the prior-meeting block
-    /// absorbs the remainder. Each block carries a localized truncation notice when it is cut.
-    private func assembleContext(meeting: Meeting, priorBlock: String, kbBlock: String) -> String {
+    /// meetings silently truncate the trailing blocks away entirely (M5 review finding 2) — the KB
+    /// and email blocks each get a reserved slice (~a quarter of the budget) and the prior-meeting
+    /// block absorbs the remainder. **D-M3 budget fix (normative)**: the KB block, now a *middle*
+    /// section, must subtract the trailing email reserve — exactly as the prior block subtracts
+    /// `kbReserve` — otherwise a large KB block eats the email section's slice. Each block carries a
+    /// localized truncation notice when it is cut; final whole-string bound unchanged.
+    private func assembleContext(
+        meeting: Meeting,
+        priorBlock: String,
+        kbBlock: String,
+        emailBlock: String
+    ) -> String {
         let notice = String(localized: "meetings.output.truncationNotice")
         var sections: [String] = []
 
@@ -234,14 +296,13 @@ final class MeetingBriefService: ObservableObject {
         let metaSection = meta.joined(separator: "\n")
         sections.append(metaSection)
 
-        // Reserve a quarter of the budget for the knowledge base so prior meetings can't crowd it
-        // out; the prior block gets whatever is left after meta + that reservation.
         var runningLength = metaSection.count
         let kbReserve = kbBlock.isEmpty ? 0 : charBudget / 4
+        let emailReserve = emailBlock.isEmpty ? 0 : charBudget / 4
 
         if !priorBlock.isEmpty {
             let priorHeader = String(localized: "meetings.brief.context.priorHeader")
-            let priorBudget = max(0, charBudget - runningLength - kbReserve - priorHeader.count - 4)
+            let priorBudget = max(0, charBudget - runningLength - kbReserve - emailReserve - priorHeader.count - 4)
             let bounded = bound(priorBlock, to: priorBudget, notice: notice)
             let section = "\(priorHeader)\n\(bounded)"
             sections.append(section)
@@ -249,10 +310,20 @@ final class MeetingBriefService: ObservableObject {
         }
         if !kbBlock.isEmpty {
             let kbHeader = String(localized: "meetings.brief.context.knowledgeHeader")
-            // The KB block gets all the remaining budget (at least the reserved slice).
-            let kbBudget = max(0, charBudget - runningLength - kbHeader.count - 4)
+            // Remaining budget minus the trailing email reserve (the D-M3 fix — "all remaining"
+            // here would starve the email section below its slice).
+            let kbBudget = max(0, charBudget - runningLength - emailReserve - kbHeader.count - 4)
             let bounded = bound(kbBlock, to: kbBudget, notice: notice)
-            sections.append("\(kbHeader)\n\(bounded)")
+            let section = "\(kbHeader)\n\(bounded)"
+            sections.append(section)
+            runningLength += section.count + 2
+        }
+        if !emailBlock.isEmpty {
+            let emailsHeader = String(localized: "meetings.brief.context.emailsHeader")
+            // The trailing block gets the remainder (≥ its reserve by construction).
+            let emailBudget = max(0, charBudget - runningLength - emailsHeader.count - 4)
+            let bounded = bound(emailBlock, to: emailBudget, notice: notice)
+            sections.append("\(emailsHeader)\n\(bounded)")
         }
 
         let assembled = sections.joined(separator: "\n\n")

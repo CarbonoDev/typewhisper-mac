@@ -231,6 +231,7 @@
 		GGB0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */; };
 		GGB0000000000000000109 /* GmailWebURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000109 /* GmailWebURLTests.swift */; };
 		GGB0000000000000000110 /* GmailToggleStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000110 /* GmailToggleStateTests.swift */; };
+		GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */; };
 		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
 		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
 		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
@@ -958,6 +959,7 @@
 		GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountStoreGmailFlagTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000109 /* GmailWebURLTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailWebURLTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000110 /* GmailToggleStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailToggleStateTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceEmailBlockTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
 		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
@@ -3111,6 +3113,7 @@
 				GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */,
 				GGF0000000000000000109 /* GmailWebURLTests.swift */,
 				GGF0000000000000000110 /* GmailToggleStateTests.swift */,
+				GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */,
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
@@ -4707,6 +4710,7 @@
 				GGB0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift in Sources */,
 				GGB0000000000000000109 /* GmailWebURLTests.swift in Sources */,
 				GGB0000000000000000110 /* GmailToggleStateTests.swift in Sources */,
+				GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */,
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,

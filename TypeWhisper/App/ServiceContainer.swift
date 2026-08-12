@@ -342,7 +342,9 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             // [M7] The meeting's folder config scopes brief knowledge-base retrieval (Amendment 1, DA5).
             folderMetadataStore: meetingFolderMetadataStore,
-            modelRouter: meetingModelRouter // [M4] briefs purpose
+            modelRouter: meetingModelRouter, // [M4] briefs purpose
+            // [Google Phase 3 · M3] Related emails as the brief's third context block (D-M3).
+            gmailService: gmailContextService
         )
         // [M8] Agentic related-document discovery (Amendment 2). Searches the vault folder-first then
         // wider (LLM-judge junk-filtered) to curate per-meeting related notes; writes only through
