@@ -1610,6 +1610,28 @@ final class APIHandlers: @unchecked Sendable {
         ) != nil
     }
 
+    /// How far apart two live-session starts may sit and still be considered the same call. Long
+    /// enough to cover the longest realistic meeting plus a mid-call app restart (the extension keeps
+    /// posting the *original* session start, so a resumed session's start never drifts); far shorter
+    /// than the gap between two occurrences of a recurring call, which reuse the same Meet code.
+    static let liveSessionResumeWindow: TimeInterval = 6 * 60 * 60
+
+    /// Whether an already-open meeting carrying the same `session_key` is this same call, and may be
+    /// resumed rather than replaced by a fresh meeting.
+    ///
+    /// Recurring Meet links reuse one call code forever, so the key identifies the *room*, not the
+    /// call. A meeting left `.live` because its `/end` never landed would otherwise swallow every
+    /// later occurrence. A meeting with no recorded start cannot be aged — resume it, since forking on
+    /// every retry would be the worse failure.
+    static func canResumeLiveSession(
+        existingStart: Date?,
+        incomingStart: Date,
+        window: TimeInterval = liveSessionResumeWindow
+    ) -> Bool {
+        guard let existingStart else { return true }
+        return abs(incomingStart.timeIntervalSince(existingStart)) <= window
+    }
+
     /// Title for a live meeting when neither the Meet tab nor a calendar match offers a real one:
     /// built from the start time and, when known, the Google account the call was joined from.
     static func liveFallbackTitle(startDate: Date, account: String?) -> String {
@@ -1687,25 +1709,46 @@ final class APIHandlers: @unchecked Sendable {
 
         let meetingService = self.meetingService
         let calendarService = self.calendarService
+        let start = startDate ?? Date()
         return await MainActor.run {
-            if let existing = meetingService.meetings.first(where: {
-                $0.externalSessionKey == sessionKey && $0.state != .completed
-            }) {
-                return .json(LiveSessionResponse(
-                    id: existing.id.uuidString,
-                    created: false,
-                    title: existing.title,
-                    state: existing.state.rawValue,
-                    segment_count: existing.segments.count,
-                    matched_event: nil
-                ))
+            // A Meet call code is *reused* by every occurrence of a recurring meeting, so the session
+            // key alone does not identify a call — only a session key plus recency does. An open
+            // meeting under this key that is hours (or days) old is not this call: it is a session
+            // whose `/end` never landed (the app was closed at hang-up). Resuming it would append
+            // today's captions — with timestamps restarting at 0 — to last week's transcript.
+            let openForKey = meetingService.meetings
+                .filter { $0.externalSessionKey == sessionKey && $0.state != .completed }
+                .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
+
+            if let existing = openForKey.last {
+                if Self.canResumeLiveSession(existingStart: existing.startDate, incomingStart: start) {
+                    return .json(LiveSessionResponse(
+                        id: existing.id.uuidString,
+                        created: false,
+                        title: existing.title,
+                        state: existing.state.rawValue,
+                        segment_count: existing.segments.count,
+                        matched_event: nil
+                    ))
+                }
+
+                // Stale. Close it out on the way past — this is the only place that ever learns the
+                // old session is over, and leaving it `.live` forever would keep it in the way of
+                // every future occurrence of the same recurring call.
+                for stale in openForKey {
+                    stale.endDate = stale.endDate ?? stale.startDate
+                    stale.state = .completed
+                    meetingService.update(stale)
+                }
+                apiLogger.info(
+                    "Closed \(openForKey.count, privacy: .public) stale live meeting(s) for key \(sessionKey, privacy: .public); starting a fresh one"
+                )
             }
 
             // Calendar matching mirrors the import path: for calendar-created calls the tab title
             // *is* the event's name, so a confident title+date match links the live meeting to the
             // event and adopts its roster. `bestAutoLinkCandidate`'s confidence floor keeps an
             // ad-hoc call from linking to whatever else happens to be on the calendar right now.
-            let start = startDate ?? Date()
             var matched: MatchedEventResponse?
             var projection: CalendarService.MeetingProjection?
             if let realTitle, let calendarService,

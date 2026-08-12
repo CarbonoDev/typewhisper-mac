@@ -421,7 +421,10 @@ final class ServiceContainer: ObservableObject {
 
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
-        let router = APIRouter(apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests)
+        let router = APIRouter(
+            apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests,
+            extensionOriginPolicy: apiAuthenticator.extensionOriginPolicy
+        )
         let handlers = APIHandlers(
             modelManager: modelManagerService,
             audioFileService: audioFileService,

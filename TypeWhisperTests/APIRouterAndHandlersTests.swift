@@ -1205,6 +1205,128 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(goodHeaderToken.status, 200)
     }
 
+    // MARK: - Browser-extension origins (caption bridge)
+
+    /// Every extension the browser has installed shares the `chrome-extension://` scheme, so the API
+    /// trusts an *identity*, not a scheme: an unlisted extension is refused outright and gets no CORS
+    /// headers to read a response with.
+    func testRouterRefusesUnlistedBrowserExtensionOrigin() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil }, // token optional for loopback callers — the default
+            extensionOriginPolicy: {
+                .init(allowedOrigins: ["chrome-extension://bridge"], token: "secret-token")
+            }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: ["origin": "chrome-extension://someone-elses-extension", "authorization": "Bearer secret-token"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 403)
+        XCTAssertNil(response.headers["Access-Control-Allow-Origin"])
+    }
+
+    /// An allowlisted extension is CORS-approved but still has to authenticate — the loopback
+    /// "no token configured ⇒ authorized" rule never covers browser code.
+    func testRouterRequiresTokenFromAllowlistedExtensionEvenWhenTokenIsOptional() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil },
+            extensionOriginPolicy: {
+                .init(allowedOrigins: ["chrome-extension://bridge"], token: "secret-token")
+            }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+        router.register("GET", "/v1/status") { _ in .json(["status": "ready"]) }
+
+        let headers = ["origin": "chrome-extension://bridge"]
+        let withoutToken = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: [:], headers: headers, body: Data()
+        ))
+        let wrongToken = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: headers.merging(["authorization": "Bearer nope"]) { _, new in new },
+            body: Data()
+        ))
+        let withToken = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: headers.merging(["authorization": "Bearer secret-token"]) { _, new in new },
+            body: Data()
+        ))
+        // Even the otherwise-public status route is token-gated for an extension caller.
+        let publicRoute = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/status", queryParams: [:], headers: headers, body: Data()
+        ))
+        // The CORS preflight carries no Authorization (browsers strip it) and must still pass.
+        let preflight = await router.route(HTTPRequest(
+            method: "OPTIONS", path: "/v1/meetings", queryParams: [:], headers: headers, body: Data()
+        ))
+
+        XCTAssertEqual(withoutToken.status, 401)
+        XCTAssertEqual(wrongToken.status, 401)
+        XCTAssertEqual(withToken.status, 200)
+        XCTAssertEqual(publicRoute.status, 401)
+        XCTAssertEqual(preflight.status, 204)
+        XCTAssertEqual(withToken.headers["Access-Control-Allow-Origin"], "chrome-extension://bridge")
+        XCTAssertEqual(preflight.headers["Access-Control-Allow-Origin"], "chrome-extension://bridge")
+    }
+
+    /// A local client (CLI, Raycast, curl) sends no `Origin` and is unaffected by the extension rules.
+    func testRouterLeavesLocalCallersWithoutOriginUntouched() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil },
+            extensionOriginPolicy: { .init(allowedOrigins: [], token: "secret-token") }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: [:], headers: [:], body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertNil(response.headers["Access-Control-Allow-Origin"])
+    }
+
+    /// With nothing configured (the default) no extension can reach the API at all.
+    func testRouterDefaultPolicyDeniesEveryExtensionOrigin() async {
+        let router = APIRouter()
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: ["origin": "chrome-extension://bridge"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 403)
+    }
+
+    func testParseAllowedExtensionOrigins() {
+        // A bare id (what chrome://extensions shows) covers both extension schemes.
+        XCTAssertEqual(
+            APIRouter.parseAllowedExtensionOrigins("AbCdEf"),
+            ["chrome-extension://abcdef", "moz-extension://abcdef"]
+        )
+        // Full origins, comma- or newline-separated, with a stray trailing slash.
+        XCTAssertEqual(
+            APIRouter.parseAllowedExtensionOrigins("chrome-extension://one/, \n moz-extension://two"),
+            ["chrome-extension://one", "moz-extension://two"]
+        )
+        // Anything that is not an extension origin is dropped, and empty means empty.
+        XCTAssertEqual(APIRouter.parseAllowedExtensionOrigins("https://evil.example"), [])
+        XCTAssertEqual(APIRouter.parseAllowedExtensionOrigins("   "), [])
+    }
+
     func testLocalAPIAuthenticatorEnforcesTokenOnlyWhenEnabled() {
         let authenticator = LocalAPIAuthenticator(initialToken: "test-token", requiresAuthentication: false)
 
@@ -6278,6 +6400,75 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertNotEqual(title, "abc-defg-hij")
         XCTAssertTrue(title.contains("marco@carbonodev.com"), "fallback title names the account: \(title)")
         XCTAssertNil(json["matched_event"] as? [String: Any])
+    }
+
+    /// A recurring Meet link reuses one call code forever, so `session_key` identifies the room, not
+    /// the call. A meeting left `.live` because its `/end` never landed (app closed at hang-up) must
+    /// not swallow the next occurrence: the stale one is closed out and a fresh meeting starts.
+    func testLiveSessionDoesNotResumeAStaleMeetingForTheSameCallCode() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        func startSession(startedAt: String) async throws -> [String: Any] {
+            let body = try Self.jsonBody([
+                "session_key": "abc-defg-hij",
+                "title": "abc-defg-hij",
+                "started_at": startedAt
+            ])
+            let response = await apiContext.router.route(HTTPRequest(
+                method: "POST",
+                path: "/v1/meetings/live",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: body
+            ))
+            XCTAssertEqual(response.status, 200)
+            return try Self.jsonObject(response)
+        }
+
+        let yesterday = try await startSession(startedAt: "2026-01-05T10:00:00Z")
+        XCTAssertEqual(yesterday["created"] as? Bool, true)
+        let staleID = try XCTUnwrap(yesterday["id"] as? String)
+
+        // Same call code, next day: the old meeting is never resumed.
+        let today = try await startSession(startedAt: "2026-01-06T10:00:00Z")
+        XCTAssertEqual(today["created"] as? Bool, true)
+        let freshID = try XCTUnwrap(today["id"] as? String)
+        XCTAssertNotEqual(freshID, staleID)
+
+        await MainActor.run {
+            let stale = apiContext.meetingService.meetings.first { $0.id.uuidString == staleID }
+            XCTAssertEqual(stale?.state, .completed, "the abandoned session is closed out on the way past")
+            let fresh = apiContext.meetingService.meetings.first { $0.id.uuidString == freshID }
+            XCTAssertEqual(fresh?.state, .live)
+        }
+
+        // A reconnect inside the same call still resumes — idempotency on `session_key` is intact.
+        let reconnect = try await startSession(startedAt: "2026-01-06T10:35:00Z")
+        XCTAssertEqual(reconnect["created"] as? Bool, false)
+        XCTAssertEqual(reconnect["id"] as? String, freshID)
+    }
+
+    func testCanResumeLiveSession() {
+        let start = Self.iso8601("2026-01-05T10:00:00Z")
+        // Same call: a mid-call reconnect, even hours in.
+        XCTAssertTrue(APIHandlers.canResumeLiveSession(
+            existingStart: start,
+            incomingStart: start.addingTimeInterval(90 * 60)
+        ))
+        // Next occurrence of the same recurring call code.
+        XCTAssertFalse(APIHandlers.canResumeLiveSession(
+            existingStart: start,
+            incomingStart: start.addingTimeInterval(24 * 60 * 60)
+        ))
+        // A meeting with no recorded start cannot be aged; forking on every retry would be worse.
+        XCTAssertTrue(APIHandlers.canResumeLiveSession(existingStart: nil, incomingStart: start))
     }
 
     func testIsMeetCodeTitle() {

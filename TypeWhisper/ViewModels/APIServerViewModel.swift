@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Combine
 import Security
@@ -26,6 +27,15 @@ final class APIServerViewModel: ObservableObject {
             apiAuthenticator.setRequiresAuthentication(requiresAuthentication)
         }
     }
+    /// Browser-extension ids allowed to call the local API (the Meet caption bridge). Empty by
+    /// default — an extension origin is refused until its id is listed here, and it must send the API
+    /// token besides.
+    @Published var allowedExtensionIDs: String {
+        didSet {
+            UserDefaults.standard.set(allowedExtensionIDs, forKey: UserDefaultsKeys.apiServerAllowedExtensionIDs)
+            apiAuthenticator.setAllowedExtensionIDs(allowedExtensionIDs)
+        }
+    }
     @Published var errorMessage: String?
 
     private let httpServer: HTTPServer
@@ -38,7 +48,10 @@ final class APIServerViewModel: ObservableObject {
         let savedPort = UserDefaults.standard.integer(forKey: UserDefaultsKeys.apiServerPort)
         self.port = savedPort > 0 ? UInt16(savedPort) : 8978
         self.requiresAuthentication = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        self.allowedExtensionIDs = UserDefaults.standard
+            .string(forKey: UserDefaultsKeys.apiServerAllowedExtensionIDs) ?? ""
         apiAuthenticator.setRequiresAuthentication(requiresAuthentication)
+        apiAuthenticator.setAllowedExtensionIDs(allowedExtensionIDs)
 
         httpServer.onStateChange = { [weak self] running in
             DispatchQueue.main.async {
@@ -73,6 +86,16 @@ final class APIServerViewModel: ObservableObject {
         isRunning = false
         errorMessage = nil
         removeDiscoveryFiles()
+    }
+
+    /// Put the API token on the pasteboard so the user can paste it into the browser extension's
+    /// options page. Returns `false` when there is no token yet (the server has never started).
+    @discardableResult
+    func copyAPITokenToPasteboard() -> Bool {
+        guard let token = try? apiAuthenticator.loadOrCreateToken(), !token.isEmpty else { return false }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(token, forType: .string)
+        return true
     }
 
     func restartIfNeeded() {
@@ -127,13 +150,18 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
 
     private let token: OSAllocatedUnfairLock<String?>
     private let requiresAuthentication: OSAllocatedUnfairLock<Bool>
+    private let allowedExtensionOrigins: OSAllocatedUnfairLock<Set<String>>
 
     init(
         initialToken: String? = nil,
-        requiresAuthentication: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        requiresAuthentication: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication),
+        allowedExtensionIDs: String = UserDefaults.standard.string(forKey: UserDefaultsKeys.apiServerAllowedExtensionIDs) ?? ""
     ) {
         token = OSAllocatedUnfairLock<String?>(initialState: initialToken)
         self.requiresAuthentication = OSAllocatedUnfairLock<Bool>(initialState: requiresAuthentication)
+        allowedExtensionOrigins = OSAllocatedUnfairLock<Set<String>>(
+            initialState: APIRouter.parseAllowedExtensionOrigins(allowedExtensionIDs)
+        )
 
         if initialToken == nil,
            let existingToken = KeychainService.load(service: Self.keychainService),
@@ -153,6 +181,21 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
 
     func setRequiresAuthentication(_ enabled: Bool) {
         requiresAuthentication.withLock { $0 = enabled }
+    }
+
+    func setAllowedExtensionIDs(_ raw: String) {
+        let origins = APIRouter.parseAllowedExtensionOrigins(raw)
+        allowedExtensionOrigins.withLock { $0 = origins }
+    }
+
+    /// The policy `APIRouter` applies to browser-extension callers. The token here is the *current*
+    /// token, not `tokenForEnforcedRequests()`: an extension authenticates even when the loopback
+    /// "Require API Token" toggle is off, because it is browser code, not a tool the user launched.
+    func extensionOriginPolicy() -> APIRouter.ExtensionOriginPolicy {
+        APIRouter.ExtensionOriginPolicy(
+            allowedOrigins: allowedExtensionOrigins.withLock { $0 },
+            token: currentToken()
+        )
     }
 
     func loadOrCreateToken() throws -> String {
