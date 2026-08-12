@@ -30167,6 +30167,22 @@
         }
       }
     },
+    "meetings.qa.answer.emailsConsultedPrefix": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting deckt das nicht direkt ab, daher habe ich verwandte E-Mails aus Ihrem Gmail-Postfach herangezogen:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting didn't cover that directly, so I checked related emails from your Gmail:"
+          }
+        }
+      }
+    },
     "meetings.qa.answer.notCovered": {
       "localizations": {
         "de": {
@@ -30179,6 +30195,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "This meeting doesn't cover that."
+          }
+        }
+      }
+    },
+    "meetings.qa.answer.vaultAndEmailsConsultedPrefix": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Meeting deckt das nicht direkt ab, daher habe ich verwandte Notizen aus Ihrem Vault und verwandte E-Mails aus Ihrem Gmail-Postfach herangezogen:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This meeting didn't cover that directly, so I checked related notes from your vault and related emails from your Gmail:"
           }
         }
       }
@@ -30227,6 +30259,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "A:"
+          }
+        }
+      }
+    },
+    "meetings.qa.context.emailsHeader": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Für diese Frage abgerufene E-Mails (nachrangig zum Meeting-Transkript)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "## Related emails retrieved for this question (secondary to the meeting transcript)"
           }
         }
       }
@@ -30435,6 +30483,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "You are a meeting assistant answering a question about a meeting. Ground your answer only in the provided meeting material: the transcript, the curated notes, and prior questions and answers. Answer concisely and factually. If the question is simply not covered by the meeting, say so plainly rather than inventing details."
+          }
+        }
+      }
+    },
+    "meetings.qa.systemPrompt.emailSearchInvitation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Ausnahme: Nur wenn das bereitgestellte Meeting-Material die Antwort nicht enthält und die E-Mail-Korrespondenz des Nutzers sie plausibel abdecken würde, raten Sie nicht und erklären Sie die Frage nicht für unbeantwortet: Antworten Sie mit genau einer Zeile in der Form `EMAIL_SEARCH: <Suchbegriffe>` und sonst nichts, damit die App die E-Mails für Sie durchsuchen kann."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Further exception: if — and only if — the provided meeting material does not contain the answer and the user's email correspondence would plausibly cover it, do not guess and do not declare it uncovered: reply with exactly one line in the form `EMAIL_SEARCH: <search terms>` and nothing else, so the app can search their email for you."
           }
         }
       }
