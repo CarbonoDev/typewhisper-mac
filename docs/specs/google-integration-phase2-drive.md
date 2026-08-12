@@ -155,31 +155,57 @@ fingerprint-store durability precedent (`WatchFolderService`,
 `Services/WatchFolderService.swift:439-449` — JSON under `AppConstants.appSupportDirectory`)
 is followed for the watermark + ledger (D-D5), not the FS-watch mechanism.
 
-**Query (normative,** built by `GoogleDriveAPI.filesListRequest`**):**
+**Query (normative,** built by `GoogleDriveAPI.filesListRequest`**) — revised by the M1–M4 review,
+2026-08-12.** The original design filtered server-side with `name contains '<marker>'`. That
+**cannot work**: Drive documents that `contains` only *prefix*-matches the `name` field — *"The
+`contains` operator only performs prefix matching for a `name` term. For example, suppose you have
+a name of `HelloWorld`. A query of `name contains 'Hello'` returns a result, but a query of
+`name contains 'World'` doesn't"*
+([Drive v3 search terms reference](https://developers.google.com/workspace/drive/api/guides/ref-search-terms))
+— and Gemini's marker is always a **trailing** suffix ("Llamada semanal - 2026_07_07 11_00 CST -
+Notas de Gemini"). The query therefore matched nothing and the feature would have imported zero
+transcripts. The marker rule moves client-side:
 
 ```
-q = mimeType='application/vnd.google-apps.document'
-    and (name contains 'Notes by Gemini' or name contains 'Notas de Gemini'
-         or name contains 'Gemini Notes')
-    and trashed = false
-    [and modifiedTime > '<watermark RFC3339>']        ← omitted for backfill scans
+# auto-import cycle (narrowing = .timeWindow) — the window itself is the bound
+q = mimeType='application/vnd.google-apps.document' and trashed = false
+    and modifiedTime > '<watermark RFC3339>'
+
+# backfill scan (narrowing = .fullTextMarkers) — unbounded in time, so it must narrow somehow
+q = mimeType='application/vnd.google-apps.document' and trashed = false
+    and (fullText contains '"notas de gemini"' or fullText contains '"notes by gemini"'
+         or fullText contains '"gemini notes"')
+
 fields = nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)
 orderBy = modifiedTime            pageSize = 100      (+ pageToken pagination, maxPages guard)
 ```
 
-The three name markers are **derived from one canonical list**, not mirrored:
-`ImportedMeetingTitle.notesSuffixes` (`ImportedMeetingTitle.swift:20-24`) holds the bare marker
-phrases ("notas de gemini", "notes by gemini", "gemini notes") and is today `private static` —
-M1 widens it to `static` (internal; the file is fork-owned and Phase 2 owns this change, §4).
-The two consumers *derive* differently from the same list: `ImportedMeetingTitle` wraps each
-phrase in its dash-separator suffix regex for title cleaning (:44), while
-`GoogleDriveAPI.filesListRequest` emits one `name contains '<phrase>'` term per phrase verbatim
-(Drive matches case-insensitively). A unit test asserts the query terms are generated from
-`notesSuffixes` — one list, two derivations, impossible to drift.
+then **every page is filtered by `ImportedMeetingTitle.hasNotesSuffix(name)`** — the single
+authoritative marker rule (trailing marker, optional `(2)` copy counter), applied identically to
+both modes. The auto path deliberately carries **no** text predicate: its 15-minute window (plus
+the 5-minute overlap) is already a tiny candidate set, so discovery cannot depend on Drive's
+full-text indexing behaviour at all. `fullText` narrowing is used only where the alternative is
+walking every Google Doc in the corpus (the unbounded backfill scan); it matches whole tokens and,
+double-quoted, phrases across name + content, so a trailing marker *is* reachable that way — and
+if it under-matches, the visible symptom is a short backfill preview, never a silently broken
+auto-import. QA step 4a proves discovery against a live account.
+
+The markers stay **derived from one canonical list**, not mirrored:
+`ImportedMeetingTitle.notesSuffixes` holds the bare phrases ("notas de gemini", "notes by gemini",
+"gemini notes"), and all three consumers derive from it *in the same file*: the suffix regex used
+by `parse` (title cleaning), `hasNotesSuffix` (the discovery filter, sharing that regex), and
+`GoogleDriveAPI.filesListRequest`'s `fullText` terms. Unit tests assert the derivation and that
+`name contains` never returns.
 `corpora`/`driveId` are left at defaults (user corpus) for v1; shared-drive widening is a noted
 follow-up. RFC3339 formatting reuses the `GoogleCalendarAPI.rfc3339String` helper
 (`Services/Google/GoogleCalendarAPI.swift:137`) — hoist it somewhere both can call rather than
 duplicating.
+
+**Truncation is never silent (review fix):** `listFiles` returns a `Listing`
+(`files` + `isTruncated` + `lastSeenModifiedTime`). When the walk hits `maxListPages` the pass is
+*not* a full success: the cycle refuses to advance the watermark past the newest item it actually
+saw (D-D6), and the backfill sheet renders `google.drive.backfill.truncated` above the preview so
+the user knows the list is partial.
 
 **Content fetch: `files.export` with `mimeType=text/markdown`.** Verified against a real export
 in hand (`Seguimiento Fase 2 IA - … - Notas de Gemini.md`): Google's Docs→markdown converter
@@ -204,11 +230,31 @@ There is no auto-matching anywhere today (`MeetingImportService.mergeTranscriptF
 explicitly chosen meeting, `Services/Meetings/MeetingImportService.swift:203`). Phase 2 builds
 it as a pure resolver, `DriveTranscriptMatcher`:
 
+**Live meetings are never targets (normative — review fix, 2026-08-12).** `mergeImport` deletes
+and re-inserts the target meeting's segment rows, so merging a doc into a meeting that is still
+capturing destroys live-captured rows *while the user is watching them* — and Gemini creates and
+edits its doc **during** the call, so at the 15-minute cadence this fires mid-recording and again
+on every subsequent poll. Therefore:
+
+- the candidate snapshot excludes every meeting whose state is in
+  `DriveTranscriptMatcher.unwritableStates` (`.live`, `.processing`) — importer and backfill
+  planner share one snapshot builder, `GoogleDriveTranscriptImporter.candidateSnapshot(of:)`;
+- a doc whose best match *is* such a meeting (or whose recorded re-merge target is) is
+  **deferred**, not duplicated: `Outcome.deferred` — nothing exported, written, ledgered, or
+  recorded as a failure, and the pending guard is released, so the next cycle re-discovers the
+  file and imports it normally once the meeting has completed. The check runs **before** the
+  export, since the matcher needs only the filename;
+- the user-initiated backfill obeys the same rule (a deferral counts as `skipped` in its summary).
+
 **Inputs:** the file's identity — `ImportedMeetingTitle.parse` on the filename
 (`ImportedMeetingTitle.swift:26` — clean title + embedded `yyyy_MM_dd HH_mm TZ` date; matches
 Drive names verbatim), falling back to the doc `createdTime` when the filename carries no date —
 plus a value snapshot of candidate meetings
-`[(id, title, startDate, calendarEventID, segmentCount)]` taken from `MeetingService.meetings`.
+`[(id, title, startDate, calendarEventID)]` taken from `MeetingService.meetings`. (The
+`segmentCount` field was **dropped** by the review: it was only the last tie-break rung, and
+reading `Meeting.segments.count` faults the whole cascade relationship of every meeting for every
+imported file — ~150 k segment objects materialized on the main actor for a 500-meeting archive.
+Remaining ties break on a stable `id` order.)
 
 **Scoring:** reuse `CalendarService`'s pure statics unchanged — `titleSimilarity`
 (`Services/Meetings/CalendarService.swift:374`, token Jaccard), `dateProximity` (:385) and the
@@ -224,8 +270,7 @@ meeting at ~1.0, silently corrupting the wrong occurrence and breaking cross-acc
 convergence). Within the band, prefer a meeting whose `calendarEventID` is namespaced to the
 **same account** (`GoogleCalendarID.accountSub(fromNamespacedID:)`,
 `Services/Google/GoogleCalendarMapper.swift:21-26` — the transcript and the calendar event came
-from the same Google account), then higher score, then more segments (the `ranksBefore` spirit,
-`MeetingMergePlan.swift`).
+from the same Google account), then higher score, then a stable `id` order.
 
 **Dispositions (normative):**
 
@@ -293,6 +338,13 @@ struct GoogleDriveImportLedger.Entry: Codable {
 //       failures:   [String: Int]         (namespaced fileID → attempt count, capped)
 ```
 
+**Loading is fault-tolerant (review fix):** the entries array is folded into the map **last-wins**,
+never `Dictionary(uniqueKeysWithValues:)`. The ledger is external data (a torn `save()`, a restored
+backup, a hand edit) and is constructed inside `ServiceContainer` init, so a duplicate `fileID`
+used to be an app that could not launch; it now degrades exactly like the unreadable-JSON branch.
+New `FailureRecord` fields decode with `decodeIfPresent` for the same reason — an older ledger
+must keep loading, not silently reset to empty.
+
 `@MainActor final class GoogleDriveImportLedger` — **single writer:**
 `GoogleDriveTranscriptImporter` (success/failure records) and the engine (watermarks only);
 read by the engine's per-file decision and the backfill planner. In-memory `pendingFileIDs` set
@@ -318,14 +370,28 @@ record "imported" for a transcript that never landed — a **permanent** loss. A
 asserts the order and the self-healing replay (import, drop the ledger write, re-run, assert
 one meeting with no duplicated rows).
 
-**Failure retry:** an import job that *ran and failed* records `failures[fileID] += 1`; the
-engine re-enqueues ledgered failures with `attempts < 3` each cycle regardless of watermark,
-then abandons (the record stays — surfaced in logs and as a selectable backfill row, D-D7).
-This keeps transient export errors from blocking the watermark indefinitely: a failed file has
-left the pending set, so the D-D6 rule no longer holds the watermark for it — the failure
-record, not the watermark, is what brings it back. **The re-merge path is gated by the same
-cap** (review fix, 2026-08-11): a ledgered doc whose re-merges keep failing is skipped once
-`attempts ≥ 3` — UNLESS the doc was edited again *after* the last failed attempt
+**Failure retry — error-class aware (revised by the review, 2026-08-12).** The original policy
+counted every failure the same and, once the 3-attempt cap was spent on a never-imported file,
+`.skip`ped it forever *while the watermark had already moved past it*: three unlucky cycles (45
+minutes of Drive 5xx/429) permanently and invisibly dropped that meeting's transcript. Two
+changes:
+
+1. **Two budgets.** `recordFailure(fileID:docModifiedTime:kind:now:)` classifies the error
+   (`GoogleDriveTranscriptImporter.failureKind(for:)`): a **permanent** error — any 4xx that is
+   not 429, or a parse/empty-transcript error — spends `maxRetryAttempts` (3); a **transient**
+   one — 429, 5xx, `URLError` — spends `maxTransientAttempts` (10, ≈2.5 h at the cadence). A
+   **cancellation** records nothing at all and merely releases the pending guard: a user's Cancel
+   is not a failure.
+2. **Unresolved files hold the watermark.** Failure records carry the doc's `modifiedTime`, and
+   the D-D6 bound is now `earliestUnresolvedModifiedTime` = min over pending **and**
+   failed-but-never-imported files. An abandoned file therefore stays *above* the watermark: it
+   is re-listed every cycle (a cheap `.skip`), stays a selectable backfill row, and becomes
+   `.importNew` again when `pruneStaleFailures` drops the record — a 30-day self-heal instead of
+   a silent permanent loss.
+
+**The re-merge path is gated by the same cap** (review fix, 2026-08-11): a ledgered doc whose
+re-merges keep failing is skipped once its budget is exhausted — UNLESS the doc was edited again
+*after* the last failed attempt
 (`modifiedTime > lastAttemptAt`), which **resets the attempt budget** before re-merging: an
 edit plausibly fixes a parse failure. (Failure records therefore carry `lastAttemptAt`
 alongside the attempt count — needed for this rule and for pruning.) **Pruning:** failure records past the retry
@@ -351,10 +417,26 @@ backfill's job, user-controlled) → for each file, the D-D5 decision (unseen �
 re-merge; failed+retryable → retry; else skip) → cap **25 enqueues per cycle** (burst bound;
 the remainder lands next cycle via the watermark overlap).
 
+**Seeding is re-armed when an account stops being polled (normative — review fix, 2026-08-12).**
+D-D6's "seed to now, import nothing" rule only holds if a *stopped* account forgets where it
+stopped; otherwise toggling Drive off for two months and back on (or Disconnect → re-add) resumes
+from the stale watermark and mass-imports everything published meanwhile — unattended, the exact
+opposite of the rule. `GoogleDriveImportLedger.forgetCycleState` drops an account's **watermark +
+pending guards** (never its entries — import identity outlives the account, so a re-add cannot
+re-import what already landed) and runs from two places: eagerly in `GoogleDriveToggleFlow` when
+the toggle goes OFF (so an off→on flip inside one cycle cannot slip past), and as a per-cycle
+sweep of every sub the store no longer polls (removed account, or a toggle flipped off while the
+app was quit). `.needsReauth` accounts are deliberately **not** swept: under D-D1 that state is
+routine and dropping the watermark there would skip the gap's transcripts.
+
 **Watermark advance (normative — crash-safe):** on a fully successful list pass,
-`watermark := min(cycleStart, earliest modifiedTime of any enqueued-but-not-yet-ledgered file
-− 1 s)`. The `pendingFileIDs` guard entries carry each file's `modifiedTime` for exactly this
-computation. Rationale: `.driveImport` jobs live in the in-memory io lane (`JobQueueService`
+`watermark := min(cycleStart, earliest modifiedTime of any unresolved file − 1 s)`, where
+*unresolved* = enqueued-but-not-yet-ledgered (the `pendingFileIDs` guard entries carry each file's
+`modifiedTime`) **or** failed-but-never-imported (D-D5 review fix). If the pass was **truncated**
+at `maxListPages`, the advance is additionally capped at `lastSeenModifiedTime − 1 s`: everything
+past the last page is unseen, and since `orderBy: modifiedTime` is ascending that is the *newest*
+end — advancing to `cycleStart` there would push those files below the next cycle's bound forever
+while reporting success. Rationale: `.driveImport` jobs live in the in-memory io lane (`JobQueueService`
 persists nothing) — if the watermark jumped straight to `cycleStart` and the app quit before an
 enqueued job ran, that file would have no ledger entry, an empty (relaunched) pending set, and a
 `modifiedTime` below the watermark: silently lost forever (the 5-min overlap only survives
@@ -372,6 +454,16 @@ watermark fully.
   per-file dedupe is the ledger's `pendingFileIDs` (D-D5), since the queue cannot key external
   IDs. `progressLabel` carries the doc's clean title so the activity popover reads
   "Drive transcript import — Weekly sync".
+  **Bounded + reconciled (review fixes, 2026-08-12):** the `io` lane is unbounded by design, so
+  all 25 of a cycle's jobs launch at once — their exports would hit Drive simultaneously and the
+  resulting 403/429 burst would spend the ledger's retry budget on self-inflicted failures.
+  The engine therefore chains its own jobs through a serial gate reusing the backfill's 250 ms
+  pacing (`GoogleDriveSyncEngine.serialized`), so exports go out one at a time regardless of lane
+  capacity. And because `JobQueueService.cancel` settles a **queued** job in place without ever
+  running its closure — and the importer is the only thing that clears a pending guard — the
+  engine tracks `fileID → jobID` and releases the guard of any settled job at the top of the next
+  cycle; otherwise one cancelled job would `.skip` its file for the session *and* pin every
+  account's watermark to that file's `modifiedTime − 1 s`.
 - `case driveBackfill` → lane `.io`, one job for the whole selected batch (§D-D7),
   `priority: .userInitiated`, cancellable (the operation checks `Task.isCancelled` between
   files). `MeetingJobPresentation.canCancel` needs no change (only `.export` and queued
@@ -391,10 +483,13 @@ visible when the account is `.connected` with Drive enabled.
 
 **Sheet (`GoogleDriveBackfillSheet`) flow:**
 
-1. **Scan** — `files.list` full query (no watermark bound), paged to completion, progress
-   spinner. Each hit becomes a preview row via the pure planner `GoogleDriveBackfillPlanner`:
-   `ImportedMeetingTitle.parse` for title/date, ledger lookup for "already imported",
-   `DriveTranscriptMatcher` for the disposition label.
+1. **Scan** — `files.list` with the `fullText` narrowing and no watermark bound (D-D3), paged to
+   completion **or to the `maxListPages` guard**, progress spinner. Each hit becomes a preview row
+   via the pure planner `GoogleDriveBackfillPlanner`: `ImportedMeetingTitle.parse` for title/date,
+   ledger lookup for "already imported", `DriveTranscriptMatcher` for the disposition label (over
+   the live-meeting-free snapshot, D-D4). A truncated scan renders
+   `google.drive.backfill.truncated` above the list — the preview must never pass itself off as
+   the complete history (review fix).
 2. **Preview list** — rows show *clean title · real date · disposition*: "Merge into '<meeting>'"
    / "New meeting" / "Already imported" (pre-unchecked, disabled). Select-all toggle; footer
    count ("Import N transcripts").
@@ -433,8 +528,9 @@ run `GoogleAuthService.reauthorize(accountID:additionalScopes:[GoogleDriveAPI.re
 (`GoogleAuthService.swift:163` — `login_hint` + `include_granted_scopes=true`; the store unions
 scopes on upsert, `GoogleAccountStore.swift:146-161`). On success → set the key, `syncNow()`.
 On failure/cancel/scope-not-granted (check the returned `grantedScopes`) → revert the toggle
-with an inline explanation. Toggle OFF → clear the key; the engine skips the account next
-cycle; no token changes (scope stays granted — harmless).
+with an inline explanation. Toggle OFF → clear the key **and the account's ledger cycle state**
+(D-D6 re-seeding, review fix); the engine skips the account next cycle; no token changes (scope
+stays granted — harmless).
 
 **Reconnect carries feature scopes (Testing-mode hardening, D-D1):** after a weekly expiry the
 refresh token is dead and Reconnect mints a *new* grant. `include_granted_scopes=true` asks
@@ -444,6 +540,19 @@ account's **enabled features** — a small pure helper
 `GoogleFeatureScopes.additionalScopes(for account: GoogleAccount, store:) -> [String]`
 (Drive scope iff the Drive toggle is on; Phase 3 appends Gmail). One click restores calendar
 **and** Drive in a single consent pass.
+
+**…and verifies the grant (normative — review fix, 2026-08-12).** *Requesting* a feature scope
+proves nothing: Google's consent screen lets the user **uncheck** an individual scope and still
+complete the sign-in, and the account then returns `.connected` with the feature toggle still on —
+so the engine polls with an unscoped token and wedges in a permanent 403 loop with nothing telling
+the user that toggling Drive off and on is the fix. Every reauthorize entry point that composes
+feature scopes (the settings row's Reconnect **and** the Home nudge) therefore runs
+`GoogleFeatureScopes.disableFeaturesWithMissingScopes(accountID:store:)` on success — the same
+check `GoogleDriveToggleFlow.setEnabled` already did for itself. Any enabled feature whose scope is
+absent from the re-read account is turned **off** and reported, and the caller shows
+`google.drive.reconnectScopeDenied` (EN+DE). The check is table-driven over
+`GoogleFeatureScopes.Feature`, so **Phase 3's Gmail toggle inherits it by adding one case**
+(`scope` / `isEnabled` / `disable`) plus its own localized message.
 
 **Needs-reauth nudge:** today `.needsReauth` is visible only inside Settings
 (`GoogleAccountRowState`, `GoogleAccountsSection.swift:373-399`) and as a sync-error line —
@@ -679,10 +788,21 @@ twin, a no-date filename, a plain-text degraded export.
 4. Have a meeting with Gemini notes ("Take notes with Gemini") → after the doc lands in Drive,
    within ≤15 min (or **Check now**) a "Drive transcript import" job appears and the transcript
    attaches to the calendar meeting created for that event — verify speakers, timestamps, and
-   that the meeting was **merged, not duplicated**. This step also validates that the lowercase
-   `name contains` terms (derived from `ImportedMeetingTitle.notesSuffixes`) match Google's
-   title-case doc names — Drive matching is documented case-insensitive; if discovery fails
-   here, the fallback is emitting display-case variants derived from the same canonical list.
+   that the meeting was **merged, not duplicated**.
+4a. **Discovery proof (gates the whole feature — added by the review, since the original
+    `name contains` query provably could not match a trailing marker).** With the toggle on and a
+    known Gemini doc in Drive, hit **Check now** and read Console (filter `GoogleDriveSyncEngine`):
+    the `files.list` request must return the doc's page and the client-side marker filter must keep
+    it (the job appears with the *clean* title). Then open **Import past transcripts…** and confirm
+    the unbounded scan — which narrows with `fullText contains '"notas de gemini"'` rather than the
+    time window — lists the same doc among the historical rows. If the auto path finds it but the
+    backfill scan does not, `fullText` narrowing is under-matching for this corpus: drop the
+    narrowing (list by mimeType alone) and rely on the page guard + truncation notice.
+4b. **Live-meeting guard:** start a recording in the app for a call that has Gemini notes enabled
+    and let it run past the moment Gemini publishes its doc (or force **Check now** mid-call).
+    The live transcript must not lose a single row, no second meeting may appear, and Console must
+    log "Deferred Drive doc … its meeting is still live". Stop the meeting → the next **Check now**
+    imports and merges it normally.
 5. **Flagship collision:** run a meeting captured with live captions, then let its Gemini doc
    import — verify overlapped live rows were replaced by the Gemini transcript
    (`ImportOverlapPlan`) and non-overlapped content survived.
@@ -696,6 +816,14 @@ twin, a no-date filename, a plain-text degraded export.
    imports; summary counts match; re-open the sheet — imported rows now show "Already
    imported".
 9. Restart the app → nothing re-imports (ledger + watermark survive).
+9a. **Re-seeding drill (review fix):** turn the Drive toggle **off**, wait for a Gemini doc to be
+    published (or edit an existing one so its `modifiedTime` moves), then turn it back on → the
+    account re-seeds: **nothing** is imported for the off window, and the settings row simply shows
+    a fresh "Transcripts checked". Repeat with **Disconnect → reconnect** — same outcome, and the
+    docs imported before the disconnect do **not** re-import.
+9b. **Declined-scope drill:** hit **Reconnect** with the Drive toggle on and uncheck the Drive box
+    on the consent screen → the toggle turns itself off and the row shows
+    `google.drive.reconnectScopeDenied`; no 403 loop appears in `lastSyncError`.
 10. **Weekly-expiry drill (D-D1/D-D8):** revoke the app at myaccount.google.com/permissions →
     next sync flips the account to "Needs attention", the Home nudge appears; click
     **Reconnect** on the nudge → one consent pass restores **both** calendar and Drive scopes;
@@ -713,10 +841,18 @@ twin, a no-date filename, a plain-text degraded export.
 - **Markdown-export fidelity** is assumed identical between the Docs UI download and
   `files.export?mimeType=text/markdown` (same converter; verified sample is a UI download). QA
   step 4 is the empirical gate; the D-D3 fallback rungs bound the damage if Google drifts.
-- **Name-based discovery misses renamed docs** (a user retitling the doc breaks the
-  `name contains` markers). Accepted for v1; the fallback is manual file import (existing UI).
-  A "Meet Recordings folder" query or `drive.meet.readonly` visibility (D-D2) could widen this
-  later.
+- **Name-based discovery misses renamed docs** (a user retitling the doc breaks the trailing
+  marker that `ImportedMeetingTitle.hasNotesSuffix` keys on). Accepted for v1; the fallback is
+  manual file import (existing UI). A "Meet Recordings folder" query or `drive.meet.readonly`
+  visibility (D-D2) could widen this later.
+- **The backfill scan leans on `fullText` narrowing** (D-D3): unlike the auto path, whose time
+  window makes a text predicate unnecessary, an unbounded scan must narrow somehow or walk every
+  Google Doc in the corpus. Phrase matching over name + content should cover Gemini docs, but it
+  is the one discovery behaviour not provable offline — QA step 4a is the gate, and the failure
+  mode is a short preview (with the truncation notice), never a broken auto-import.
+- **An unresolved file holds the watermark** (D-D5): a doc that keeps failing keeps the account's
+  bound behind it, so every cycle re-lists a little more history until the record is pruned at 30
+  days. Bounded and deliberate — the alternative was the silent permanent drop the review found.
 - **Weekly consent friction (D-D1)** now applies to *all* accounts and *all* scopes; the nudge
   (D-D8) makes it one click but it is still weekly. This is the accepted cost of Testing mode
   until Marco submits for verification (Appendix A path-to-verification).
