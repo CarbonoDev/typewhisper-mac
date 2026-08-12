@@ -101,8 +101,17 @@ struct GoogleReauthNudge: View {
                 let declined = GoogleFeatureScopes.disableFeaturesWithMissingScopes(
                     accountID: accountID, store: accountStore
                 )
-                if declined.contains(.driveImport) {
-                    reconnectError = String(localized: "google.drive.reconnectScopeDenied")
+                // [Google Phase 3 · M6] Gmail rides the same table, so a declined Gmail checkbox
+                // turns the search off here too. Both features can be declined in one consent
+                // pass, so the explanations concatenate instead of one silently winning.
+                let explanations = [
+                    declined.contains(.driveImport)
+                        ? String(localized: "google.drive.reconnectScopeDenied") : nil,
+                    declined.contains(.gmail)
+                        ? String(localized: "google.gmail.reconnectScopeDenied") : nil
+                ].compactMap { $0 }
+                if !explanations.isEmpty {
+                    reconnectError = explanations.joined(separator: "\n")
                 }
             } catch {
                 reconnectError = GoogleConnectErrorPresenter.message(for: error)

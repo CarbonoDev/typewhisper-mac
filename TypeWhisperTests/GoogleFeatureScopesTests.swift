@@ -154,6 +154,55 @@ final class GoogleFeatureScopesTests: XCTestCase {
         XCTAssertTrue(store.isDriveImportEnabled(for: "sub-1"))
     }
 
+    /// [Google Phase 3 · M6] Gmail is a row in the same table, so it inherits the verification:
+    /// a Reconnect whose consent pass dropped the Gmail checkbox turns the search off instead of
+    /// leaving it polling with an unscoped token.
+    func testDeclinedGmailScopeTurnsTheGmailToggleOff() throws {
+        let store = makeStore()
+        let reconnected = account(sub: "sub-1", scopes: ["openid", "email"])
+        try store.upsert(reconnected, refreshToken: "rt")
+        store.setGmailEnabled(true, for: "sub-1")
+
+        let declined = GoogleFeatureScopes.disableFeaturesWithMissingScopes(
+            accountID: "sub-1", store: store
+        )
+
+        XCTAssertEqual(declined, [.gmail])
+        XCTAssertFalse(store.isGmailEnabled(for: "sub-1"))
+    }
+
+    /// One consent pass can decline both checkboxes — both must be reported, so the call sites
+    /// can show both explanations rather than one silently winning.
+    func testBothDeclinedFeaturesAreReportedTogether() throws {
+        let store = makeStore()
+        let reconnected = account(sub: "sub-1", scopes: ["openid"])
+        try store.upsert(reconnected, refreshToken: "rt")
+        store.setDriveImportEnabled(true, for: "sub-1")
+        store.setGmailEnabled(true, for: "sub-1")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.disableFeaturesWithMissingScopes(accountID: "sub-1", store: store),
+            [.driveImport, .gmail]
+        )
+        XCTAssertFalse(store.isDriveImportEnabled(for: "sub-1"))
+        XCTAssertFalse(store.isGmailEnabled(for: "sub-1"))
+    }
+
+    /// The granted half survives when only the other is declined.
+    func testGrantedGmailScopeSurvivesADeclinedDriveScope() throws {
+        let store = makeStore()
+        let reconnected = account(sub: "sub-1", scopes: ["openid", GmailContextService.gmailScope])
+        try store.upsert(reconnected, refreshToken: "rt")
+        store.setDriveImportEnabled(true, for: "sub-1")
+        store.setGmailEnabled(true, for: "sub-1")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.disableFeaturesWithMissingScopes(accountID: "sub-1", store: store),
+            [.driveImport]
+        )
+        XCTAssertTrue(store.isGmailEnabled(for: "sub-1"))
+    }
+
     /// A disabled feature is never "declined" — verification only ever inspects what is on.
     func testDisabledFeaturesAreNotReportedAsDeclined() throws {
         let store = makeStore()

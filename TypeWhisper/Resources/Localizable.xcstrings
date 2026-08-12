@@ -21322,6 +21322,22 @@
         }
       }
     },
+    "google.gmail.reconnectScopeDenied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wieder verbunden, aber Google hat den Gmail-Zugriff nicht gewährt – die Gmail-Suche wurde deaktiviert. Aktiviere sie erneut, um die Gmail-Berechtigung zu genehmigen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnected, but Google didn't grant Gmail access, so Gmail search was turned off. Turn it back on to approve the Gmail permission."
+          }
+        }
+      }
+    },
     "google.gmail.toggle": {
       "localizations": {
         "de": {
