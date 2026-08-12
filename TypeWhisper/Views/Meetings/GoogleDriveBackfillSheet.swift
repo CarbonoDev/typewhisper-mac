@@ -26,6 +26,9 @@ struct GoogleDriveBackfillSheet: View {
     @State private var rows: [GoogleDriveBackfillPlanner.Row] = []
     @State private var selection: Set<String> = []
     @State private var jobID: UUID?
+    /// The scan hit `GoogleDriveAPI.maxListPages` — the preview below is a partial view of the
+    /// account's history and must say so (review fix), never look like the complete answer.
+    @State private var isPreviewTruncated = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -58,6 +61,7 @@ struct GoogleDriveBackfillSheet: View {
             Text(String(localized: "google.drive.backfill.empty"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            truncationNotice
             Spacer()
             closeButtonRow
 
@@ -117,8 +121,20 @@ struct GoogleDriveBackfillSheet: View {
         rows.filter(\.isSelectable)
     }
 
+    /// Rendered whenever the page guard cut the scan short: the list is a partial view, and the
+    /// remedy (run the backfill again once these are imported) has to be said out loud.
+    @ViewBuilder
+    private var truncationNotice: some View {
+        if isPreviewTruncated {
+            Label(String(localized: "google.drive.backfill.truncated"), systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var previewList: some View {
         VStack(alignment: .leading, spacing: 8) {
+            truncationNotice
             Toggle(
                 String(localized: "google.drive.backfill.selectAll"),
                 isOn: Binding(
@@ -198,9 +214,10 @@ struct GoogleDriveBackfillSheet: View {
     private func scan() async {
         let container = ServiceContainer.shared
         do {
-            let files = try await container.googleDriveSyncEngine.scanAllFiles(sub: account.id)
+            let listing = try await container.googleDriveSyncEngine.scanAllFiles(sub: account.id)
+            isPreviewTruncated = listing.isTruncated
             let planned = GoogleDriveBackfillPlanner.rows(
-                files: files,
+                files: listing.files,
                 sub: account.id,
                 ledger: container.googleDriveImportLedger,
                 candidates: GoogleDriveBackfillPlanner.candidates(of: container.meetingService.meetings)

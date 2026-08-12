@@ -2,7 +2,7 @@ import XCTest
 @testable import TypeWhisper
 
 /// The D-D4 attach-to-meeting resolver ([Google Phase 2 · M1]), pure over candidate snapshots:
-/// the 0.6 confidence threshold, the ±24 h window, the same-account → score → segment-count
+/// the 0.6 confidence threshold, the ±24 h window, the same-account → score → stable-id
 /// tie-break among qualifying candidates, the near-miss create policy, and the
 /// filename-date-else-createdTime fallback.
 @MainActor
@@ -26,13 +26,11 @@ final class DriveTranscriptMatcherTests: XCTestCase {
     func testConfidentMatchMerges() {
         let target = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync",
-            startDate: embeddedDate,
-            segmentCount: 10
+            startDate: embeddedDate
         )
         let unrelated = DriveTranscriptMatcher.Candidate(
             title: "Quarterly planning offsite",
-            startDate: embeddedDate,
-            segmentCount: 99
+            startDate: embeddedDate
         )
 
         let disposition = DriveTranscriptMatcher.disposition(
@@ -120,14 +118,12 @@ final class DriveTranscriptMatcherTests: XCTestCase {
         let otherAccount = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync",
             startDate: embeddedDate,
-            calendarEventID: "google:sub-other:evt1",
-            segmentCount: 50
+            calendarEventID: "google:sub-other:evt1"
         )
         let sameAccount = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync",
             startDate: embeddedDate,
-            calendarEventID: "google:sub-1:evt2",
-            segmentCount: 5
+            calendarEventID: "google:sub-1:evt2"
         )
 
         let disposition = DriveTranscriptMatcher.disposition(
@@ -179,13 +175,11 @@ final class DriveTranscriptMatcherTests: XCTestCase {
         let yesterdaySameAccount = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync",
             startDate: embeddedDate.addingTimeInterval(-23 * 60 * 60),
-            calendarEventID: "google:sub-1:evt-yesterday",
-            segmentCount: 80
+            calendarEventID: "google:sub-1:evt-yesterday"
         )
         let todayUnlinked = DriveTranscriptMatcher.Candidate(
             title: "Weekly sync",
-            startDate: embeddedDate,
-            segmentCount: 3
+            startDate: embeddedDate
         )
 
         let disposition = DriveTranscriptMatcher.disposition(
@@ -202,22 +196,23 @@ final class DriveTranscriptMatcherTests: XCTestCase {
         XCTAssertEqual(score, 1.0, accuracy: 0.0001)
     }
 
-    func testMoreSegmentsBreaksRemainingTies() {
-        let sparse = DriveTranscriptMatcher.Candidate(
-            title: "Weekly sync", startDate: embeddedDate, segmentCount: 2
-        )
-        let rich = DriveTranscriptMatcher.Candidate(
-            title: "Weekly sync", startDate: embeddedDate, segmentCount: 40
-        )
+    /// The segment-count rung is gone (review fix — reading `Meeting.segments.count` faulted every
+    /// segment of every meeting per imported file). What is left must still be *stable*: a fully
+    /// tied pair resolves to the same meeting regardless of the input order.
+    func testRemainingTiesResolveDeterministically() {
+        let first = DriveTranscriptMatcher.Candidate(title: "Weekly sync", startDate: embeddedDate)
+        let second = DriveTranscriptMatcher.Candidate(title: "Weekly sync", startDate: embeddedDate)
 
-        let disposition = DriveTranscriptMatcher.disposition(
-            fileName: datedFileName, createdTime: nil, sub: "sub-1", candidates: [sparse, rich]
-        )
-
-        guard case .merge(let meetingID, _) = disposition else {
-            return XCTFail("expected merge, got \(disposition)")
+        func winner(_ candidates: [DriveTranscriptMatcher.Candidate]) -> UUID? {
+            guard case .merge(let meetingID, _) = DriveTranscriptMatcher.disposition(
+                fileName: datedFileName, createdTime: nil, sub: "sub-1", candidates: candidates
+            ) else { return nil }
+            return meetingID
         }
-        XCTAssertEqual(meetingID, rich.id, "the ranksBefore spirit: substance wins")
+
+        let forward = winner([first, second])
+        XCTAssertNotNil(forward)
+        XCTAssertEqual(forward, winner([second, first]), "the tie-break must not depend on order")
     }
 
     // MARK: - Date fallback (filename date, else Drive createdTime)

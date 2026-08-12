@@ -115,7 +115,7 @@ final class GoogleDriveBackfillPlannerTests: XCTestCase {
         defer { TestSupport.remove(dir) }
         let ledger = makeLedger(in: dir)
         for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
-            ledger.recordFailure(fileID: "google:sub-1:f1", now: fixedNow)
+            ledger.recordFailure(fileID: "google:sub-1:f1", docModifiedTime: nil, kind: .permanent, now: fixedNow)
         }
         let meetingID = UUID()
         let candidates = [

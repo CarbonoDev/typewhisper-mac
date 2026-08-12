@@ -19,10 +19,11 @@ enum ImportedMeetingTitle {
     /// case-insensitively after a dash separator.
     ///
     /// Internal (not private) — this is the **canonical marker list** ([Google Phase 2 · M1],
-    /// D-D3/F3): `GoogleDriveAPI.filesListRequest` derives its `name contains '<phrase>'` query
-    /// terms from these same phrases (Drive matches case-insensitively), while this file wraps
-    /// them in its dash-separator suffix regex below — one list, two derivations, impossible to
-    /// drift (asserted by `GoogleDriveAPITests`).
+    /// D-D3/F3): `GoogleDriveAPI.filesListRequest` derives its `fullText contains '"<phrase>"'`
+    /// narrowing terms from these same phrases, `hasNotesSuffix` below is the authoritative
+    /// client-side discovery filter, and `parse` wraps them in its dash-separator suffix regex for
+    /// title cleaning — one list, three derivations from the same code, impossible to drift
+    /// (asserted by `GoogleDriveAPITests`).
     static let notesSuffixes = [
         "notas de gemini",
         "notes by gemini",
@@ -39,20 +40,15 @@ enum ImportedMeetingTitle {
 
         // 1. Trailing copy counter "… (1)" — only treated as a counter when an export marker
         //    precedes it, so a real title that happens to end in "(2)" survives.
-        if let range = working.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression),
-           containsExportMarker(String(working[..<range.lowerBound])) {
+        if let range = copyCounterRange(in: working) {
             working = String(working[..<range.lowerBound])
             matched = true
         }
 
         // 2. Trailing notes-app suffix "… - Notas de Gemini".
-        for suffix in notesSuffixes {
-            let pattern = #"\s*[-–—]\s*"# + NSRegularExpression.escapedPattern(for: suffix) + #"\s*$"#
-            if let range = working.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
-                working = String(working[..<range.lowerBound])
-                matched = true
-                break
-            }
+        if let range = notesSuffixRange(in: working) {
+            working = String(working[..<range.lowerBound])
+            matched = true
         }
 
         // 3. Trailing date segment "… - 2026_07_07 11_00 CST" (time-zone token optional).
@@ -82,6 +78,39 @@ enum ImportedMeetingTitle {
     /// The row-display convenience: the clean title when the raw one is a recognized export name.
     static func displayTitle(for raw: String) -> String {
         parse(raw).cleanTitle
+    }
+
+    /// True when the name carries a trailing Gemini-notes marker (optionally followed by a copy
+    /// counter): *the* Drive discovery filter ([Google Phase 2 · M1], D-D3 review fix).
+    ///
+    /// Load-bearing: Drive's `contains` operator **prefix-matches** the `name` field
+    /// (`name contains 'World'` does not match "HelloWorld" —
+    /// developers.google.com/workspace/drive/api/guides/ref-search-terms), so a *trailing* marker
+    /// can never be matched server-side. Discovery therefore lists by mimeType/time window (with
+    /// an optional `fullText` narrowing for unbounded scans) and filters names here.
+    static func hasNotesSuffix(_ raw: String) -> Bool {
+        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = copyCounterRange(in: working) {
+            working = String(working[..<range.lowerBound])
+        }
+        return notesSuffixRange(in: working) != nil
+    }
+
+    private static func copyCounterRange(in text: String) -> Range<String.Index>? {
+        guard let range = text.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression),
+              containsExportMarker(String(text[..<range.lowerBound]))
+        else { return nil }
+        return range
+    }
+
+    private static func notesSuffixRange(in text: String) -> Range<String.Index>? {
+        for suffix in notesSuffixes {
+            let pattern = #"\s*[-–—]\s*"# + NSRegularExpression.escapedPattern(for: suffix) + #"\s*$"#
+            if let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+                return range
+            }
+        }
+        return nil
     }
 
     private static func containsExportMarker(_ text: String) -> Bool {

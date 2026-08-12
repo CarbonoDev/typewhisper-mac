@@ -11,27 +11,38 @@ import Foundation
 enum DriveTranscriptMatcher {
     /// Value snapshot of one existing meeting, taken from `MeetingService.meetings` in the same
     /// main-actor stretch as the write (D-D4 atomicity: no `await` between snapshot and write).
+    /// Deliberately **no segment count** (review fix, 2026-08-12): it was only ever the last
+    /// tie-break rung, and reading `Meeting.segments.count` faults the entire cascade relationship
+    /// of every meeting for every imported file (a 500-meeting archive materialized ~150 k
+    /// segment objects on the main actor per file). Remaining ties are broken by `id` instead —
+    /// arbitrary but stable, which is all a tie between two equally-scored, equally-affine
+    /// candidates needs.
     struct Candidate: Equatable, Sendable {
         var id: UUID
         var title: String
         var startDate: Date?
         var calendarEventID: String?
-        var segmentCount: Int
 
         init(
             id: UUID = UUID(),
             title: String,
             startDate: Date? = nil,
-            calendarEventID: String? = nil,
-            segmentCount: Int = 0
+            calendarEventID: String? = nil
         ) {
             self.id = id
             self.title = title
             self.startDate = startDate
             self.calendarEventID = calendarEventID
-            self.segmentCount = segmentCount
         }
     }
+
+    /// Meeting states an import must never write into (review fix, 2026-08-12): `mergeImport`
+    /// deletes and re-inserts the target's segment rows, so merging a Gemini doc published
+    /// mid-call into the `.live` meeting that is still capturing would delete live rows the user
+    /// is watching — and repeat on every 15-minute poll. Callers snapshot only meetings whose
+    /// state is outside this set, and defer (rather than duplicate) a doc whose best match is in
+    /// it, so the import lands after the meeting completes.
+    static let unwritableStates: Set<MeetingState> = [.live, .processing]
 
     enum Disposition: Equatable {
         /// A confident match (score ≥ threshold): merge into the existing meeting
@@ -62,7 +73,7 @@ enum DriveTranscriptMatcher {
     /// silently corrupts the wrong occurrence and breaks cross-account convergence). Within the
     /// near-tie band, prefer a candidate whose `calendarEventID` is namespaced to the **same
     /// account** (the transcript and the calendar event came from the same Google account), then
-    /// higher score, then more segments (the `ranksBefore` spirit, `MeetingMergePlan`). Below
+    /// higher score, then a stable `id` order (see `Candidate` on the dropped rung). Below
     /// threshold is a near-miss and creates, never auto-merges: a wrong merge silently corrupts a
     /// meeting, a duplicate is visible and foldable via the manual merge flow (spec §1 non-goal).
     static func disposition(
@@ -103,7 +114,7 @@ enum DriveTranscriptMatcher {
                 if abs(lhs.score - rhs.score) > Self.affinityTieBand { return lhs.score > rhs.score }
                 if lhs.sameAccount != rhs.sameAccount { return lhs.sameAccount }
                 if lhs.score != rhs.score { return lhs.score > rhs.score }
-                return lhs.candidate.segmentCount > rhs.candidate.segmentCount
+                return lhs.candidate.id.uuidString < rhs.candidate.id.uuidString
             }
 
         if let best = qualifying.first {

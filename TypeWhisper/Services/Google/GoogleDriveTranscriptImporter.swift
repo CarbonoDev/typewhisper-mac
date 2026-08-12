@@ -66,6 +66,10 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         /// flight elsewhere, or abandoned — so nothing was exported or written. The batch counts
         /// these as skipped; the engine's job closure treats them as success.
         case skipped
+        /// The doc's target meeting is still `.live`/`.processing` (review fix): nothing was
+        /// exported, written, or ledgered, and no failure was recorded — the file stays unseen so
+        /// a later cycle imports it once the meeting has completed.
+        case deferred
         /// Export or parse failed; a capped failure was recorded (D-D5 retry policy).
         case failed(message: String)
     }
@@ -132,13 +136,28 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             return .skipped
         }
 
+        // 0b. Live-meeting guard (D-D4 review fix, 2026-08-12) — BEFORE the export, because the
+        //     matcher needs only the filename: `MeetingService.mergeImport` deletes and re-inserts
+        //     the target's segment rows, so merging Gemini's doc into a meeting that is still
+        //     capturing would wipe live rows mid-recording (and repeat every poll while the doc
+        //     keeps being edited). Nothing is written, nothing is ledgered, no failure is
+        //     recorded: the file simply stays unseen and the next cycle re-discovers it — by then
+        //     the meeting has completed and the merge is the normal, correct one.
+        if isBlockedByActiveMeeting(file: file, sub: sub) {
+            if ownsPendingEntry {
+                ledger.clearPending(fileID: fileID)
+            }
+            logger.info("Deferred Drive doc \(file.id, privacy: .private): its meeting is still live")
+            return .deferred
+        }
+
         // 1. Export FIRST (D-D4 atomicity): every await happens before the snapshot below.
         let text: String
         do {
             text = try await exportText(rawFileID: file.id, sub: sub)
         } catch {
             logger.warning("Drive export failed for \(file.id, privacy: .private): \(error.localizedDescription)")
-            ledger.recordFailure(fileID: fileID, now: now())
+            record(error, fileID: fileID, docModifiedTime: docModified)
             return .failed(message: error.localizedDescription)
         }
 
@@ -150,6 +169,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             guard let meetingID = entry.meetingID,
                   let meeting = meetingService.meetings.first(where: { $0.id == meetingID })
             else {
+                // (the 0b guard already deferred a re-merge whose target is live)
                 // Target vanished (or already known-deleted): acknowledge the edit only —
                 // a meeting deleted on purpose stays deleted (D-D5).
                 ledger.touch(fileID: fileID, docModifiedTime: docModified, markMeetingDeleted: true)
@@ -164,21 +184,16 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 logger.info("Re-merged Drive doc into meeting \(meetingID) (dropped \(dropped) live rows)")
                 return .remerged(meetingID: meetingID)
             } catch {
-                ledger.recordFailure(fileID: fileID, now: now())
+                record(error, fileID: fileID, docModifiedTime: docModified)
                 return .failed(message: error.localizedDescription)
             }
         }
 
         // New doc: snapshot candidates, resolve the D-D4 disposition, write, then ledger (F2).
-        let candidates = meetingService.meetings.map { meeting in
-            DriveTranscriptMatcher.Candidate(
-                id: meeting.id,
-                title: meeting.title,
-                startDate: meeting.startDate,
-                calendarEventID: meeting.calendarEventID,
-                segmentCount: meeting.segments.count
-            )
-        }
+        // Live/processing meetings are excluded from the snapshot entirely (see the 0b guard):
+        // they are never a legal merge target, and the guard above already deferred the docs that
+        // would have matched one, so this cannot silently create a duplicate instead.
+        let candidates = Self.candidateSnapshot(of: meetingService.meetings)
         let disposition = DriveTranscriptMatcher.disposition(
             fileName: file.name,
             createdTime: file.createdDate,
@@ -190,8 +205,10 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         case .merge(let meetingID, let score):
             guard let meeting = meetingService.meetings.first(where: { $0.id == meetingID }) else {
                 // Unreachable in the synchronous stretch (the snapshot came from the same array);
-                // recorded as a failure rather than trapped, out of caution.
-                ledger.recordFailure(fileID: fileID, now: now())
+                // recorded as a permanent failure rather than trapped, out of caution.
+                ledger.recordFailure(
+                    fileID: fileID, docModifiedTime: docModified, kind: .permanent, now: now()
+                )
                 return .failed(message: "matched meeting disappeared before merge")
             }
             do {
@@ -203,7 +220,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 logger.info("Merged Drive doc into meeting \(meetingID) (score \(score), dropped \(dropped))")
                 return .merged(meetingID: meetingID, droppedOverlapped: dropped)
             } catch {
-                ledger.recordFailure(fileID: fileID, now: now())
+                record(error, fileID: fileID, docModifiedTime: docModified)
                 return .failed(message: error.localizedDescription)
             }
 
@@ -212,7 +229,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             do {
                 meeting = try importService.importTranscriptText(text, title: title, startDate: startDate)
             } catch {
-                ledger.recordFailure(fileID: fileID, now: now())
+                record(error, fileID: fileID, docModifiedTime: docModified)
                 return .failed(message: error.localizedDescription)
             }
             // Best-effort calendar auto-link (D-D4 disposition 2) — still before the ledger
@@ -245,6 +262,94 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             logger.info("Created meeting \(meeting.id) from Drive doc")
             return .created(meetingID: meeting.id)
         }
+    }
+
+    // MARK: - Live-meeting guard + candidate snapshot (D-D4 review fix)
+
+    /// The value snapshot the matcher scores: every meeting the import may legally write into.
+    /// Cheap by construction — no `segments` access, so no relationship faulting (review fix).
+    static func candidateSnapshot(of meetings: [Meeting]) -> [DriveTranscriptMatcher.Candidate] {
+        meetings
+            .filter { !DriveTranscriptMatcher.unwritableStates.contains($0.state) }
+            .map { meeting in
+                DriveTranscriptMatcher.Candidate(
+                    id: meeting.id,
+                    title: meeting.title,
+                    startDate: meeting.startDate,
+                    calendarEventID: meeting.calendarEventID
+                )
+            }
+    }
+
+    /// True when this doc's rightful target is a meeting that is still capturing: either the
+    /// recorded re-merge target is live/processing, or the matcher would confidently pick a
+    /// live/processing meeting. Pure over the filename — no export needed.
+    private func isBlockedByActiveMeeting(file: GoogleDriveAPI.GDriveFile, sub: String) -> Bool {
+        let active = meetingService.meetings.filter {
+            DriveTranscriptMatcher.unwritableStates.contains($0.state)
+        }
+        guard !active.isEmpty else { return false }
+
+        let fileID = GoogleDriveAPI.fileID(sub: sub, raw: file.id)
+        if let target = ledger.entry(for: fileID)?.meetingID {
+            return active.contains { $0.id == target }
+        }
+        let candidates = active.map { meeting in
+            DriveTranscriptMatcher.Candidate(
+                id: meeting.id,
+                title: meeting.title,
+                startDate: meeting.startDate,
+                calendarEventID: meeting.calendarEventID
+            )
+        }
+        let disposition = DriveTranscriptMatcher.disposition(
+            fileName: file.name,
+            createdTime: file.createdDate,
+            sub: sub,
+            candidates: candidates
+        )
+        if case .merge = disposition { return true }
+        return false
+    }
+
+    // MARK: - Failure classification (D-D5 review fix)
+
+    /// Which retry budget an error spends. Permanent = it will fail identically next time (a 4xx
+    /// that is not a rate limit; an empty or unparseable doc). Transient = 429/5xx/network, which
+    /// must not be able to abandon a transcript after three unlucky cycles. Cancellation is
+    /// neither — the caller records nothing at all for it.
+    static func failureKind(for error: Error) -> GoogleDriveImportLedger.FailureKind {
+        if let failed = error as? GoogleDriveAPI.RequestFailed {
+            let isRateLimit = failed.statusCode == 429
+            let isClientError = (400..<500).contains(failed.statusCode)
+            return isClientError && !isRateLimit ? .permanent : .transient
+        }
+        if error is URLError { return .transient }
+        // Parse/merge errors (`MeetingImportService.ImportError`) and anything else content-shaped.
+        return .permanent
+    }
+
+    /// A user cancel is not a failure: it must neither spend a retry budget nor leave the pending
+    /// guard behind (which would pin the watermark and skip the file for the session).
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
+    }
+
+    /// The one place a failed attempt is booked (D-D5 single-writer): classify, or — for a
+    /// cancellation — just release the pending guard.
+    private func record(_ error: Error, fileID: String, docModifiedTime: Date) {
+        guard !Self.isCancellation(error) else {
+            ledger.clearPending(fileID: fileID)
+            return
+        }
+        ledger.recordFailure(
+            fileID: fileID,
+            docModifiedTime: docModifiedTime,
+            kind: Self.failureKind(for: error),
+            now: now()
+        )
     }
 
     // MARK: - Backfill batch ([Google Phase 2 · M4], D-D7)
@@ -296,7 +401,10 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 summary.imported += 1
             case .merged, .remerged:
                 summary.merged += 1
-            case .skipped, .touched:
+            case .skipped, .touched, .deferred:
+                // `.deferred` (live meeting) counts as skipped: the user-initiated batch must not
+                // rewrite a meeting that is still capturing either — auto-import picks it up once
+                // the meeting completes.
                 summary.skipped += 1
             case .failed:
                 summary.failed += 1

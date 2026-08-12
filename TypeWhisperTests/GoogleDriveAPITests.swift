@@ -1,9 +1,9 @@
 import XCTest
 @testable import TypeWhisper
 
-/// Pure Drive v3 request assembly and wire decoding ([Google Phase 2 · M1]): the D-D3 normative
-/// discovery query — including the assertion that its `name contains` terms are **derived from**
-/// the canonical marker list `ImportedMeetingTitle.notesSuffixes` (D-D3/F3) — watermark
+/// Pure Drive v3 request assembly and wire decoding ([Google Phase 2 · M1]): the D-D3 discovery
+/// query in both narrowing modes — including the assertion that the marker rule never went back
+/// to `name contains`, which Drive only prefix-matches (review fix, 2026-08-12) — watermark
 /// formatting, literal escaping, export URL + MIME, and the Phase 1 §9 file-ID namespacing.
 final class GoogleDriveAPITests: XCTestCase {
 
@@ -32,8 +32,8 @@ final class GoogleDriveAPITests: XCTestCase {
 
         let items = queryItems(of: request)
         let q = items["q"] ?? ""
-        XCTAssertTrue(q.hasPrefix("mimeType='application/vnd.google-apps.document' and ("))
-        XCTAssertTrue(q.hasSuffix(") and trashed = false"), "no watermark bound without a watermark")
+        XCTAssertEqual(q, "mimeType='application/vnd.google-apps.document' and trashed = false",
+                       "the default (time-window) narrowing carries no text predicate at all")
         XCTAssertEqual(
             items["fields"],
             "nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)"
@@ -43,25 +43,53 @@ final class GoogleDriveAPITests: XCTestCase {
         XCTAssertNil(items["pageToken"])
     }
 
-    /// D-D3/F3: one `name contains '<phrase>'` term per canonical marker phrase, generated from
-    /// `ImportedMeetingTitle.notesSuffixes` — one list, two derivations, impossible to drift.
-    func testFilesListNameTermsAreDerivedFromCanonicalMarkerList() {
-        let q = queryItems(of: GoogleDriveAPI.filesListRequest(token: "t"))["q"] ?? ""
+    /// The review fix that gates the whole feature: Drive's `contains` operator **prefix-matches**
+    /// `name` ("a query of `name contains 'World'` doesn't return HelloWorld" — Drive v3 search
+    /// terms reference), and Gemini's marker is a *trailing* suffix, so a `name contains` term can
+    /// never match and discovery returned nothing. The marker rule lives client-side now.
+    func testDiscoveryQueryNeverFiltersOnNamePrefix() {
+        for narrowing in [GoogleDriveAPI.Narrowing.timeWindow, .fullTextMarkers] {
+            let q = queryItems(
+                of: GoogleDriveAPI.filesListRequest(token: "t", narrowing: narrowing)
+            )["q"] ?? ""
+            XCTAssertFalse(q.contains("name contains"), "prefix-only operator, got: \(q)")
+        }
+    }
+
+    /// D-D3/F3: the unbounded (backfill) scan narrows with one double-quoted `fullText contains`
+    /// phrase per canonical marker, generated from `ImportedMeetingTitle.notesSuffixes` — one
+    /// list, and the client-side filter derives from the same one, so they cannot drift.
+    func testFullTextNarrowingIsDerivedFromCanonicalMarkerList() {
+        let q = queryItems(
+            of: GoogleDriveAPI.filesListRequest(token: "t", narrowing: .fullTextMarkers)
+        )["q"] ?? ""
 
         for phrase in ImportedMeetingTitle.notesSuffixes {
             XCTAssertTrue(
-                q.contains("name contains '\(phrase)'"),
-                "missing term for canonical marker '\(phrase)'"
+                q.contains("fullText contains '\"\(phrase)\"'"),
+                "missing term for canonical marker '\(phrase)'; got: \(q)"
             )
         }
         // Exactly the canonical list — no extra hard-coded markers.
-        let termCount = q.components(separatedBy: "name contains").count - 1
+        let termCount = q.components(separatedBy: "fullText contains").count - 1
         XCTAssertEqual(termCount, ImportedMeetingTitle.notesSuffixes.count)
         // And the list itself still carries the three Gemini phrases the query relies on.
         XCTAssertEqual(
             Set(ImportedMeetingTitle.notesSuffixes),
             ["notas de gemini", "notes by gemini", "gemini notes"]
         )
+    }
+
+    /// The one rule that decides what a Gemini notes doc *is*, now that the server cannot: it must
+    /// match the trailing marker (with or without a copy counter) and nothing else.
+    func testCanonicalMarkerFilterMatchesTrailingSuffixesOnly() {
+        XCTAssertTrue(ImportedMeetingTitle.hasNotesSuffix(
+            "Llamada semanal - 2026_07_07 11_00 CST - Notas de Gemini"
+        ))
+        XCTAssertTrue(ImportedMeetingTitle.hasNotesSuffix("Weekly sync - Notes by Gemini (2)"))
+        XCTAssertTrue(ImportedMeetingTitle.hasNotesSuffix("Standup — Gemini Notes"))
+        XCTAssertFalse(ImportedMeetingTitle.hasNotesSuffix("Notas de Gemini para el equipo"))
+        XCTAssertFalse(ImportedMeetingTitle.hasNotesSuffix("Q3 budget"))
     }
 
     func testFilesListRequestAppendsWatermarkBound() {

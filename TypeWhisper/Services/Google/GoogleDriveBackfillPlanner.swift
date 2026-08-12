@@ -38,16 +38,11 @@ enum GoogleDriveBackfillPlanner {
     }
 
     /// Value snapshot of the candidate meetings, taken by the sheet from `MeetingService.meetings`.
+    /// Shares the importer's snapshot rule (review fix): live/processing meetings are excluded, so
+    /// the preview can never offer to merge into a meeting that is still capturing — and no
+    /// `segments` relationship is faulted while building it.
     static func candidates(of meetings: [Meeting]) -> [DriveTranscriptMatcher.Candidate] {
-        meetings.map { meeting in
-            DriveTranscriptMatcher.Candidate(
-                id: meeting.id,
-                title: meeting.title,
-                startDate: meeting.startDate,
-                calendarEventID: meeting.calendarEventID,
-                segmentCount: meeting.segments.count
-            )
-        }
+        GoogleDriveTranscriptImporter.candidateSnapshot(of: meetings)
     }
 
     /// Plan the preview rows for one account's scan, newest first (date descending; undated docs
