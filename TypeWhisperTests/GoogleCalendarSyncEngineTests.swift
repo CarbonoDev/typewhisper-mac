@@ -367,6 +367,75 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
         XCTAssertEqual(engine.lastSyncAt, fixedNow)
     }
 
+    // MARK: - Per-calendar isolation (PR #7 review finding 1)
+
+    func testOneFailingCalendarDoesNotAbortTheAccountsOtherCalendars() async throws {
+        // A shared/subscribed calendar whose `events.list` 403s forever must not freeze the whole
+        // account slice — the other calendars' events still land, and the failure is reported.
+        let transport = FakeCalendarTransport(stubs: [
+            .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["cal1", "cal2", "cal3"])),
+            .init(urlContains: "/calendars/cal1/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("e1", start: "2026-08-10T10:00:00Z", end: "2026-08-10T11:00:00Z")]
+            )),
+            .init(urlContains: "/calendars/cal2/events", statusCode: 403, body: #"{"error": "forbidden"}"#),
+            .init(urlContains: "/calendars/cal3/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("e3", start: "2026-08-10T14:00:00Z", end: "2026-08-10T15:00:00Z")]
+            )),
+        ])
+        let tokens = FakeTokenProvider()
+        let (engine, _) = try makeEngine(transport: transport, tokenProvider: tokens, accountIDs: ["sub-1"])
+
+        await engine.syncNow()
+
+        XCTAssertEqual(
+            engine.snapshot.flatMap(\.events).map(\.id),
+            ["google:sub-1:e1", "google:sub-1:e3"],
+            "the two readable calendars' events land despite the 403 in between"
+        )
+        XCTAssertEqual(
+            engine.snapshot.map(\.calendar.id),
+            ["google:sub-1:cal1", "google:sub-1:cal3"],
+            "a calendar with no previously fetched events is skipped, not emptied into the snapshot"
+        )
+        let error = try XCTUnwrap(engine.lastSyncError, "the partial failure is user-facing")
+        XCTAssertTrue(error.contains("sub-1@example.com"), "the note names the account")
+        XCTAssertTrue(error.contains("1"), "the note carries the failed-calendar count")
+        XCTAssertEqual(engine.lastSyncAt, fixedNow, "the cycle still counts as attempted")
+    }
+
+    func testFailingCalendarKeepsItsOwnLastGoodEventsWhileSiblingsUpdate() async throws {
+        let transport = FakeCalendarTransport(stubs: [
+            .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["cal1", "cal2"])),
+            .init(urlContains: "/calendars/cal1/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("a1", start: "2026-08-10T10:00:00Z", end: "2026-08-10T11:00:00Z")]
+            )),
+            .init(urlContains: "/calendars/cal2/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("b1", start: "2026-08-10T12:00:00Z", end: "2026-08-10T13:00:00Z")]
+            )),
+        ])
+        let tokens = FakeTokenProvider()
+        let (engine, _) = try makeEngine(transport: transport, tokenProvider: tokens, accountIDs: ["sub-1"])
+        await engine.syncNow()
+        XCTAssertNil(engine.lastSyncError)
+
+        // Cycle 2: cal1 gains a new event, cal2 breaks — cal2 degrades to stale, never to empty.
+        transport.setStubs([
+            .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["cal1", "cal2"])),
+            .init(urlContains: "/calendars/cal1/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("a2", start: "2026-08-10T16:00:00Z", end: "2026-08-10T17:00:00Z")]
+            )),
+            .init(urlContains: "/calendars/cal2/events", statusCode: 404, body: "gone"),
+        ])
+        await engine.syncNow()
+
+        XCTAssertEqual(
+            engine.snapshot.flatMap(\.events).map(\.id),
+            ["google:sub-1:a2", "google:sub-1:b1"],
+            "cal1 updated; cal2 served from its own last good events"
+        )
+        XCTAssertNotNil(engine.lastSyncError)
+    }
+
     // MARK: - needsReauth
 
     func testNeedsReauthFromTokenSeamSkipsAccountAndSurfacesError() async throws {
