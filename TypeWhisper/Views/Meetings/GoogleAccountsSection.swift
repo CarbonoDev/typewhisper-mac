@@ -243,13 +243,11 @@ struct GoogleAccountsSection: View {
             accountStore.setGmailEnabled(false, for: account.id)
             return
         }
-        guard state.needsReauthFlow else {
-            // Scope already granted (e.g. toggled off and on again) — no consent prompt.
-            accountStore.setGmailEnabled(true, for: account.id)
-            return
-        }
-        // Consent first, flag only on success (GmailToggleState.enable is the tested ordering
-        // seam); failures surface through the section's inline error line like every auth flow.
+        // Every ON path routes through the tested `GmailToggleState.enable` seam (M2 review):
+        // it skips consent when the scope is already granted, orders consent-before-flag when it
+        // is missing, and — granular consent — re-checks the granted scopes AFTER the flow, so an
+        // unticked Gmail checkbox on Google's consent screen leaves the toggle off. Failures
+        // surface through the section's inline error line like every auth flow.
         runAuthFlow {
             try await GmailToggleState.enable(account: account, store: accountStore) { id, scopes in
                 try await authService.reauthorize(accountID: id, additionalScopes: scopes)
@@ -626,15 +624,27 @@ struct GmailToggleState: Equatable {
     /// The ON flow's ordering seam, tested without SwiftUI: consent (when the scope is missing)
     /// runs FIRST, and the flag is set **only after** it returns — a thrown/cancelled reauthorize
     /// propagates with the flag untouched, so the toggle stays off (D-M7).
+    ///
+    /// Granular consent (M2 review): Google lets the user untick the Gmail checkbox on the
+    /// consent screen, in which case the flow *succeeds* with the scope still missing — the
+    /// store row is therefore re-read AFTER the flow (the scope union lands via `upsert`), and
+    /// the flag is set only when the grant actually arrived. A declined checkbox leaves the
+    /// toggle off silently, exactly like a cancelled consent.
     @MainActor
     static func enable(
         account: GoogleAccount,
         store: GoogleAccountStore,
         reauthorize: (_ accountID: String, _ additionalScopes: [String]) async throws -> Void
     ) async throws {
-        if !account.grantedScopes.contains(GmailContextService.gmailScope) {
+        // Always read the live row — the caller's snapshot may lag the store.
+        func hasScope() -> Bool {
+            (store.account(id: account.id) ?? account)
+                .grantedScopes.contains(GmailContextService.gmailScope)
+        }
+        if !hasScope() {
             try await reauthorize(account.id, [GmailContextService.gmailScope])
         }
+        guard hasScope() else { return }
         store.setGmailEnabled(true, for: account.id)
     }
 }

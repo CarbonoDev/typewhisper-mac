@@ -581,14 +581,19 @@ remove); `GmailWebURLTests`.
 ### M2 — Per-account Gmail toggle in settings
 
 **Modify:** `Views/Meetings/GoogleAccountsSection.swift` — the D-M7 toggle + caption per account
-row, reauthorize-on-missing-scope through `runAuthFlow`, flag set only on success.
+row, reauthorize-on-missing-scope through `runAuthFlow`, flag set only on success. Every ON path
+routes through the tested `GmailToggleState.enable` seam, which **re-checks the granted scopes
+after the flow** (granular consent: an unticked Gmail checkbox on Google's consent screen lets
+the flow succeed without the scope — the toggle then stays off, silently, like a cancel).
 
 **Tests:** `GmailToggleStateTests` — pure mapping `(GoogleAccount, flag) → (isOn, needsReauthFlow)`
-extracted as a static helper so the view stays logic-free (the `GoogleAccountRowState` precedent).
+extracted as a static helper so the view stays logic-free (the `GoogleAccountRowState` precedent),
+plus the `enable` ordering seam (consent-first, flag untouched on throw, granular-consent
+no-grant ⇒ flag off, no consent when the scope is already granted).
 
 **EN strings (dev adds DE):**
 `google.gmail.toggle` "Search Gmail for meeting context";
-`google.gmail.toggleCaption` "Finds emails related to your meetings for briefs, Q&A, and the Related emails list. Read-only.";
+`google.gmail.toggleCaption` "Finds emails related to your meetings for briefs, Q&A, and the Related emails list. Read-only; turning this off stops searches immediately." (the trailing sentence carries D-M7's stops-immediately note);
 `google.gmail.consentHint` "Google will ask you to allow read-only Gmail access.".
 
 ### M3 — Brief integration (D-M3)
