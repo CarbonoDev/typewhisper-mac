@@ -45,6 +45,10 @@ final class MeetingLLMService: ObservableObject {
     /// `answeringMeetingIDs`. Exposed VM-agnostically so the UI can surface a "Searching your vault…"
     /// status. NOTE: the UI hookup is a deliberate follow-up — no view consumes this yet.
     @Published private(set) var searchingVaultMeetingIDs: Set<UUID> = []
+    /// `searchingVaultMeetingIDs`' twin for the D-M4 email escalation ([Google Phase 3 · M4]):
+    /// inserted before the email retrieval, cleared in the same `defer`; identical
+    /// no-view-consumes-this-yet posture.
+    @Published private(set) var searchingEmailsMeetingIDs: Set<UUID> = []
 
     private let meetingService: MeetingService
     private let vaultService: ObsidianVaultService
@@ -59,6 +63,10 @@ final class MeetingLLMService: ObservableObject {
     /// service's processor + `.standard` defaults, where an unset purpose collapses to the prior
     /// `template ?? app default` behavior.
     private let modelRouter: MeetingModelRouter
+    /// The D-M4 email-escalation seam ([Google Phase 3 · M4]) — meeting-centric Gmail retrieval.
+    /// Nil-defaulted so every predating call site and test compiles unchanged; nil means "no email
+    /// escalation source" (the M3 `MeetingBriefService` pattern).
+    private let gmailService: GmailContextRetrieving?
     private let charBudget: Int
 
     init(
@@ -67,6 +75,7 @@ final class MeetingLLMService: ObservableObject {
         processor: any PromptProcessing,
         folderMetadataStore: MeetingFolderMetadataStore? = nil,
         modelRouter: MeetingModelRouter? = nil,
+        gmailService: GmailContextRetrieving? = nil,
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) {
         self.meetingService = meetingService
@@ -74,6 +83,7 @@ final class MeetingLLMService: ObservableObject {
         self.processor = processor
         self.folderMetadataStore = folderMetadataStore
         self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
+        self.gmailService = gmailService
         self.charBudget = charBudget
     }
 
@@ -188,6 +198,7 @@ final class MeetingLLMService: ObservableObject {
         defer {
             answeringMeetingIDs.remove(meeting.id)
             searchingVaultMeetingIDs.remove(meeting.id)
+            searchingEmailsMeetingIDs.remove(meeting.id)
         }
 
         let segments = meeting.segments
@@ -239,40 +250,64 @@ final class MeetingLLMService: ObservableObject {
         )
         // The `VAULT_SEARCH` invitation is extended only when a vault is actually available to search —
         // never invite the model to escalate into a void. The pass-2 no-vault degradation below stays
-        // as a safety net should the model emit the marker unprompted.
+        // as a safety net should the model emit the marker unprompted. Identically, the D-M4
+        // `EMAIL_SEARCH` invitation is extended only when Gmail is connected for THIS meeting
+        // ([Google Phase 3 · M4]) — neither, one, or both may be appended.
         var pass1Base = String(localized: "meetings.qa.systemPrompt")
         if vaultService.isConnected {
             pass1Base += " " + String(localized: "meetings.qa.systemPrompt.vaultSearchInvitation")
+        }
+        if let gmailService, gmailService.isConnected(for: meeting) {
+            pass1Base += " " + String(localized: "meetings.qa.systemPrompt.emailSearchInvitation")
         }
         // Plan D4: the answer is the final output — append the meeting's language directive.
         let pass1Prompt = MeetingLanguageDirective.appending(for: meeting.languageCode, to: pass1Base)
         let pass1Answer = try await runQA(userText: pass1Text, systemPrompt: pass1Prompt)
 
-        // The model is instructed to reply with exactly one `VAULT_SEARCH: <terms>` line and nothing
-        // else — but real replies sometimes wrap the marker in prose ("I couldn't find this…\nVAULT_
-        // SEARCH: …"), so a marker line at ANY line start counts as the escalation request. A reply
-        // with no marker line is a normal answer: persist it, stripped of marker lines as
-        // defense-in-depth (a no-op here by construction — detection and stripping match the same
-        // lines; mid-sentence mentions are neither markers nor stripped).
-        guard let rawTerms = MeetingQAComposer.vaultSearchTerms(in: pass1Answer) else {
+        // The model is instructed to reply with exactly one marker line and nothing else — but real
+        // replies sometimes wrap the marker in prose ("I couldn't find this…\nVAULT_SEARCH: …"), so
+        // a marker line at ANY line start counts as the escalation request. Pass 1 is scanned for
+        // BOTH markers (D-M4): either or both trigger the single escalation round below. A reply
+        // with no marker line is a normal answer: persist it, stripped of marker lines (both forms)
+        // as defense-in-depth — mid-sentence mentions are neither markers nor stripped.
+        let vaultTerms = MeetingQAComposer.vaultSearchTerms(in: pass1Answer)
+        let emailTerms = MeetingQAComposer.emailSearchTerms(in: pass1Answer)
+        guard vaultTerms != nil || emailTerms != nil else {
             return meetingService.addQATurn(
                 to: meeting,
                 question: trimmedQuestion,
-                answer: MeetingQAComposer.strippingVaultSearchLines(from: pass1Answer)
+                answer: MeetingQAComposer.strippingEscalationLines(from: pass1Answer)
             )
         }
-        let searchTerms = rawTerms.isEmpty ? trimmedQuestion : rawTerms
 
-        // ── PASS 2 (ESCALATION, model-chosen, max ONE round) ──────────────────────────────────────
-        // Run one retrieval round through the existing vault services at the *escalation* scope: the
-        // folder scope (including its folder-prefix search) when the meeting has one, else whole vault.
-        searchingVaultMeetingIDs.insert(meeting.id)
-        let retrievedPassages = vaultService.isConnected
-            ? vaultService.retrieve(query: searchTerms, limit: 3, scope: retrievalScope(for: meeting))
-            : []
-        // Empty search results (or no vault) ⇒ skip pass 2 and answer "not covered". The marker never
-        // surfaces to the user.
-        guard !retrievedPassages.isEmpty else {
+        // ── PASS 2 (ESCALATION, model-chosen, exactly ONE round across BOTH sources — D-M4) ───────
+        // Every retrieval the model requested runs within this single round; there is never a third
+        // LLM pass. Vault: the existing escalation scope (folder scope when the meeting has one,
+        // else whole vault). Emails: the meeting-centric Gmail seam with the marker's terms (bare
+        // marker falls back to the question text; the service's D-M2 window already covers the
+        // meeting day). A Gmail failure degrades to "emails contributed nothing" — never fails the
+        // answer (the M3 philosophy).
+        var retrievedPassages: [VaultPassage] = []
+        if let vaultTerms {
+            searchingVaultMeetingIDs.insert(meeting.id)
+            let searchTerms = vaultTerms.isEmpty ? trimmedQuestion : vaultTerms
+            retrievedPassages = vaultService.isConnected
+                ? vaultService.retrieve(query: searchTerms, limit: 3, scope: retrievalScope(for: meeting))
+                : []
+        }
+        var retrievedEmails: [EmailPassage] = []
+        if let emailTerms, let gmailService, gmailService.isConnected(for: meeting) {
+            searchingEmailsMeetingIDs.insert(meeting.id)
+            let searchTerms = emailTerms.isEmpty ? trimmedQuestion : emailTerms
+            do {
+                retrievedEmails = try await gmailService.retrieve(for: meeting, query: searchTerms, limit: 3)
+            } catch {
+                logger.warning("Q&A email escalation degraded to empty: \(error.localizedDescription)")
+            }
+        }
+        // Every requested retrieval came back empty (or its source is unavailable) ⇒ skip pass 2
+        // and answer "not covered". No marker ever surfaces to the user.
+        guard !retrievedPassages.isEmpty || !retrievedEmails.isEmpty else {
             return meetingService.addQATurn(
                 to: meeting,
                 question: trimmedQuestion,
@@ -280,7 +315,8 @@ final class MeetingLLMService: ObservableObject {
             )
         }
 
-        // Re-compose: pass-1 material + clearly labeled retrieved excerpts (secondary to the transcript).
+        // Re-compose: pass-1 material + every non-empty retrieved block, clearly labeled as
+        // secondary to the transcript.
         let pass2Text = MeetingQAComposer.compose(
             question: trimmedQuestion,
             segments: segments,
@@ -288,6 +324,7 @@ final class MeetingLLMService: ObservableObject {
             priorTurns: priorTurns,
             knowledgePassages: curatedPassages,
             retrievedPassages: retrievedPassages,
+            retrievedEmailPassages: retrievedEmails,
             charBudget: charBudget
         )
         let pass2Prompt = MeetingLanguageDirective.appending(
@@ -297,10 +334,10 @@ final class MeetingLLMService: ObservableObject {
         let pass2Answer = try await runQA(userText: pass2Text, systemPrompt: pass2Prompt)
 
         // Loop guard + sanitizer: there is never a third round, whatever pass 2 replies. Any marker
-        // line is stripped before persisting so the machine token can never surface to the user; if the
-        // model wrapped usable prose around a marker, the prose is kept, and if stripping leaves
-        // nothing (a pure re-request), degrade to the localized "not covered" answer.
-        let sanitizedPass2 = MeetingQAComposer.strippingVaultSearchLines(from: pass2Answer)
+        // line — EITHER form (D-M4) — is stripped before persisting, never honored; if the model
+        // wrapped usable prose around a marker, the prose is kept, and if stripping leaves nothing
+        // (a pure re-request), degrade to the localized "not covered" answer.
+        let sanitizedPass2 = MeetingQAComposer.strippingEscalationLines(from: pass2Answer)
         guard !sanitizedPass2.isEmpty else {
             return meetingService.addQATurn(
                 to: meeting,
@@ -309,10 +346,17 @@ final class MeetingLLMService: ObservableObject {
             )
         }
 
-        // Disclose (localized, natural) that the answer consulted vault notes beyond the meeting.
-        let disclosedAnswer = String(localized: "meetings.qa.answer.vaultConsultedPrefix")
-            + "\n\n"
-            + sanitizedPass2
+        // Disclose (localized, natural) what was actually consulted beyond the meeting: the prefix
+        // reflects the non-empty retrieved blocks that fed pass 2 (D-M4).
+        let disclosurePrefix: String
+        if !retrievedPassages.isEmpty && !retrievedEmails.isEmpty {
+            disclosurePrefix = String(localized: "meetings.qa.answer.vaultAndEmailsConsultedPrefix")
+        } else if !retrievedEmails.isEmpty {
+            disclosurePrefix = String(localized: "meetings.qa.answer.emailsConsultedPrefix")
+        } else {
+            disclosurePrefix = String(localized: "meetings.qa.answer.vaultConsultedPrefix")
+        }
+        let disclosedAnswer = disclosurePrefix + "\n\n" + sanitizedPass2
         return meetingService.addQATurn(to: meeting, question: trimmedQuestion, answer: disclosedAnswer)
     }
 
@@ -538,40 +582,71 @@ enum MeetingQAComposer {
     /// `meetings.qa.systemPrompt.vaultSearchInvitation` strings.
     static let vaultSearchMarker = "VAULT_SEARCH:"
 
-    /// Detects the model's escalation request. The model is instructed to emit the marker as its
-    /// *entire* reply, but real replies sometimes wrap it in prose (e.g. "I couldn't find this in the
-    /// meeting.\nVAULT_SEARCH: acme roadmap"), so the FIRST line whose trimmed form begins with the
-    /// marker — at any line start, case-insensitive — is honored. Returns that line's remainder,
+    /// The second escalation marker ([Google Phase 3 · M4], D-M4): one email-search request beside
+    /// the vault one, same line-prefix detection contract. NOT localized — embedded verbatim in the
+    /// EN and DE `meetings.qa.systemPrompt.emailSearchInvitation` strings (the `vaultSearchMarker`
+    /// precedent above).
+    static let emailSearchMarker = "EMAIL_SEARCH:"
+
+    /// Detects the model's vault escalation request. The model is instructed to emit the marker as
+    /// its *entire* reply, but real replies sometimes wrap it in prose (e.g. "I couldn't find this in
+    /// the meeting.\nVAULT_SEARCH: acme roadmap"), so the FIRST line whose trimmed form begins with
+    /// the marker — at any line start, case-insensitive — is honored. Returns that line's remainder,
     /// trimmed, as the search terms (`""` for a bare marker so the caller can fall back to the
     /// question's text), or `nil` when no line starts with the marker. A mid-sentence mention (not at
     /// a line start) never fires.
     static func vaultSearchTerms(in answer: String) -> String? {
+        terms(in: answer, marker: vaultSearchMarker)
+    }
+
+    /// `vaultSearchTerms`' twin for the D-M4 email marker — identical line-prefix contract.
+    static func emailSearchTerms(in answer: String) -> String? {
+        terms(in: answer, marker: emailSearchMarker)
+    }
+
+    private static func terms(in answer: String, marker: String) -> String? {
         for line in answer.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            guard trimmedLine.uppercased().hasPrefix(vaultSearchMarker) else { continue }
-            return String(trimmedLine.dropFirst(vaultSearchMarker.count))
+            guard trimmedLine.uppercased().hasPrefix(marker) else { continue }
+            return String(trimmedLine.dropFirst(marker.count))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return nil
     }
 
-    /// Removes every line whose trimmed form begins with the escalation marker (case-insensitive,
-    /// matching `vaultSearchTerms`' line predicate exactly) so the machine token is never persisted or
-    /// shown, even when the model wraps it in prose. Mid-sentence mentions are kept — they are not
-    /// markers. Returns the remaining text with outer whitespace trimmed; an all-marker reply collapses
-    /// to `""` (the caller substitutes the localized "not covered" answer).
-    static func strippingVaultSearchLines(from answer: String) -> String {
+    /// Removes every line whose trimmed form begins with EITHER escalation marker (case-insensitive,
+    /// matching the detection predicates exactly) so a machine token is never persisted or shown,
+    /// even when the model wraps it in prose. Mid-sentence mentions are kept — they are not markers.
+    /// Returns the remaining text with outer whitespace trimmed; an all-marker reply collapses to
+    /// `""` (the caller substitutes the localized "not covered" answer). Supersedes
+    /// `strippingVaultSearchLines` (D-M4) — both marker forms are always stripped, whichever source
+    /// is connected, so an unprompted token can never leak into a persisted answer.
+    static func strippingEscalationLines(from answer: String) -> String {
         answer
             .split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).uppercased().hasPrefix(vaultSearchMarker) }
+            .filter { line in
+                let upper = line.trimmingCharacters(in: .whitespaces).uppercased()
+                return !upper.hasPrefix(vaultSearchMarker) && !upper.hasPrefix(emailSearchMarker)
+            }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Call-through kept for predating call sites/tests (D-M4) — stripping now always covers both
+    /// marker forms.
+    static func strippingVaultSearchLines(from answer: String) -> String {
+        strippingEscalationLines(from: answer)
+    }
+
     /// - Parameter retrievedPassages: pass-2 escalation excerpts, retrieved from the vault only after the
-    ///   model asked for a search. Rendered LAST under a distinct "secondary to the transcript" header so
-    ///   they are dropped first under budget pressure and never displace the meeting's own content.
+    ///   model asked for a search. Rendered under a distinct "secondary to the transcript" header so
+    ///   they are dropped early under budget pressure and never displace the meeting's own content.
     ///   Empty on the default (pass-1) path.
+    /// - Parameter retrievedEmailPassages: pass-2 email excerpts ([Google Phase 3 · M4], D-M4),
+    ///   retrieved via the Gmail seam only after an `EMAIL_SEARCH:` request. Rendered LAST — after
+    ///   the retrieved-vault block — under their own header with their own budget slice, so under
+    ///   pressure the prefix-keeping final bound drops email excerpts first. Like both vault
+    ///   sections, withheld entirely when the transcript is empty.
     static func compose(
         question: String,
         segments: [TranscriptContextBuilder.Segment],
@@ -579,6 +654,7 @@ enum MeetingQAComposer {
         priorTurns: [PriorTurn],
         knowledgePassages: [VaultPassage],
         retrievedPassages: [VaultPassage] = [],
+        retrievedEmailPassages: [EmailPassage] = [],
         charBudget: Int = TranscriptContextBuilder.defaultCharBudget
     ) -> String {
         let question = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -612,6 +688,10 @@ enum MeetingQAComposer {
         let retrievedBudget = max(0, charBudget / 4)
         let retrievedBlock = TranscriptContextBuilder.truncateWords(renderPassages(retrievedPassages), to: retrievedBudget)
 
+        // Escalation-only email excerpts (D-M4): own slice, rendered last of all.
+        let emailBudget = max(0, charBudget / 4)
+        let emailBlock = TranscriptContextBuilder.truncateWords(renderEmailPassages(retrievedEmailPassages), to: emailBudget)
+
         // The meeting's OWN transcript is the primary grounding and leads the context; prior turns
         // (this meeting's own Q&A history) follow; curated notes are *supplementary*; escalation-retrieved
         // excerpts are *secondary* and come last. Ordering is load-bearing for the cross-meeting-leak fix:
@@ -631,6 +711,9 @@ enum MeetingQAComposer {
         }
         if !retrievedBlock.isEmpty, !relevantTranscript.isEmpty {
             contextSections.append("\(String(localized: "meetings.qa.context.retrievedHeader"))\n\(retrievedBlock)")
+        }
+        if !emailBlock.isEmpty, !relevantTranscript.isEmpty {
+            contextSections.append("\(String(localized: "meetings.qa.context.emailsHeader"))\n\(emailBlock)")
         }
 
         // Reserve the whole question section off the top before the final bound, then truncate only
@@ -736,6 +819,16 @@ enum MeetingQAComposer {
             .map { passage in
                 let tagSuffix = passage.tags.isEmpty ? "" : " [\(passage.tags.joined(separator: ", "))]"
                 return "### \(passage.title)\(tagSuffix)\n\(passage.content)"
+            }
+            .joined(separator: "\n\n")
+    }
+
+    /// The M3 brief block's citation shape, reused for Q&A email excerpts (D-M4).
+    private static func renderEmailPassages(_ passages: [EmailPassage]) -> String {
+        passages
+            .map { passage in
+                let dateLabel = passage.date.formatted(date: .abbreviated, time: .omitted)
+                return "### \(passage.subject) — \(passage.from), \(dateLabel)\n\(passage.content)"
             }
             .joined(separator: "\n\n")
     }

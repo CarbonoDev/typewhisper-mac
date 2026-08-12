@@ -311,7 +311,9 @@ final class ServiceContainer: ObservableObject {
             processor: promptProcessingService,
             // [M7] Q&A honors the same per-folder vault scope as the brief (Amendment 1, DA6).
             folderMetadataStore: meetingFolderMetadataStore,
-            modelRouter: meetingModelRouter // [M4]
+            modelRouter: meetingModelRouter, // [M4]
+            // [Google Phase 3 · M4] EMAIL_SEARCH escalation source (D-M4).
+            gmailService: gmailContextService
         )
         // [M2] Per-meeting language detection (plan D5). Runs a single-turn LLM call over a transcript
         // sample and persists a `.detected` language; enqueues on the shared job queue's cap-1 `llm`
