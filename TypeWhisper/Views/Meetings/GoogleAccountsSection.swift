@@ -49,6 +49,10 @@ struct GoogleAccountsSection: View {
     /// [Google Phase 2 · M3] Inline error from the last Drive-toggle flow, keyed to its account
     /// row. `nil` after a user cancel — the toggle simply reverts (the flag was never set).
     @State private var driveToggleError: (accountID: String, message: String)?
+    /// [Google Phase 3 · M6] The Gmail twin of `driveToggleError`: a Reconnect whose consent pass
+    /// dropped the Gmail scope turns the search off, and the explanation belongs next to the
+    /// toggle it just moved — not in the section-wide line at the top.
+    @State private var gmailToggleError: (accountID: String, message: String)?
     /// [Google Phase 2 · M4] The account whose backfill sheet is presented (`nil` = none).
     @State private var backfillAccount: GoogleAccount?
 
@@ -232,12 +236,18 @@ struct GoogleAccountsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let error = gmailToggleError, error.accountID == account.id {
+                Text(error.message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
         .frame(maxWidth: 360, alignment: .leading)
         .padding(.top, 2)
     }
 
     private func setGmailEnabled(_ enabled: Bool, for account: GoogleAccount, state: GmailToggleState) {
+        gmailToggleError = nil
         guard enabled else {
             // OFF is immediate and local — no de-scope call (D-M7).
             accountStore.setGmailEnabled(false, for: account.id)
@@ -507,6 +517,7 @@ struct GoogleAccountsSection: View {
         // enabled feature, without leaning on `include_granted_scopes` alone.
         let scopes = GoogleFeatureScopes.additionalScopes(for: account, store: accountStore)
         driveToggleError = nil
+        gmailToggleError = nil
         runAuthFlow {
             try await authService.reauthorize(accountID: account.id, additionalScopes: scopes)
         } onSuccess: {
@@ -519,6 +530,12 @@ struct GoogleAccountsSection: View {
             )
             if declined.contains(.driveImport) {
                 driveToggleError = (account.id, String(localized: "google.drive.reconnectScopeDenied"))
+            }
+            // [Google Phase 3 · M6] Gmail is a row in the same table, so it gets the same
+            // treatment — and both can come back declined from one consent pass, which is why
+            // these are independent lines rather than an either/or.
+            if declined.contains(.gmail) {
+                gmailToggleError = (account.id, String(localized: "google.gmail.reconnectScopeDenied"))
             }
         }
     }
@@ -630,22 +647,29 @@ struct GmailToggleState: Equatable {
     /// store row is therefore re-read AFTER the flow (the scope union lands via `upsert`), and
     /// the flag is set only when the grant actually arrived. A declined checkbox leaves the
     /// toggle off silently, exactly like a cancelled consent.
+    ///
+    /// [Google Phase 3 · M6 restack] This check is the *same* rule the shared
+    /// `GoogleFeatureScopes.disableFeaturesWithMissingScopes` applies after the two reauthorize
+    /// entry points — it is not a second source of truth: the scope comes from
+    /// `Feature.gmail.scope`, and the two run on disjoint paths (this one before the flag is ever
+    /// written, the shared one after a reconnect that could have dropped an already-on feature).
     @MainActor
     static func enable(
         account: GoogleAccount,
         store: GoogleAccountStore,
         reauthorize: (_ accountID: String, _ additionalScopes: [String]) async throws -> Void
     ) async throws {
+        let scope = GoogleFeatureScopes.Feature.gmail.scope
         // Pre-flow: prefer the live row; the caller's snapshot only decides whether consent runs.
         let alreadyGranted = (store.account(id: account.id) ?? account)
-            .grantedScopes.contains(GmailContextService.gmailScope)
+            .grantedScopes.contains(scope)
         if !alreadyGranted {
-            try await reauthorize(account.id, [GmailContextService.gmailScope])
+            try await reauthorize(account.id, [scope])
         }
         // The flag write requires the LIVE row (M5-cycle review NIT F-1 — no snapshot fallback
         // here): an account removed mid-flow, or whose grant never actually landed, must not get
         // its flag set from stale caller state.
-        guard store.account(id: account.id)?.grantedScopes.contains(GmailContextService.gmailScope) == true else {
+        guard store.account(id: account.id)?.grantedScopes.contains(scope) == true else {
             return
         }
         store.setGmailEnabled(true, for: account.id)

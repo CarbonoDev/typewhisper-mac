@@ -139,6 +139,37 @@ final class GmailToggleStateTests: XCTestCase {
         XCTAssertFalse(store.isGmailEnabled(for: "sub-1"), "a cancelled consent leaves the toggle off")
     }
 
+    /// [Google Phase 3 · M6 restack] Phase 1's fix made `reauthorize` throw `.wrongAccount` when
+    /// the user picks a different account in Google's chooser (it no longer leaves a mismatched
+    /// account connected). The Gmail toggle drives the same reauthorize, so that must reach the
+    /// user as the specific "you signed in as X, but Y needs reconnecting" line — not the generic
+    /// error frame, which would send them looking for a Gmail problem that does not exist.
+    func testEnableSurfacesAWrongAccountConsentSpecifically() async throws {
+        let store = makeStore()
+        let subject = account(scopes: ["openid"])
+        try store.upsert(subject, refreshToken: "rt")
+        let mismatch = GoogleAuthError.wrongAccount(
+            expectedEmail: "work@example.com", signedInEmail: "personal@example.com"
+        )
+
+        var thrown: Error?
+        do {
+            try await GmailToggleState.enable(account: subject, store: store) { _, _ in
+                throw mismatch
+            }
+            XCTFail("expected the wrong-account failure to propagate")
+        } catch {
+            thrown = error
+        }
+
+        XCTAssertEqual(thrown as? GoogleAuthError, mismatch)
+        XCTAssertFalse(store.isGmailEnabled(for: "sub-1"), "a mismatched sign-in leaves the toggle off")
+
+        let message = try XCTUnwrap(GoogleConnectErrorPresenter.message(for: mismatch))
+        XCTAssertTrue(message.contains("personal@example.com"), "names who actually signed in")
+        XCTAssertTrue(message.contains("work@example.com"), "names the account still needing a reconnect")
+    }
+
     func testEnableWithGrantedScopeSkipsConsentEntirely() async throws {
         let store = makeStore()
         let subject = account(scopes: gmailScopes)
