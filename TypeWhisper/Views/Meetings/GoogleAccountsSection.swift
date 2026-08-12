@@ -410,6 +410,18 @@ enum GoogleConnectErrorPresenter {
             return nil
         case .timedOut:
             return String(localized: "google.accounts.error.timedOut")
+        case .loopbackUnavailable:
+            // PR #7 review finding 10: a listener that never bound is a *local* problem — never
+            // report it as a redirect timeout, which sends the user off to debug their browser.
+            return String(localized: "google.accounts.error.loopbackUnavailable")
+        case .wrongAccount(let expectedEmail, let signedInEmail):
+            // PR #7 review finding 2: name both accounts — the user picked the wrong one in
+            // Google's chooser, and the requested account still needs reconnecting.
+            return String(
+                format: String(localized: "google.accounts.error.wrongAccount"),
+                signedInEmail,
+                expectedEmail
+            )
         case .notConfigured:
             return String(localized: "google.accounts.notConfigured")
         case .stateMismatch, .exchangeFailed, .refreshFailed, .needsReauth:

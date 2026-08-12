@@ -6,7 +6,13 @@ import Network
 /// binds and no browser opens under test (§7).
 protocol GoogleLoopbackServing: AnyObject {
     var onCallback: @MainActor (URL) -> Void { get set }
-    func start() throws -> UInt16
+    /// Binds the listener and returns its port. `async` (PR #7 review finding 10): the readiness
+    /// wait used to block the calling thread — the main actor, in practice — for up to 5 s, so a
+    /// machine where the listener cannot bind beach-balled the whole UI before failing. Called
+    /// from `GoogleAuthService` (a `@MainActor` type), so it is main-actor isolated like
+    /// `onCallback` — awaiting it suspends the flow without ever blocking the actor.
+    @MainActor
+    func start() async throws -> UInt16
     func stop()
 }
 
@@ -23,6 +29,40 @@ protocol GoogleLoopbackServing: AnyObject {
 /// internals are not viable because Network framework callbacks arrive on their own queue.
 /// App-side reimplementation — deliberately does not import the OpenAI plugin (D-G1).
 final class GoogleLoopbackServer: GoogleLoopbackServing, @unchecked Sendable {
+    /// How long the listener gets to reach `.ready` before `start()` reports
+    /// `.loopbackUnavailable`. The wait is fully asynchronous, so this never blocks a thread.
+    nonisolated static let readyTimeout: TimeInterval = 5
+
+    /// One-shot resume guard for the readiness continuation: `.ready`, `.failed`, and the timeout
+    /// race each other, and a `CheckedContinuation` may be resumed exactly once.
+    private final class ReadyGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Error>?
+        private var finished = false
+
+        func attach(_ continuation: CheckedContinuation<Void, Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.continuation = continuation
+        }
+
+        func finish(_ error: Error?) {
+            lock.lock()
+            guard !finished, let continuation else {
+                lock.unlock()
+                return
+            }
+            finished = true
+            self.continuation = nil
+            lock.unlock()
+            if let error {
+                continuation.resume(throwing: error)
+            } else {
+                continuation.resume()
+            }
+        }
+    }
+
     private let queue = DispatchQueue(label: "com.meetingwhisper.google.oauth-loopback")
     /// The `state` value a request must echo before it is treated as the OAuth redirect.
     private let expectedState: String
@@ -40,52 +80,66 @@ final class GoogleLoopbackServer: GoogleLoopbackServing, @unchecked Sendable {
     }
 
     /// Starts listening on an ephemeral loopback port and returns the assigned port number, from
-    /// which the caller builds the `redirect_uri`. Blocks the calling thread (the main actor, in
-    /// practice) on a semaphore until the listener reports ready — a deliberate, tightly bounded
-    /// exception to the "nothing blocks the main thread" discipline: binding a local socket is
-    /// near-instant and the spec mandates the synchronous `start() throws -> UInt16` shape (M1).
-    func start() throws -> UInt16 {
+    /// which the caller builds the `redirect_uri`.
+    ///
+    /// The readiness wait is asynchronous (PR #7 review finding 10): it used to block the calling
+    /// thread — the main actor, in practice — on a semaphore for up to 5 s, so a machine where the
+    /// listener cannot bind (socket-filter extension, local security software, exhausted loopback)
+    /// froze the entire UI and then reported `.timedOut`, which reads as "the browser redirect
+    /// never arrived" even though no browser was ever opened. Bind failures now surface as
+    /// `.loopbackUnavailable`, a distinct taxonomy entry with its own message.
+    @MainActor
+    func start() async throws -> UInt16 {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
-        let listener = try NWListener(using: params)
-
-        let ready = DispatchSemaphore(value: 0)
-        // nonisolated(unsafe): the handler below is the only writer and runs on the listener
-        // queue; `start()` reads only after the semaphore wait, and the handler is detached as
-        // soon as the wait returns — so a post-ready `.failed` transition can no longer write.
-        nonisolated(unsafe) var startupError: Error?
-        listener.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                ready.signal()
-            case .failed(let error):
-                startupError = error
-                ready.signal()
-            default:
-                break
-            }
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: params)
+        } catch {
+            throw GoogleAuthError.loopbackUnavailable(error.localizedDescription)
         }
         listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }
-        listener.start(queue: queue)
 
-        let waited = ready.wait(timeout: .now() + 5)
-        // Startup is decided; drop the handler so later transitions cannot race the
-        // `startupError` read (a runtime failure after this surfaces as a redirect that never
-        // arrives, which the flow's 5-minute timeout handles).
+        let gate = ReadyGate()
+        var timeoutTask: Task<Void, Never>?
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                gate.attach(continuation)
+                listener.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready:
+                        gate.finish(nil)
+                    case .failed(let error):
+                        gate.finish(GoogleAuthError.loopbackUnavailable(error.localizedDescription))
+                    case .cancelled:
+                        gate.finish(GoogleAuthError.loopbackUnavailable("listener cancelled"))
+                    default:
+                        break
+                    }
+                }
+                listener.start(queue: queue)
+                timeoutTask = Task {
+                    try? await Task.sleep(nanoseconds: UInt64(Self.readyTimeout * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    gate.finish(GoogleAuthError.loopbackUnavailable("listener did not become ready"))
+                }
+            }
+        } catch {
+            timeoutTask?.cancel()
+            listener.stateUpdateHandler = nil
+            listener.cancel()
+            throw error
+        }
+        timeoutTask?.cancel()
+        // Startup is decided; drop the handler so later transitions cannot resume anything (a
+        // runtime failure after this surfaces as a redirect that never arrives, which the flow's
+        // 5-minute timeout handles).
         listener.stateUpdateHandler = nil
-        guard waited == .success else {
-            listener.cancel()
-            throw GoogleAuthError.timedOut
-        }
-        if let startupError {
-            listener.cancel()
-            throw startupError
-        }
         guard let port = listener.port?.rawValue else {
             listener.cancel()
-            throw GoogleAuthError.exchangeFailed("loopback listener has no port")
+            throw GoogleAuthError.loopbackUnavailable("loopback listener has no port")
         }
         self.queue.async { self.listener = listener }
         return port
