@@ -180,7 +180,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         let file = try makeFile(id: "f1", name: datedName)
         h.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
 
-        let outcome = await h.importer.processFile(file, sub: "sub-1")
+        let outcome = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: true)
 
         guard case .created(let meetingID) = outcome else {
             return XCTFail("expected created, got \(outcome)")
@@ -215,7 +215,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
             to: meeting
         )
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .merged(let meetingID, let dropped) = outcome else {
             return XCTFail("expected merged, got \(outcome)")
@@ -238,7 +238,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
             title: "Quarterly planning offsite", source: .adHoc, state: .completed, startDate: embeddedDate
         )
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .created = outcome else {
             return XCTFail("expected created, got \(outcome)")
@@ -258,7 +258,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         ])
         let h = makeHarness(in: dir, transport: transport)
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .created(let meetingID) = outcome else {
             return XCTFail("expected created via fallback, got \(outcome)")
@@ -274,7 +274,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         let h = makeHarness(in: dir, transport: transport)
         h.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .failed = outcome else {
             return XCTFail("expected failed, got \(outcome)")
@@ -289,7 +289,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         defer { TestSupport.remove(dir) }
         let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: [exportStub("   \n\n  ")]))
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .failed = outcome else {
             return XCTFail("expected failed, got \(outcome)")
@@ -309,7 +309,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         let file = try makeFile(id: "f1", name: datedName)
 
         // First import creates; the "edited" replay re-exports identical content.
-        let first = await h.importer.processFile(file, sub: "sub-1")
+        let first = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: true)
         guard case .created(let meetingID) = first else {
             return XCTFail("expected created, got \(first)")
         }
@@ -317,7 +317,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
 
         let editedTime = fixedNow.addingTimeInterval(600)
         let edited = try makeFile(id: "f1", name: datedName, modified: editedTime)
-        let second = await h.importer.processFile(edited, sub: "sub-1")
+        let second = await h.importer.processFile(edited, sub: "sub-1", ownsPendingEntry: true)
 
         XCTAssertEqual(second, .remerged(meetingID: meetingID))
         XCTAssertEqual(h.meetingService.meetings.count, 1)
@@ -338,7 +338,8 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         )
 
         let outcome = await h.importer.processFile(
-            try makeFile(id: "f1", name: datedName, modified: editedTime), sub: "sub-1"
+            try makeFile(id: "f1", name: datedName, modified: editedTime), sub: "sub-1",
+            ownsPendingEntry: true
         )
 
         XCTAssertEqual(outcome, .touched)
@@ -363,7 +364,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         )
         h.autoLink.candidate = (event, 1.0)
 
-        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1")
+        let outcome = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true)
 
         guard case .created(let meetingID) = outcome else {
             return XCTFail("expected created, got \(outcome)")
@@ -391,7 +392,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         let h1 = makeHarness(in: dir, transport: transport)
         let file = try makeFile(id: "f1", name: datedName)
 
-        let first = await h1.importer.processFile(file, sub: "sub-1")
+        let first = await h1.importer.processFile(file, sub: "sub-1", ownsPendingEntry: true)
         guard case .created(let meetingID) = first else {
             return XCTFail("expected created, got \(first)")
         }
@@ -403,7 +404,7 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
             in: dir, transport: transport,
             meetingService: h1.meetingService, ledgerFileName: "replay-ledger.json"
         )
-        let replay = await h2.importer.processFile(file, sub: "sub-1")
+        let replay = await h2.importer.processFile(file, sub: "sub-1", ownsPendingEntry: true)
 
         guard case .merged(let replayedID, _) = replay else {
             return XCTFail("expected the replay to merge, got \(replay)")
@@ -433,8 +434,8 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         let fileA = try makeFile(id: "doc-a", name: datedName)
         let fileB = try makeFile(id: "doc-b", name: datedName)
 
-        async let outcomeA = h.importer.processFile(fileA, sub: "sub-1")
-        async let outcomeB = h.importer.processFile(fileB, sub: "sub-2")
+        async let outcomeA = h.importer.processFile(fileA, sub: "sub-1", ownsPendingEntry: true)
+        async let outcomeB = h.importer.processFile(fileB, sub: "sub-2", ownsPendingEntry: true)
         let outcomes = await [outcomeA, outcomeB]
 
         XCTAssertEqual(h.meetingService.meetings.count, 1,
@@ -445,5 +446,171 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         XCTAssertEqual(mergedCount, 1)
         // Identical rows deduped by the merger — the meeting holds one copy of the transcript.
         XCTAssertEqual(h.meetingService.meetings[0].segments.count, 2)
+    }
+
+    // MARK: - F4 execution-time re-check ([Google Phase 2 · M4], D-D7)
+
+    /// An unchanged, already-ledgered file is skipped BEFORE any export request — the fake
+    /// transport has zero stubs, so any network attempt would surface as `.failed`.
+    func testUnchangedLedgeredFileSkipsWithoutAnyExportRequest() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: []))
+        h.ledger.recordImported(
+            fileID: "google:sub-1:f1", docModifiedTime: fixedNow,
+            meetingID: UUID(), disposition: .created, now: fixedNow
+        )
+        // A stale auto job's own pending entry is cleared on the skip (watermark hygiene).
+        h.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
+
+        let outcome = await h.importer.processFile(
+            try makeFile(id: "f1", name: datedName, modified: fixedNow), sub: "sub-1",
+            ownsPendingEntry: true
+        )
+
+        XCTAssertEqual(outcome, .skipped)
+        XCTAssertTrue(h.meetingService.meetings.isEmpty)
+        XCTAssertTrue(h.ledger.pendingFileIDs.isEmpty, "an owned pending entry is cleared on skip")
+    }
+
+    /// The pending self-exemption: an auto job (owner) imports through its own guard entry; a
+    /// non-owner (the backfill batch) reading the same pending state is skipped without a request.
+    func testPendingEntrySelfExemptionOnlyForTheOwningJob() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+
+        // Non-owner first: pending marked (an in-flight auto import), zero stubs → must skip.
+        let hBlocked = makeHarness(in: dir, transport: FakeDriveTransport(stubs: []))
+        hBlocked.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
+        let blocked = await hBlocked.importer.processFile(
+            try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: false
+        )
+        XCTAssertEqual(blocked, .skipped, "a file in flight elsewhere is never re-exported")
+        XCTAssertTrue(hBlocked.ledger.pendingFileIDs.contains("google:sub-1:f1"),
+                      "a non-owner never clears someone else's guard entry")
+
+        // Owner: same pending state, real stub → imports normally.
+        let hOwner = makeHarness(
+            in: dir, transport: FakeDriveTransport(stubs: [exportStub(Self.geminiMarkdown)]),
+            ledgerFileName: "owner-ledger.json"
+        )
+        hOwner.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
+        let owned = await hOwner.importer.processFile(
+            try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true
+        )
+        guard case .created = owned else {
+            return XCTFail("the owning job must pass through its own pending entry, got \(owned)")
+        }
+        XCTAssertTrue(hOwner.ledger.pendingFileIDs.isEmpty, "cleared by the success record")
+    }
+
+    // MARK: - Backfill batch ([Google Phase 2 · M4], D-D7)
+
+    /// Serial walk with the injected inter-file pause, progress callbacks, and a summary tally
+    /// across created / merged / skipped outcomes.
+    func testRunBackfillWalksSeriallyWithPauseProgressAndTally() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: [
+            .init(urlContains: "/files/doc-a/export", statusCode: 200, body: Self.geminiMarkdown),
+            .init(urlContains: "/files/doc-b/export", statusCode: 200, body: Self.geminiMarkdown),
+        ]))
+        // doc-c is already ledgered → skipped without a stub.
+        h.ledger.recordImported(
+            fileID: "google:sub-1:doc-c", docModifiedTime: fixedNow,
+            meetingID: UUID(), disposition: .created, now: fixedNow
+        )
+        let files = [
+            try makeFile(id: "doc-a", name: datedName),
+            try makeFile(id: "doc-b", name: datedName),
+            try makeFile(id: "doc-c", name: "Other call - Notas de Gemini", modified: fixedNow),
+        ]
+        var pauses: [UInt64] = []
+        var progress: [[Int]] = []
+
+        let summary = await h.importer.runBackfill(
+            files: files,
+            sub: "sub-1",
+            pause: { pauses.append($0) },
+            onProgress: { current, total in progress.append([current, total]) }
+        )
+
+        // doc-a creates; doc-b (same doc content/title/date) merges into it; doc-c skips.
+        XCTAssertEqual(summary, .init(imported: 1, merged: 1, skipped: 1, failed: 0, cancelled: false))
+        XCTAssertEqual(pauses, [
+            GoogleDriveTranscriptImporter.backfillInterFilePause,
+            GoogleDriveTranscriptImporter.backfillInterFilePause,
+        ], "one rate-limit pause between files, none before the first")
+        XCTAssertEqual(progress, [[1, 3], [2, 3], [3, 3]])
+        XCTAssertEqual(h.meetingService.meetings.count, 1)
+    }
+
+    /// Cancel stops between files: the in-flight file completes and stays ledgered; the rest are
+    /// never exported (zero remaining stubs would otherwise fail them).
+    func testRunBackfillCancellationBetweenFilesKeepsCompletedImports() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: [
+            .init(urlContains: "/files/doc-a/export", statusCode: 200, body: Self.geminiMarkdown),
+        ]))
+        let files = [
+            try makeFile(id: "doc-a", name: datedName),
+            try makeFile(id: "doc-b", name: datedName),
+        ]
+
+        // The pause between files cancels the batch task — deterministic "cancel mid-run".
+        let box = CancelBox()
+        let importer = h.importer
+        let task = Task { @MainActor in
+            await importer.runBackfill(
+                files: files,
+                sub: "sub-1",
+                pause: { _ in box.task?.cancel() }
+            )
+        }
+        box.task = task
+        let summary = await task.value
+
+        XCTAssertTrue(summary.cancelled)
+        XCTAssertEqual(summary.imported, 1, "the completed file stays imported")
+        XCTAssertNotNil(h.ledger.entry(for: "google:sub-1:doc-a"))
+        XCTAssertNil(h.ledger.entry(for: "google:sub-1:doc-b"), "never reached")
+        XCTAssertEqual(h.meetingService.meetings.count, 1)
+    }
+
+    private final class CancelBox: @unchecked Sendable {
+        var task: Task<GoogleDriveTranscriptImporter.BackfillSummary, Never>?
+    }
+
+    /// D-D7/F4: a file ledgered mid-batch by a concurrent auto-import (simulated in the
+    /// inter-file pause) is skipped at execution time and counted as skipped in the summary.
+    func testRunBackfillSkipsFileLedgeredMidBatchByAutoImport() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: [
+            .init(urlContains: "/files/doc-a/export", statusCode: 200, body: Self.geminiMarkdown),
+        ]))
+        let files = [
+            try makeFile(id: "doc-a", name: datedName),
+            try makeFile(id: "doc-b", name: datedName, modified: fixedNow),
+        ]
+        let ledger = h.ledger
+        let now = fixedNow
+
+        let summary = await h.importer.runBackfill(
+            files: files,
+            sub: "sub-1",
+            pause: { _ in
+                // Auto-import lands doc-b while the batch is between files.
+                ledger.recordImported(
+                    fileID: "google:sub-1:doc-b", docModifiedTime: now,
+                    meetingID: UUID(), disposition: .merged, now: now
+                )
+            }
+        )
+
+        XCTAssertEqual(summary.imported, 1)
+        XCTAssertEqual(summary.skipped, 1, "the stale preview row is skipped, never double-imported")
+        XCTAssertEqual(summary.failed, 0)
     }
 }

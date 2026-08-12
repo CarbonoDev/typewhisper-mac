@@ -20986,6 +20986,198 @@
         }
       }
     },
+    "google.drive.backfill.alreadyImported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereits importiert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already imported"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.empty": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Drive-Ablage dieses Kontos wurden keine Gemini-Transkripte gefunden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Gemini transcripts were found in this account's Drive."
+          }
+        }
+      }
+    },
+    "google.drive.backfill.importCount": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Transkripte importieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import %lld transcripts"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.mergeInto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In \"%@\" zusammenführen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge into \"%@\""
+          }
+        }
+      }
+    },
+    "google.drive.backfill.newMeeting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Meeting"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New meeting"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.progress": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importiere %lld von %lld …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing %lld of %lld…"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.scanning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche nach Gemini-Transkripten in Drive …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking for Gemini transcripts in Drive…"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.selectAll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle auswählen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
+          }
+        }
+      }
+    },
+    "google.drive.backfill.summary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Transkripte importiert — %lld in bestehende Meetings zusammengeführt, %lld übersprungen, %lld fehlgeschlagen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported %lld transcripts — %lld merged into existing meetings, %lld skipped, %lld failed."
+          }
+        }
+      }
+    },
+    "google.drive.backfill.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frühere Transkripte importieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import past transcripts"
+          }
+        }
+      }
+    },
+    "google.drive.backfillButton": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frühere Transkripte importieren …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import past transcripts…"
+          }
+        }
+      }
+    },
     "google.drive.checkNow": {
       "localizations": {
         "de": {
