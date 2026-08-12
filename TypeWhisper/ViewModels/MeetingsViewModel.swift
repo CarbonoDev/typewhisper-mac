@@ -185,6 +185,31 @@ final class MeetingsViewModel: ObservableObject {
     // keep compiling; the store stays the single writer of all `google.*` state — the VM only
     // reads `$accounts`/`isTwinPromptHandled` and routes handled-marks through it.
     private let googleAccountStore: GoogleAccountStore?
+    // ── [Google Phase 3 · M5] Related emails (D-M6) — one self-contained block (spec §10). ──────
+    // The concrete service (optional so unit tests constructing the VM without the Google stack
+    // keep compiling); `internal` so `MeetingsViewModel+RelatedEmails.swift` reaches it.
+    let gmailContextService: GmailContextService?
+    /// Per-meeting related-emails fetch state, owned here and observed directly by
+    /// `MeetingRelatedEmailsSection` (the VM does not republish on its changes).
+    let relatedEmailsModel: RelatedEmailsModel
+    /// D-M6 mirror of `GmailContextService.isConnected`, recomputed on
+    /// `GoogleAccountStore.objectWillChange` with a main-queue hop (the vaultPath re-check
+    /// pattern) — `$accounts` alone would miss Gmail-toggle flips, which announce only via
+    /// `objectWillChange` (D-M7).
+    @Published private(set) var isGmailConnected = false
+    /// Whether ANY Google account exists — with none, the Related emails section renders nothing
+    /// (the briefing page must not advertise plumbing the user never configured, D-M6).
+    var hasGoogleAccounts: Bool { !(googleAccountStore?.accounts.isEmpty ?? true) }
+    /// The first Gmail-enabled account currently in `.needsReauth`, driving the section's
+    /// reconnect hint (D-M6: an owning account needing reauth must not masquerade as "Gmail not
+    /// enabled"). Computed here because the store is private to the VM body.
+    var gmailNeedsReauthAccountEmail: String? {
+        guard let googleAccountStore else { return nil }
+        return googleAccountStore.accounts.first {
+            $0.status == .needsReauth && googleAccountStore.isGmailEnabled(for: $0.id)
+        }?.email
+    }
+    // ── end [Google Phase 3 · M5] block ─────────────────────────────────────────────────────────
     private var cancellables = Set<AnyCancellable>()
     private var pollingCancellable: AnyCancellable?
 
@@ -209,9 +234,13 @@ final class MeetingsViewModel: ObservableObject {
         briefScheduler: MeetingBriefScheduler, // [Track D]
         jobQueue: JobQueueService, // [Track J]
         participantDirectoryService: ParticipantDirectoryService, // [M3-Participants]
-        googleAccountStore: GoogleAccountStore? = nil // [Google Phase 1 · M4]
+        googleAccountStore: GoogleAccountStore? = nil, // [Google Phase 1 · M4]
+        gmailContextService: GmailContextService? = nil // [Google Phase 3 · M5]
     ) {
         self.googleAccountStore = googleAccountStore // [Google Phase 1 · M4]
+        // [Google Phase 3 · M5] Related emails (D-M6) — assignments for the block above.
+        self.gmailContextService = gmailContextService
+        self.relatedEmailsModel = RelatedEmailsModel(provider: gmailContextService)
         self.participantDirectoryService = participantDirectoryService // [M3-Participants]
         self.contextRuleService = contextRuleService
         self.jobQueue = jobQueue // [Track J]
@@ -251,6 +280,19 @@ final class MeetingsViewModel: ObservableObject {
         self.calendarErrorMessage = calendarService.errorMessage
         self.isVaultConnected = vaultService.isConnected
         self.vaultName = vaultService.vaultName
+        // [Google Phase 3 · M5] Seed + recompute the D-M6 Gmail mirror on store `objectWillChange`
+        // (main-queue hop — the vaultPath re-check pattern below; `$accounts` alone would miss
+        // Gmail-toggle flips, D-M7).
+        self.isGmailConnected = gmailContextService?.isConnected ?? false
+        if let store = googleAccountStore {
+            store.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    self.isGmailConnected = self.gmailContextService?.isConnected ?? false
+                }
+                .store(in: &cancellables)
+        }
 
         meetingService.$meetings
             .receive(on: DispatchQueue.main)

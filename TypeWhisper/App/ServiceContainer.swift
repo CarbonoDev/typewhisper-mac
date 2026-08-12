@@ -569,7 +569,8 @@ final class ServiceContainer: ObservableObject {
             briefScheduler: meetingBriefScheduler, // [Track D]
             jobQueue: meetingJobQueue, // [Track J]
             participantDirectoryService: participantDirectoryService, // [M3-Participants]
-            googleAccountStore: googleAccountStore // [Google Phase 1 · M4] hasAnyCalendarSource + twin prompts
+            googleAccountStore: googleAccountStore, // [Google Phase 1 · M4] hasAnyCalendarSource + twin prompts
+            gmailContextService: gmailContextService // [Google Phase 3 · M5] Related emails (D-M6)
         )
         homeFeedViewModel = HomeFeedViewModel() // [Track C]
         // [Track E] Space vault browser (ME-1): caches one `listEntries()` snapshot from the shared

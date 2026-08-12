@@ -636,15 +636,18 @@ struct GmailToggleState: Equatable {
         store: GoogleAccountStore,
         reauthorize: (_ accountID: String, _ additionalScopes: [String]) async throws -> Void
     ) async throws {
-        // Always read the live row — the caller's snapshot may lag the store.
-        func hasScope() -> Bool {
-            (store.account(id: account.id) ?? account)
-                .grantedScopes.contains(GmailContextService.gmailScope)
-        }
-        if !hasScope() {
+        // Pre-flow: prefer the live row; the caller's snapshot only decides whether consent runs.
+        let alreadyGranted = (store.account(id: account.id) ?? account)
+            .grantedScopes.contains(GmailContextService.gmailScope)
+        if !alreadyGranted {
             try await reauthorize(account.id, [GmailContextService.gmailScope])
         }
-        guard hasScope() else { return }
+        // The flag write requires the LIVE row (M5-cycle review NIT F-1 — no snapshot fallback
+        // here): an account removed mid-flow, or whose grant never actually landed, must not get
+        // its flag set from stale caller state.
+        guard store.account(id: account.id)?.grantedScopes.contains(GmailContextService.gmailScope) == true else {
+            return
+        }
         store.setGmailEnabled(true, for: account.id)
     }
 }

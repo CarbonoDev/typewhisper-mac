@@ -42,6 +42,8 @@ struct MeetingDocumentBody: View {
             }
             eventDetailsSection
             MeetingRelatedDocsSection(meeting: meeting)
+            // [Google Phase 3 · M5] Related emails on the briefing page (D-M6).
+            MeetingRelatedEmailsSection(meeting: meeting)
         }
     }
 
@@ -100,6 +102,10 @@ struct MeetingDocumentBody: View {
                 }
             }
             MeetingNotesPane(meeting: meeting)
+            // [Google Phase 3 · M5] Related emails on the live capture page (D-M6): a
+            // collapsed-by-default disclosure so the page stays notes-first; the live style
+            // auto-refreshes at the cache-TTL cadence for mid-meeting arrivals.
+            MeetingRelatedEmailsSection(meeting: meeting, style: .live)
         }
     }
 
@@ -271,7 +277,23 @@ struct MeetingDocumentBody: View {
                     MeetingRelatedDocsSection(meeting: meeting)
                 }
             }
+
+            // [Google Phase 3 · M5] Related emails appendix row (D-M6), gated like the docs row
+            // on connected-or-nonempty.
+            if viewModel.isGmailConnected || !viewModel.relatedEmails(for: meeting).isEmpty {
+                MeetingAppendixRow(
+                    title: String(localized: "meetingdoc.emails.title"),
+                    summary: relatedEmailsSummary
+                ) {
+                    MeetingRelatedEmailsSection(meeting: meeting)
+                }
+            }
         }
+    }
+
+    private var relatedEmailsSummary: String? {
+        let count = viewModel.relatedEmails(for: meeting).count
+        return count > 0 ? "\(count)" : nil
     }
 
     private var speakerSummary: String? {
