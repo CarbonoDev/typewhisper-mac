@@ -312,13 +312,26 @@ final class MeetingService: ObservableObject {
     }
 
     /// Unlink a meeting from its calendar event: clear the linkage identifiers (`calendarEventID`,
-    /// `seriesID`) while keeping all content — title, date, attendees, transcript, outputs (owner
-    /// requirement 3). Attendees are retained deliberately (they are content the user may still want,
-    /// and prior-meeting matching can keep using them). Idempotent. Single-writer on the MainActor.
+    /// `seriesID`) **and the event snapshot they own** (`calendarNotes`, `conferencingURL`) while
+    /// keeping the meeting's own content — title, date, attendees, transcript, outputs (owner
+    /// requirement 3). Attendees are retained deliberately (they are content the user may still
+    /// want, and prior-meeting matching can keep using them).
+    ///
+    /// The event snapshot is *not* content in that sense ([Google Phase 1 · M5], PR #7 review
+    /// finding 3): the notes and join URL are a verbatim copy of one specific event, taken by
+    /// `linkToCalendarEvent`. Unlinking almost always means "this was the wrong event" — keeping
+    /// them would leave the meeting document rendering another meeting's agenda behind a Join
+    /// button that dials into the wrong call (and export both to Obsidian), with nothing else ever
+    /// writing those two fields back to `nil`. Idempotent. Single-writer on the MainActor.
     func unlinkCalendarEvent(for meeting: Meeting) {
-        guard meeting.calendarEventID != nil || meeting.seriesID != nil else { return }
+        guard meeting.calendarEventID != nil
+            || meeting.seriesID != nil
+            || meeting.calendarNotes != nil
+            || meeting.conferencingURL != nil else { return }
         meeting.calendarEventID = nil
         meeting.seriesID = nil
+        meeting.calendarNotes = nil
+        meeting.conferencingURL = nil
         meeting.updatedAt = Date()
         save()
         fetchMeetings()
@@ -737,7 +750,8 @@ final class MeetingService: ObservableObject {
     ///   1. **Attendees** — union through `mergeAttendees` (same dedupe/upgrade + directory ingest
     ///      as every other attendee choke point).
     ///   2. **Scalars** — adopt the plan's title (an LLM-resolved title, when provided, supersedes
-    ///      the deterministic pick), min–max time range, calendar link, session key, folder, tags
+    ///      the deterministic pick), min–max time range, calendar link *with the linked event's
+    ///      notes/join URL snapshot*, session key, folder, tags
     ///      (case-folded union), language, state. Speaker maps union with the primary winning on
     ///      colliding keys — a generic `SPEAKER_xx` key can denote different humans in different
     ///      meetings, a documented v1 limitation.
@@ -780,6 +794,11 @@ final class MeetingService: ObservableObject {
         primary.endDate = plan.endDate
         primary.calendarEventID = plan.calendarEventID
         primary.seriesID = plan.seriesID
+        // The linked event's snapshot travels with the linkage (PR #7 review finding 9) — without
+        // this the surviving meeting adopts the calendar link but loses its Event-details
+        // disclosure and Join button, unrecoverably (the absorbed row is deleted below).
+        primary.calendarNotes = plan.calendarNotes
+        primary.conferencingURL = plan.conferencingURL
         primary.externalSessionKey = plan.externalSessionKey
         primary.folderPath = plan.folderPath
         primary.languageCode = plan.languageCode
