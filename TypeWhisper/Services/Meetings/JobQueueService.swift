@@ -162,6 +162,23 @@ final class JobQueueService: ObservableObject {
         }
     }
 
+    /// `cancelAll(for:)`, but awaits every affected `.running` job's child `Task` before returning —
+    /// `cancel(_:)` alone only *requests* cancellation (`Task.cancel()`); the task can still be
+    /// mid-`await` when the call returns. Callers that are about to make `meetingID` unreachable in
+    /// the store (e.g. a merge's pre-apply seam, right before `applyMerge` deletes the row) need the
+    /// stronger ordering: no cancelled job's closure resumes AFTER the row is gone. `.queued` jobs
+    /// settle synchronously inside `cancel(_:)` (no handle exists yet), so only running ones are
+    /// awaited.
+    func cancelAllAndWait(for meetingID: UUID) async {
+        let activeJobIDs = jobs(for: meetingID).filter { $0.state.isActive }.map(\.id)
+        for id in activeJobIDs { cancel(id) }
+        for id in activeJobIDs {
+            if let handle = handles[id] {
+                await handle.value
+            }
+        }
+    }
+
     /// Whether an active (queued/running) job of `kind` exists for `meetingID`.
     func hasActiveJob(kind: MeetingJobKind, meetingID: UUID) -> Bool {
         jobs.contains { $0.kind == kind && $0.meetingID == meetingID && $0.state.isActive }
