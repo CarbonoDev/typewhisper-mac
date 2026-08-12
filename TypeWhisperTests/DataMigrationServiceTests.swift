@@ -198,8 +198,10 @@ final class DataMigrationServiceTests: XCTestCase {
         let keychain = FakeKeychain(items: [oldPrefix + "a": Data("A".utf8)])
         keychain.throwOnEnumerate = true
         let summary = DataMigrationService.migrateKeychain(oldPrefix: oldPrefix, newPrefix: newPrefix, keychain: keychain)
-        XCTAssertEqual(summary, .init(migrated: 0, skipped: 0, total: 0))
+        XCTAssertEqual(summary, .init(migrated: 0, skipped: 0, total: 0, failed: [], enumerationFailed: true))
         XCTAssertTrue(keychain.writes.isEmpty)
+        // The user must be told: we cannot even list what was left behind.
+        XCTAssertTrue(summary.needsAttention)
     }
 
     func testKeychain_partialReadFailure_migratesReadableItems() {
@@ -213,6 +215,10 @@ final class DataMigrationServiceTests: XCTestCase {
         XCTAssertEqual(summary.total, 3)
         XCTAssertEqual(summary.migrated, 2) // a and c
         XCTAssertEqual(summary.skipped, 1)  // b unreadable
+        // Named, not swallowed: "b" is a provider key the user now has to re-enter.
+        XCTAssertEqual(summary.failed, ["b"])
+        XCTAssertTrue(summary.needsAttention)
+        XCTAssertFalse(summary.enumerationFailed)
         XCTAssertNotNil(keychain.items[newPrefix + "a"])
         XCTAssertNil(keychain.items[newPrefix + "b"])
         XCTAssertNotNil(keychain.items[newPrefix + "c"])
@@ -236,7 +242,8 @@ final class DataMigrationServiceTests: XCTestCase {
         let keychain = FakeKeychain(items: [oldPrefix + "a": Data("A".utf8)])
         var factoryInvoked = false
 
-        let summary = DataMigrationService.runIfNeeded(isTestEnvironment: false) {
+        let reportDefaults = Self.scratchDefaults()
+        let summary = DataMigrationService.runIfNeeded(isTestEnvironment: false, makeContext: {
             factoryInvoked = true
             return DataMigrationService.Context(
                 appSupportSource: src,
@@ -250,11 +257,63 @@ final class DataMigrationServiceTests: XCTestCase {
                 keychain: keychain,
                 log: { _ in }
             )
-        }
+        }, defaults: reportDefaults)
         XCTAssertTrue(factoryInvoked)
         XCTAssertEqual(summary?.appSupportMoved, true)
         XCTAssertEqual(summary?.defaultsCopied, true)
         XCTAssertEqual(summary?.keychain.migrated, 1)
+        // A clean run leaves nothing for the settings banner to report.
+        XCTAssertTrue(DataMigrationService.unmigratedKeychainItems(defaults: reportDefaults).isEmpty)
+        XCTAssertFalse(DataMigrationService.keychainEnumerationFailed(defaults: reportDefaults))
+    }
+
+    // MARK: - Reporting the keychain outcome to the user
+
+    /// A scratch defaults suite so the report tests never touch the developer's real preferences.
+    private static func scratchDefaults() -> UserDefaults {
+        let suite = "DataMigrationServiceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    /// Keys the migration could not carry over are recorded by name, survive the launch that ran the
+    /// migration, and can be cleared — the settings banner's whole contract.
+    func testKeychainReport_recordsFailedItems_andDismissClearsThem() {
+        let defaults = Self.scratchDefaults()
+        let summary = DataMigrationService.KeychainSummary(
+            migrated: 1,
+            skipped: 2,
+            total: 3,
+            failed: ["openai", "groq"]
+        )
+
+        DataMigrationService.recordKeychainOutcome(summary, defaults: defaults)
+        XCTAssertEqual(DataMigrationService.unmigratedKeychainItems(defaults: defaults), ["openai", "groq"])
+        XCTAssertFalse(DataMigrationService.keychainEnumerationFailed(defaults: defaults))
+
+        DataMigrationService.dismissKeychainReport(defaults: defaults)
+        XCTAssertTrue(DataMigrationService.unmigratedKeychainItems(defaults: defaults).isEmpty)
+    }
+
+    /// An enumeration failure is reported even though the affected items are unknown — the case where
+    /// silence would leave the user with no working provider key and no explanation.
+    func testKeychainReport_enumerationFailureIsReported_andASuccessfulRerunClearsIt() {
+        let defaults = Self.scratchDefaults()
+
+        DataMigrationService.recordKeychainOutcome(
+            .init(migrated: 0, skipped: 0, total: 0, failed: [], enumerationFailed: true),
+            defaults: defaults
+        )
+        XCTAssertTrue(DataMigrationService.keychainEnumerationFailed(defaults: defaults))
+
+        // A later clean run (the "Retry migration" path) clears the report.
+        DataMigrationService.recordKeychainOutcome(
+            .init(migrated: 3, skipped: 0, total: 3),
+            defaults: defaults
+        )
+        XCTAssertFalse(DataMigrationService.keychainEnumerationFailed(defaults: defaults))
+        XCTAssertTrue(DataMigrationService.unmigratedKeychainItems(defaults: defaults).isEmpty)
     }
 
     // MARK: - Full-run composition + idempotency

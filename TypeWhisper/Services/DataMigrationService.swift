@@ -57,6 +57,18 @@ enum DataMigrationService {
         var migrated: Int
         var skipped: Int
         var total: Int
+        /// Items that were found under the old prefix but could **not** be copied (the Keychain
+        /// denied the read, or the write failed). These are the ones the user loses silently unless
+        /// they are surfaced — every one of them is a provider API key they will have to re-enter.
+        /// Names are the item suffix (`openai`, `groq`, …), never the secret.
+        var failed: [String] = []
+        /// The enumeration query itself failed, so we do not even know what there was to migrate.
+        /// Distinct from "nothing to migrate", which is the ordinary fresh-install case.
+        var enumerationFailed: Bool = false
+
+        /// Whether the user needs to know: something was left behind that they will otherwise only
+        /// discover as an authentication error mid-transcription.
+        var needsAttention: Bool { enumerationFailed || !failed.isEmpty }
     }
 
     struct Summary: Equatable {
@@ -115,25 +127,30 @@ enum DataMigrationService {
     // MARK: Step C — Keychain (best-effort)
 
     /// Copies every old-prefixed generic-password item to the new prefix. Existing new items are
-    /// preserved (reported as skipped). Read/write failures on individual items are swallowed
-    /// (reported as skipped) so a partitioned or unreadable Keychain degrades gracefully.
+    /// preserved (reported as skipped, and *not* as failures — nothing was lost there). Read/write
+    /// failures on individual items never throw, so a partitioned or unreadable Keychain degrades
+    /// gracefully — but they are **named** in `failed` rather than swallowed: a silently empty
+    /// migration means every provider API key is gone, and the user must be told which ones.
     static func migrateKeychain(oldPrefix: String, newPrefix: String, keychain: MigrationKeychain) -> KeychainSummary {
         let services: [String]
         do {
             services = try keychain.servicesWithPrefix(oldPrefix)
         } catch {
-            // Enumeration itself failed (e.g. access-group denies the renamed app). Degrade.
-            return KeychainSummary(migrated: 0, skipped: 0, total: 0)
+            // Enumeration itself failed (e.g. access-group denies the renamed app). Degrade, but
+            // report it: this is the case where we cannot even list what was lost.
+            return KeychainSummary(migrated: 0, skipped: 0, total: 0, failed: [], enumerationFailed: true)
         }
 
         var migrated = 0
         var skipped = 0
+        var failed: [String] = []
         for old in services {
             guard old.hasPrefix(oldPrefix) else {
                 skipped += 1
                 continue
             }
-            let newService = newPrefix + old.dropFirst(oldPrefix.count)
+            let suffix = String(old.dropFirst(oldPrefix.count))
+            let newService = newPrefix + suffix
 
             // Never overwrite a secret already present under the new prefix.
             if keychain.secretExists(service: newService) {
@@ -147,9 +164,72 @@ enum DataMigrationService {
                 migrated += 1
             } catch {
                 skipped += 1
+                failed.append(suffix)
             }
         }
-        return KeychainSummary(migrated: migrated, skipped: skipped, total: services.count)
+        return KeychainSummary(
+            migrated: migrated,
+            skipped: skipped,
+            total: services.count,
+            failed: failed
+        )
+    }
+
+    // MARK: Reporting the keychain outcome to the user
+
+    /// Where the last run's unmigrated keychain items are recorded, so the surface can outlive the
+    /// launch that ran the migration (it runs before any window exists).
+    static let unmigratedKeychainItemsKey = "dataMigrationUnmigratedKeychainItems"
+    /// Set when enumeration failed outright and the unmigrated set is therefore unknown.
+    static let keychainEnumerationFailedKey = "dataMigrationKeychainEnumerationFailed"
+
+    /// Record what the user still needs to act on (and clear it when there is nothing).
+    static func recordKeychainOutcome(_ summary: KeychainSummary, defaults: UserDefaults = .standard) {
+        if summary.failed.isEmpty {
+            defaults.removeObject(forKey: unmigratedKeychainItemsKey)
+        } else {
+            defaults.set(summary.failed, forKey: unmigratedKeychainItemsKey)
+        }
+        if summary.enumerationFailed {
+            defaults.set(true, forKey: keychainEnumerationFailedKey)
+        } else {
+            defaults.removeObject(forKey: keychainEnumerationFailedKey)
+        }
+    }
+
+    /// The items the last migration could not carry over — the settings banner's input.
+    static func unmigratedKeychainItems(defaults: UserDefaults = .standard) -> [String] {
+        defaults.stringArray(forKey: unmigratedKeychainItemsKey) ?? []
+    }
+
+    static func keychainEnumerationFailed(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: keychainEnumerationFailedKey)
+    }
+
+    /// Stop reporting: the user re-entered the keys (or does not care). Nothing is deleted.
+    static func dismissKeychainReport(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: unmigratedKeychainItemsKey)
+        defaults.removeObject(forKey: keychainEnumerationFailedKey)
+    }
+
+    /// Re-run **only** the keychain step against production seams — what the banner's "Retry" does.
+    /// The Keychain denies a read from a newly-signed app until the user allows it; the second
+    /// attempt (after they clicked Always Allow) is exactly the case worth retrying. Returns nil when
+    /// there is no rename to migrate. The outcome is re-recorded, so a clean retry clears the banner.
+    @discardableResult
+    static func retryKeychainMigration(defaults: UserDefaults = .standard) -> KeychainSummary? {
+        guard let context = productionContext() else { return nil }
+        let summary = migrateKeychain(
+            oldPrefix: context.oldKeychainPrefix,
+            newPrefix: context.newKeychainPrefix,
+            keychain: context.keychain
+        )
+        context.log(
+            "migration retry: keychain \(summary.migrated)/\(summary.total) migrated "
+                + "(skipped \(summary.skipped), failed \(summary.failed.count))"
+        )
+        recordKeychainOutcome(summary, defaults: defaults)
+        return summary
     }
 
     // MARK: Composition
@@ -199,7 +279,9 @@ enum DataMigrationService {
             keychain: keychainSummary
         )
         log("migration: appSupport moved=\(appSupportMoved), defaults copied=\(defaultsCopied), " +
-            "keychain \(keychainSummary.migrated)/\(keychainSummary.total) migrated (skipped \(keychainSummary.skipped))")
+            "keychain \(keychainSummary.migrated)/\(keychainSummary.total) migrated " +
+            "(skipped \(keychainSummary.skipped), failed \(keychainSummary.failed.count), " +
+            "enumerationFailed=\(keychainSummary.enumerationFailed))")
         return summary
     }
 
@@ -233,11 +315,12 @@ enum DataMigrationService {
     @discardableResult
     static func runIfNeeded(
         isTestEnvironment: Bool,
-        makeContext: () -> Context?
+        makeContext: () -> Context?,
+        defaults reportDefaults: UserDefaults = .standard
     ) -> Summary? {
         guard !isTestEnvironment else { return nil }
         guard let context = makeContext() else { return nil }
-        return run(
+        let summary = run(
             appSupportSource: context.appSupportSource,
             appSupportDestination: context.appSupportDestination,
             oldDefaultsDomain: context.oldDefaultsDomain,
@@ -249,6 +332,10 @@ enum DataMigrationService {
             keychain: context.keychain,
             log: context.log
         )
+        // Hand the keychain outcome to the UI. Nothing else in the app runs this early, and a
+        // silently-empty keychain migration is the one failure the user cannot diagnose on their own.
+        recordKeychainOutcome(summary.keychain, defaults: reportDefaults)
+        return summary
     }
 
     /// Resolves the legacy/new identifiers from `AppConstants` + the bundle id and wires production
