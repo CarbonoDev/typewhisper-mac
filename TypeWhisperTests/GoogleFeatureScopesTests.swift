@@ -77,6 +77,34 @@ final class GoogleFeatureScopesTests: XCTestCase {
         )
     }
 
+    func testGmailToggleOnComposesTheGmailScope() throws {
+        // [Google Phase 3 · M6] Gmail wired into the D-D8 seam: Reconnect / nudge consent passes
+        // re-carry the Gmail scope for toggled-on accounts.
+        let store = makeStore()
+        let account = account(sub: "sub-1")
+        try store.upsert(account, refreshToken: "rt")
+        store.setGmailEnabled(true, for: "sub-1")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.additionalScopes(for: account, store: store),
+            [GmailContextService.gmailScope]
+        )
+    }
+
+    func testBothFeatureTogglesComposeBothScopes() throws {
+        let store = makeStore()
+        let account = account(sub: "sub-1")
+        try store.upsert(account, refreshToken: "rt")
+        store.setDriveImportEnabled(true, for: "sub-1")
+        store.setGmailEnabled(true, for: "sub-1")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.additionalScopes(for: account, store: store),
+            [GoogleDriveAPI.readonlyScope, GmailContextService.gmailScope],
+            "one consent pass restores calendar + Drive + Gmail together"
+        )
+    }
+
     func testCompositionIsPerAccount() throws {
         let store = makeStore()
         let enabled = account(sub: "sub-on")
