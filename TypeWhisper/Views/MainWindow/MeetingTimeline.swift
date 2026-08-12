@@ -255,6 +255,15 @@ struct MeetingTimelineList: View {
         /// `N open` while action items remain; a quiet check when they're all done.
         @ViewBuilder
         private var trailingFacts: some View {
+            // A quiet "there's a transcript here" marker (a row that outlives its deleted meeting for
+            // one render degrades to nothing rather than trapping — the `isDeletedFromStore`
+            // convention), shared with `MeetingsListView.ArchiveRow`.
+            if !meeting.isDeletedFromStore, !meeting.segments.isEmpty {
+                Image(systemName: "text.quote")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .help(String(localized: "meetings.row.hasTranscript"))
+            }
             if meeting.state == .completed,
                let facts = homeViewModel.actionFacts(for: meeting),
                facts.totalCount > 0 {

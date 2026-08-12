@@ -29015,6 +29015,22 @@
         }
       }
     },
+    "meetings.menu.mergeCount.help": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Besprechungen zusammenführen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge the selected meetings"
+          }
+        }
+      }
+    },
     "meetings.menu.moveToFolder": {
       "localizations": {
         "de": {
@@ -30771,6 +30787,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Possible duplicate of a same-day meeting"
+          }
+        }
+      }
+    },
+    "meetings.row.hasTranscript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript vorhanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Has transcript"
           }
         }
       }

@@ -150,6 +150,18 @@ final class JobQueueService: ObservableObject {
         jobs.filter { $0.meetingID == meetingID }
     }
 
+    /// Cancel every active (queued/running) job for `meetingID`, one `cancel(_:)` per job. Meant for
+    /// callers that are about to make a meeting unreachable — deleting it, or absorbing it into
+    /// another during a merge — so a job whose closure holds a strong reference to that `Meeting`
+    /// (e.g. `generateOutput`'s enqueue captures the model directly) never resumes against a row that
+    /// no longer has backing store data. Best-effort like `cancel(_:)` itself: a `.running` job's
+    /// child `Task` is asked to cancel, not guaranteed to stop before its next `await`.
+    func cancelAll(for meetingID: UUID) {
+        for job in jobs(for: meetingID) where job.state.isActive {
+            cancel(job.id)
+        }
+    }
+
     /// Whether an active (queued/running) job of `kind` exists for `meetingID`.
     func hasActiveJob(kind: MeetingJobKind, meetingID: UUID) -> Bool {
         jobs.contains { $0.kind == kind && $0.meetingID == meetingID && $0.state.isActive }
