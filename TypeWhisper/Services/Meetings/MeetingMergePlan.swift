@@ -29,6 +29,11 @@ struct MeetingMergeSnapshot: Identifiable, Equatable, Sendable {
     var endDate: Date?
     var calendarEventID: String?
     var seriesID: String?
+    /// The linked event's snapshotted description ([Google Phase 1 · M5]) — carried with the
+    /// calendar linkage, never independently (PR #7 review finding 9).
+    var calendarNotes: String?
+    /// The linked event's snapshotted join URL, carried with the calendar linkage.
+    var conferencingURL: String?
     var externalSessionKey: String?
     var folderPath: String?
     var languageCode: String?
@@ -45,6 +50,8 @@ struct MeetingMergeSnapshot: Identifiable, Equatable, Sendable {
         endDate: Date? = nil,
         calendarEventID: String? = nil,
         seriesID: String? = nil,
+        calendarNotes: String? = nil,
+        conferencingURL: String? = nil,
         externalSessionKey: String? = nil,
         folderPath: String? = nil,
         languageCode: String? = nil,
@@ -60,6 +67,8 @@ struct MeetingMergeSnapshot: Identifiable, Equatable, Sendable {
         self.endDate = endDate
         self.calendarEventID = calendarEventID
         self.seriesID = seriesID
+        self.calendarNotes = calendarNotes
+        self.conferencingURL = conferencingURL
         self.externalSessionKey = externalSessionKey
         self.folderPath = folderPath
         self.languageCode = languageCode
@@ -83,6 +92,8 @@ extension MeetingMergeSnapshot {
             endDate: meeting.endDate,
             calendarEventID: meeting.calendarEventID,
             seriesID: meeting.seriesID,
+            calendarNotes: meeting.calendarNotes,
+            conferencingURL: meeting.conferencingURL,
             externalSessionKey: meeting.externalSessionKey,
             folderPath: meeting.folderPath,
             languageCode: meeting.languageCode,
@@ -131,6 +142,14 @@ struct MeetingMergePlan: Equatable, Sendable {
     /// calendar-linked meeting, so this is normally the primary's own link).
     var calendarEventID: String?
     var seriesID: String?
+    /// The event snapshot ([Google Phase 1 · M5]) taken from **the same meeting the calendar
+    /// linkage came from** (PR #7 review finding 9) — a merge that adopts a calendar link must
+    /// bring its Event-details disclosure and Join button with it, and must never pair one event's
+    /// link with another's agenda. Falls back to the first non-nil in priority order when no input
+    /// carries a link at all, so an orphaned snapshot is not silently dropped either.
+    var calendarNotes: String?
+    /// The linked event's join URL — see `calendarNotes` for the sourcing rule.
+    var conferencingURL: String?
     /// First non-nil in priority order, so a live caption-bridge session key survives a merge with
     /// its calendar-created duplicate and `POST /v1/meetings/live` keeps resuming the same meeting.
     var externalSessionKey: String?
@@ -256,6 +275,12 @@ enum MeetingMergePlanner {
             }
         }
 
+        // The event snapshot travels with the calendar linkage (PR #7 review finding 9): take both
+        // fields from the meeting that supplied `calendarEventID`, so the surviving meeting can
+        // never show one event's link beside another's agenda/join URL. With no linked input at
+        // all, fall back to the first non-nil so an orphaned snapshot survives the merge.
+        let linkSource = ordered.first { normalized($0.calendarEventID) != nil }
+
         return MeetingMergePlan(
             primaryID: primary.id,
             absorbedIDs: ordered.dropFirst().map(\.id),
@@ -265,6 +290,10 @@ enum MeetingMergePlanner {
             endDate: endDate,
             calendarEventID: firstNonNil(ordered, \.calendarEventID),
             seriesID: firstNonNil(ordered, \.seriesID),
+            calendarNotes: linkSource.map { normalized($0.calendarNotes) }
+                ?? firstNonNil(ordered, \.calendarNotes),
+            conferencingURL: linkSource.map { normalized($0.conferencingURL) }
+                ?? firstNonNil(ordered, \.conferencingURL),
             externalSessionKey: firstNonNil(ordered, \.externalSessionKey),
             folderPath: firstNonNil(ordered, \.folderPath),
             languageCode: normalized(languagePick?.languageCode),

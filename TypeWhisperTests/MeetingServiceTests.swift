@@ -388,6 +388,54 @@ final class MeetingServiceTests: XCTestCase {
         XCTAssertEqual(meeting.attendees.map(\.email), ["kim@example.com"])
     }
 
+    func testUnlinkAlsoClearsTheLinkedEventsNotesAndJoinURL() throws {
+        // PR #7 review finding 3: `calendarNotes`/`conferencingURL` are a snapshot of the event
+        // being unlinked — keeping them leaves the document showing another meeting's agenda
+        // behind a Join button that dials the wrong call, permanently.
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Mislinked", source: .adHoc)
+        service.linkToCalendarEvent(
+            calendarEventID: "evt#42",
+            seriesID: "series-42",
+            title: "Weekly Sync",
+            startDate: Date(timeIntervalSince1970: 1_500_000),
+            endDate: nil,
+            attendees: [Attendee(name: "Kim", email: "kim@example.com")],
+            calendarNotes: "Agenda: budget",
+            conferencingURL: "https://meet.google.com/abc-defg-hij",
+            for: meeting
+        )
+        XCTAssertEqual(meeting.calendarNotes, "Agenda: budget")
+
+        service.unlinkCalendarEvent(for: meeting)
+
+        XCTAssertNil(meeting.calendarEventID)
+        XCTAssertNil(meeting.seriesID)
+        XCTAssertNil(meeting.calendarNotes, "the event snapshot goes with the linkage")
+        XCTAssertNil(meeting.conferencingURL)
+        // The meeting's own content is still kept.
+        XCTAssertEqual(meeting.title, "Mislinked")
+        XCTAssertEqual(meeting.attendees.map(\.email), ["kim@example.com"])
+    }
+
+    func testUnlinkClearsAnOrphanedEventSnapshotAndStaysIdempotent() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Ad hoc", source: .adHoc)
+        meeting.conferencingURL = "https://meet.google.com/orphan"
+
+        service.unlinkCalendarEvent(for: meeting)
+        XCTAssertNil(meeting.conferencingURL)
+
+        // Second call is a no-op — nothing left to clear.
+        let updatedAt = meeting.updatedAt
+        service.unlinkCalendarEvent(for: meeting)
+        XCTAssertEqual(meeting.updatedAt, updatedAt)
+    }
+
     func testIsDefaultOrEmptyTitle() {
         XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle(""))
         XCTAssertTrue(MeetingService.isDefaultOrEmptyTitle("   "))

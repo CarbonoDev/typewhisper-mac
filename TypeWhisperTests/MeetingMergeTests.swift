@@ -20,6 +20,8 @@ final class MeetingMergeTests: XCTestCase {
         end: TimeInterval? = nil,
         calendarEventID: String? = nil,
         seriesID: String? = nil,
+        calendarNotes: String? = nil,
+        conferencingURL: String? = nil,
         externalSessionKey: String? = nil,
         folderPath: String? = nil,
         languageCode: String? = nil,
@@ -36,6 +38,8 @@ final class MeetingMergeTests: XCTestCase {
             endDate: end.map(date),
             calendarEventID: calendarEventID,
             seriesID: seriesID,
+            calendarNotes: calendarNotes,
+            conferencingURL: conferencingURL,
             externalSessionKey: externalSessionKey,
             folderPath: folderPath,
             languageCode: languageCode,
@@ -170,6 +174,42 @@ final class MeetingMergeTests: XCTestCase {
         XCTAssertEqual(plan.seriesID, "series-9")
         XCTAssertEqual(plan.externalSessionKey, "abc-defg-hij")
         XCTAssertEqual(plan.folderPath, "Clients/Acme")
+    }
+
+    // MARK: - Event snapshot travels with the linkage (PR #7 review finding 9)
+
+    func testEventSnapshotComesFromTheMeetingThatSuppliedTheCalendarLink() {
+        let primary = snap(
+            start: 0,
+            calendarEventID: "ev-1",
+            calendarNotes: "Agenda A",
+            conferencingURL: "https://meet.google.com/aaa"
+        )
+        let absorbed = snap(
+            start: 60,
+            calendarNotes: "Agenda B",
+            conferencingURL: "https://meet.google.com/bbb"
+        )
+        let plan = MeetingMergePlanner.plan([primary, absorbed])!
+        XCTAssertEqual(plan.calendarEventID, "ev-1")
+        XCTAssertEqual(plan.calendarNotes, "Agenda A", "never pair one event's link with another's agenda")
+        XCTAssertEqual(plan.conferencingURL, "https://meet.google.com/aaa")
+    }
+
+    func testLinkedMeetingWithoutASnapshotDoesNotAdoptAStrayOne() {
+        let primary = snap(start: 0, calendarEventID: "ev-1")
+        let absorbed = snap(start: 60, calendarNotes: "Agenda B", conferencingURL: "https://meet.google.com/bbb")
+        let plan = MeetingMergePlanner.plan([primary, absorbed])!
+        XCTAssertNil(plan.calendarNotes, "the linked event carries no notes — a stray Join button is worse")
+        XCTAssertNil(plan.conferencingURL)
+    }
+
+    func testWithoutAnyCalendarLinkTheSnapshotFallsBackToPriorityOrder() {
+        let primary = snap(start: 0)
+        let absorbed = snap(start: 60, calendarNotes: "Agenda B", conferencingURL: "https://meet.google.com/bbb")
+        let plan = MeetingMergePlanner.plan([primary, absorbed])!
+        XCTAssertEqual(plan.calendarNotes, "Agenda B", "an orphaned snapshot is not silently dropped either")
+        XCTAssertEqual(plan.conferencingURL, "https://meet.google.com/bbb")
     }
 
     func testStrongerLanguageProvenanceWinsOverPrimary() {
@@ -356,6 +396,60 @@ final class MeetingMergeTests: XCTestCase {
             survivor.segments.sorted { $0.order < $1.order }.map(\.text),
             ["One.", "Two."]
         )
+    }
+
+    func testApplyMergeCarriesTheEventSnapshotOntoTheSurvivor() async throws {
+        // PR #7 review finding 9: `applyMerge` never wrote `calendarNotes`/`conferencingURL`, so a
+        // snapshot living on the absorbed meeting was lost with the deleted row.
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+
+        let primary = service.createMeeting(title: "Live capture", state: .completed, startDate: date(0))
+        let duplicate = service.createMeeting(
+            title: String(localized: "meetings.adHoc.defaultTitle"),
+            state: .completed,
+            startDate: date(600),
+            calendarNotes: "Agenda: budget",
+            conferencingURL: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let merged = await MeetingMergeService(meetingService: service).merge([primary, duplicate])
+        let survivor = try XCTUnwrap(merged)
+
+        XCTAssertEqual(survivor.id, primary.id)
+        XCTAssertEqual(survivor.calendarNotes, "Agenda: budget")
+        XCTAssertEqual(survivor.conferencingURL, "https://meet.google.com/abc-defg-hij")
+    }
+
+    func testApplyMergeKeepsTheLinkedPrimarysOwnSnapshot() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+
+        let linked = service.createMeeting(
+            title: "Weekly Sync",
+            source: .calendar,
+            state: .completed,
+            startDate: date(0),
+            calendarEventID: "ev-1",
+            calendarNotes: "Agenda A",
+            conferencingURL: "https://meet.google.com/aaa"
+        )
+        let duplicate = service.createMeeting(
+            title: String(localized: "meetings.adHoc.defaultTitle"),
+            state: .completed,
+            startDate: date(600),
+            calendarNotes: "Agenda B",
+            conferencingURL: "https://meet.google.com/bbb"
+        )
+
+        let merged = await MeetingMergeService(meetingService: service).merge([linked, duplicate])
+        let survivor = try XCTUnwrap(merged)
+
+        XCTAssertEqual(survivor.calendarEventID, "ev-1")
+        XCTAssertEqual(survivor.calendarNotes, "Agenda A", "the snapshot stays paired with its own event")
+        XCTAssertEqual(survivor.conferencingURL, "https://meet.google.com/aaa")
     }
 
     func testMergeUsesResolverForTitleConflictOnly() async throws {
