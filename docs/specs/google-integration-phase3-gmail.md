@@ -260,6 +260,12 @@ reserved KB slice in `assembleContext` (`:222`). The email block mirrors the KB 
   (normative):** `emailBlockSufficient` = the block is non-empty **and the meeting has ≥1
   non-self attendee email** (i.e. the attendee query was non-nil) — title-term-only email matches
   may *augment* a brief but never solely ground a persisted one.
+  *Documented approximation (M3 review, note-only):* the brief service's `hasNonSelfAttendeeEmail`
+  checks `isSelf` only — it cannot see the connected-account emails the D-M2 self-exclusion also
+  subtracts. In the narrow case where the sole non-self attendee email is one of the user's own
+  connected accounts, the guard passes while the actual attendee clause was nil (a non-empty
+  block is then title-anchored). Accepted: the block is still gated on a non-empty retrieval,
+  and threading the account list into the brief service for this edge is not worth the coupling.
 - `assembleContext(meeting:priorBlock:kbBlock:emailBlock:)`: the email block gets its own reserved
   slice, extending the existing reserve mechanics (`:240`) with one **explicit fix to the middle
   block's budget**: today the last section is given *all* remaining budget (`:250-256`), so a

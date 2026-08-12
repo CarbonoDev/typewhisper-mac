@@ -234,6 +234,10 @@
 		GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */; };
 		GGB0000000000000000112 /* MeetingQAComposerEmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */; };
 		GGB0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */; };
+		GGB0000000000000000114 /* MeetingRelatedEmailsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */; };
+		GGB0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */; };
+		GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000116 /* EmailRowPresentationTests.swift */; };
+		GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */; };
 		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
 		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
 		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
@@ -964,6 +968,10 @@
 		GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceEmailBlockTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerEmailTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceEmailEscalationTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedEmailsSection.swift; sourceTree = "<group>"; };
+		GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+RelatedEmails.swift"; sourceTree = "<group>"; };
+		GGF0000000000000000116 /* EmailRowPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmailRowPresentationTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RelatedEmailsFetchStateTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
 		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
@@ -2185,6 +2193,7 @@
 				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
 				M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */,
 				M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */,
+				GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */,
 				TEF0000000000000000006 /* SpaceViewModel.swift */,
 			);
 			path = ViewModels;
@@ -2400,6 +2409,7 @@
 				M7F0000000000000000003 /* VaultContextPickerView.swift */,
 				M7F0000000000000000010 /* MeetingRowContextMenu.swift */,
 				M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */,
+				GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */,
 				BB00000000000000000405 /* MeetingQAView.swift */,
 				BB00000000000000000407 /* MeetingExportView.swift */,
 				BB00000000000000000411 /* MeetingImportView.swift */,
@@ -3120,6 +3130,8 @@
 				GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */,
 				GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */,
 				GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */,
+				GGF0000000000000000116 /* EmailRowPresentationTests.swift */,
+				GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */,
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
@@ -4719,6 +4731,8 @@
 				GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */,
 				GGB0000000000000000112 /* MeetingQAComposerEmailTests.swift in Sources */,
 				GGB0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift in Sources */,
+				GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */,
+				GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */,
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
@@ -4993,6 +5007,8 @@
 				M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */,
 				M8B0000000000000000001 /* MeetingRelatedDocsService.swift in Sources */,
 				M8B0000000000000000002 /* MeetingRelatedDocsSection.swift in Sources */,
+				GGB0000000000000000114 /* MeetingRelatedEmailsSection.swift in Sources */,
+				GGB0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift in Sources */,
 				M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */,
 				DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */,
 				DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */,

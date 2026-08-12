@@ -23335,6 +23335,150 @@
         }
       }
     },
+    "meetingdoc.emails.empty": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine relevanten E-Mails gefunden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No related emails found."
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.fetchFailed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail-Suche fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't search Gmail: %@"
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.liveTitle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relevante E-Mails (%lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related emails (%lld)"
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.needsReauth": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde %@ in den Einstellungen neu, um Gmail zu durchsuchen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect %@ in Settings to search Gmail."
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.notConnected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiviere Gmail für ein Google-Konto in den Einstellungen, um relevante E-Mails zu sehen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Gmail for a Google account in Settings to see related emails."
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Gmail öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Gmail"
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relevante E-Mails"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Related emails"
+          }
+        }
+      }
+    },
+    "meetingdoc.emails.updatedAt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisiert %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %@"
+          }
+        }
+      }
+    },
     "meetingdoc.export.done": {
       "localizations": {
         "de": {
