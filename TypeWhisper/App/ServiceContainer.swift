@@ -513,7 +513,8 @@ final class ServiceContainer: ObservableObject {
             audioRecorderViewModel: audioRecorderViewModel,
             meetingService: meetingService,
             meetingImportService: meetingImportService,
-            calendarService: calendarService
+            calendarService: calendarService,
+            jobQueue: meetingJobQueue
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)

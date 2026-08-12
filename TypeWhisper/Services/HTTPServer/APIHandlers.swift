@@ -17,6 +17,12 @@ final class APIHandlers: @unchecked Sendable {
     /// Used for the optional `match_calendar` auto-link on import. Optional so tests (and any
     /// host without a calendar) can omit it; when nil, `match_calendar` reports `matched_event: null`.
     private let calendarService: CalendarService?
+    /// Drives the `willAbsorb` seam of `POST /v1/meetings/merge`: the absorbed meetings' queued and
+    /// running jobs are cancelled (and awaited) right before their rows are deleted, exactly as
+    /// `MeetingsViewModel.mergeMeetings` does for the UI path. Optional so a host without a queue
+    /// (tests that never enqueue) can omit it; when nil the merge still runs, it simply has no jobs
+    /// to cancel.
+    private let jobQueue: JobQueueService?
 
     init(
         modelManager: ModelManagerService,
@@ -29,7 +35,8 @@ final class APIHandlers: @unchecked Sendable {
         audioRecorderViewModel: AudioRecorderViewModel,
         meetingService: MeetingService,
         meetingImportService: MeetingImportService,
-        calendarService: CalendarService?
+        calendarService: CalendarService?,
+        jobQueue: JobQueueService? = nil
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -42,6 +49,7 @@ final class APIHandlers: @unchecked Sendable {
         self.meetingService = meetingService
         self.meetingImportService = meetingImportService
         self.calendarService = calendarService
+        self.jobQueue = jobQueue
     }
 
     func register(on router: APIRouter) {
@@ -70,6 +78,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
         router.register("POST", "/v1/meetings/import-transcript", handler: handleImportMeetingTranscript)
+        // Literal path: `APIRouter.route` matches every exact route before any `{placeholder}`
+        // pattern, so this is never shadowed by `/v1/meetings/{id}` (see the ordering comment there).
+        router.register("POST", "/v1/meetings/merge", handler: handleMergeMeetings)
         router.register("POST", "/v1/meetings/live", handler: handleStartLiveMeeting)
         router.register("POST", "/v1/meetings/live/{id}/segments", handler: handleAppendLiveSegments)
         router.register("POST", "/v1/meetings/live/{id}/end", handler: handleEndLiveMeeting)
@@ -1474,6 +1485,112 @@ final class APIHandlers: @unchecked Sendable {
                 matched_event: matched
             ))
         }
+    }
+
+    // MARK: - POST /v1/meetings/merge
+
+    private struct MeetingMergeRequest: Decodable {
+        let meetingIDs: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case meetingIDs = "meeting_ids"
+        }
+    }
+
+    private struct MeetingMergeResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let absorbed_ids: [String]
+        let segment_count: Int
+    }
+
+    /// Merge two or more existing meetings into one, over the *same* `MeetingMergeService.merge`
+    /// path the UI's bulk "Merge N meetings…" uses — deterministic planner, single plan, absorbed
+    /// rows deleted through the meetings store's single writer. No merge logic lives here.
+    ///
+    /// The `willAbsorb` seam is wired exactly as `MeetingsViewModel.mergeMeetings` wires it (and for
+    /// the same reason): a queued or running job can hold a strong reference to a `Meeting` that is
+    /// about to be deleted, so those jobs are cancelled *and awaited* (`cancelAllAndWait`) from
+    /// inside the callback, which fires once, from within `merge`, with the one plan actually about
+    /// to be applied. Deliberately not re-planned here — a second plan over the same live rows can
+    /// disagree with the one `merge` applies.
+    private func handleMergeMeetings(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+        let payload: MeetingMergeRequest
+        do {
+            payload = try JSONDecoder().decode(MeetingMergeRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body: expected {\"meeting_ids\": [\"…\", \"…\"]}")
+        }
+
+        // Trim, drop blanks, and de-duplicate while preserving order: the same id twice is not two
+        // meetings, and `MeetingMergePlanner` requires two *distinct* rows.
+        var uuids: [UUID] = []
+        for raw in payload.meetingIDs {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let uuid = UUID(uuidString: trimmed) else {
+                return .error(status: 400, message: "Invalid meeting id: '\(trimmed)'")
+            }
+            if !uuids.contains(uuid) { uuids.append(uuid) }
+        }
+        guard uuids.count >= 2 else {
+            return .error(status: 400, message: "Provide at least two distinct 'meeting_ids'")
+        }
+
+        return await performMerge(of: uuids)
+    }
+
+    @MainActor
+    private func performMerge(of uuids: [UUID]) async -> HTTPResponse {
+        let meetingService = self.meetingService
+        let jobQueue = self.jobQueue
+
+        var meetings: [Meeting] = []
+        for uuid in uuids {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found: \(uuid.uuidString)")
+            }
+            meetings.append(meeting)
+        }
+
+        guard MeetingMergeService.canMerge(meetings) else {
+            return .error(
+                status: 409,
+                message: "These meetings cannot be merged: a meeting that is still recording or "
+                    + "processing must finish first (states: "
+                    + meetings.map(\.state.rawValue).joined(separator: ", ") + ")"
+            )
+        }
+
+        var absorbedIDs: [UUID] = []
+        let mergeService = MeetingMergeService(meetingService: meetingService)
+        guard let merged = await mergeService.merge(meetings, willAbsorb: { ids in
+            absorbedIDs = ids
+            for id in ids {
+                await jobQueue?.cancelAllAndWait(for: id)
+            }
+        }) else {
+            // `canMerge` passed above, so this is the narrow race where a state flipped underneath
+            // us (or the planner refused) between the check and the apply.
+            return .error(status: 409, message: "Merge was refused: the meetings changed state mid-merge")
+        }
+
+        for id in absorbedIDs {
+            MeetingChecklistStore.shared.removeAll(meetingID: id)
+        }
+
+        apiLogger.info("Merged \(absorbedIDs.count) meeting(s) into \(merged.id.uuidString, privacy: .public)")
+
+        return .json(MeetingMergeResponse(
+            id: merged.id.uuidString,
+            title: merged.title,
+            date: merged.startDate,
+            absorbed_ids: absorbedIDs.map(\.uuidString),
+            segment_count: merged.segments.count
+        ))
     }
 
     private func parseImportInputs(_ request: HTTPRequest) -> MeetingImportInputsResolution {
