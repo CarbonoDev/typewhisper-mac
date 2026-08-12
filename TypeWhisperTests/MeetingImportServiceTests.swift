@@ -387,6 +387,64 @@ final class MeetingImportServiceTests: XCTestCase {
         XCTAssertEqual(sorted.filter { $0.source == .importedTranscript }.count, 2)
     }
 
+    /// End to end: a timed import that skipped the middle of the meeting takes over the stretches it
+    /// transcribed and leaves the rest of the live transcript alone. Regression for the coarse
+    /// covered-span policy, which deleted every caption row in the import's hole.
+    func testMergeTimedImportKeepsLiveRowsInsideItsUncoveredHole() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        let service = makeService(
+            meetingService: meetingService,
+            transcriber: StubTranscriber(result: makeResult(segments: []))
+        )
+
+        // The captions deliberately share no wording with the import (two transcriptions of the same
+        // audio rarely do), so no text anchor exists and both timelines are compared on the
+        // meeting-relative clock the live-caption API contract pins them to.
+        let meeting = meetingService.createMeeting(title: "Con captions", source: .adHoc, state: .completed)
+        meetingService.appendStableSegments(
+            [
+                TranscriptionSegment(text: "Nota viva sobre presupuesto anual.", start: 100, end: 130),
+                TranscriptionSegment(text: "Nota viva sobre contratación pendiente.", start: 600, end: 630),
+                TranscriptionSegment(text: "Nota viva sobre calendario compartido.", start: 1520, end: 1540)
+            ],
+            source: .liveCaptions,
+            to: meeting
+        )
+
+        // A transcript whose recognizer dropped out between 00:01 and 00:25 — the two halves are
+        // transcribed, the middle is simply missing.
+        let fileURL = dir.appendingPathComponent("con-hueco.txt")
+        try """
+        Alice  00:00:05
+        Arranque del primer tramo.
+
+        Bob  00:01:00
+        Cierre del primer tramo.
+
+        Alice  00:25:00
+        Arranque del segundo tramo.
+
+        Bob  00:26:00
+        Cierre del segundo tramo.
+        """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let dropped = try service.mergeTranscriptFile(at: fileURL, into: meeting)
+
+        XCTAssertEqual(dropped, 2, "only the caption rows inside a covered run give way")
+        let texts = meeting.segments.sorted { $0.order < $1.order }.map(\.text)
+        XCTAssertTrue(
+            texts.contains("Nota viva sobre contratación pendiente."),
+            "captured content is never dropped outside the import's covered runs: \(texts)"
+        )
+        XCTAssertFalse(texts.contains("Nota viva sobre presupuesto anual."))
+        XCTAssertFalse(texts.contains("Nota viva sobre calendario compartido."))
+        XCTAssertTrue(texts.contains("Arranque del primer tramo."))
+        XCTAssertTrue(texts.contains("Cierre del segundo tramo."))
+    }
+
     /// An import with no recoverable timing (plain `Speaker:` lines, all-zero timestamps) must fall
     /// back to the append + text-dedupe behavior: no live row is ever dropped on a guess.
     func testMergeUntimedImportNeverDropsLiveRows() throws {
@@ -474,7 +532,11 @@ final class MeetingImportServiceTests: XCTestCase {
             .init(text: "nueva uno", start: 90, end: 200, source: .importedTranscript)
         ]
 
-        let resolution = ImportOverlapPlan.resolve(existing: existing, imported: imported)
+        let resolution = ImportOverlapPlan.resolve(
+            existing: existing,
+            imported: imported,
+            clockAnchored: true
+        )
 
         XCTAssertEqual(resolution.droppedOverlappedCount, 2)
         XCTAssertEqual(
@@ -493,10 +555,95 @@ final class MeetingImportServiceTests: XCTestCase {
             .init(text: "sin tiempos dos", start: 0, end: 0, source: .importedTranscript)
         ]
 
-        let resolution = ImportOverlapPlan.resolve(existing: existing, imported: imported)
+        let resolution = ImportOverlapPlan.resolve(
+            existing: existing,
+            imported: imported,
+            clockAnchored: true
+        )
 
         XCTAssertEqual(resolution.droppedOverlappedCount, 0)
         XCTAssertEqual(resolution.survivingExisting, existing)
         XCTAssertNil(ImportOverlapPlan.coveredSpan(of: imported))
+    }
+
+    /// The invariant the coarse `[min, max]` span broke: **captured content is never dropped outside
+    /// the runs the import actually covers.** An import that skipped a stretch of the meeting owns
+    /// the stretches it transcribed and nothing else — the live rows sitting in its hole are the only
+    /// record of what was said there.
+    func testImportOverlapPlanKeepsLiveRowsInAHoleTheImportNeverCovers() {
+        let existing: [TranscriptMerger.Segment] = [
+            .init(text: "caption en el primer tramo", start: 260, end: 290, source: .liveCaptions),
+            .init(text: "caption dentro del hueco", start: 1200, end: 1230, source: .liveCaptions),
+            .init(text: "captura dentro del hueco", start: 1400, end: 1430, source: .liveCapture),
+            .init(text: "caption en el segundo tramo", start: 2420, end: 2450, source: .liveCaptions)
+        ]
+        // Two covered stretches (04:00–04:40 and 40:00–40:40) with 35 minutes of nothing between —
+        // the backfilled end of the last turn before the hole must not be read as coverage.
+        let imported: [TranscriptMerger.Segment] = [
+            .init(text: "importado uno", start: 240, end: 280, source: .importedTranscript),
+            .init(text: "importado dos", start: 280, end: 2400, source: .importedTranscript),
+            .init(text: "importado tres", start: 2400, end: 2440, source: .importedTranscript)
+        ]
+
+        let resolution = ImportOverlapPlan.resolve(
+            existing: existing,
+            imported: imported,
+            clockAnchored: true
+        )
+
+        XCTAssertEqual(resolution.droppedOverlappedCount, 2, "only the rows inside a covered run")
+        XCTAssertEqual(
+            resolution.survivingExisting.map(\.text),
+            ["caption dentro del hueco", "captura dentro del hueco"]
+        )
+        XCTAssertEqual(ImportOverlapPlan.coveredRuns(of: imported).count, 2)
+    }
+
+    /// Without a text anchor the two timelines share an origin only for `.liveCaptions` (meeting-
+    /// relative by API contract). A late-join `.liveCapture` sits on its own 0-based clock, so
+    /// comparing it against the import's times would delete rows by coincidence — it survives.
+    func testImportOverlapPlanKeepsCaptureRowsWhenClocksWereNeverAnchored() {
+        let existing: [TranscriptMerger.Segment] = [
+            .init(text: "caption", start: 100, end: 130, source: .liveCaptions),
+            .init(text: "captura de un late join", start: 100, end: 130, source: .liveCapture)
+        ]
+        let imported: [TranscriptMerger.Segment] = [
+            .init(text: "importado", start: 90, end: 200, source: .importedTranscript)
+        ]
+
+        let anchorless = ImportOverlapPlan.resolve(
+            existing: existing,
+            imported: imported,
+            clockAnchored: false
+        )
+        XCTAssertEqual(anchorless.droppedOverlappedCount, 1)
+        XCTAssertEqual(anchorless.survivingExisting.map(\.source), [.liveCapture])
+
+        // With an anchor both timelines are on the captured clock, so both rows are fair game.
+        let anchored = ImportOverlapPlan.resolve(
+            existing: existing,
+            imported: imported,
+            clockAnchored: true
+        )
+        XCTAssertEqual(anchored.droppedOverlappedCount, 2)
+        XCTAssertTrue(anchored.survivingExisting.isEmpty)
+    }
+
+    /// Runs bridge the pauses inside a conversation and break at a stretch with no content.
+    func testCoveredRunsBridgePausesAndBreakAtSkippedStretches() {
+        let dense: [TranscriptMerger.Segment] = [
+            .init(text: "uno", start: 0, end: 10, source: .importedTranscript),
+            .init(text: "dos", start: 40, end: 50, source: .importedTranscript),
+            .init(text: "tres", start: 120, end: 130, source: .importedTranscript)
+        ]
+        XCTAssertEqual(ImportOverlapPlan.coveredRuns(of: dense), [0...130])
+
+        let skipped: [TranscriptMerger.Segment] = [
+            .init(text: "uno", start: 0, end: 10, source: .importedTranscript),
+            .init(text: "dos", start: 1800, end: 1810, source: .importedTranscript)
+        ]
+        XCTAssertEqual(ImportOverlapPlan.coveredRuns(of: skipped), [0...10, 1800...1810])
+        // The hull still spans both — which is exactly why the policy may not use it.
+        XCTAssertEqual(ImportOverlapPlan.coveredSpan(of: skipped), 0...1810)
     }
 }

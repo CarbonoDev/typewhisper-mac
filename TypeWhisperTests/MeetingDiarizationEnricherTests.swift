@@ -648,4 +648,39 @@ final class MeetingDiarizationEnricherTests: XCTestCase {
         let outcome = try await enricher.enrich(meeting)
         XCTAssertEqual(outcome, .noAudio)
     }
+
+    // MARK: - Cloud speaker rerun: the replace target
+
+    /// The rerun replaces the transcription-derived source, never `.liveCaptions`. On a caption-bridge
+    /// meeting merged with its locally-recorded twin the earliest segment is a caption row, and
+    /// selecting it would trade every real speaker name Meet supplied for a generic `SPEAKER_xx` —
+    /// the loss `MeetingSegmentSource.liveCaptions` exists to prevent.
+    func testCloudRerunNeverSelectsLiveCaptionsAsTheReplaceTarget() {
+        // Captions first in transcript order (the merged caption-bridge meeting).
+        XCTAssertEqual(
+            MeetingDiarizationEnricher.cloudRerunReplacementSource(
+                orderedSources: [.liveCaptions, .liveCaptions, .liveCapture, .liveCaptions]
+            ),
+            .liveCapture
+        )
+        // An imported-audio twin is just as valid a target.
+        XCTAssertEqual(
+            MeetingDiarizationEnricher.cloudRerunReplacementSource(
+                orderedSources: [.liveCaptions, .importedAudio]
+            ),
+            .importedAudio
+        )
+        // Single-source meetings keep behaving exactly as before.
+        XCTAssertEqual(
+            MeetingDiarizationEnricher.cloudRerunReplacementSource(orderedSources: [.liveCapture]),
+            .liveCapture
+        )
+        // Caption-only: nothing may be replaced, so the rerun skips instead of clobbering.
+        XCTAssertNil(
+            MeetingDiarizationEnricher.cloudRerunReplacementSource(
+                orderedSources: [.liveCaptions, .liveCaptions]
+            )
+        )
+        XCTAssertNil(MeetingDiarizationEnricher.cloudRerunReplacementSource(orderedSources: []))
+    }
 }

@@ -6,8 +6,8 @@ import Foundation
 /// is not duplicated (plan reminder 3 — a user who joined late imports the full transcript).
 /// Non-overlapping imported segments (e.g. the pre-capture gap for a late joiner) are kept and
 /// time-ordered into place. `mergeAuthoritativeImport` adds one deliberate exception for the
-/// merge-import path: a *timed* import owns its covered span, so existing live rows inside it are
-/// dropped per `ImportOverlapPlan` (two transcriptions of the same audio never text-match, so text
+/// merge-import path: a *timed* import owns the stretches it actually covers, so existing live rows
+/// inside those runs are dropped per `ImportOverlapPlan` (two transcriptions of the same audio never text-match, so text
 /// dedupe alone would interleave them).
 ///
 /// ## Two clocks
@@ -103,11 +103,12 @@ enum TranscriptMerger {
     }
 
     /// The merge for the merge-import path (`MeetingService.mergeImport`): identical alignment and
-    /// dedupe to `merge`, plus the `ImportOverlapPlan` policy — a *timed* import is authoritative
-    /// for its covered span, so existing live rows (captions/capture) inside that span are dropped.
+    /// dedupe to `merge`, plus the `ImportOverlapPlan` policy — a *timed* import is authoritative for
+    /// the stretches it actually covers, so existing live rows (captions/capture) inside one of those
+    /// covered runs are dropped. Live rows in a hole the import never covers always survive.
     ///
     /// Sequencing matters and is why the policy lives inside the pipeline rather than before it:
-    /// the plan runs **after clock alignment** (the span comparison must happen on the captured
+    /// the plan runs **after clock alignment** (the run comparison must happen on the captured
     /// clock, and dropping live rows first could remove the very anchors the offset estimate needs,
     /// letting a weaker cross-match win and corrupt the whole timeline) and **before dedupe** (an
     /// imported row must not be deduped against a live row it is about to replace).
@@ -180,15 +181,21 @@ enum TranscriptMerger {
         }
 
         // 1.5) Overlap policy (merge-import path only): now that both timelines share one clock,
-        // a timed import is authoritative for its covered span — existing live rows inside it are
-        // dropped (`ImportOverlapPlan` documents the full rationale). Must run after alignment
-        // (span on the captured clock; anchors intact) and before dedupe (imported rows must not
-        // dedupe against rows they replace).
+        // a timed import is authoritative for the stretches it actually covers — existing live rows
+        // inside those runs are dropped (`ImportOverlapPlan` documents the full rationale). Must run
+        // after alignment (runs on the captured clock; anchors intact) and before dedupe (imported
+        // rows must not dedupe against rows they replace). Whether an anchor was found is passed
+        // through: without one, only rows whose clock the API contract pins to the import's origin
+        // (`.liveCaptions`) may be dropped.
         let survivingExisting: [Segment]
         let survivingTokenSets: [Set<String>]
         let droppedOverlapped: Int
         if applyOverlapPolicy {
-            let plan = ImportOverlapPlan.resolve(existing: existing, imported: aligned)
+            let plan = ImportOverlapPlan.resolve(
+                existing: existing,
+                imported: aligned,
+                clockAnchored: offset != nil
+            )
             droppedOverlapped = plan.droppedOverlappedCount
             survivingExisting = plan.survivingExisting
             survivingTokenSets = droppedOverlapped == 0
