@@ -44,9 +44,14 @@ enum GoogleCalendarAPI {
         let isSelf: Bool?
         /// `"accepted" | "declined" | "tentative" | "needsAction"`.
         let responseStatus: String?
+        /// Google's `resource` flag: this entry is a room / equipment booking, not a person
+        /// (PR #7 review finding 6). Such entries are excluded from the projected roster by
+        /// `GoogleCalendarMapper.attendees(from:)` so a conference room never lands in the
+        /// participant directory.
+        let resource: Bool?
 
         enum CodingKeys: String, CodingKey {
-            case email, displayName, organizer, responseStatus
+            case email, displayName, organizer, responseStatus, resource
             case isSelf = "self"
         }
     }
