@@ -6679,6 +6679,194 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(invalid.status, 400)
     }
 
+    // MARK: - POST /v1/meetings/merge
+
+    private static func mergeRequest(_ ids: [String]) -> HTTPRequest {
+        HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/merge",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try! JSONSerialization.data(withJSONObject: ["meeting_ids": ids])
+        )
+    }
+
+    /// The happy path over the same `MeetingMergeService` seam the UI uses: two completed meetings
+    /// collapse into one, the earlier-starting meeting survives (the planner's primary pick), the
+    /// other is reported as absorbed, and the store is left with exactly one row.
+    func testMergeMeetingsCollapsesTwoMeetingsAndReportsSurvivor() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let (primaryID, duplicateID) = await MainActor.run {
+            let service = apiContext.meetingService
+            let primary = service.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            )
+            let duplicate = service.createFromImport(
+                title: "Weekly Sync (re-join)",
+                source: .importedTranscript,
+                segments: [
+                    TranscriptionSegment(text: "First line.", start: 0, end: 1, speakerLabel: "Alice"),
+                    TranscriptionSegment(text: "Second line.", start: 1, end: 2, speakerLabel: "Bob")
+                ],
+                segmentSource: .importedTranscript
+            )
+            service.setMeetingDate(Self.iso8601("2026-03-01T10:20:00Z"), for: duplicate)
+            return (primary.id.uuidString, duplicate.id.uuidString)
+        }
+
+        let response = await apiContext.router.route(Self.mergeRequest([primaryID, duplicateID]))
+        XCTAssertEqual(response.status, 200)
+
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["id"] as? String, primaryID)
+        XCTAssertEqual(json["title"] as? String, "Weekly Sync")
+        XCTAssertEqual(json["absorbed_ids"] as? [String], [duplicateID])
+        XCTAssertEqual(json["segment_count"] as? Int, 2)
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 1)
+            XCTAssertEqual(apiContext.meetingService.meetings.first?.id.uuidString, primaryID)
+        }
+    }
+
+    /// An id that resolves to no meeting is a 404 that names the offender — and nothing is merged.
+    func testMergeMeetingsUnknownIdReturns404() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let existingID = await MainActor.run {
+            apiContext.meetingService.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            ).id.uuidString
+        }
+        let missingID = UUID().uuidString
+
+        let response = await apiContext.router.route(Self.mergeRequest([existingID, missingID]))
+        XCTAssertEqual(response.status, 404)
+        let message = String(data: response.body, encoding: .utf8) ?? ""
+        XCTAssertTrue(message.contains(missingID), "the 404 must name the id that was not found")
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 1, "a failed merge changes nothing")
+        }
+    }
+
+    /// A meeting that is still recording (`.live`) makes the set unmergeable — `canMerge` refuses,
+    /// the endpoint answers 409, and both rows survive untouched.
+    func testMergeMeetingsWithLiveMeetingReturns409() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let (completedID, liveID) = await MainActor.run {
+            let service = apiContext.meetingService
+            let completed = service.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            )
+            let live = service.createMeeting(
+                title: "Weekly Sync (recording)",
+                state: .live,
+                startDate: Self.iso8601("2026-03-01T10:20:00Z")
+            )
+            return (completed.id.uuidString, live.id.uuidString)
+        }
+
+        let response = await apiContext.router.route(Self.mergeRequest([completedID, liveID]))
+        XCTAssertEqual(response.status, 409)
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 2, "a refused merge changes nothing")
+        }
+    }
+
+    /// Guard rails on the payload itself: a single id is not a merge, and a malformed uuid is a 400
+    /// (not a 404) because it never identified a meeting in the first place.
+    func testMergeMeetingsRejectsTooFewAndMalformedIds() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let id = await MainActor.run {
+            apiContext.meetingService.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            ).id.uuidString
+        }
+
+        let single = await apiContext.router.route(Self.mergeRequest([id]))
+        XCTAssertEqual(single.status, 400)
+
+        // The same id twice is one meeting, not two.
+        let duplicated = await apiContext.router.route(Self.mergeRequest([id, id]))
+        XCTAssertEqual(duplicated.status, 400)
+
+        let malformed = await apiContext.router.route(Self.mergeRequest([id, "not-a-uuid"]))
+        XCTAssertEqual(malformed.status, 400)
+
+        let empty = await apiContext.router.route(HTTPRequest(
+            method: "POST", path: "/v1/meetings/merge", queryParams: [:],
+            headers: ["content-type": "application/json"], body: Data()
+        ))
+        XCTAssertEqual(empty.status, 400)
+    }
+
+    /// The literal `/v1/meetings/merge` route must never be swallowed by the `/v1/meetings/{id}`
+    /// pattern — a GET on the same path still falls through to the id route (and 400s on the
+    /// un-parseable "merge" id), proving the two coexist.
+    func testMergeRouteIsNotShadowedByMeetingIdRoute() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        // POST hits the merge handler (400 for a missing body), not the GET-only id route.
+        let posted = await apiContext.router.route(HTTPRequest(
+            method: "POST", path: "/v1/meetings/merge", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(posted.status, 400)
+
+        // GET still resolves through `/v1/meetings/{id}`, which rejects "merge" as an id.
+        let fetched = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/merge", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(fetched.status, 400)
+    }
+
     @MainActor
     func testPromptProcessingInjectsMemoryByDefault() async throws {
         let providerKey = "llmProviderType"
