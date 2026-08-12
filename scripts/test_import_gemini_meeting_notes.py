@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
-"""Tests for the Gemini meeting-notes export parser."""
+"""Tests for the Gemini meeting-notes export splitter.
+
+The fixtures below use the **real** export flavor: every heading is bold (`## **…**`,
+`### **HH:MM:SS**`) and markdown punctuation is backslash-escaped (`\\-`). Transcript *parsing*
+is not tested here — the script hands the section to the app verbatim and
+`TranscriptFileParser.parseGeminiNotes` (covered by `TranscriptFileParserTests`) owns it.
+"""
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from import_gemini_meeting_notes import parse_export, parse_stamp, parse_transcript
+from import_gemini_meeting_notes import count_turns, main, parse_export, parse_stamp
 
-EXPORT = """10 mar 2026
+NOTES_HALF = """10 mar 2026
 
-## Llamada Semanal Dirección-TI
+## **Llamada Semanal Dirección\\-TI**
 
 Invitados [<span class="underline">Hugo Anaya</span>](mailto:hanaya@example.mx) \
 [<span class="underline">Marco Rivadeneyra</span>](mailto:marco@example.mx) \
@@ -20,20 +30,20 @@ Invitados [<span class="underline">Hugo Anaya</span>](mailto:hanaya@example.mx) 
 
 Archivos adjuntos [<span class="underline">Llamada Semanal</span>](https://www.google.com/calendar/event?eid=abc)
 
-### Resumen
+### **Resumen**
 
 Ajustes de carga laboral dominaron la sesión.
 
 **Gestión de Errores**
 El error crítico sigue sin resolverse.
 
-### Detalles
+### **Detalles**
 
   - > **Carga Laboral**: Se discutió reducir la carga ([<span class="underline">00:00:00</span>](#section)).
 
   - > **Bugs**: Hugo toma el \\*bug\\* crítico ([<span class="underline">00:01:00</span>](#section-1)).
 
-### Pasos siguientes recomendados
+### **Pasos siguientes recomendados**
 
   - > Hugo Anaya tomará el bug crítico.
 
@@ -45,23 +55,27 @@ El error crítico sigue sin resolverse.
 
 10 mar 2026
 
-## Llamada Semanal Dirección-TI - Transcripción
+"""
 
-### 00:00:00
+TRANSCRIPT_HALF = """## **Llamada Semanal Dirección\\-TI \\- Transcripción**
+
+### **00:00:00**
 
 \xa0
 **Hugo Anaya:** Hola a todos.
 **Karim Darwich:** Hola.
 
 
-### 00:01:00
+### **00:01:00**
 
 **Hugo Anaya:** Empecemos con los bugs.
 
-### La transcripción finalizó después de 00:02:00
+### **La transcripción finalizó después de 00:02:00**
 
 *Esta transcripción editable se ha generado por ordenador y puede contener errores.*
 """
+
+EXPORT = NOTES_HALF + TRANSCRIPT_HALF
 
 
 class ParseStampTests(unittest.TestCase):
@@ -78,30 +92,15 @@ class ParseStampTests(unittest.TestCase):
         self.assertIsNone(parse_stamp("just-a-note.md"))
 
 
-class ParseTranscriptTests(unittest.TestCase):
-    def test_turns_are_spread_across_their_block(self) -> None:
-        parsed = parse_transcript(
-            "### 00:00:00\n\n**A:** aaaaa\n**B:** bbbbb\n\n### 00:00:10\n\n**A:** end\n"
-        )
-        # Two equal-length turns split the 10s block in half; the trailing block has no
-        # successor, so it falls back to a one-minute span.
-        self.assertEqual(
-            parsed.split("\n"),
-            ["00:00:00 A: aaaaa", "00:00:05 B: bbbbb", "00:00:10 A: end"],
-        )
+class CountTurnsTests(unittest.TestCase):
+    def test_counts_only_bold_speaker_turns(self) -> None:
+        self.assertEqual(count_turns(TRANSCRIPT_HALF), 3)
 
-    def test_end_marker_bounds_the_final_block(self) -> None:
-        parsed = parse_transcript(
-            "### 00:00:00\n**A:** one\n**B:** two\n### La transcripción finalizó después de 00:00:20\n"
-        )
-        self.assertEqual(parsed.split("\n"), ["00:00:00 A: one", "00:00:10 B: two"])
+    def test_a_section_with_no_turns_counts_zero(self) -> None:
+        self.assertEqual(count_turns("## **X \\- Transcripción**\n\n### **00:00:00**\n"), 0)
 
-    def test_boilerplate_and_blockless_lines_are_dropped(self) -> None:
-        parsed = parse_transcript(
-            "**A:** stray turn before any block\n### 00:00:00\n"
-            "*Esta transcripción editable se ha generado por ordenador.*\n**A:** real turn\n"
-        )
-        self.assertEqual(parsed, "00:00:00 A: real turn")
+    def test_a_bold_label_with_no_utterance_is_not_a_turn(self) -> None:
+        self.assertEqual(count_turns("**Gestión de Errores:**\n**Ana:** sí"), 1)
 
 
 class ParseExportTests(unittest.TestCase):
@@ -112,7 +111,7 @@ class ParseExportTests(unittest.TestCase):
             self_email="marco@example.mx",
         )
 
-    def test_title_comes_from_the_document_not_the_filename(self) -> None:
+    def test_title_comes_from_the_bold_document_heading_not_the_filename(self) -> None:
         self.assertEqual(self.parsed["title"], "Llamada Semanal Dirección-TI")
 
     def test_date_comes_from_the_filename_stamp(self) -> None:
@@ -131,7 +130,7 @@ class ParseExportTests(unittest.TestCase):
         parsed = parse_export(EXPORT, "x__2026_03_10_11_00_CST.md", include_absent=True)
         self.assertEqual([entry["name"] for entry in parsed["attendees"]][-1], "Juan Carlos Sánchez")
 
-    def test_summary_keeps_only_the_resumen_section(self) -> None:
+    def test_summary_keeps_only_the_bold_resumen_section(self) -> None:
         self.assertEqual(
             self.parsed["summary"],
             "Ajustes de carga laboral dominaron la sesión.\n\n"
@@ -150,15 +149,84 @@ class ParseExportTests(unittest.TestCase):
             "- Hugo Anaya actualizará el ticket diariamente.",
         )
 
+    def test_transcript_section_is_handed_over_verbatim(self) -> None:
+        # The app's own parser owns this text; the script must not rewrite it. The banner stays in
+        # because it is one of the two signals TranscriptFileParser uses to detect the format.
+        self.assertEqual(self.parsed["text"], TRANSCRIPT_HALF.strip())
+
     def test_transcript_excludes_the_notes_half(self) -> None:
-        self.assertEqual(
-            self.parsed["text"].split("\n"),
-            [
-                "00:00:00 Hugo Anaya: Hola a todos.",
-                "00:00:43 Karim Darwich: Hola.",  # 60s block split by utterance length (13 : 5)
-                "00:01:00 Hugo Anaya: Empecemos con los bugs.",
-            ],
+        self.assertNotIn("Resumen", self.parsed["text"])
+        self.assertNotIn("Ajustes de carga laboral", self.parsed["text"])
+        self.assertNotIn("📖", self.parsed["text"])
+
+
+class TranscriptOnlyExportTests(unittest.TestCase):
+    """Real exports are often transcript-only: a date line and the transcript half, no notes."""
+
+    def setUp(self) -> None:
+        self.parsed = parse_export(
+            "jul 22, 2026\n\n" + TRANSCRIPT_HALF,
+            "Llamada Semanal - 2026_03_10 11_00 CST - Notas de Gemini.md",
         )
+
+    def test_title_falls_back_to_the_transcript_banner(self) -> None:
+        self.assertEqual(self.parsed["title"], "Llamada Semanal Dirección-TI")
+
+    def test_transcript_is_still_extracted(self) -> None:
+        self.assertEqual(count_turns(self.parsed["text"]), 3)
+
+    def test_notes_fields_are_empty(self) -> None:
+        self.assertEqual(self.parsed["summary"], "")
+        self.assertEqual(self.parsed["extended"], "")
+
+
+class NoTranscriptTests(unittest.TestCase):
+    def test_a_notes_only_export_yields_no_transcript(self) -> None:
+        parsed = parse_export(NOTES_HALF, "x__2026_03_10_11_00_CST.md")
+        self.assertEqual(parsed["text"], "")
+        self.assertEqual(parsed["summary"].splitlines()[0], "Ajustes de carga laboral dominaron la sesión.")
+
+
+class MainTests(unittest.TestCase):
+    """End-to-end CLI behavior: `--dry-run` reports, an export with no turns is skipped."""
+
+    def _run(self, contents: str, name: str, *extra: str) -> tuple[int, str, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, name)
+            Path(path).write_text(contents, encoding="utf-8")
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                status = main([path, "--dry-run", *extra])
+            return status, out.getvalue(), err.getvalue()
+
+    def test_dry_run_reports_the_parsed_export_and_succeeds(self) -> None:
+        status, out, err = self._run(
+            EXPORT, "Llamada Semanal - 2026_03_10 11_00 CST - Notas de Gemini.md"
+        )
+        self.assertEqual(status, 0, err)
+        self.assertIn("DRY  Llamada Semanal Dirección-TI @ 2026-03-10T11:00:00-06:00", out)
+        self.assertIn("3 turns, 2 attendees", out)
+
+    def test_dry_run_imports_a_transcript_only_export(self) -> None:
+        status, out, _ = self._run(
+            "jul 22, 2026\n\n" + TRANSCRIPT_HALF,
+            "Llamada Semanal - 2026_03_10 11_00 CST - Notas de Gemini.md",
+        )
+        self.assertEqual(status, 0)
+        self.assertIn("3 turns", out)
+
+    def test_an_export_with_no_turns_is_skipped_and_fails(self) -> None:
+        status, out, err = self._run(NOTES_HALF, "Notas - 2026_03_10 11_00 CST.md")
+        self.assertEqual(status, 1)
+        self.assertEqual(out, "")
+        self.assertIn("no transcript turns found", err)
+
+    def test_a_missing_file_is_skipped_and_fails(self) -> None:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            status = main(["/nonexistent/path/to/export.md", "--dry-run"])
+        self.assertEqual(status, 1)
+        self.assertIn("SKIP", err.getvalue())
 
 
 if __name__ == "__main__":
