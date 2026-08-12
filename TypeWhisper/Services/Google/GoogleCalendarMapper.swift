@@ -102,8 +102,13 @@ enum GoogleCalendarMapper {
 
     // MARK: - Attendees
 
+    /// Human attendees only. Room / equipment bookings arrive as attendee entries flagged
+    /// `resource: true` (PR #7 review finding 6) — projecting them would promote "Conf Room 3" into
+    /// the participants directory as a person (every attendee write funnels through
+    /// `ParticipantDirectoryService.ingest`), so they are dropped here, at the single mapping
+    /// choke point.
     private static func attendees(from event: GoogleCalendarAPI.GCalEvent) -> [Attendee] {
-        (event.attendees ?? []).map { attendee in
+        (event.attendees ?? []).filter { $0.resource != true }.map { attendee in
             Attendee(
                 name: attendee.displayName ?? attendee.email ?? "",
                 email: attendee.email,
@@ -137,18 +142,40 @@ enum GoogleCalendarMapper {
 
     // MARK: - Notes (HTML → plain text)
 
+    /// A well-formed HTML tag *shape*: `<tag …>`, `</tag>`, `<tag/>`. The tag name must start with
+    /// a letter and attributes must be separated by whitespace, so non-markup angle-bracketed text
+    /// (`<john@example.com>`, `< 5000 >`, `<-- draft`) never matches (PR #7 review finding 8).
+    private static let tagPattern = "</?[A-Za-z][A-Za-z0-9]*(?:\\s[^<>]*)?/?>"
+    /// HTML comments and declarations (`<!-- … -->`, `<!DOCTYPE html>`), stripped alongside tags.
+    private static let commentPattern = "<!--[\\s\\S]*?-->|<![^<>]*>"
+
+    /// Whether the string actually looks like HTML: it carries at least one real tag. Plain-text
+    /// descriptions that merely contain angle brackets are left completely untouched.
+    static func looksLikeHTML(_ text: String) -> Bool {
+        text.range(of: tagPattern, options: [.regularExpression]) != nil
+            || text.range(of: commentPattern, options: [.regularExpression]) != nil
+    }
+
     /// Google event descriptions frequently arrive as HTML. Reduce to plain text: block-level
     /// closers and `<br>` become newlines, remaining tags are stripped, the common entities are
     /// decoded (`&amp;` last, so `&amp;lt;` never double-decodes), and whitespace is tidied.
-    /// Plain-text descriptions pass through effectively untouched.
+    ///
+    /// Tag stripping only runs when the content actually contains HTML tags, and even then it
+    /// matches the tag *shape* rather than "anything between angle brackets" (PR #7 review finding
+    /// 8): a plain-text description like `Dial-in host John <john@example.com>, budget < 5000 >
+    /// target` used to lose the address and the numbers permanently, because the notes are
+    /// snapshotted onto `Meeting.calendarNotes` at create/link time. Entity decoding still runs on
+    /// plain text — an escaped `&amp;` is meant to be read as `&` either way.
     static func plainText(fromHTML html: String) -> String {
         var text = html
         let fullRange = { NSRange(text.startIndex..., in: text) }
-        if let lineBreaks = try? NSRegularExpression(pattern: "(?i)<br\\s*/?>|</p>|</div>|</li>|</tr>") {
-            text = lineBreaks.stringByReplacingMatches(in: text, range: fullRange(), withTemplate: "\n")
-        }
-        if let tags = try? NSRegularExpression(pattern: "<[^>]+>") {
-            text = tags.stringByReplacingMatches(in: text, range: fullRange(), withTemplate: "")
+        if looksLikeHTML(text) {
+            if let lineBreaks = try? NSRegularExpression(pattern: "(?i)<br\\s*/?>|</p>|</div>|</li>|</tr>") {
+                text = lineBreaks.stringByReplacingMatches(in: text, range: fullRange(), withTemplate: "\n")
+            }
+            if let tags = try? NSRegularExpression(pattern: "\(commentPattern)|\(tagPattern)") {
+                text = tags.stringByReplacingMatches(in: text, range: fullRange(), withTemplate: "")
+            }
         }
         let entities: [(String, String)] = [
             ("&nbsp;", " "),

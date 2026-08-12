@@ -205,6 +205,38 @@ final class GoogleCalendarMapperTests: XCTestCase {
         XCTAssertNil(room.responseStatus)
     }
 
+    func testResourceAttendeesAreExcludedFromTheRoster() throws {
+        // Real room-booking shape (PR #7 review finding 6): rooms and equipment arrive as
+        // attendees flagged `resource: true` and must never reach the participants directory.
+        let dto = try XCTUnwrap(mapped(#"""
+        {"id": "evt-1", "status": "confirmed", "summary": "Sync",
+         "attendees": [
+            {"email": "ada@example.com", "displayName": "Ada Lovelace", "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "c_188abcdef@resource.calendar.google.com", "displayName": "Conf Room 3 (10)", "resource": true, "responseStatus": "accepted"},
+            {"email": "projector@resource.calendar.google.com", "displayName": "Projector", "resource": true, "responseStatus": "needsAction"},
+            {"email": "grace@example.com", "responseStatus": "tentative"}],
+         "start": {"dateTime": "2026-08-10T10:00:00Z"}, "end": {"dateTime": "2026-08-10T11:00:00Z"}}
+        """#))
+
+        XCTAssertEqual(
+            dto.attendees.map(\.name),
+            ["Ada Lovelace", "grace@example.com"],
+            "rooms and equipment are not participants"
+        )
+    }
+
+    func testAttendeeWithoutResourceFlagIsStillAPerson() throws {
+        // `resource` absent (the common case) and `resource: false` both mean "human".
+        let dto = try XCTUnwrap(mapped(#"""
+        {"id": "evt-1", "status": "confirmed", "summary": "Sync",
+         "attendees": [
+            {"email": "grace@example.com", "resource": false},
+            {"displayName": "Room 4"}],
+         "start": {"dateTime": "2026-08-10T10:00:00Z"}, "end": {"dateTime": "2026-08-10T11:00:00Z"}}
+        """#))
+        XCTAssertEqual(dto.attendees.map(\.name), ["grace@example.com", "Room 4"])
+    }
+
     // MARK: - Notes (HTML → plain text)
 
     func testEventNotesAreHTMLStripped() throws {
@@ -235,6 +267,48 @@ final class GoogleCalendarMapperTests: XCTestCase {
          "start": {"dateTime": "2026-08-10T10:00:00Z"}, "end": {"dateTime": "2026-08-10T11:00:00Z"}}
         """#))
         XCTAssertNil(blank.eventNotes, "whitespace-only notes collapse to nil")
+    }
+
+    // MARK: - Notes: angle-bracketed plain text (PR #7 review finding 8)
+
+    func testAngleBracketedPlainTextSurvivesUntouched() throws {
+        let dto = try XCTUnwrap(mapped(#"""
+        {"id": "evt-1", "status": "confirmed", "summary": "Sync",
+         "description": "Dial-in host John <john@example.com>, budget < 5000 > target",
+         "start": {"dateTime": "2026-08-10T10:00:00Z"}, "end": {"dateTime": "2026-08-10T11:00:00Z"}}
+        """#))
+        XCTAssertEqual(
+            dto.eventNotes,
+            "Dial-in host John <john@example.com>, budget < 5000 > target",
+            "non-HTML angle-bracketed text must not be stripped — the notes are snapshotted forever"
+        )
+    }
+
+    func testPlainTextHeuristicAndStrippingBoundaries() {
+        XCTAssertFalse(GoogleCalendarMapper.looksLikeHTML("John <john@example.com>"))
+        XCTAssertFalse(GoogleCalendarMapper.looksLikeHTML("budget < 5000 > target"))
+        XCTAssertFalse(GoogleCalendarMapper.looksLikeHTML("a <-- b"))
+        XCTAssertTrue(GoogleCalendarMapper.looksLikeHTML("<p>hi</p>"))
+        XCTAssertTrue(GoogleCalendarMapper.looksLikeHTML("line<br>break"))
+        XCTAssertTrue(GoogleCalendarMapper.looksLikeHTML(#"<a href="https://x.example">link</a>"#))
+
+        // Real HTML still reduces to plain text …
+        XCTAssertEqual(
+            GoogleCalendarMapper.plainText(fromHTML: "<div>Agenda</div><br>Notes &amp; more"),
+            "Agenda\n\nNotes & more"
+        )
+        // … and inside real HTML, an escaped address is decoded rather than deleted.
+        XCTAssertEqual(
+            GoogleCalendarMapper.plainText(fromHTML: "<p>Host John &lt;john@example.com&gt;</p>"),
+            "Host John <john@example.com>"
+        )
+        // Mixed content: the tag goes, the non-tag angle brackets stay.
+        XCTAssertEqual(
+            GoogleCalendarMapper.plainText(fromHTML: "<b>Budget</b> < 5000 > target"),
+            "Budget < 5000 > target"
+        )
+        // Entities still decode in plain text, `&amp;` last so `&amp;lt;` never double-decodes.
+        XCTAssertEqual(GoogleCalendarMapper.plainText(fromHTML: "A &amp;lt; B"), "A &lt; B")
     }
 
     // MARK: - GoogleCalendarID
