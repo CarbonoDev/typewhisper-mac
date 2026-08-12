@@ -87,6 +87,85 @@ test('a speaker change on a reused element closes the previous turn', () => {
   assert.equal(next[0].text, 'I disagree');
 });
 
+test('a reused element with a fresh short turn by the same speaker is not swallowed', () => {
+  // Meet reuses a caption element for the *same* speaker's next turn, so the rename guard never
+  // fires. Without a reset check `emittedChars` still points past the new (shorter) text and the
+  // whole turn would slice away to nothing.
+  const s = makeStabilizer();
+  const el = block('a');
+  const sentence = 'This is a complete thought that ends here. ';
+
+  let text = '';
+  let flushed = [];
+  for (let i = 0; i < 12; i += 1) {
+    text += sentence;
+    flushed = flushed.concat(s.observe([{ element: el, speaker: 'Ana', text }], 1000 + i * 200));
+  }
+  assert.ok(flushed.length > 0, 'expected a prefix flush so emittedChars > 0');
+
+  const out = s.observe([{ element: el, speaker: 'Ana', text: 'ok next point' }], 4000);
+  assert.ok(
+    out.some((segment) => segment.text.startsWith('This is a complete thought')),
+    'the previous turn is closed out when the element is reused'
+  );
+
+  // The new turn is now tracked from its start and emits in full once it settles.
+  const idle = s.observe([{ element: el, speaker: 'Ana', text: 'ok next point' }], 8000);
+  assert.deepEqual(
+    idle.map((segment) => segment.text),
+    ['ok next point']
+  );
+});
+
+test('a front-trimmed rolling buffer clamps emittedChars instead of slicing past the end', () => {
+  const s = makeStabilizer({ prefixFlushChars: 20, tailGuardChars: 5 });
+  const el = block('a');
+
+  const first = s.observe(
+    [{ element: el, speaker: 'Ana', text: 'alpha beta gamma delta epsilon zeta' }],
+    1000
+  );
+  assert.ok(first.length > 0, 'expected a prefix flush so emittedChars > 0');
+
+  // Meet drops the front of its buffer: the surviving text is shorter than what we already emitted.
+  const out = s.observe([{ element: el, speaker: 'Ana', text: 'eta theta' }], 1500);
+  for (const segment of out) assert.ok(segment.text.length > 0);
+
+  const idle = s.observe([{ element: el, speaker: 'Ana', text: 'eta theta' }], 5000);
+  assert.deepEqual(
+    idle.map((segment) => segment.text),
+    ['eta theta']
+  );
+});
+
+test('growth plus tail revision after a prefix flush still behaves as a single turn', () => {
+  const s = makeStabilizer({ prefixFlushChars: 20, tailGuardChars: 5 });
+  const el = block('a');
+
+  const flushed = s.observe(
+    [{ element: el, speaker: 'Ana', text: 'lets talk about the deploy window' }],
+    1000
+  );
+  assert.equal(flushed.length, 1);
+  const head = flushed[0].text;
+
+  // The tail past the emitted prefix keeps being revised — that is *not* a reset.
+  s.observe([{ element: el, speaker: 'Ana', text: 'lets talk about the deploy window tomo' }], 1400);
+  s.observe(
+    [{ element: el, speaker: 'Ana', text: 'lets talk about the deploy window tomorrow' }],
+    1800
+  );
+  const out = s.observe(
+    [{ element: el, speaker: 'Ana', text: 'lets talk about the deploy window tomorrow' }],
+    6000
+  );
+
+  assert.equal(out.length, 1);
+  assert.equal(out[0].speaker, 'Ana');
+  // Exactly the un-emitted remainder, with no repetition of the flushed head and no gap.
+  assert.equal(`${head} ${out[0].text}`, 'lets talk about the deploy window tomorrow');
+});
+
 test('a re-created block with identical text is not emitted twice', () => {
   const s = makeStabilizer();
 

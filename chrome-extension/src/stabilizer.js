@@ -70,15 +70,29 @@ class CaptionStabilizer {
         };
         this.blocks.set(block.element, state);
       } else {
-        // A speaker rename on an existing block means Meet reused the element for a new turn:
-        // close the old turn out before adopting the new one.
-        if (block.speaker && state.speaker && block.speaker !== state.speaker) {
+        // Two ways Meet ends a turn *without* removing the element, both of which invalidate our
+        // "text only grows, revisions only touch the tail" assumption:
+        //
+        //   - a speaker rename — the element was reused for someone else's turn;
+        //   - a text reset — the element was reused for a *new turn by the same speaker*, or Meet
+        //     trimmed the front of its rolling buffer. Either way the emitted prefix no longer
+        //     prefixes the new text (see `#isReset`).
+        //
+        // Both must close the old turn out before adopting the new text, or `emittedChars` stays
+        // pointing into text that no longer exists and `text.slice(emittedChars)` silently drops
+        // the start of the new turn (empty or mid-word pending) instead of emitting it.
+        const renamed = block.speaker && state.speaker && block.speaker !== state.speaker;
+        const reset = !renamed && this.#isReset(state, text);
+        if (renamed || reset) {
           const tail = this.#finalizeState(state, now, emitted);
           if (tail) this.#remember(tail.text);
-          state.speaker = block.speaker;
+          // On a bare reset Meet may not re-render the name line; keeping the last known speaker is
+          // the better guess than dropping attribution entirely.
+          if (block.speaker) state.speaker = block.speaker;
           state.text = text;
           state.emittedChars = 0;
           state.segmentStart = now;
+          state.lastChanged = now;
         } else {
           if (block.speaker && !state.speaker) state.speaker = block.speaker;
           if (text !== state.text) {
@@ -127,6 +141,24 @@ class CaptionStabilizer {
       this.blocks.delete(element);
     }
     return emitted;
+  }
+
+  /**
+   * Did this block's text stop being an extension of what we already emitted from it?
+   *
+   * Everything before `emittedChars` is settled and already shipped, so in the normal case the new
+   * text still starts with exactly those characters (only the tail past them gets revised). When it
+   * does not — the text got shorter than the emitted prefix (Meet trimmed the front of its rolling
+   * buffer) or diverges inside it (the element was reused for a fresh turn) — `emittedChars` is
+   * stale and must not be used to slice the new text.
+   *
+   * Re-emitting a turn we already shipped is handled by the existing `recent` dedupe, so this only
+   * has to be right about *shape*, not about novelty.
+   */
+  #isReset(state, text) {
+    if (state.emittedChars === 0) return false; // nothing emitted yet; any rewrite is just a revision
+    if (text.length < state.emittedChars) return true;
+    return !text.startsWith(state.text.slice(0, state.emittedChars));
   }
 
   #finalizeState(state, now, sink) {

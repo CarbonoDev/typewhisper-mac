@@ -177,6 +177,73 @@ function heuristicCaptionRoot() {
   return best;
 }
 
+/** Tags and roles that make an element a *control*, never a caption region. */
+const INTERACTIVE_TAGS = new Set(['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA']);
+const INTERACTIVE_ROLES = new Set([
+  'button',
+  'link',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'switch',
+  'checkbox',
+  'tab',
+  'option',
+]);
+/** Roles a caption container plausibly carries — enough on their own to accept it. */
+const CAPTION_SHAPED_ROLES = new Set(['region', 'log', 'status', 'complementary']);
+const CONTROL_ANCESTOR_SELECTOR = [
+  'button',
+  'a',
+  '[role="button"]',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="menuitemradio"]',
+  '[role="switch"]',
+  '[role="tab"]',
+].join(', ');
+
+function isInteractiveElement(el) {
+  if (INTERACTIVE_TAGS.has((el.tagName || '').toUpperCase())) return true;
+  return INTERACTIVE_ROLES.has((el.getAttribute('role') || '').trim().toLowerCase());
+}
+
+/**
+ * Rung 2, shared by `findCaptionRoot()` and `inActiveCall()`: labelled elements that plausibly *are*
+ * the caption region.
+ *
+ * The label test alone is far too loose. CAPTION_REGION_LABELS and CAPTION_TOGGLE_LABELS are the
+ * same words ("captions", "untertitel", …) because the toggle is *named after* the region, so the
+ * CC control, its tooltip and its menu entry all match — and Meet builds those as
+ * `div[role="button"]` as often as `<button>` (which is why `findCaptionToggle()` queries both).
+ * A bare `tagName !== 'BUTTON'` check therefore lets a lobby CC control masquerade as a caption
+ * region, which would both start a session on the "Ready to join?" screen and hand
+ * `readCaptionBlocks()` a button's guts to scrape.
+ *
+ * So a candidate must not be a control (nor sit inside one) and must then look like a container:
+ * either a caption-shaped role, or a body of text too long to be a control's label. The tradeoff:
+ * an *unlabelled-role* caption region that is still empty is rejected until it has text — harmless,
+ * since an empty region carries nothing to capture, and `inActiveCall()` still has the leave-call
+ * rung. Erring the other way is what produced the pre-join junk meetings.
+ */
+function captionRegionsByLabel() {
+  const found = [];
+  for (const el of document.querySelectorAll('[aria-label]')) {
+    if (!matchesAnyLabel(el, CAPTION_REGION_LABELS)) continue;
+    if (isInteractiveElement(el)) continue;
+    // A label-carrying wrapper *inside* a control (Meet's tooltip spans) is still that control.
+    if (typeof el.closest === 'function' && el.closest(CONTROL_ANCESTOR_SELECTOR)) continue;
+
+    if (CAPTION_SHAPED_ROLES.has((el.getAttribute('role') || '').trim().toLowerCase())) {
+      found.push(el);
+      continue;
+    }
+    const text = (el.innerText || '').trim();
+    if (text.length > 40 && text.includes(' ')) found.push(el);
+  }
+  return found;
+}
+
 /** Walk the ladder. Returns `{ root, via }` or `null`. */
 function findCaptionRoot() {
   for (const selector of CAPTION_CONTAINER_SELECTORS) {
@@ -184,12 +251,8 @@ function findCaptionRoot() {
     if (el) return { root: el, via: `selector:${selector}` };
   }
 
-  const regions = document.querySelectorAll('[role="region"][aria-label], [aria-label]');
-  for (const el of regions) {
-    if (matchesAnyLabel(el, CAPTION_REGION_LABELS) && el.tagName !== 'BUTTON') {
-      return { root: el, via: 'aria-label' };
-    }
-  }
+  const [region] = captionRegionsByLabel();
+  if (region) return { root: region, via: 'aria-label' };
 
   const heuristic = heuristicCaptionRoot();
   if (heuristic) return { root: heuristic, via: 'heuristic' };
@@ -389,11 +452,9 @@ function inActiveCall() {
   for (const selector of CAPTION_CONTAINER_SELECTORS) {
     if (document.querySelector(selector)) return true;
   }
-  const regions = document.querySelectorAll('[role="region"][aria-label], [aria-label]');
-  for (const el of regions) {
-    if (matchesAnyLabel(el, CAPTION_REGION_LABELS) && el.tagName !== 'BUTTON') return true;
-  }
-  return false;
+  // Only a *region* counts here, never a CC control: the lobby renders the captions toggle too, and
+  // treating it as the joined signal is exactly how pre-join junk meetings got created.
+  return captionRegionsByLabel().length > 0;
 }
 
 /**
@@ -412,10 +473,16 @@ function readAccountEmail() {
   return null;
 }
 
-/** The Meet call code (`abc-defg-hij`) — our stable session identity. */
+/**
+ * The Meet call code (`abc-defg-hij`) — our stable session identity.
+ *
+ * Anything that is not shaped like a call code is `null`, never a best guess: the code is what the
+ * app keys a live meeting on, so accepting a stray first path segment (`landing`, `new`, `_meet`)
+ * would create a bogus meeting — and `readMeetingTitle()` would then name it after that junk.
+ */
 function readCallCode() {
   const path = location.pathname.replace(/^\//, '').split('/')[0];
-  return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(path) ? path : path || null;
+  return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(path) ? path : null;
 }
 
 /** Best-effort human title for the call; falls back to the call code. */
@@ -431,6 +498,7 @@ function readMeetingTitle() {
 
 const TWSelectorsAPI = {
   findCaptionRoot,
+  captionRegionsByLabel,
   readCaptionBlocks,
   parseCaptionBlock,
   captionsAppearActive,
