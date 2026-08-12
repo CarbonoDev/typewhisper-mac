@@ -93,14 +93,33 @@ final class GmailToggleStateTests: XCTestCase {
         try store.upsert(subject, refreshToken: "rt")
         var requested: [(String, [String])] = []
 
-        try await GmailToggleState.enable(account: subject, store: store) { id, scopes in
+        // The fake consent behaves like the real flow: the exchange upserts the account with the
+        // widened grant (scope union via `store.upsert`).
+        try await GmailToggleState.enable(account: subject, store: store) { [gmailScopes] id, scopes in
             requested.append((id, scopes))
             XCTAssertFalse(store.isGmailEnabled(for: id), "flag must not be set before consent returns")
+            try store.upsert(self.account(scopes: gmailScopes), refreshToken: "rt2")
         }
 
         XCTAssertEqual(requested.map(\.0), ["sub-1"])
         XCTAssertEqual(requested.map(\.1), [[GmailContextService.gmailScope]])
         XCTAssertTrue(store.isGmailEnabled(for: "sub-1"), "flag lands only after success")
+    }
+
+    func testEnableLeavesFlagOffWhenConsentSucceedsWithoutGrantingTheScope() async throws {
+        // Granular consent (M2 review): the user unticks the Gmail checkbox on Google's consent
+        // screen — the flow returns successfully, but the scope never lands in the grant.
+        let store = makeStore()
+        let subject = account(scopes: ["openid"])
+        try store.upsert(subject, refreshToken: "rt")
+        var consentRuns = 0
+
+        try await GmailToggleState.enable(account: subject, store: store) { _, _ in
+            consentRuns += 1 // succeeds, upserts nothing new — scope still missing
+        }
+
+        XCTAssertEqual(consentRuns, 1)
+        XCTAssertFalse(store.isGmailEnabled(for: "sub-1"), "no grant ⇒ the toggle stays off, silently")
     }
 
     func testEnableLeavesFlagOffWhenReauthorizeThrows() async throws {
