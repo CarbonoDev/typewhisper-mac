@@ -99,14 +99,24 @@ final class GoogleDriveImportLedger {
         entries[fileID]
     }
 
-    /// The per-file branch of the engine's cycle (and the backfill's execution-time re-check),
-    /// pure over ledger state — no clocks (`now` injected), and no writes except the one
-    /// documented self-heal: a fresh doc edit resetting an exhausted re-merge attempt budget
-    /// (review fix, D-D5).
-    func action(for file: GoogleDriveAPI.GDriveFile, sub: String, now: Date) -> LedgerAction {
+    /// The per-file branch of the engine's cycle (and the F4 execution-time re-check at the top
+    /// of `processFile`), pure over ledger state — no clocks (`now` injected), and no writes
+    /// except the one documented self-heal: a fresh doc edit resetting an exhausted re-merge
+    /// attempt budget (review fix, D-D5).
+    ///
+    /// `exemptingPendingFileID` (D-D7/F4): an auto-import job re-checking its **own** file must
+    /// not be blocked by the very pending entry the engine marked for it at enqueue — the owner
+    /// passes its fileID to bypass the pending gate for that one file. Every other caller (the
+    /// backfill batch, discovery) leaves it `nil`, so in-flight files still read `.skip`.
+    func action(
+        for file: GoogleDriveAPI.GDriveFile,
+        sub: String,
+        now: Date,
+        exemptingPendingFileID: String? = nil
+    ) -> LedgerAction {
         let fileID = GoogleDriveAPI.fileID(sub: sub, raw: file.id)
         // In flight: enqueued but not yet ledgered — the concurrent-enqueue guard.
-        if pending[fileID] != nil { return .skip }
+        if pending[fileID] != nil, fileID != exemptingPendingFileID { return .skip }
 
         if let entry = entries[fileID] {
             // Edited only when Drive's modifiedTime moved past the recorded one (+ tolerance).

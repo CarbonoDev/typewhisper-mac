@@ -215,14 +215,25 @@ final class GoogleDriveSyncEngine: ObservableObject {
             dedupe: nil,
             progressLabel: ImportedMeetingTitle.displayTitle(for: file.name)
         ) {
-            let outcome = await processor.processFile(file, sub: sub)
+            // `ownsPendingEntry: true` (F4): this job's file carries the pending entry marked at
+            // enqueue above — the re-check must not self-block on it. `.skipped` reads as success.
+            let outcome = await processor.processFile(file, sub: sub, ownsPendingEntry: true)
             if case .failed(let message) = outcome {
                 throw GoogleDriveTranscriptImporter.ImportFailed(message: message)
             }
         }
     }
 
-    private func listFiles(token: String, since watermark: Date) async throws -> [GoogleDriveAPI.GDriveFile] {
+    // MARK: - Discovery listing (shared by the cycle and the M4 backfill scan)
+
+    /// The backfill scan (D-D7): the same normative query with **no watermark bound**, paged to
+    /// completion. Never touches watermarks — the scan is read-only discovery.
+    func scanAllFiles(sub: String) async throws -> [GoogleDriveAPI.GDriveFile] {
+        let token = try await tokenProvider.accessToken(for: sub)
+        return try await listFiles(token: token, since: nil)
+    }
+
+    private func listFiles(token: String, since watermark: Date?) async throws -> [GoogleDriveAPI.GDriveFile] {
         var files: [GoogleDriveAPI.GDriveFile] = []
         var pageToken: String?
         for _ in 0..<GoogleDriveAPI.maxListPages {

@@ -18,12 +18,20 @@ protocol MeetingAutoLinking: AnyObject {
 
 extension CalendarService: MeetingAutoLinking {}
 
-/// The seam the sync engine's job closures call ([Google Phase 2 · M2]) — the importer in
-/// production, a fake in `GoogleDriveSyncEngineTests` (which must observe enqueues without real
-/// imports running).
+/// The seam the sync engine's job closures (and the M4 backfill batch) call
+/// ([Google Phase 2 · M2]) — the importer in production, a fake in `GoogleDriveSyncEngineTests`
+/// (which must observe enqueues without real imports running).
+///
+/// `ownsPendingEntry` (D-D7/F4): `true` for an auto-import job whose file the engine marked
+/// pending at enqueue — its own guard entry must not skip it; `false` for the backfill batch,
+/// so a file in flight by auto-import at execution time reads `.skipped`.
 @MainActor
 protocol GoogleDriveFileProcessing: AnyObject {
-    func processFile(_ file: GoogleDriveAPI.GDriveFile, sub: String) async -> GoogleDriveTranscriptImporter.Outcome
+    func processFile(
+        _ file: GoogleDriveAPI.GDriveFile,
+        sub: String,
+        ownsPendingEntry: Bool
+    ) async -> GoogleDriveTranscriptImporter.Outcome
 }
 
 /// Per-file Drive transcript import ([Google Phase 2 · M2]): export the Gemini notes doc as
@@ -54,6 +62,10 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         /// The re-merge target no longer exists: the edit was acknowledged (`touch`), the entry
         /// marked known-deleted — a deleted meeting stays deleted (D-D5).
         case touched
+        /// The F4 execution-time re-check said `.skip` — already imported and unchanged, in
+        /// flight elsewhere, or abandoned — so nothing was exported or written. The batch counts
+        /// these as skipped; the engine's job closure treats them as success.
+        case skipped
         /// Export or parse failed; a capped failure was recorded (D-D5 retry policy).
         case failed(message: String)
     }
@@ -93,9 +105,32 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
 
     // MARK: - Per-file pipeline
 
-    func processFile(_ file: GoogleDriveAPI.GDriveFile, sub: String) async -> Outcome {
+    func processFile(
+        _ file: GoogleDriveAPI.GDriveFile,
+        sub: String,
+        ownsPendingEntry: Bool
+    ) async -> Outcome {
         let fileID = GoogleDriveAPI.fileID(sub: sub, raw: file.id)
         let docModified = file.modifiedDate ?? now()
+
+        // 0. Execution-time re-check (D-D7/F4, spec M4): the engine's discovery decision (or the
+        //    backfill preview's disposition) may be stale by the time this runs — an unchanged
+        //    ledgered file, one imported meanwhile by the other path, or one in flight elsewhere
+        //    is skipped BEFORE any export request. An auto job exempts its own pending entry
+        //    (marked by the engine at enqueue) so it never self-blocks, and clears it on a skip
+        //    so a stale guard entry can never hold the watermark.
+        let recheck = ledger.action(
+            for: file,
+            sub: sub,
+            now: now(),
+            exemptingPendingFileID: ownsPendingEntry ? fileID : nil
+        )
+        if case .skip = recheck {
+            if ownsPendingEntry {
+                ledger.clearPending(fileID: fileID)
+            }
+            return .skipped
+        }
 
         // 1. Export FIRST (D-D4 atomicity): every await happens before the snapshot below.
         let text: String
@@ -210,6 +245,64 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             logger.info("Created meeting \(meeting.id) from Drive doc")
             return .created(meetingID: meeting.id)
         }
+    }
+
+    // MARK: - Backfill batch ([Google Phase 2 · M4], D-D7)
+
+    struct BackfillSummary: Equatable {
+        /// New meetings created.
+        var imported = 0
+        /// Merged (or re-merged) into existing meetings.
+        var merged = 0
+        /// F4 re-check skips (already imported / in flight) + vanished-target touches.
+        var skipped = 0
+        var failed = 0
+        /// True when the batch stopped early (job cancelled); completed files stay imported.
+        var cancelled = false
+    }
+
+    /// The 250 ms serial inter-file pause (rate limiting; also keeps the main actor breathing).
+    nonisolated static let backfillInterFilePause: UInt64 = 250_000_000
+
+    /// Run one user-selected batch serially — the `.driveBackfill` job's operation (D-D7). Per
+    /// file, **at execution time**, the ledger is re-checked inside `processFile` (F4): the
+    /// auto-import engine keeps ticking during preview and batch, so a file imported or in
+    /// flight by the time the batch reaches it is skipped and counted in the summary. Cancel
+    /// (`Task.isCancelled`) stops between files; completed files stay ledgered. A backfill
+    /// success clears any failure record (via `recordImported`). Watermarks are never touched —
+    /// they track the poll cycle only; ledger entries are what dedupe (D-D7 normative).
+    func runBackfill(
+        files: [GoogleDriveAPI.GDriveFile],
+        sub: String,
+        pause: @MainActor (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) },
+        onProgress: @MainActor (_ current: Int, _ total: Int) -> Void = { _, _ in }
+    ) async -> BackfillSummary {
+        var summary = BackfillSummary()
+        for (index, file) in files.enumerated() {
+            if Task.isCancelled {
+                summary.cancelled = true
+                break
+            }
+            if index > 0 {
+                await pause(Self.backfillInterFilePause)
+                if Task.isCancelled {
+                    summary.cancelled = true
+                    break
+                }
+            }
+            onProgress(index + 1, files.count)
+            switch await processFile(file, sub: sub, ownsPendingEntry: false) {
+            case .created:
+                summary.imported += 1
+            case .merged, .remerged:
+                summary.merged += 1
+            case .skipped, .touched:
+                summary.skipped += 1
+            case .failed:
+                summary.failed += 1
+            }
+        }
+        return summary
     }
 
     // MARK: - Export (D-D3)

@@ -41,11 +41,15 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
     /// landed).
     @MainActor
     private final class FakeProcessor: GoogleDriveFileProcessing {
-        private(set) var processed: [(fileID: String, sub: String)] = []
+        private(set) var processed: [(fileID: String, sub: String, ownsPendingEntry: Bool)] = []
         var outcome: GoogleDriveTranscriptImporter.Outcome = .touched
 
-        func processFile(_ file: GoogleDriveAPI.GDriveFile, sub: String) async -> GoogleDriveTranscriptImporter.Outcome {
-            processed.append((file.id, sub))
+        func processFile(
+            _ file: GoogleDriveAPI.GDriveFile,
+            sub: String,
+            ownsPendingEntry: Bool
+        ) async -> GoogleDriveTranscriptImporter.Outcome {
+            processed.append((file.id, sub, ownsPendingEntry))
             return outcome
         }
     }
@@ -294,6 +298,9 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         XCTAssertEqual(job.progressLabel, "Weekly sync", "the clean title, not the raw export name")
         XCTAssertEqual(h.processor.processed.map(\.fileID), ["f1"])
         XCTAssertEqual(h.processor.processed.map(\.sub), ["sub-1"])
+        // F4: an auto-import job owns its file's pending entry, so the importer's execution-time
+        // re-check never self-blocks on the guard the engine just marked.
+        XCTAssertEqual(h.processor.processed.map(\.ownsPendingEntry), [true])
         // The fake processor never ledgered, so the file is still pending and the watermark is
         // held at its modifiedTime − 1 s — the crash-safe bound.
         XCTAssertTrue(h.ledger.pendingFileIDs.contains("google:sub-1:f1"))

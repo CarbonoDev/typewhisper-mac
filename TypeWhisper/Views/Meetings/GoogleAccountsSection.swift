@@ -49,6 +49,8 @@ struct GoogleAccountsSection: View {
     /// [Google Phase 2 · M3] Inline error from the last Drive-toggle flow, keyed to its account
     /// row. `nil` after a user cancel — the toggle simply reverts (the flag was never set).
     @State private var driveToggleError: (accountID: String, message: String)?
+    /// [Google Phase 2 · M4] The account whose backfill sheet is presented (`nil` = none).
+    @State private var backfillAccount: GoogleAccount?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -100,6 +102,10 @@ struct GoogleAccountsSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear(perform: load)
+        // [Google Phase 2 · M4] Per-account historical backfill (D-D7).
+        .sheet(item: $backfillAccount) { account in
+            GoogleDriveBackfillSheet(account: account)
+        }
     }
 
     /// Configured = both credential drafts non-blank. Mirrors `GoogleAccountStore.isConfigured`
@@ -299,6 +305,14 @@ struct GoogleAccountsSection: View {
                 Text(error.message)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+            // [M4] Backfill entry point (D-D7): connected + toggle on (the
+            // `showsDriveBackfill` rule — this row already renders connected-only).
+            if accountStore.isDriveImportEnabled(for: account.id) {
+                Button(String(localized: "google.drive.backfillButton")) {
+                    backfillAccount = account
+                }
+                .controlSize(.small)
             }
         }
         .frame(maxWidth: 420, alignment: .leading)
