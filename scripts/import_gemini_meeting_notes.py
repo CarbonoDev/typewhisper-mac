@@ -2,13 +2,15 @@
 """Import Google Meet "Notas de Gemini" markdown exports as TypeWhisper meetings.
 
 A Gemini export bundles two documents in one file: the notes Gemini wrote (Resumen /
-Detalles / Pasos siguientes recomendados) and the raw transcript (``### HH:MM:SS`` blocks of
-``**Speaker:** utterance`` lines). Neither half is readable by ``TranscriptFileParser`` as-is,
-so this script splits and normalizes an export into the shape the local HTTP API wants:
+Detalles / Pasos siguientes recomendados) and the raw transcript (``### **HH:MM:SS**`` blocks of
+``**Speaker:** utterance`` lines). The notes half is not readable by ``TranscriptFileParser``,
+so this script splits an export into the shape the local HTTP API wants:
 
-* transcript -> ``HH:MM:SS Speaker: utterance`` lines (the parser's timestamped-line form),
-  with per-turn start times interpolated inside each block so segments do not all collapse
-  onto the block's timestamp;
+* transcript -> posted **verbatim** as the ``text`` field. The app already parses this exact
+  format natively (``TranscriptFileParser.parseGeminiNotes``, reached through
+  ``POST /v1/meetings/import-transcript`` -> ``MeetingImportService.importTranscriptText``),
+  including the per-turn time interpolation inside each ``### **HH:MM:SS**`` block, so this
+  script only *locates* the section and hands the raw markdown over — it does not re-parse it;
 * Resumen -> the ``summary`` field (stored verbatim as the meeting's Summary output);
 * Detalles + Pasos siguientes -> the ``extended`` field;
 * the ``Invitados`` line -> ``attendees`` (struck-through invitees, i.e. the ones who did not
@@ -48,10 +50,17 @@ FIXED_OFFSET_HOURS = {
 }
 
 FILENAME_STAMP = re.compile(r"(\d{4})_(\d{2})_(\d{2})[_ ](\d{2})_(\d{2})(?:[_ ]([A-Za-z]{2,5}))?")
-TRANSCRIPT_HEADING = re.compile(r"^## .*[-–—]\s*Transcripci[óo]n\s*$", re.MULTILINE)
-TIME_BLOCK = re.compile(r"^###\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*$")
-END_MARKER = re.compile(r"^###\s+.*?(\d{1,2}:\d{2}(?::\d{2})?)\s*$")
-SPEAKER_TURN = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
+
+# The transcript half's banner. Real exports bold every heading and backslash-escape the dash
+# (``## **Seguimiento Fase 2 IA \- Transcripción**``); both markers are optional so a plain
+# ``## Title - Transcript`` export still splits. Group 1 is the title without the suffix.
+TRANSCRIPT_HEADING = re.compile(
+    r"^##[ \t]+\*{0,2}[ \t]*(.*?)[ \t]*\\?[-–—][ \t]*Transcrip(?:ci[óo]n|t(?:ion)?)[ \t]*\*{0,2}[ \t]*$",
+    re.MULTILINE,
+)
+# Report/guard only: the script counts speaker turns to decide whether a section is worth posting
+# and to label the dry run. Turn *parsing* belongs to TranscriptFileParser.parseGeminiNotes.
+TURN_LINE = re.compile(r"^\*\*[^*]+?:\*\*\s*\S")
 MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 ATTENDEE_LINK = re.compile(r"\[(?P<name>[^\]]*)\]\(mailto:(?P<email>[^)]+)\)")
 
@@ -70,8 +79,24 @@ def _clean_markdown(text: str) -> str:
     text = re.sub(r"</?span[^>]*>", "", text)
     text = MD_LINK.sub(r"\1", text)          # keep the label, drop the (#section) target
     text = re.sub(r"~~(.*?)~~", r"\1", text)
-    text = re.sub(r"\\([*_\[\]#~`])", r"\1", text)
+    # Same escape set as TranscriptFileParser.unescapeMarkdown — exports escape `\-` and `\.`
+    # too, not just the emphasis characters. Bold markers are deliberately *kept*: notes bodies
+    # use them for real emphasis (`**Gestión de Errores**`) and are stored as markdown.
+    text = re.sub(r"\\([\\`*_{}\[\]()#+\-.!>~|])", r"\1", text)
     return text
+
+
+def _heading_text(line: str, level: int) -> str | None:
+    """Inner text of a ``##``/``###`` heading, or None. Real exports bold every heading
+    (``### **Resumen**``); older exports do not, so the markers are optional."""
+    match = re.match(rf"^#{{{level}}}[ \t]+(.*?)[ \t]*$", line)
+    if not match:
+        return None
+    inner = match.group(1).strip()
+    bold = re.match(r"^\*\*(.+?)\*\*$", inner)
+    if bold:
+        inner = bold.group(1).strip()
+    return _clean_markdown(inner).strip()
 
 
 def parse_stamp(name: str) -> str | None:
@@ -156,67 +181,10 @@ def _clean_block(raw_lines: list[str]) -> str:
         text = tightened
 
 
-def _timestamp(seconds: float) -> str:
-    total = int(round(seconds))
-    return f"{total // 3600:02d}:{(total % 3600) // 60:02d}:{total % 60:02d}"
-
-
-def _seconds(stamp: str) -> int:
-    parts = [int(part) for part in stamp.split(":")]
-    if len(parts) == 3:
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    return parts[0] * 60 + parts[1]
-
-
-def parse_transcript(body: str) -> str:
-    """``### HH:MM:SS`` + ``**Name:** text`` blocks -> ``HH:MM:SS Name: text`` lines.
-
-    Gemini stamps one timestamp per block, not per turn. Emitting every turn at the block's
-    own timestamp would give every segment in the block the same start (and a zero duration),
-    so turns are spread across the block proportionally to their length.
-    """
-    blocks: list[tuple[int, list[tuple[str, str]]]] = []
-    current: tuple[int, list[tuple[str, str]]] | None = None
-    end_seconds: int | None = None
-
-    for raw in body.split("\n"):
-        line = _clean_markdown(raw).strip()
-        if not line or line.startswith(BOILERPLATE_PREFIXES):
-            continue
-        block = TIME_BLOCK.match(line)
-        if block:
-            current = (_seconds(block.group(1)), [])
-            blocks.append(current)
-            continue
-        if line.startswith("###"):
-            marker = END_MARKER.match(line)          # "### La transcripción finalizó después de …"
-            if marker:
-                end_seconds = _seconds(marker.group(1))
-            continue
-        turn = SPEAKER_TURN.match(line)
-        if turn and current is not None:
-            speaker = turn.group(1).strip()
-            text = turn.group(2).strip()
-            if text:
-                current[1].append((speaker, text))
-
-    lines: list[str] = []
-    for index, (start, turns) in enumerate(blocks):
-        if not turns:
-            continue
-        if index + 1 < len(blocks):
-            stop = blocks[index + 1][0]
-        elif end_seconds is not None and end_seconds > start:
-            stop = end_seconds
-        else:
-            stop = start + 60
-        span = max(stop - start, 0)
-        total = sum(len(text) for _, text in turns) or 1
-        elapsed = 0
-        for speaker, text in turns:
-            lines.append(f"{_timestamp(start + span * elapsed / total)} {speaker}: {text}")
-            elapsed += len(text)
-    return "\n".join(lines)
+def count_turns(transcript: str) -> int:
+    """How many ``**Speaker:** utterance`` turns the section carries. Used to decide whether the
+    section is worth posting and to label the dry run — not to parse it."""
+    return sum(1 for line in transcript.split("\n") if TURN_LINE.match(line.strip()))
 
 
 def parse_export(text: str, filename: str, include_absent: bool = False,
@@ -225,14 +193,20 @@ def parse_export(text: str, filename: str, include_absent: bool = False,
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     split = TRANSCRIPT_HEADING.search(text)
     notes_part = text[: split.start()] if split else text
-    transcript_part = text[split.end():] if split else ""
+    # The transcript section is handed to the app verbatim, banner line included: the heading is
+    # one of the two signals TranscriptFileParser uses to recognize a Gemini export.
+    transcript_part = text[split.start():].strip() if split else ""
 
     lines = notes_part.split("\n")
     title = ""
     for line in lines:
-        if line.startswith("## "):
-            title = _clean_markdown(line[3:]).strip()
+        heading = _heading_text(line, 2)
+        if heading:
+            title = heading
             break
+    # A transcript-only export has no notes half to title it; the banner carries the meeting name.
+    if not title and split:
+        title = _clean_markdown(split.group(1)).strip()
     if not title:
         title = os.path.splitext(os.path.basename(filename))[0]
 
@@ -243,8 +217,9 @@ def parse_export(text: str, filename: str, include_absent: bool = False,
         # chrome — a repeated date line and the transcript's banner — not meeting content.
         if line.strip().startswith(BOILERPLATE_PREFIXES):
             break
-        if line.startswith("### "):
-            current = _clean_markdown(line[4:]).strip().lower()
+        heading = _heading_text(line, 3)
+        if heading is not None:
+            current = heading.lower()
             sections[current] = []
         elif current is not None:
             sections[current].append(line)
@@ -264,7 +239,7 @@ def parse_export(text: str, filename: str, include_absent: bool = False,
         "attendees": parse_attendees(lines, include_absent, self_email),
         "summary": summary,
         "extended": "\n\n".join(extended_parts),
-        "text": parse_transcript(transcript_part),
+        "text": transcript_part,
     }
 
 
@@ -317,9 +292,9 @@ def main(argv: list[str]) -> int:
             continue
 
         parsed = parse_export(raw, path, include_absent=args.include_absent, self_email=args.self_email)
-        turns = len(parsed["text"].split("\n")) if parsed["text"] else 0
+        turns = count_turns(parsed["text"])
         label = f"{parsed['title']} @ {parsed['date']}"
-        if not parsed["text"]:
+        if not turns:
             print(f"SKIP {os.path.basename(path)}: no transcript turns found", file=sys.stderr)
             failures += 1
             continue
