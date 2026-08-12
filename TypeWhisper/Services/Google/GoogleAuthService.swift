@@ -16,6 +16,15 @@ enum GoogleAuthError: LocalizedError, Equatable {
     case cancelled
     /// The loopback listener gave up waiting for the redirect (5-minute window, D-G2).
     case timedOut
+    /// The local loopback listener could not be started at all (port bind refused, socket filter,
+    /// listener never reaching `.ready`). Distinct from `.timedOut` (PR #7 review finding 10):
+    /// no browser was opened and no redirect was ever awaited, so the remedy is local, not in the
+    /// browser.
+    case loopbackUnavailable(String)
+    /// A `reauthorize` flow finished as a *different* Google account than the one it was asked to
+    /// repair (PR #7 review finding 2). The requested account is untouched and any brand-new row
+    /// the flow created is rolled back.
+    case wrongAccount(expectedEmail: String, signedInEmail: String)
     /// The callback's `state` echo did not match the value sent with the authorization request.
     case stateMismatch
     /// The authorization-code exchange (or callback/ID-token parsing around it) failed.
@@ -34,6 +43,10 @@ enum GoogleAuthError: LocalizedError, Equatable {
             "Google sign-in was cancelled"
         case .timedOut:
             "Timed out waiting for the Google sign-in redirect"
+        case .loopbackUnavailable(let detail):
+            "Could not start the local sign-in listener: \(detail)"
+        case .wrongAccount(let expectedEmail, let signedInEmail):
+            "Signed in as \(signedInEmail) but \(expectedEmail) was expected"
         case .stateMismatch:
             "OAuth state mismatch in the sign-in redirect"
         case .exchangeFailed(let detail):
@@ -160,14 +173,36 @@ final class GoogleAuthService: ObservableObject {
     /// Re-runs the flow for an existing account to widen its grant (`include_granted_scopes=true`
     /// makes Google merge scopes server-side). Used by "Reconnect" on `.needsReauth` (empty
     /// `additionalScopes`) and by Phases 2–3 to add Drive/Gmail scopes (§9).
+    ///
+    /// Identity is verified (PR #7 review finding 2): `prompt=select_account` always shows Google's
+    /// chooser and `login_hint` only *pre-selects*, so a user signed into several accounts can
+    /// easily finish the flow as the wrong one. Repairing account A must never silently add or
+    /// refresh account B: when the returned `sub` differs, a row this flow *created* is rolled back
+    /// (index + Keychain, through the store's remove seam), a pre-existing sibling row is left
+    /// exactly as it was, the requested account keeps its status, and `.wrongAccount` is thrown so
+    /// the settings UI can say which account was actually signed in. `connectAccount()` — adding a
+    /// *new* account — is deliberately unaffected: it has no expected identity.
     func reauthorize(accountID: String, additionalScopes: [String]) async throws {
         var scopes = Self.identityScopes + [Self.calendarScope]
         for scope in additionalScopes where !scopes.contains(scope) {
             scopes.append(scope)
         }
-        _ = try await runAuthorizationFlow(
+        let expectedEmail = store.account(id: accountID)?.email ?? accountID
+        let knownAccountIDs = Set(store.accounts.map(\.id))
+        let connected = try await runAuthorizationFlow(
             scopes: scopes,
             loginHint: store.account(id: accountID)?.email
+        )
+        guard connected.id != accountID else { return }
+        logger.warning("Reauthorize finished as a different account than requested")
+        if !knownAccountIDs.contains(connected.id) {
+            // A repair flow must not leave a brand-new connected row behind.
+            tokenCache[connected.id] = nil
+            store.remove(accountID: connected.id)
+        }
+        throw GoogleAuthError.wrongAccount(
+            expectedEmail: expectedEmail,
+            signedInEmail: connected.email
         )
     }
 
@@ -288,7 +323,15 @@ final class GoogleAuthService: ObservableObject {
         server.onCallback = { [weak self] url in
             self?.deliver(url, to: session)
         }
-        let port = try server.start()
+        // `start()` is async (PR #7 review finding 10) — binding the listener no longer blocks the
+        // main actor. That introduces a suspension before this flow installs itself, so the
+        // one-flow-at-a-time rule is re-asserted below: a flow that started (and installed itself)
+        // while we were binding is cancelled here rather than being silently orphaned by the
+        // `activeSession` assignment.
+        let port = try await server.start()
+        if let stale = activeSession, stale !== session {
+            fail(stale, with: .cancelled)
+        }
         activeSession = session
         let redirectURI = "http://127.0.0.1:\(port)"
 

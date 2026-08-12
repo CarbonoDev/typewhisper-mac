@@ -16,7 +16,7 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         private(set) var started = false
         private(set) var stopped = false
 
-        func start() throws -> UInt16 {
+        func start() async throws -> UInt16 {
             started = true
             return 49152
         }
@@ -335,6 +335,133 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         serverB.onCallback(URL(string: "http://127.0.0.1:49152/?state=\(stateB)&code=code-b")!)
         _ = try await flowB.value
         XCTAssertFalse(service.isAuthorizing, "clears when the surviving flow completes")
+    }
+
+    // MARK: - Reauthorize identity check (PR #7 review finding 2)
+
+    /// Exchange response for a flow that finishes as `sub`.
+    private func exchangeBody(sub: String, email: String, name: String, refreshToken: String) -> String {
+        let idToken = fixtureIDToken(sub: sub, email: email, name: name)
+        return """
+        {"access_token": "at-\(sub)", "expires_in": 3600, "refresh_token": "\(refreshToken)", \
+        "id_token": "\(idToken)", "scope": "openid email profile"}
+        """
+    }
+
+    /// Runs `flow`, waits until the browser URL for attempt `index` was opened, and delivers the
+    /// matching redirect through `server`.
+    private func deliverRedirect(to server: FakeLoopbackServer, attempt index: Int) async throws {
+        while openedURLs.count <= index {
+            await Task.yield()
+        }
+        let state = try XCTUnwrap(queryValue("state", of: openedURLs[index]))
+        server.onCallback(URL(string: "http://127.0.0.1:49152/?state=\(state)&code=code-\(index)")!)
+    }
+
+    func testReauthorizeAsTheSameAccountSucceedsAndRefreshesIt() async throws {
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-1", email: "ada@example.com", name: "Ada", refreshToken: "rt-1b")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+        store.setStatus(.needsReauth, for: "sub-1")
+
+        let flow = Task { try await service.reauthorize(accountID: "sub-1", additionalScopes: []) }
+        try await deliverRedirect(to: server, attempt: 0)
+        try await flow.value
+
+        XCTAssertEqual(store.accounts.map(\.id), ["sub-1"], "no extra row")
+        XCTAssertEqual(store.accounts.first?.status, .connected, "the repaired account is healthy again")
+        XCTAssertEqual(store.refreshToken(for: "sub-1"), "rt-1b", "fresh refresh token stored")
+    }
+
+    func testReauthorizeAsADifferentAccountThrowsAndRollsBackTheNewRow() async throws {
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-9", email: "grace@example.com", name: "Grace", refreshToken: "rt-9")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+        store.setStatus(.needsReauth, for: "sub-1")
+
+        let flow = Task { try await service.reauthorize(accountID: "sub-1", additionalScopes: []) }
+        try await deliverRedirect(to: server, attempt: 0)
+
+        do {
+            try await flow.value
+            XCTFail("expected wrongAccount")
+        } catch {
+            XCTAssertEqual(
+                error as? GoogleAuthError,
+                .wrongAccount(expectedEmail: "ada@example.com", signedInEmail: "grace@example.com")
+            )
+        }
+        XCTAssertEqual(store.accounts.map(\.id), ["sub-1"], "the repair flow must not leave a new account behind")
+        XCTAssertNil(store.refreshToken(for: "sub-9"), "the rolled-back row's Keychain entry is swept")
+        XCTAssertEqual(store.accounts.first?.status, .needsReauth, "the requested account still needs reconnecting")
+    }
+
+    func testReauthorizeAsAnAlreadyConnectedSiblingThrowsWithoutRemovingIt() async throws {
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-2", email: "bob@example.com", name: "Bob", refreshToken: "rt-2b")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+        try store.upsert(
+            GoogleAccount(
+                id: "sub-2",
+                email: "bob@example.com",
+                displayName: "Bob",
+                grantedScopes: ["openid"],
+                connectedAt: currentDate,
+                statusRaw: GoogleAccountStatus.connected.rawValue
+            ),
+            refreshToken: "rt-2"
+        )
+        store.setStatus(.needsReauth, for: "sub-1")
+
+        let flow = Task { try await service.reauthorize(accountID: "sub-1", additionalScopes: []) }
+        try await deliverRedirect(to: server, attempt: 0)
+
+        do {
+            try await flow.value
+            XCTFail("expected wrongAccount")
+        } catch {
+            XCTAssertEqual(
+                error as? GoogleAuthError,
+                .wrongAccount(expectedEmail: "ada@example.com", signedInEmail: "bob@example.com")
+            )
+        }
+        XCTAssertEqual(store.accounts.map(\.id).sorted(), ["sub-1", "sub-2"], "a pre-existing sibling is never removed")
+        XCTAssertEqual(store.refreshToken(for: "sub-2"), "rt-2b", "the sibling keeps the token the flow just issued")
+    }
+
+    func testConnectAccountStillAcceptsAnyIdentity() async throws {
+        // The identity check belongs to `reauthorize` only — adding a *new* account has no
+        // expected `sub`.
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-9", email: "new@example.com", name: "New", refreshToken: "rt-9")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+
+        let flow = Task { try await service.connectAccount() }
+        try await deliverRedirect(to: server, attempt: 0)
+        let account = try await flow.value
+
+        XCTAssertEqual(account.id, "sub-9")
+        XCTAssertEqual(store.accounts.map(\.id).sorted(), ["sub-1", "sub-9"])
     }
 
     func testRestartWhilePendingCancelsOldFlowAndNewFlowStillCompletes() async throws {
