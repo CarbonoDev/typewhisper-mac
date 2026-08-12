@@ -259,10 +259,29 @@ current test compiling.
   additionally be re-evaluated at the top of every `refresh(now:existingCalendarEventIDs:)`, which
   runs on the 60 s poll and on every snapshot-change refresh, so connecting/disconnecting a Google
   account updates the message within one refresh cycle.
+- **Normative (PR #7 review finding 5): suppression applies to the *gate*, not to the user.**
+  `CalendarService.errorMessage` is the "no calendar source at all" signal and only that. "One
+  source is broken" is a separate question answered by
+  `MeetingsViewModel.showsSystemCalendarProblem(authorization:accounts:dismissed:)` (pure static,
+  unit-tested matrix): EventKit `.denied`/`.restricted` **with** a working source ⇒ a dismissible
+  per-source row on Home ("macOS Calendar access is denied…" + "Open System Settings"), which
+  `HomeNextSection` renders inside the `hasAnyCalendarSource` branch. Without it, a Google-connected
+  user whose macOS access is denied silently loses every iCloud/Exchange/local event from Home,
+  Upcoming, Earlier, auto-briefs and start notifications with no hint outside Settings. EventKit
+  `.notDetermined`, or no working Google account, keep their existing paths (the Calendars
+  section's grant affordance / the connect card) — the row never stacks on top of them. Dismissal
+  is in-memory for the launch (the remedy lives in System Settings).
 - **Per-provider failure:** a provider must never throw through the seam. On a *transient sync
   failure* (network, 4xx/5xx), `GoogleCalendarProvider` serves its last good snapshot and exposes
   the error via `GoogleCalendarSyncEngine.$lastSyncError` for the settings UI; EventKit behavior
-  is unchanged — sync failures degrade to "its events go stale," never to an empty list. This
+  is unchanged — sync failures degrade to "its events go stale," never to an empty list.
+  **Normative (PR #7 review finding 1): failure granularity is per *calendar*, not per account.**
+  A single calendar whose `events.list` fails (persistent 403/404 from a revoked share or a stale
+  subscription) is skipped — keeping its own last good events — while every other calendar of that
+  account still syncs; the count of failed calendars is reported through `lastSyncError`
+  (`google.calendar.calendarsFailed`). Only a `calendarList` failure fails the whole account slice.
+  Without this, one broken calendar freezes the account's entire snapshot forever, and it never
+  self-heals. This
   invariant is scoped to sync failures: when **every** account is `.needsReauth` (revoked/expired
   auth) the provider's status drops out of `.authorized` and its events clear from the lists —
   intended, mirroring how EventKit-denied clears EventKit events.
@@ -344,6 +363,28 @@ broken.
 - Escape hatches: re-enabling a hidden calendar in `CalendarSelectionSection` works as today;
   duplicates that still occur (e.g. an Exchange-relayed copy the detector can't see) fall back to
   the existing manual meeting merge (`MeetingMergePlanner`) — unchanged, out of scope.
+- **Normative (PR #7 review finding 7):** resolving a prompt writes through the selection choke
+  point, which the Calendars section does not observe (its rows are a local `@State` snapshot and
+  selection is read from the service, not a `@Published`). `MeetingsViewModel` therefore publishes
+  `calendarSelectionRevision`, bumped by every selection write it performs (single, batched, and
+  twin-prompt resolution), and `CalendarSelectionSection` reloads its rows on change — otherwise
+  the checkboxes keep rendering the just-hidden calendars as selected and appear stuck.
+
+**Amendment (PR #7 review finding 4) — the automatic consumers still need event-level collapse.**
+D-G6 answers the *visible* half of the duplicate-source hazard, and only after the user resolves a
+prompt (or never, if they choose "Keep both"). Until then every automatic consumer of the fanned-in
+list acts twice per real event: `MeetingBriefScheduler.resolveMeeting` dedupes strictly on
+`calendarEventID`, so it auto-creates two meeting documents and enqueues two `relatedDiscovery` +
+two `brief` jobs on the cap-1 `llm` lane, and `MeetingStartNotificationService` posts two
+notifications. `CalendarEventTwinCollapser.collapse(_:)` (pure, unit-tested) is therefore applied
+in `MeetingsViewModel`'s `$upcomingEvents` sink **to the scheduler/notification feed only** — the
+published event lists and the Calendars selection UI keep both copies, so nothing is hidden
+invisibly and the D-G6 prompt still makes sense. The collapse key stays deliberately narrow, which
+is what D-G6 rejected option (a) for: identity = the D-G8 `seriesID` (the bare `iCalUID` — exactly
+why it was chosen), else the trimmed, case-folded title; **plus** the exact start *and* end
+instants; **and** the group must span both providers (≥1 namespaced Google ID and ≥1 bare EventKit
+ID). Same-side duplicates (two Google accounts invited to the same event, §8) are never collapsed.
+The Google copy wins — it carries the richer detail.
 
 ### D-G7 — Sync model: cached snapshot behind a periodic sync engine; the provider seam stays synchronous
 
@@ -443,6 +484,22 @@ by `MeetingService` (single-writer). The view-model seam that drives linking is
 `MeetingsViewModel.linkMeeting(_:to:)` (`ViewModels/MeetingsViewModel.swift:516`), which passes
 the event's fields through.
 
+**Normative (PR #7 review finding 3 — amends the earlier "unlink keeps all content" reading):**
+both columns are a *snapshot of one specific event*, not meeting content, so
+`MeetingService.unlinkCalendarEvent(for:)` clears them together with `calendarEventID`/`seriesID`.
+Title, date, attendees, transcript, notes and outputs are still kept. Rationale: unlinking almost
+always means "this was the wrong event"; keeping the snapshot leaves the document rendering another
+meeting's agenda behind a Join button that dials into the wrong call (and exports both to
+Obsidian), and nothing else ever writes those two fields back to `nil`. `linkToCalendarEvent`
+already adopts them wholesale (including back to `nil`), so re-linking always yields a consistent
+pair.
+
+**Normative (PR #7 review finding 9):** `MeetingMergePlan` / `MeetingService.applyMerge` carry both
+columns, sourced from **the meeting that supplied the calendar linkage** (falling back to the first
+non-nil in priority order only when no input is linked at all), so a merge can never pair one
+event's link with another event's agenda or join URL, and can never drop the Event-details
+disclosure while adopting the link.
+
 ### `CalendarService.MeetingProjection` (`CalendarService.swift:269-289`)
 
 Add `var calendarNotes: String?` and `var conferencingURL: String?`, populated from the DTO in
@@ -516,8 +573,21 @@ added to `TypeWhisper.xcodeproj` (project.pbxproj) — no SDK/package changes an
     `throw GoogleAuthError.needsReauth`.
   - `func reauthorize(accountID: String, additionalScopes: [String]) async throws` — same flow
     with `login_hint` + `include_granted_scopes=true` (used by "Reconnect", and by Phases 2–3).
+    **Normative (PR #7 review finding 2): the returned `sub` is verified against `accountID`.**
+    `prompt=select_account` always shows Google's chooser and `login_hint` only pre-selects, so a
+    user signed into several accounts easily finishes the flow as the wrong one. On a mismatch the
+    flow throws `.wrongAccount(expectedEmail:signedInEmail:)`, a row this flow *created* is rolled
+    back through `store.remove` (index + Keychain sweep) and its cached token dropped, a
+    pre-existing sibling row is left untouched, and the requested account keeps its status — so a
+    repair flow can never silently add a second account while leaving the broken one broken.
+    `connectAccount()` is deliberately unaffected: adding a new account has no expected identity.
   - `func disconnect(accountID: String) async` — best-effort revoke + `store.remove`.
-  - `enum GoogleAuthError: LocalizedError { case notConfigured, cancelled, timedOut, stateMismatch, exchangeFailed(String), refreshFailed(String), needsReauth }`
+  - `enum GoogleAuthError: LocalizedError { case notConfigured, cancelled, timedOut, loopbackUnavailable(String), wrongAccount(expectedEmail: String, signedInEmail: String), stateMismatch, exchangeFailed(String), refreshFailed(String), needsReauth }`
+    — `.loopbackUnavailable` (PR #7 review finding 10) is the local listener failing to bind or to
+    reach `.ready`; it must never be reported as `.timedOut` ("waiting for the redirect"), since no
+    browser was opened and no redirect was awaited. `GoogleLoopbackServing.start()` is `async` and
+    main-actor isolated for the same finding: the readiness wait used to block the main actor on a
+    semaphore for up to 5 s.
   - `static let calendarScope = "https://www.googleapis.com/auth/calendar.readonly"`,
     `static let identityScopes = ["openid", "email", "profile"]`.
 
@@ -604,6 +674,18 @@ string key, which buttons show) extracted as a static helper so the view stays l
     `accountLabel = accountEmail`; attendees → `Attendee(name: displayName ?? email ?? "",
     email:, isSelf: self == true ? true : nil, isOrganizer:, responseStatusRaw:)` (the `isSelf`
     convention matches the EventKit provider, `CalendarService.swift:511-521`).
+    **Normative (PR #7 review finding 6):** `GCalAttendee` decodes `resource`, and entries with
+    `resource == true` (room / equipment bookings) are **excluded** from the roster — every
+    attendee write funnels through `ParticipantDirectoryService.ingest`, so a mapped room would be
+    promoted into the participants directory as a person, permanently, for every room-booked
+    meeting. Absent or `false` ⇒ a person, as before.
+    **Normative (PR #7 review finding 8):** `plainText(fromHTML:)` strips tags **only when the
+    content actually contains HTML** (`looksLikeHTML(_:)`), and then matches the tag *shape*
+    (`</?tag …>`, comments, declarations) rather than "anything between angle brackets". A plain
+    description such as `Dial-in host John <john@example.com>, budget < 5000 > target` must survive
+    verbatim — the notes are snapshotted onto `Meeting.calendarNotes`, so the loss would be
+    permanent and silent. Entity decoding still runs on plain text, with `&amp;` last so
+    `&amp;lt;` never double-decodes.
 - `GoogleCalendarSyncEngine.swift` — `@MainActor final class`, `ObservableObject`; owns the
   snapshot `[(calendar: CalendarInfo, events: [CalendarEventDTO])]`; injected
   `GoogleHTTPTransport`, `GoogleAuthService`-conforming token seam
@@ -612,8 +694,9 @@ string key, which buttons show) extracted as a static helper so the view stays l
   `func syncNow() async`; `@Published private(set) var lastSyncError: String?`,
   `@Published private(set) var lastSyncAt: Date?`; posts
   `.googleCalendarSnapshotDidChange` on change. Per-account failure isolates (one account erroring
-  never drops another account's snapshot); a `.needsReauth` from the token seam sets a
-  user-facing `lastSyncError` and skips the account.
+  never drops another account's snapshot) **and per-calendar failure isolates inside an account**
+  (PR #7 review finding 1 — see D-G4); a `.needsReauth` from the token seam sets a user-facing
+  `lastSyncError` and skips the account.
 - `GoogleCalendarProvider.swift` — `CalendarEventProviding` over the engine's snapshot (D-G7
   semantics: overlap filter in `events(from:to:)`, `calendars()` from snapshot,
   `authorizationStatus` from account store).
