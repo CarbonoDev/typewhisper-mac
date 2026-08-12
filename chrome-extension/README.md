@@ -21,12 +21,20 @@ diarization is skipped entirely. No change to the ladder was needed.
 
 ## Install
 
-1. TypeWhisper → Settings → enable the **local API** (default `http://127.0.0.1:8978`). Note the
-   API token if you set one.
+1. TypeWhisper → Settings → Advanced → enable the **local API** (default `http://127.0.0.1:8978`).
 2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select this directory.
-3. Open the extension's options and set the API URL and token, then hit **Test connection**.
-4. Join a Meet call. Captions are required for capture; by default the extension **turns them on
+   Copy the **extension ID** Chrome shows under the loaded extension.
+3. Back in Settings → Advanced → API Server → **Allowed Browser Extensions**: paste that ID, then
+   press **Copy API Token**.
+4. Open the extension's options, set the API URL, paste the token, and hit **Test connection**.
+5. Join a Meet call. Captions are required for capture; by default the extension **turns them on
    for you** at call start (see Options below).
+
+Steps 3 and 4 are not optional. Every extension in the browser shares the `chrome-extension://`
+scheme, so the app trusts an *identity*, not a scheme: a request from an unlisted extension is
+refused with `403`, and a listed one must present the API token on every call — the "Require API
+Token" toggle governs loopback tools (CLI, Raycast) only and never exempts browser code. Getting
+either wrong shows up as `403`/`401` in the extension's console.
 
 The extension only ever talks to a loopback address; `config.js` hard-rejects any other host.
 
@@ -102,9 +110,12 @@ re-transcription of your own audio can never delete the caption-derived speaker 
 ## Tests
 
 ```bash
-node --test chrome-extension/test/stabilizer.test.js chrome-extension/test/selectors.test.js \
-  chrome-extension/test/language.test.js
+node --test chrome-extension/test/*.test.js
 ```
+
+Covered: the stabilizer's revision/reset rules, the DOM-discovery ladder (over a small fake
+`document` installed by the test), the language matcher, and the service worker's queueing rules —
+buffering, retry backoff, and the retried `/end` — over a fake `chrome.storage`.
 
 ## Known limits
 

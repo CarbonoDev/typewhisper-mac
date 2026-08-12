@@ -68,9 +68,14 @@
     <input type="text" id="baseUrl" placeholder="http://127.0.0.1:8978" />
     <div class="hint">Must be a loopback address. Enable the local API in TypeWhisper → Settings.</div>
 
-    <label for="apiToken">API token (optional)</label>
-    <input type="password" id="apiToken" placeholder="leave blank if no token is set" />
-    <div class="hint">Matches the token in TypeWhisper's local API settings.</div>
+    <label for="apiToken">API token (required)</label>
+    <input type="password" id="apiToken" placeholder="paste the token from the app" />
+    <div class="hint">
+      Settings &rsaquo; Advanced &rsaquo; API Server &rsaquo; <b>Copy API Token</b>. Browser
+      extensions always authenticate, whatever the app's &ldquo;Require API Token&rdquo; toggle says
+      &mdash; and this extension's ID must also be listed under <b>Allowed Browser Extensions</b>
+      there, or the app answers 403.
+    </div>
 
     <button id="save">Save</button>
     <button id="test">Test connection</button>

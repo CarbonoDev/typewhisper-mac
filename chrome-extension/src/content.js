@@ -23,7 +23,15 @@
   const LANG_ENTRY_SEARCH_TICKS = 20;
   const LANG_DIALOG_WAIT_TICKS = 5;
 
+  // Messages that failed to reach the worker wait here until the next successful connect. Capped
+  // for the same reason as the worker's MAX_BUFFER, and dropping from the *front* for the same
+  // reason too: if the worker stays unreachable long enough to overflow this, the newest captions
+  // are the ones worth keeping.
+  const MAX_OUTBOX = 200;
+
   let port = null;
+  /** @type {object[]} unsent messages, oldest first. */
+  const outbox = [];
   let portTimer = null;
   let tickTimer = null;
   let observer = null;
@@ -54,7 +62,10 @@
       return;
     }
     port.onMessage.addListener((message) => {
-      if (message.type === 'session-ready') log('meeting id', message.meetingId);
+      if (message.type === 'session-ready') {
+        log('meeting id', message.meetingId);
+        adoptSessionStart(message.startedAt);
+      }
       if (message.type === 'error') log('worker error:', message.message);
     });
     port.onDisconnect.addListener(() => {
@@ -62,28 +73,95 @@
     });
 
     if (sessionKey) {
-      post({
+      const start = {
         type: 'session-start',
         sessionKey,
         title: TWSelectors.readMeetingTitle(),
         account: TWSelectors.readAccountEmail(),
         startedAt: sessionStartedAt,
-      });
+      };
+      // Announced ahead of the outbox: the worker may have been evicted and needs the session key
+      // before buffered segments mean anything. If even this fails, it goes to the *front* of the
+      // outbox so the next connect still sends it first.
+      if (!sendNow(start)) outbox.unshift(start);
+    }
+    drainOutbox();
+  }
+
+  /** Post over the live port, reporting failure instead of reconnecting. Never throws. */
+  function sendNow(message) {
+    if (!port) return false;
+    try {
+      port.postMessage(message);
+      return true;
+    } catch {
+      port = null;
+      return false;
     }
   }
 
   function post(message) {
     if (!port) connect();
-    try {
-      port?.postMessage(message);
-    } catch {
-      // The worker recycled between our check and the send; reconnect and drop this message. The
-      // buffer that matters lives in the worker's storage, and unsent turns are re-emitted on the
-      // next tick only if they were never acknowledged — losing one tick of captions is acceptable
-      // next to blocking the observer.
-      port = null;
-      connect();
+    if (sendNow(message)) return;
+    // The worker recycled between our check and the send. A caption turn exists *only here* until
+    // the worker has it — the worker's storage buffer cannot cover a message it never received — so
+    // hold it and reconnect; `connect()` drains the outbox once the new port is up. Failing sends
+    // must never block the observer, hence buffer-and-continue rather than retry inline.
+    queueForRetry(message);
+    connect();
+  }
+
+  function queueForRetry(message) {
+    outbox.push(message);
+    if (outbox.length > MAX_OUTBOX) {
+      const dropped = outbox.splice(0, outbox.length - MAX_OUTBOX).length;
+      log(`outbox full — dropped the ${dropped} oldest unsent message(s)`);
     }
+  }
+
+  /** Flush buffered messages in order; anything still unsent goes back to the front of the queue. */
+  function drainOutbox() {
+    if (!port || outbox.length === 0) return;
+    const pending = outbox.splice(0, outbox.length);
+    log(`resending ${pending.length} buffered message(s) after reconnect`);
+    for (let i = 0; i < pending.length; i += 1) {
+      if (!sendNow(pending[i])) {
+        outbox.unshift(...pending.slice(i));
+        return;
+      }
+    }
+  }
+
+  /**
+   * Adopt the worker's authoritative meeting start.
+   *
+   * The stabilizer is created with `Date.now()` because the page has nothing better, but the worker
+   * *resumes* a session by call code — after a mid-call reload the meeting already started minutes
+   * ago, and timestamping from the reload instant would fold the second half of the call on top of
+   * the first (the segments API takes seconds relative to the meeting start). So the worker reports
+   * the start it has persisted and we re-base on it.
+   *
+   * Residual: segments emitted in the sub-second before `session-ready` arrives still carry the
+   * local base. That is at most the first tick, and downstream speaker transfer is text-anchored.
+   */
+  function adoptSessionStart(startedAt) {
+    if (!stabilizer || !startedAt) return;
+    const parsed = Date.parse(startedAt);
+    if (!Number.isFinite(parsed)) return;
+    // Reject nonsense rather than silently shifting the whole transcript: a start in the future, or
+    // one from a stale session persisted under this call code days ago.
+    if (parsed > Date.now() + 60_000 || Date.now() - parsed > 12 * 60 * 60 * 1000) {
+      log('ignoring implausible session start from the worker:', startedAt);
+      return;
+    }
+    if (parsed === stabilizer.sessionStart) return;
+
+    const shiftSeconds = Math.round((stabilizer.sessionStart - parsed) / 1000);
+    stabilizer.sessionStart = parsed;
+    log(
+      `adopted the meeting start reported by the worker (${startedAt});`,
+      `caption timestamps shift by +${shiftSeconds}s`
+    );
   }
 
   function startSession() {
@@ -92,7 +170,11 @@
 
     if (sessionKey) endSession();
     sessionKey = code;
+    // Page-local start: only ever used for the *this page* windows (captions warning, auto-CC), which
+    // must stay relative to when this content script started, not to the meeting.
     sessionStartedAt = new Date().toISOString();
+    // Provisional timestamp base — replaced by the worker's persisted start on `session-ready`
+    // (see `adoptSessionStart`), which is what makes a mid-call reload keep meeting-relative times.
     stabilizer = new CaptionStabilizer({ sessionStart: Date.now() });
     warnedAboutCaptions = false;
     ccAttempts = 0;
