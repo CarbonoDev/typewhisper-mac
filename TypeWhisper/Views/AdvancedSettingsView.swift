@@ -22,6 +22,9 @@ struct AdvancedSettingsView: View {
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
+    @State private var apiTokenCopied = false
+    @State private var unmigratedKeychainItems: [String] = DataMigrationService.unmigratedKeychainItems()
+    @State private var keychainEnumerationFailed = DataMigrationService.keychainEnumerationFailed()
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
 
@@ -42,6 +45,56 @@ struct AdvancedSettingsView: View {
 
     var body: some View {
         Form {
+            // MARK: - Rename migration report
+            // Shown only when the MeetingWhisper rename could not carry some API keys over. Without
+            // it the failure is invisible until a transcription fails with an auth error.
+            if !unmigratedKeychainItems.isEmpty || keychainEnumerationFailed {
+                Section(localizedAppText("Data Migration", de: "Datenübernahme")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(
+                            localizedAppText(
+                                "Some saved API keys could not be carried over from TypeWhisper.",
+                                de: "Einige gespeicherte API-Schlüssel konnten nicht von TypeWhisper übernommen werden."
+                            ),
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.orange)
+
+                        if !unmigratedKeychainItems.isEmpty {
+                            Text(unmigratedKeychainItems.joined(separator: ", "))
+                                .font(.system(.callout, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        } else {
+                            Text(localizedAppText(
+                                "The keychain could not be read at all, so it is not known which keys were affected.",
+                                de: "Der Schlüsselbund konnte gar nicht gelesen werden, daher ist unbekannt, welche Schlüssel betroffen sind."
+                            ))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Text(localizedAppText(
+                            "Retrying asks the keychain again — macOS may prompt you to allow access. If it keeps failing, re-enter the affected keys in their provider's settings.",
+                            de: "Ein erneuter Versuch fragt den Schlüsselbund noch einmal ab – macOS fragt dabei ggf. nach deiner Erlaubnis. Schlägt es weiterhin fehl, gib die betroffenen Schlüssel in den Einstellungen des jeweiligen Anbieters neu ein."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            Button(localizedAppText("Retry Migration", de: "Übernahme wiederholen")) {
+                                DataMigrationService.retryKeychainMigration()
+                                reloadMigrationReport()
+                            }
+                            Button(localizedAppText("Dismiss", de: "Ausblenden")) {
+                                DataMigrationService.dismissKeychainReport()
+                                reloadMigrationReport()
+                            }
+                        }
+                    }
+                }
+            }
+
             // MARK: - Window
             Section(String(localized: "settings.mainWindow.section")) {
                 Toggle(isOn: $showMainWindowAtLaunch) {
@@ -413,6 +466,31 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Allowed Browser Extensions"),
+                        info: String(localized: "Browser extensions are refused by the API unless their ID is listed here — otherwise every extension installed in the browser could read your meetings. Chrome shows the ID on chrome://extensions with Developer mode on; separate several with commas. A listed extension must also send the API token, whatever the setting above says: copy it here and paste it into the extension's options.")
+                    )
+                    TextField(
+                        String(localized: "Extension IDs"),
+                        text: $viewModel.allowedExtensionIDs,
+                        prompt: Text(verbatim: "abcdefghijklmnopabcdefghijklmnop")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+
+                    HStack(spacing: 8) {
+                        Button(String(localized: "Copy API Token")) {
+                            apiTokenCopied = viewModel.copyAPITokenToPasteboard()
+                        }
+                        if apiTokenCopied {
+                            Text(String(localized: "Copied to the clipboard"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 if viewModel.isEnabled {
                     HStack {
                         Image(systemName: "circle.fill")
@@ -606,6 +684,13 @@ struct AdvancedSettingsView: View {
                 .help(String(localized: "Copy"))
             }
         }
+    }
+
+    // MARK: - Rename migration report
+
+    private func reloadMigrationReport() {
+        unmigratedKeychainItems = DataMigrationService.unmigratedKeychainItems()
+        keychainEnumerationFailed = DataMigrationService.keychainEnumerationFailed()
     }
 
     // MARK: - Support Diagnostics

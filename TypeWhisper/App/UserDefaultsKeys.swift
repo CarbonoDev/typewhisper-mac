@@ -54,6 +54,9 @@ enum UserDefaultsKeys {
     static let apiServerEnabled = "apiServerEnabled"
     static let apiServerPort = "apiServerPort"
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
+    /// Browser-extension ids (or full extension origins) allowed to call the local API, comma- or
+    /// newline-separated. Empty by default: no extension is trusted until the user adds one.
+    static let apiServerAllowedExtensionIDs = "apiServerAllowedExtensionIDs"
     static let updateChannel = "updateChannel"
 
     // MARK: - Audio Device

@@ -1864,6 +1864,16 @@
         }
       }
     },
+    "Allowed Browser Extensions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugelassene Browser-Erweiterungen"
+          }
+        }
+      }
+    },
     "Already Installed": {
       "localizations": {
         "de": {
@@ -2848,6 +2858,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "タブ「利用可能」を検索するか、ファイルからインストールしてください。"
+          }
+        }
+      }
+    },
+    "Browser extensions are refused by the API unless their ID is listed here — otherwise every extension installed in the browser could read your meetings. Chrome shows the ID on chrome://extensions with Developer mode on; separate several with commas. A listed extension must also send the API token, whatever the setting above says: copy it here and paste it into the extension's options.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browser-Erweiterungen werden von der API abgewiesen, solange ihre ID nicht hier steht – sonst könnte jede installierte Erweiterung deine Meetings lesen. Chrome zeigt die ID unter chrome://extensions bei aktiviertem Entwicklermodus; mehrere durch Kommas trennen. Eine gelistete Erweiterung muss zusätzlich das API-Token senden, unabhängig von der Einstellung darüber: Kopiere es hier und füge es in den Optionen der Erweiterung ein."
           }
         }
       }
@@ -4167,6 +4187,16 @@
         }
       }
     },
+    "Copied to the clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
     "Copy": {
       "localizations": {
         "de": {
@@ -4179,6 +4209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "コピー"
+          }
+        }
+      }
+    },
+    "Copy API Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Token kopieren"
           }
         }
       }
@@ -6598,6 +6638,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
+          }
+        }
+      }
+    },
+    "Extension IDs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweiterungs-IDs"
           }
         }
       }
