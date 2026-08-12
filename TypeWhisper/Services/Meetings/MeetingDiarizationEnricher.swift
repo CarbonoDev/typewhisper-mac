@@ -185,6 +185,10 @@ final class MeetingDiarizationEnricher: ObservableObject {
         case noAudio
         /// The meeting has no transcript segments to label.
         case noTranscript
+        /// The transcript is made only of conferencing captions (`.liveCaptions`), which already carry
+        /// the speakers' real names. A cloud re-transcription would replace them with generic labels, so
+        /// nothing is written.
+        case captionsOnly
         /// The transcript timeline does not line up with the stored audio (restarted/merged flows),
         /// so labeling would attach wrong speakers — surfaced as a status, nothing is written.
         case timelineMismatch
@@ -797,8 +801,10 @@ final class MeetingDiarizationEnricher: ObservableObject {
     /// persisted to `finalRetranscriptionPolicy` or any global — this is a per-run action.
     ///
     /// Returns `.unavailable` when no transcriber is wired or the call fails, `.noAudio` with no stored
-    /// audio, `.noTranscript` when the meeting has nothing to relabel, and `.noSpeakersDetected` when the
-    /// engine returned a transcript with no speaker labels (the existing transcript is kept untouched).
+    /// audio, `.noTranscript` when the meeting has nothing to relabel, `.captionsOnly` when the only
+    /// segments are conferencing captions (whose speaker names a re-transcription cannot reproduce), and
+    /// `.noSpeakersDetected` when the engine returned a transcript with no speaker labels (the existing
+    /// transcript is kept untouched).
     @discardableResult
     func rerunCloudSpeakers(_ meeting: Meeting, engineId: String, model: String? = nil) async -> Outcome {
         guard !isEnriching else { return .unavailable }
@@ -814,12 +820,26 @@ final class MeetingDiarizationEnricher: ObservableObject {
         // it deterministically from the transcript order (SwiftData's `segments` relationship array has no
         // guaranteed order — every other enricher path sorts by `order` before use).
         //
+        // `.liveCaptions` is never a replace target, whatever the transcript order says. Caption rows are
+        // the one source this re-transcription cannot reproduce: they carry the *human speaker names* Meet
+        // supplied, while the cloud engine returns generic `SPEAKER_xx` labels. On a caption-bridge meeting
+        // merged with its locally-recorded twin the earliest segment is often a caption row, and picking it
+        // here would replace every named row with an anonymous one — the exact loss
+        // `MeetingSegmentSource.liveCaptions` exists to prevent (see its doc comment). Target the
+        // transcription-derived source instead; with nothing else to replace, skip rather than clobber.
+        //
         // Known limitation (M5 review finding): on a *mixed-source* meeting (e.g. a live capture later
         // merged with an M8 transcript import), the fresh cloud transcription covers the whole stored
         // audio, so replacing only the first source's segments leaves the other source's segments to
         // duplicate against the new full transcript. Mixed-source cloud rerun is out of scope here; the
         // common single-source case (a live capture, or a lone audio import) is correct.
-        let source = meeting.segments.sorted { $0.order < $1.order }.first?.source ?? .liveCapture
+        let orderedSources = meeting.segments.sorted { $0.order < $1.order }.map(\.source)
+        guard let source = Self.cloudRerunReplacementSource(orderedSources: orderedSources) else {
+            logger.warning(
+                "Cloud speaker rerun skipped: caption-only transcript; replacing it would destroy the speaker names the captions carry."
+            )
+            return .captionsOnly
+        }
         let selection = meetingService.transcriptionLanguageSelection(for: meeting)
 
         let samples: [Float]
@@ -856,5 +876,18 @@ final class MeetingDiarizationEnricher: ObservableObject {
         // Identify does not pay for the M9-SPK-B timing re-pass.
         meetingService.setTimestampsRefined(true, for: meeting)
         return .labeled(speakerCount: distinctLabels.count)
+    }
+
+    /// Which segment source a cloud speaker rerun may replace, given the meeting's segment sources in
+    /// transcript order. Pure so the rule is unit-testable without a store.
+    ///
+    /// The first *transcription-derived* source wins — `.liveCaptions` is skipped over, never selected:
+    /// the fresh transcription has no speaker names of its own, so replacing caption rows with it would
+    /// trade real names for `SPEAKER_xx`. `nil` means the transcript is caption-only and the rerun must
+    /// not touch it.
+    nonisolated static func cloudRerunReplacementSource(
+        orderedSources: [MeetingSegmentSource]
+    ) -> MeetingSegmentSource? {
+        orderedSources.first { $0 != .liveCaptions }
     }
 }

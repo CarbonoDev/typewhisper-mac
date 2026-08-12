@@ -25293,6 +25293,22 @@
         }
       }
     },
+    "meetings.diarization.status.captionsOnly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Transkript stammt aus Meet-Untertiteln, die bereits die echten Sprechernamen enthalten. Eine erneute Transkription würde sie überschreiben – es wurde nichts geändert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This transcript comes from Meet captions, which already carry the speakers' real names. Re-transcribing would overwrite them, so nothing was changed."
+          }
+        }
+      }
+    },
     "meetings.diarization.status.noAudio": {
       "localizations": {
         "de": {

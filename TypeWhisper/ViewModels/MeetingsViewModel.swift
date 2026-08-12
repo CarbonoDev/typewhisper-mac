@@ -1387,6 +1387,8 @@ final class MeetingsViewModel: ObservableObject {
             diarizationStatusMessage = String(localized: "meetings.diarization.status.noAudio")
         case .noTranscript:
             diarizationStatusMessage = String(localized: "meetings.diarization.status.noTranscript")
+        case .captionsOnly:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.captionsOnly")
         case .timelineMismatch:
             diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
         }
