@@ -230,6 +230,92 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         XCTAssertEqual(h.ledger.entry(for: "google:sub-1:f1")?.disposition, "merged")
     }
 
+    // MARK: - Live-meeting guard (D-D4 review fix, 2026-08-12)
+
+    /// The data-loss case: Gemini publishes (and keeps editing) the notes doc while the call is
+    /// still being captured. `mergeImport` deletes and re-inserts the target's segments, so a
+    /// merge here would wipe live rows mid-recording and repeat on every 15-minute poll. Nothing
+    /// may be exported, written, or ledgered — and no duplicate meeting may be created either.
+    func testLiveMeetingIsNeverMergedIntoAndTheFileIsDeferred() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        // No export stub at all: reaching the transport would itself be the failure.
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: []))
+        let live = h.meetingService.createMeeting(
+            title: "Weekly sync", source: .adHoc, state: .live, startDate: embeddedDate
+        )
+        h.meetingService.appendStableSegments(
+            [
+                TranscriptionSegment(text: "Caption en vivo uno.", start: 0, end: 30),
+                TranscriptionSegment(text: "Caption en vivo dos.", start: 300, end: 330),
+            ],
+            source: .liveCaptions,
+            to: live
+        )
+        let liveTexts = live.segments.map(\.text).sorted()
+        h.ledger.markPending(fileID: "google:sub-1:f1", modifiedTime: fixedNow)
+
+        let outcome = await h.importer.processFile(
+            try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: true
+        )
+
+        XCTAssertEqual(outcome, .deferred)
+        XCTAssertEqual(h.meetingService.meetings.count, 1, "no duplicate meeting was created either")
+        XCTAssertEqual(live.segments.map(\.text).sorted(), liveTexts, "not one live row was dropped")
+        XCTAssertNil(h.ledger.entry(for: "google:sub-1:f1"), "a deferred file stays unseen")
+        XCTAssertNil(h.ledger.failures["google:sub-1:f1"], "deferring is not a failure")
+        XCTAssertTrue(h.ledger.pendingFileIDs.isEmpty, "the guard is released so the next cycle re-enqueues")
+    }
+
+    /// …and once the meeting completes, the very same file imports normally — the deferral only
+    /// postpones the merge, it never loses the transcript.
+    func testDeferredFileMergesOnceTheMeetingCompletes() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: [exportStub(Self.geminiMarkdown)]))
+        let meeting = h.meetingService.createMeeting(
+            title: "Weekly sync", source: .adHoc, state: .live, startDate: embeddedDate
+        )
+        let file = try makeFile(id: "f1", name: datedName)
+
+        let deferred = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: false)
+        XCTAssertEqual(deferred, .deferred)
+
+        meeting.state = .completed
+        let outcome = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: false)
+
+        guard case .merged(let meetingID, _) = outcome else {
+            return XCTFail("expected merged, got \(outcome)")
+        }
+        XCTAssertEqual(meetingID, meeting.id)
+        XCTAssertEqual(h.meetingService.meetings.count, 1)
+    }
+
+    /// A re-merge is deferred too: the recorded target being live is exactly the same hazard.
+    func testRemergeIntoALiveTargetIsDeferred() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let h = makeHarness(in: dir, transport: FakeDriveTransport(stubs: []))
+        let meeting = h.meetingService.createMeeting(
+            title: "Weekly sync", source: .adHoc, state: .live, startDate: embeddedDate
+        )
+        h.ledger.recordImported(
+            fileID: "google:sub-1:f1", docModifiedTime: fixedNow.addingTimeInterval(-600),
+            meetingID: meeting.id, disposition: .merged, now: fixedNow.addingTimeInterval(-600)
+        )
+
+        let outcome = await h.importer.processFile(
+            try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: false
+        )
+
+        XCTAssertEqual(outcome, .deferred)
+        XCTAssertEqual(
+            h.ledger.entry(for: "google:sub-1:f1")?.docModifiedTime,
+            fixedNow.addingTimeInterval(-600),
+            "the edit was not acknowledged, so the next cycle still sees it"
+        )
+    }
+
     func testNearMissCreatesASecondMeeting() async throws {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
         defer { TestSupport.remove(dir) }
@@ -267,7 +353,9 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         XCTAssertEqual(meeting.segments.count, 2, "degraded but landed")
     }
 
-    func testExportFailureRecordsCappedFailure() async throws {
+    /// A 5xx is **transient** (review fix): it spends the large transient budget, never the small
+    /// permanent one, so three unlucky cycles can no longer abandon a transcript for good.
+    func testTransientExportFailureSpendsOnlyTheTransientBudget() async throws {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
         defer { TestSupport.remove(dir) }
         let transport = FakeDriveTransport(stubs: [exportStub("quota", statusCode: 500)])
@@ -279,9 +367,67 @@ final class GoogleDriveTranscriptImporterTests: XCTestCase {
         guard case .failed = outcome else {
             return XCTFail("expected failed, got \(outcome)")
         }
-        XCTAssertEqual(h.ledger.failures["google:sub-1:f1"]?.attempts, 1)
+        let record = try XCTUnwrap(h.ledger.failures["google:sub-1:f1"])
+        XCTAssertEqual(record.attempts, 0, "a 5xx must not burn the permanent retry cap")
+        XCTAssertEqual(record.transientAttempts, 1)
+        XCTAssertFalse(record.isExhausted)
+        // The record carries the doc's modifiedTime so the engine's watermark holds behind it.
+        XCTAssertEqual(record.docModifiedTime, fixedNow)
         XCTAssertTrue(h.ledger.pendingFileIDs.isEmpty, "a failure leaves the pending set")
         XCTAssertTrue(h.meetingService.meetings.isEmpty)
+    }
+
+    /// Three transient failures then a success — the scenario the 3-attempt cap used to abandon
+    /// permanently (45 minutes of Drive flakiness). The file stays retryable throughout, stays
+    /// under the watermark bound, and the eventual success clears the record.
+    func testThreeTransientFailuresThenSuccessStillImports() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        let transport = FakeDriveTransport(stubs: [
+            exportStub("rate limited", statusCode: 429),
+            exportStub("bad gateway", statusCode: 502),
+            exportStub("server error", statusCode: 500),
+            exportStub(Self.geminiMarkdown),
+        ])
+        let h = makeHarness(in: dir, transport: transport)
+        let file = try makeFile(id: "f1", name: datedName)
+
+        for attempt in 1...3 {
+            let outcome = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: false)
+            guard case .failed = outcome else {
+                return XCTFail("attempt \(attempt): expected failed, got \(outcome)")
+            }
+            XCTAssertEqual(
+                h.ledger.action(for: file, sub: "sub-1", now: fixedNow), .retry,
+                "attempt \(attempt): a transient failure must leave the file retryable"
+            )
+            XCTAssertEqual(h.ledger.earliestUnresolvedModifiedTime, fixedNow,
+                           "attempt \(attempt): the watermark stays held behind the unresolved file")
+        }
+
+        let final = await h.importer.processFile(file, sub: "sub-1", ownsPendingEntry: false)
+        guard case .created = final else {
+            return XCTFail("expected created, got \(final)")
+        }
+        XCTAssertNil(h.ledger.failures["google:sub-1:f1"], "success clears the failure record")
+        XCTAssertNil(h.ledger.earliestUnresolvedModifiedTime, "nothing unresolved holds the bound")
+    }
+
+    /// A 4xx that is not a rate limit is permanent: it still spends the small budget, so a doc
+    /// Drive will never export does not retry forever.
+    func testPermanentExportFailureSpendsThePermanentBudget() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveImporter")
+        defer { TestSupport.remove(dir) }
+        // 400/403 are the markdown-fallback trigger, so both export attempts must fail; 404 is
+        // the plain permanent case.
+        let transport = FakeDriveTransport(stubs: [exportStub("gone", statusCode: 404)])
+        let h = makeHarness(in: dir, transport: transport)
+
+        _ = await h.importer.processFile(try makeFile(id: "f1", name: datedName), sub: "sub-1", ownsPendingEntry: false)
+
+        let record = try XCTUnwrap(h.ledger.failures["google:sub-1:f1"])
+        XCTAssertEqual(record.attempts, 1)
+        XCTAssertEqual(record.transientAttempts, 0)
     }
 
     func testEmptyTranscriptRecordsFailure() async throws {

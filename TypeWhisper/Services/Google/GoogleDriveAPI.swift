@@ -57,22 +57,48 @@ enum GoogleDriveAPI {
 
     // MARK: - Request builders
 
-    /// `GET files` — the D-D3 discovery query. The `name contains` terms are **derived from**
-    /// `ImportedMeetingTitle.notesSuffixes` (the canonical marker list, D-D3/F3): one term per
-    /// phrase, verbatim (Drive matches case-insensitively) — one list, two derivations (the title
-    /// cleaner wraps the same phrases in its suffix regex), impossible to drift.
+    /// How the server-side query narrows the candidate set (D-D3, **review fix 2026-08-12**).
     ///
-    /// `watermark` bounds the scan to `modifiedTime > watermark` (auto-import); `nil` scans all
-    /// history (backfill, D-D7). `corpora`/`driveId` stay at defaults (user corpus) for v1.
+    /// The original design filtered with `name contains '<marker>'`. That cannot work: Drive
+    /// documents that `contains` **only prefix-matches** the `name` field — *"suppose you have a
+    /// name of `HelloWorld`. A query of `name contains 'Hello'` returns a result, but a query of
+    /// `name contains 'World'` doesn't"*
+    /// (developers.google.com/workspace/drive/api/guides/ref-search-terms) — and Gemini's marker
+    /// is always a **trailing** suffix ("Llamada semanal - 2026_07_07 11_00 CST - Notas de
+    /// Gemini"), so the query matched nothing and the whole feature imported zero transcripts.
+    ///
+    /// The name predicate is therefore gone; `ImportedMeetingTitle.hasNotesSuffix` filters names
+    /// **client-side** on each fetched page (the one authoritative marker rule), and the query
+    /// narrows only in the way Drive can actually serve:
+    enum Narrowing {
+        /// mimeType + `trashed = false` only — used with a `modifiedTime` watermark, where the
+        /// window itself (one 15-minute cycle plus the overlap margin) is the bound. No text
+        /// predicate at all, so discovery cannot depend on Drive's indexing behaviour.
+        case timeWindow
+        /// Adds `fullText contains '"<phrase>"'` terms for the **unbounded** backfill scan, where
+        /// listing every Google Doc in the corpus is not viable. `fullText` matches whole tokens
+        /// (and, double-quoted, phrases) across name + content, so a trailing marker *is*
+        /// reachable this way — but it is a narrowing convenience only: the client-side name
+        /// filter still decides, and the scan reports truncation to the user.
+        case fullTextMarkers
+    }
+
+    /// `GET files` — the D-D3 discovery query. `watermark` bounds the scan to
+    /// `modifiedTime > watermark` (auto-import); `nil` scans all history (backfill, D-D7).
+    /// `corpora`/`driveId` stay at defaults (user corpus) for v1.
     static func filesListRequest(
         token: String,
         watermark: Date? = nil,
-        pageToken: String? = nil
+        pageToken: String? = nil,
+        narrowing: Narrowing = .timeWindow
     ) -> URLRequest {
-        let nameTerms = ImportedMeetingTitle.notesSuffixes
-            .map { "name contains '\(escapedQueryLiteral($0))'" }
-            .joined(separator: " or ")
-        var q = "mimeType='application/vnd.google-apps.document' and (\(nameTerms)) and trashed = false"
+        var q = "mimeType='application/vnd.google-apps.document' and trashed = false"
+        if case .fullTextMarkers = narrowing {
+            let terms = ImportedMeetingTitle.notesSuffixes
+                .map { "fullText contains '\(escapedQueryLiteral("\"\($0)\""))'" }
+                .joined(separator: " or ")
+            q += " and (\(terms))"
+        }
         if let watermark {
             q += " and modifiedTime > '\(GoogleCalendarAPI.rfc3339String(watermark))'"
         }

@@ -330,6 +330,7 @@ struct GoogleAccountsSection: View {
                     enabled,
                     account: account,
                     store: accountStore,
+                    ledger: ServiceContainer.shared.googleDriveImportLedger,
                     reauthorize: { try await authService.reauthorize(accountID: $0, additionalScopes: $1) },
                     syncNow: { await driveSyncEngine.syncNow() }
                 )
@@ -443,7 +444,21 @@ struct GoogleAccountsSection: View {
         // (Testing-mode weekly expiry hardening) — one consent pass restores calendar and every
         // enabled feature, without leaning on `include_granted_scopes` alone.
         let scopes = GoogleFeatureScopes.additionalScopes(for: account, store: accountStore)
-        runAuthFlow { try await authService.reauthorize(accountID: account.id, additionalScopes: scopes) }
+        driveToggleError = nil
+        runAuthFlow {
+            try await authService.reauthorize(accountID: account.id, additionalScopes: scopes)
+        } onSuccess: {
+            // …and requesting a scope is not getting it (review fix): the consent screen lets the
+            // user uncheck Drive and still sign in. Verify the grant exactly as the toggle flow
+            // does, turn the feature off when it is missing, and say so — otherwise the engine
+            // polls forever with an unscoped token and only ever shows a raw 403.
+            let declined = GoogleFeatureScopes.disableFeaturesWithMissingScopes(
+                accountID: account.id, store: accountStore
+            )
+            if declined.contains(.driveImport) {
+                driveToggleError = (account.id, String(localized: "google.drive.reconnectScopeDenied"))
+            }
+        }
     }
 
     private func disconnect(_ account: GoogleAccount) {
@@ -468,11 +483,15 @@ struct GoogleAccountsSection: View {
     /// That is fine here by construction: the row list renders straight from `$accounts` (so a
     /// post-cancel row simply appears), and `isAuthorizing` clears when the flow itself resolves,
     /// never on the Cancel click, so the progress row always resolves cleanly.
-    private func runAuthFlow(_ flow: @escaping () async throws -> Void) {
+    private func runAuthFlow(
+        _ flow: @escaping () async throws -> Void,
+        onSuccess: @escaping @MainActor () -> Void = {}
+    ) {
         connectError = nil
         Task {
             do {
                 try await flow()
+                onSuccess()
             } catch {
                 connectError = GoogleConnectErrorPresenter.message(for: error)
             }

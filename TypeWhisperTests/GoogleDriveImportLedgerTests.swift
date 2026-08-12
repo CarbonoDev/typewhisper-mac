@@ -151,11 +151,11 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
 
         let file = try makeFile(id: "f1", modified: now)
 
-        ledger.recordFailure(fileID: fileID, now: now)
+        ledger.recordFailure(fileID: fileID, docModifiedTime: nil, kind: .permanent, now: now)
         XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .retry)
-        ledger.recordFailure(fileID: fileID, now: now)
+        ledger.recordFailure(fileID: fileID, docModifiedTime: nil, kind: .permanent, now: now)
         XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .retry)
-        ledger.recordFailure(fileID: fileID, now: now)
+        ledger.recordFailure(fileID: fileID, docModifiedTime: nil, kind: .permanent, now: now)
         // Cap reached (maxRetryAttempts = 3): abandoned to the backfill sheet.
         XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .skip)
     }
@@ -177,7 +177,7 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
         let editTime = now.addingTimeInterval(600)
         let lastAttempt = now.addingTimeInterval(1_200)
         for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
-            ledger.recordFailure(fileID: fileID, now: lastAttempt)
+            ledger.recordFailure(fileID: fileID, docModifiedTime: nil, kind: .permanent, now: lastAttempt)
         }
 
         // The edit predates the last failed attempt → abandoned, record kept.
@@ -199,7 +199,7 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
         defer { TestSupport.remove(dir) }
         let ledger = makeLedger(in: dir)
 
-        ledger.recordFailure(fileID: fileID, now: now)
+        ledger.recordFailure(fileID: fileID, docModifiedTime: nil, kind: .permanent, now: now)
         ledger.markPending(fileID: fileID, modifiedTime: now)
 
         let meetingID = UUID()
@@ -232,7 +232,7 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
             ledger.recordImported(
                 fileID: fileID, docModifiedTime: now, meetingID: meetingID, disposition: .merged, now: now
             )
-            ledger.recordFailure(fileID: "google:sub-1:f2", now: now)
+            ledger.recordFailure(fileID: "google:sub-1:f2", docModifiedTime: nil, kind: .permanent, now: now)
             ledger.setWatermark(now, forSub: sub)
             ledger.markPending(fileID: "google:sub-1:f3", modifiedTime: now)
         }
@@ -289,6 +289,128 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
         XCTAssertEqual(ledger.earliestPendingModifiedTime, now.addingTimeInterval(100))
     }
 
+    // MARK: - Review fixes (2026-08-12)
+
+    /// Transient errors get their own, much larger budget: three unlucky cycles (45 minutes of
+    /// Drive flakiness) must not be able to abandon a transcript the way the error-class-blind cap
+    /// did.
+    func testTransientFailuresDoNotSpendThePermanentCap() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let ledger = makeLedger(in: dir)
+        let file = try makeFile(id: "f1", modified: now)
+
+        for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
+            ledger.recordFailure(fileID: fileID, docModifiedTime: now, kind: .transient, now: now)
+        }
+        XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .retry,
+                       "the permanent cap is untouched by transient errors")
+        XCTAssertEqual(ledger.failures[fileID]?.attempts, 0)
+
+        // …but the transient budget is bounded too.
+        let remaining = GoogleDriveImportLedger.maxTransientAttempts - GoogleDriveImportLedger.maxRetryAttempts
+        for _ in 0..<remaining {
+            ledger.recordFailure(fileID: fileID, docModifiedTime: now, kind: .transient, now: now)
+        }
+        XCTAssertEqual(ledger.action(for: file, sub: sub, now: now), .skip)
+    }
+
+    /// An abandoned, never-imported file keeps holding the watermark behind itself, so it can
+    /// never end up silently below the bound — the invisible permanent drop the review found.
+    func testUnresolvedFailuresHoldTheWatermarkBound() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let ledger = makeLedger(in: dir)
+        let failedAt = now.addingTimeInterval(-3_600)
+
+        ledger.markPending(fileID: "google:sub-1:pending", modifiedTime: now)
+        ledger.recordFailure(
+            fileID: fileID, docModifiedTime: failedAt, kind: .permanent, now: now
+        )
+        XCTAssertEqual(ledger.earliestUnresolvedModifiedTime, failedAt,
+                       "the older unresolved failure, not just the pending file, bounds the watermark")
+
+        // A later success resolves it, and the bound moves back up to the pending file.
+        ledger.recordImported(
+            fileID: fileID, docModifiedTime: failedAt, meetingID: UUID(), disposition: .created, now: now
+        )
+        XCTAssertEqual(ledger.earliestUnresolvedModifiedTime, now)
+    }
+
+    /// The ledger is external data and is loaded during `ServiceContainer` init: a duplicate
+    /// `fileID` (torn save, restored backup, hand edit) must degrade like unreadable JSON does,
+    /// never trap and make the app unlaunchable.
+    func testDuplicateFileIDsInTheFileLoadLastWinsInsteadOfTrapping() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let url = dir.appendingPathComponent("google-drive-imports.json")
+        let winner = UUID()
+        let json = """
+        {
+          "entries": [
+            {"fileID": "\(fileID)", "docModifiedTime": "2026-02-01T00:00:00Z",
+             "importedAt": "2026-02-01T00:00:00Z", "meetingID": "\(UUID().uuidString)",
+             "disposition": "created"},
+            {"fileID": "\(fileID)", "docModifiedTime": "2026-02-02T00:00:00Z",
+             "importedAt": "2026-02-02T00:00:00Z", "meetingID": "\(winner.uuidString)",
+             "disposition": "merged"}
+          ],
+          "watermarks": {},
+          "failures": {}
+        }
+        """
+        try Data(json.utf8).write(to: url)
+
+        let ledger = GoogleDriveImportLedger(fileURL: url)
+
+        XCTAssertEqual(ledger.entries.count, 1)
+        XCTAssertEqual(ledger.entry(for: fileID)?.meetingID, winner, "last wins")
+    }
+
+    /// A ledger written before the failure-classification fix must keep loading (the whole decode
+    /// is `try?` — a throw here would silently wipe every import identity).
+    func testFailureRecordsWithoutTheNewFieldsStillDecode() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let url = dir.appendingPathComponent("google-drive-imports.json")
+        let json = """
+        {
+          "entries": [],
+          "watermarks": {},
+          "failures": {"\(fileID)": {"attempts": 2, "lastAttemptAt": "2026-02-01T00:00:00Z"}}
+        }
+        """
+        try Data(json.utf8).write(to: url)
+
+        let ledger = GoogleDriveImportLedger(fileURL: url)
+
+        XCTAssertEqual(ledger.failures[fileID]?.attempts, 2)
+        XCTAssertEqual(ledger.failures[fileID]?.transientAttempts, 0)
+        XCTAssertNil(ledger.failures[fileID]?.docModifiedTime)
+    }
+
+    /// Toggle-off / account-removal housekeeping: cycle state goes, import identity stays.
+    func testForgetCycleStateDropsWatermarksAndPendingButKeepsEntries() throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveLedger")
+        defer { TestSupport.remove(dir) }
+        let ledger = makeLedger(in: dir)
+
+        ledger.setWatermark(now, forSub: "sub-1")
+        ledger.setWatermark(now, forSub: "sub-2")
+        ledger.markPending(fileID: "google:sub-1:a", modifiedTime: now)
+        ledger.markPending(fileID: "google:sub-2:b", modifiedTime: now)
+        ledger.recordImported(
+            fileID: fileID, docModifiedTime: now, meetingID: UUID(), disposition: .created, now: now
+        )
+
+        XCTAssertEqual(ledger.forgetCycleState(exceptSubs: ["sub-2"]), ["sub-1"])
+
+        XCTAssertNil(ledger.watermark(forSub: "sub-1"))
+        XCTAssertEqual(ledger.watermark(forSub: "sub-2"), now)
+        XCTAssertEqual(ledger.pendingFileIDs, ["google:sub-2:b"])
+        XCTAssertNotNil(ledger.entry(for: fileID), "import identity outlives the account")
+    }
+
     // MARK: - Failure pruning (D-D5)
 
     func testPruneDropsOnlyAbandonedFailuresPastThePruneAge() throws {
@@ -300,14 +422,14 @@ final class GoogleDriveImportLedgerTests: XCTestCase {
 
         // Abandoned (at cap) and stale → pruned.
         for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
-            ledger.recordFailure(fileID: "google:sub-1:stale", now: old)
+            ledger.recordFailure(fileID: "google:sub-1:stale", docModifiedTime: nil, kind: .permanent, now: old)
         }
         // Abandoned but recent → kept (still a selectable backfill row).
         for _ in 0..<GoogleDriveImportLedger.maxRetryAttempts {
-            ledger.recordFailure(fileID: "google:sub-1:recent", now: now)
+            ledger.recordFailure(fileID: "google:sub-1:recent", docModifiedTime: nil, kind: .permanent, now: now)
         }
         // Under the cap, however old → kept (still retryable).
-        ledger.recordFailure(fileID: "google:sub-1:retryable", now: old)
+        ledger.recordFailure(fileID: "google:sub-1:retryable", docModifiedTime: nil, kind: .permanent, now: old)
 
         ledger.pruneStaleFailures(now: now)
 

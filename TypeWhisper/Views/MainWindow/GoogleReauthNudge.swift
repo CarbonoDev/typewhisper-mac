@@ -94,6 +94,16 @@ struct GoogleReauthNudge: View {
                     GoogleFeatureScopes.additionalScopes(for: $0, store: accountStore)
                 } ?? []
                 try await authService.reauthorize(accountID: accountID, additionalScopes: scopes)
+                // A declined feature checkbox must not leave the feature "on" with an unscoped
+                // token (review fix — the settings Reconnect does the same). The nudge has no
+                // per-feature error line, so the disabled feature surfaces through the same
+                // localized explanation.
+                let declined = GoogleFeatureScopes.disableFeaturesWithMissingScopes(
+                    accountID: accountID, store: accountStore
+                )
+                if declined.contains(.driveImport) {
+                    reconnectError = String(localized: "google.drive.reconnectScopeDenied")
+                }
             } catch {
                 reconnectError = GoogleConnectErrorPresenter.message(for: error)
             }

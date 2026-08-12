@@ -183,7 +183,10 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
             ledger: ledger,
             jobQueue: queue,
             processor: processor,
-            now: { self.fixedNow }
+            now: { self.fixedNow },
+            // Serialized imports are the production bound (review fix); the 250 ms pacing between
+            // them would only make the suite slow, so tests keep the ordering and drop the wait.
+            interImportPause: 0
         )
         return Harness(engine: engine, store: store, ledger: ledger, queue: queue, processor: processor, tokens: tokens)
     }
@@ -331,7 +334,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
             fileID: "google:sub-1:unchanged", docModifiedTime: old, meetingID: UUID(),
             disposition: .created, now: old
         )
-        h.ledger.recordFailure(fileID: "google:sub-1:failing", now: old)
+        h.ledger.recordFailure(fileID: "google:sub-1:failing", docModifiedTime: nil, kind: .permanent, now: old)
 
         await h.engine.syncNow()
         await h.queue.drain()
@@ -418,6 +421,164 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         // still-pending file (the global conservative bound, D-D6).
         XCTAssertEqual(h.ledger.watermark(forSub: "sub-a"), fixedNow.addingTimeInterval(-3_600))
         XCTAssertEqual(h.ledger.watermark(forSub: "sub-b"), modified.addingTimeInterval(-1))
+    }
+
+    // MARK: - Review fixes (2026-08-12)
+
+    /// D-D6, the "toggle off for two months, then on" case: nothing may resume from the stale
+    /// watermark. The sweep forgets a Drive-disabled account's cycle state, so the next enable
+    /// re-seeds to now and imports NOTHING — while ledger entries survive, so a re-add can never
+    /// re-import what already landed.
+    func testDisabledAccountForgetsItsWatermarkAndReSeedsOnReEnable() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
+        defer { TestSupport.remove(dir) }
+        let stale = fixedNow.addingTimeInterval(-60 * 24 * 60 * 60)   // two months ago
+        let transport = FakeDriveTransport(stubs: [])
+        let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
+        h.ledger.setWatermark(stale, forSub: "sub-1")
+        h.ledger.recordImported(
+            fileID: "google:sub-1:old", docModifiedTime: stale, meetingID: UUID(),
+            disposition: .created, now: stale
+        )
+
+        // Toggle OFF: the flow drops the cycle state eagerly…
+        try await GoogleDriveToggleFlow.setEnabled(
+            false, account: try XCTUnwrap(h.store.account(id: "sub-1")), store: h.store,
+            ledger: h.ledger, reauthorize: { _, _ in }, syncNow: {}
+        )
+        XCTAssertNil(h.ledger.watermark(forSub: "sub-1"))
+
+        // …and re-enabling seeds to now: no list request, no imports, no jobs.
+        h.store.setDriveImportEnabled(true, for: "sub-1")
+        await h.engine.syncNow()
+
+        XCTAssertEqual(h.ledger.watermark(forSub: "sub-1"), fixedNow, "re-seeded, not resumed")
+        XCTAssertTrue(transport.requests.isEmpty, "two months of history is backfill's job, not the poll's")
+        XCTAssertTrue(h.queue.jobs.isEmpty)
+        XCTAssertNotNil(h.ledger.entry(for: "google:sub-1:old"), "import identity outlives the toggle")
+    }
+
+    /// The same guarantee for a removed account, without any help from the toggle flow: the
+    /// per-cycle sweep is what covers Disconnect (and a toggle flipped off while the app was
+    /// quit). A `.needsReauth` account is deliberately NOT swept — that state is routine under
+    /// Testing-mode weekly expiry and its watermark must survive the gap.
+    func testRemovedAccountIsSweptButNeedsReauthKeepsItsWatermark() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
+        defer { TestSupport.remove(dir) }
+        let watermark = fixedNow.addingTimeInterval(-3_600)
+        let h = try makeHarness(
+            transport: FakeDriveTransport(stubs: []), ledgerDirectory: dir,
+            accountIDs: ["sub-gone", "sub-reauth"], enabled: ["sub-gone", "sub-reauth"]
+        )
+        h.ledger.setWatermark(watermark, forSub: "sub-gone")
+        h.ledger.setWatermark(watermark, forSub: "sub-reauth")
+        h.ledger.markPending(fileID: "google:sub-gone:f1", modifiedTime: watermark)
+        h.store.remove(accountID: "sub-gone")
+        h.store.setStatus(.needsReauth, for: "sub-reauth")
+
+        await h.engine.syncNow()
+
+        XCTAssertNil(h.ledger.watermark(forSub: "sub-gone"), "a removed account forgets where it stopped")
+        XCTAssertTrue(h.ledger.pendingFileIDs.isEmpty, "its in-flight guards go with it")
+        XCTAssertEqual(h.ledger.watermark(forSub: "sub-reauth"), watermark,
+                       "a weekly reauth must not skip the transcripts published during the gap")
+    }
+
+    /// A truncated list pass is no longer a silent partial success: the walk stopped at the page
+    /// guard, so everything after it is unseen — and with `orderBy: modifiedTime` ascending that
+    /// is the NEWEST end. The watermark may not advance past the last page actually seen.
+    func testTruncatedListPassHoldsTheWatermarkAtTheLastPageSeen() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
+        defer { TestSupport.remove(dir) }
+        let base = fixedNow.addingTimeInterval(-10_000)
+        // Every page hands back another nextPageToken, so the walk runs into `maxListPages`.
+        let stubs = (0..<GoogleDriveAPI.maxListPages).map { page in
+            FakeDriveTransport.Stub(
+                urlContains: Self.listMarker,
+                statusCode: 200,
+                body: Self.filesBody(
+                    [Self.fileJSON(
+                        id: "page\(page)",
+                        name: "Doc \(page) — not a notes export",
+                        modified: base.addingTimeInterval(Double(page))
+                    )],
+                    next: "token-\(page)"
+                )
+            )
+        }
+        let h = try makeHarness(
+            transport: FakeDriveTransport(stubs: stubs), ledgerDirectory: dir,
+            accountIDs: ["sub-1"], enabled: ["sub-1"]
+        )
+        h.ledger.setWatermark(fixedNow.addingTimeInterval(-20_000), forSub: "sub-1")
+
+        await h.engine.syncNow()
+        await h.queue.drain()
+
+        let lastSeen = base.addingTimeInterval(Double(GoogleDriveAPI.maxListPages - 1))
+        XCTAssertEqual(h.ledger.watermark(forSub: "sub-1"), lastSeen.addingTimeInterval(-1),
+                       "a truncated pass may not advance past what it saw")
+        XCTAssertNil(h.engine.lastSyncError, "truncation is not an error — the walk just continues next cycle")
+    }
+
+    /// Discovery filters names client-side now (Drive's `contains` only prefix-matches `name`, so
+    /// a trailing "- Notas de Gemini" can never be a query term): the mimeType/time-window pass
+    /// carries no text predicate, and only real notes exports are enqueued.
+    func testDiscoveryFiltersNonNotesDocsClientSide() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
+        defer { TestSupport.remove(dir) }
+        let modified = fixedNow.addingTimeInterval(-600)
+        let transport = FakeDriveTransport(stubs: [
+            .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([
+                Self.fileJSON(id: "notes", name: "Weekly sync - Notas de Gemini", modified: modified),
+                Self.fileJSON(id: "unrelated", name: "Q3 budget", modified: modified),
+                Self.fileJSON(id: "mentions", name: "Notas de Gemini para el equipo", modified: modified),
+            ])),
+        ])
+        let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
+        h.ledger.setWatermark(fixedNow.addingTimeInterval(-3_600), forSub: "sub-1")
+
+        await h.engine.syncNow()
+        await h.queue.drain()
+
+        let q = try XCTUnwrap(queryValue("q", of: try XCTUnwrap(transport.requests.first)))
+        XCTAssertFalse(q.contains("name contains"), "prefix-only operator; got: \(q)")
+        XCTAssertEqual(h.processor.processed.map(\.fileID), ["notes"],
+                       "only a trailing marker counts as a Gemini notes export")
+    }
+
+    /// A `.driveImport` job that settles without running its closure — the queued-cancel path,
+    /// which `JobQueueService.cancel` settles in place — leaves nobody to clear its pending guard:
+    /// the file would read `.skip` for the rest of the session while pinning every account's
+    /// watermark to its `modifiedTime − 1 s`. The next cycle's reconcile releases it and the file
+    /// is re-enqueued. (The fake processor never ledgers, so it models the same stranded state.)
+    func testStrandedPendingGuardIsReleasedAndTheFileReEnqueuedNextCycle() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
+        defer { TestSupport.remove(dir) }
+        let modified = fixedNow.addingTimeInterval(-600)
+        let fileJSON = Self.fileJSON(id: "f1", name: "Lost doc - Notas de Gemini", modified: modified)
+        let transport = FakeDriveTransport(stubs: [
+            .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([fileJSON])),
+            .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([fileJSON])),
+        ])
+        let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
+        h.ledger.setWatermark(fixedNow.addingTimeInterval(-3_600), forSub: "sub-1")
+
+        await h.engine.syncNow()
+        let job = try XCTUnwrap(h.queue.jobs.first { $0.kind == .driveImport })
+        h.queue.cancel(job.id)
+        await h.queue.drain()
+        XCTAssertTrue(h.ledger.pendingFileIDs.contains("google:sub-1:f1"), "the guard is stranded")
+        XCTAssertEqual(h.ledger.watermark(forSub: "sub-1"), modified.addingTimeInterval(-1),
+                       "…and it is pinning the watermark")
+        let processedBefore = h.processor.processed.count
+
+        await h.engine.syncNow()
+        await h.queue.drain()
+
+        XCTAssertEqual(h.processor.processed.count, processedBefore + 1,
+                       "the next cycle released the guard and re-enqueued the file")
+        XCTAssertEqual(h.processor.processed.last?.fileID, "f1")
     }
 
     // MARK: - Crash re-discovery (D-D6/F1)

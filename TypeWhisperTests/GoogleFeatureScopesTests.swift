@@ -19,16 +19,25 @@ final class GoogleFeatureScopesTests: XCTestCase {
 
     private var suiteName: String!
     private var defaults: UserDefaults!
+    private var ledgerDirectory: URL!
 
     override func setUp() {
         super.setUp()
         suiteName = "GoogleFeatureScopesTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
+        ledgerDirectory = try? TestSupport.makeTemporaryDirectory(prefix: "FeatureScopesLedger")
     }
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
+        if let ledgerDirectory { TestSupport.remove(ledgerDirectory) }
         super.tearDown()
+    }
+
+    private func makeLedger() -> GoogleDriveImportLedger {
+        GoogleDriveImportLedger(
+            fileURL: ledgerDirectory.appendingPathComponent("google-drive-imports.json")
+        )
     }
 
     private func makeStore() -> GoogleAccountStore {
@@ -84,6 +93,50 @@ final class GoogleFeatureScopesTests: XCTestCase {
                        "another account's toggle never leaks into this one's scopes")
     }
 
+    // MARK: - Post-reauthorize scope verification (review fix, 2026-08-12)
+
+    /// Reconnect requests the Drive scope but the user unchecks the box on the consent screen:
+    /// without verification the account comes back `.connected` with the toggle still on, and the
+    /// engine polls forever with an unscoped token (a permanent 403 loop, no remedy shown).
+    func testDeclinedFeatureScopeTurnsTheFeatureOffAndIsReported() throws {
+        let store = makeStore()
+        let reconnected = account(sub: "sub-1", scopes: ["openid", "email"])
+        try store.upsert(reconnected, refreshToken: "rt")
+        store.setDriveImportEnabled(true, for: "sub-1")
+
+        let declined = GoogleFeatureScopes.disableFeaturesWithMissingScopes(
+            accountID: "sub-1", store: store
+        )
+
+        XCTAssertEqual(declined, [.driveImport])
+        XCTAssertFalse(store.isDriveImportEnabled(for: "sub-1"),
+                       "the feature must not stay on without its scope")
+    }
+
+    func testGrantedFeatureScopeLeavesTheToggleAlone() throws {
+        let store = makeStore()
+        let reconnected = account(sub: "sub-1", scopes: ["openid", GoogleDriveAPI.readonlyScope])
+        try store.upsert(reconnected, refreshToken: "rt")
+        store.setDriveImportEnabled(true, for: "sub-1")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.disableFeaturesWithMissingScopes(accountID: "sub-1", store: store),
+            []
+        )
+        XCTAssertTrue(store.isDriveImportEnabled(for: "sub-1"))
+    }
+
+    /// A disabled feature is never "declined" — verification only ever inspects what is on.
+    func testDisabledFeaturesAreNotReportedAsDeclined() throws {
+        let store = makeStore()
+        try store.upsert(account(sub: "sub-1"), refreshToken: "rt")
+
+        XCTAssertEqual(
+            GoogleFeatureScopes.disableFeaturesWithMissingScopes(accountID: "sub-1", store: store),
+            []
+        )
+    }
+
     // MARK: - Toggle enable flow (D-D8 ordering contract)
 
     func testOffClearsTheFlagImmediatelyWithoutReauthorize() async throws {
@@ -95,6 +148,7 @@ final class GoogleFeatureScopesTests: XCTestCase {
 
         try await GoogleDriveToggleFlow.setEnabled(
             false, account: account, store: store,
+            ledger: makeLedger(),
             reauthorize: { _, _ in events.append("reauthorize") },
             syncNow: { events.append("syncNow") }
         )
@@ -111,6 +165,7 @@ final class GoogleFeatureScopesTests: XCTestCase {
 
         try await GoogleDriveToggleFlow.setEnabled(
             true, account: account, store: store,
+            ledger: makeLedger(),
             reauthorize: { _, _ in events.append("reauthorize") },
             syncNow: { events.append("syncNow") }
         )
@@ -127,6 +182,7 @@ final class GoogleFeatureScopesTests: XCTestCase {
 
         try await GoogleDriveToggleFlow.setEnabled(
             true, account: account, store: store,
+            ledger: makeLedger(),
             reauthorize: { accountID, scopes in
                 XCTAssertEqual(scopes, [GoogleDriveAPI.readonlyScope])
                 XCTAssertFalse(store.isDriveImportEnabled(for: accountID),
@@ -155,6 +211,7 @@ final class GoogleFeatureScopesTests: XCTestCase {
         do {
             try await GoogleDriveToggleFlow.setEnabled(
                 true, account: account, store: store,
+                ledger: makeLedger(),
                 reauthorize: { _, _ in throw GoogleAuthError.cancelled },
                 syncNow: { syncCalled = true }
             )
@@ -174,6 +231,7 @@ final class GoogleFeatureScopesTests: XCTestCase {
         do {
             try await GoogleDriveToggleFlow.setEnabled(
                 true, account: account, store: store,
+                ledger: makeLedger(),
                 // The flow "succeeds" but the user unchecked the Drive box: the re-read account
                 // still lacks the scope.
                 reauthorize: { _, _ in },

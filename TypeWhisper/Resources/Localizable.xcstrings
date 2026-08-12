@@ -21162,6 +21162,22 @@
         }
       }
     },
+    "google.drive.backfill.truncated": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Liste ist unvollständig – die Suche hat ihr Seitenlimit erreicht. Importiere zuerst diese Einträge und öffne das Fenster danach erneut für den Rest."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This list is incomplete — the scan reached its page limit. Import these first, then open this sheet again for the rest."
+          }
+        }
+      }
+    },
     "google.drive.backfillButton": {
       "localizations": {
         "de": {
@@ -21222,6 +21238,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transcripts checked %@"
+          }
+        }
+      }
+    },
+    "google.drive.reconnectScopeDenied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wieder verbunden, aber Google hat den Drive-Zugriff nicht gewährt – der Import von Meet-Transkripten wurde deaktiviert. Aktiviere ihn erneut, um die Drive-Berechtigung zu genehmigen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnected, but Google didn't grant Drive access, so Meet transcript import was turned off. Turn it back on to approve the Drive permission."
           }
         }
       }
