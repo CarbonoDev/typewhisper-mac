@@ -20794,6 +20794,22 @@
         }
       }
     },
+    "google.accounts.error.loopbackUnavailable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der lokale Anmelde-Listener konnte nicht gestartet werden. Prüfe, ob Sicherheitssoftware lokale Verbindungen blockiert, und versuch es dann erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not start the local sign-in listener. Check whether security software is blocking local connections, then try again."
+          }
+        }
+      }
+    },
     "google.accounts.error.timedOut": {
       "localizations": {
         "de": {
@@ -20806,6 +20822,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google sign-in timed out. Please try again."
+          }
+        }
+      }
+    },
+    "google.accounts.error.wrongAccount": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du hast dich als %1$@ angemeldet. Verbinde stattdessen %2$@ erneut – dieses Konto benötigt weiterhin Aufmerksamkeit."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You signed in as %1$@. Reconnect %2$@ instead — that account still needs attention."
           }
         }
       }
@@ -20886,6 +20918,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Needs attention — reconnect this account"
+          }
+        }
+      }
+    },
+    "google.calendar.calendarsFailed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld Kalender dieses Kontos konnten nicht gelesen werden – ihre Termine sind möglicherweise nicht aktuell."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld of this account's calendars could not be read — their events may be out of date."
           }
         }
       }
@@ -25503,6 +25551,22 @@
         }
       }
     },
+    "meetings.calendar.openSystemSettings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Systemeinstellungen öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open System Settings"
+          }
+        }
+      }
+    },
     "meetings.calendar.sectionTitle": {
       "localizations": {
         "de": {
@@ -25531,6 +25595,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Select all"
+          }
+        }
+      }
+    },
+    "meetings.calendar.systemSourceDenied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Zugriff auf den macOS-Kalender wurde verweigert – Termine aus deinen Mac-Kalendern fehlen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS Calendar access is denied — events from your Mac calendars are missing."
           }
         }
       }
