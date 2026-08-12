@@ -192,6 +192,8 @@
 		GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000022 /* GoogleCalendarMapper.swift */; };
 		GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */; };
 		GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000024 /* GoogleCalendarProvider.swift */; };
+		GGB0000000000000000041 /* CalendarEventTwinCollapser.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000041 /* CalendarEventTwinCollapser.swift */; };
+		GGB0000000000000000042 /* CalendarEventTwinCollapserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000042 /* CalendarEventTwinCollapserTests.swift */; };
 		GGB0000000000000000025 /* TwinCalendarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000025 /* TwinCalendarDetector.swift */; };
 		GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000026 /* CalendarServiceFanInTests.swift */; };
 		GGB0000000000000000027 /* TwinCalendarDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */; };
@@ -889,6 +891,8 @@
 		GGF0000000000000000022 /* GoogleCalendarMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarMapper.swift; sourceTree = "<group>"; };
 		GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncEngine.swift; sourceTree = "<group>"; };
 		GGF0000000000000000024 /* GoogleCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarProvider.swift; sourceTree = "<group>"; };
+		GGF0000000000000000041 /* CalendarEventTwinCollapser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventTwinCollapser.swift; sourceTree = "<group>"; };
+		GGF0000000000000000042 /* CalendarEventTwinCollapserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventTwinCollapserTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000025 /* TwinCalendarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwinCalendarDetector.swift; sourceTree = "<group>"; };
 		GGF0000000000000000026 /* CalendarServiceFanInTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceFanInTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TwinCalendarDetectorTests.swift; sourceTree = "<group>"; };
@@ -2365,6 +2369,7 @@
 				GGF0000000000000000022 /* GoogleCalendarMapper.swift */,
 				GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */,
 				GGF0000000000000000024 /* GoogleCalendarProvider.swift */,
+				GGF0000000000000000041 /* CalendarEventTwinCollapser.swift */,
 				GGF0000000000000000025 /* TwinCalendarDetector.swift */,
 				GGF0000000000000000015 /* ChromeProfileDetector.swift */,
 				GGF0000000000000000016 /* MeetingJoinLauncher.swift */,
@@ -3025,6 +3030,7 @@
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
+				GGF0000000000000000042 /* CalendarEventTwinCollapserTests.swift */,
 				GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */,
 				GGF0000000000000000028 /* CalendarSelectionGroupingTests.swift */,
 				GGF0000000000000000029 /* CalendarSourceAvailabilityTests.swift */,
@@ -4605,6 +4611,7 @@
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
+				GGB0000000000000000042 /* CalendarEventTwinCollapserTests.swift in Sources */,
 				GGB0000000000000000027 /* TwinCalendarDetectorTests.swift in Sources */,
 				GGB0000000000000000028 /* CalendarSelectionGroupingTests.swift in Sources */,
 				GGB0000000000000000029 /* CalendarSourceAvailabilityTests.swift in Sources */,
@@ -4818,6 +4825,7 @@
 				GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */,
 				GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */,
 				GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */,
+				GGB0000000000000000041 /* CalendarEventTwinCollapser.swift in Sources */,
 				GGB0000000000000000025 /* TwinCalendarDetector.swift in Sources */,
 				GGB0000000000000000015 /* ChromeProfileDetector.swift in Sources */,
 				GGB0000000000000000016 /* MeetingJoinLauncher.swift in Sources */,

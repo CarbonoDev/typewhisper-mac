@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// [Sprint 2] The "what's next" block of Home: a hero card for the next upcoming or in-progress
 /// calendar event — countdown, participants, brief-readiness with its CTA — followed by the rest of
@@ -21,6 +22,13 @@ struct HomeNextSection: View {
             } else if let error = viewModel.calendarErrorMessage {
                 calendarErrorRow(error)
             } else {
+                // [PR #7 review finding 5] One source can be broken while another works: with
+                // macOS Calendar access denied and a Google account connected, D-G4 correctly
+                // keeps the user out of the connect-card path — but their iCloud/Exchange/local
+                // events are silently missing, so say so here instead of only in Settings.
+                if viewModel.showsSystemCalendarProblem {
+                    systemCalendarProblemRow
+                }
                 let items = upcomingItems
                 if let hero = items.first {
                     TimelineView(.everyMinute) { context in
@@ -68,6 +76,38 @@ struct HomeNextSection: View {
             }
             .buttonStyle(.bordered)
         }
+    }
+
+    /// [PR #7 review finding 5] Dismissible per-source problem row: names the broken source, links
+    /// straight to the System Settings pane that fixes it, and can be hidden for this launch.
+    private var systemCalendarProblemRow: some View {
+        HStack(spacing: MeetingTheme.s2) {
+            Label(
+                String(localized: "meetings.calendar.systemSourceDenied"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(MeetingTheme.meta)
+            .foregroundStyle(.orange)
+            Button(String(localized: "meetings.calendar.openSystemSettings")) {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.link)
+            .font(MeetingTheme.meta)
+            Spacer(minLength: 0)
+            Button {
+                viewModel.dismissSystemCalendarProblem()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(String(localized: "meetings.calendar.dismiss"))
+        }
+        .padding(.horizontal, MeetingTheme.s2)
+        .padding(.vertical, MeetingTheme.s1)
     }
 
     private func calendarErrorRow(_ error: String) -> some View {

@@ -76,6 +76,10 @@ struct CalendarSelectionSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear(perform: reload)
         .onChange(of: viewModel.calendarAuthorizationStatus) { _, _ in reload() }
+        // [PR #7 review finding 7] Any selection write that did not originate in this section —
+        // notably resolving the D-G6 twin prompt with "Hide duplicates" in the section right below
+        // — must refresh the row snapshot, or the checkboxes render stale (and appear stuck).
+        .onChange(of: viewModel.calendarSelectionRevision) { _, _ in reload() }
         // A freshly connected account's calendars appear as soon as its first sync lands (D-G7);
         // a disconnect empties its group the same way.
         .onReceive(NotificationCenter.default.publisher(for: .googleCalendarSnapshotDidChange)) { _ in

@@ -43,6 +43,20 @@ final class MeetingsViewModel: ObservableObject {
     /// `MeetingLinkEventView`) — without it a Google-only user (EventKit denied) would get fan-in
     /// events that never render. Fed from the status mirror plus `GoogleAccountStore.$accounts`.
     @Published private(set) var hasAnyCalendarSource = false
+    /// [PR #7 review finding 5] Whether to surface the "one source is broken" row: macOS Calendar
+    /// access is denied/restricted **while another source still works**, so the D-G4 suppression of
+    /// `calendarErrorMessage` (a working configuration is not an error) would otherwise hide the
+    /// missing iCloud/Exchange/local calendars everywhere outside Settings. Session-dismissible.
+    @Published private(set) var showsSystemCalendarProblem = false
+    /// [PR #7 review finding 7] Bumped whenever calendar *selection* changes through this view
+    /// model (per-calendar toggle, group toggle, twin-prompt resolution). `CalendarSelectionSection`
+    /// keeps a local `@State` row snapshot — selection is read from the service, not a `@Published`
+    /// — so it needs an explicit signal to reload after a selection write it did not make itself.
+    @Published private(set) var calendarSelectionRevision = 0
+    /// In-memory (per launch) dismissal of the per-source problem row — the same "hide it now"
+    /// semantics as `CalendarService.dismiss(eventID:)`, deliberately not persisted: the remedy
+    /// lives in System Settings and the row must come back if the user never applies it.
+    private var systemCalendarProblemDismissed = false
     /// [Google Phase 1 · M4] Pending "duplicate calendars detected" prompts (D-G6), one per
     /// connected Google account whose EventKit CalDAV twins were found and whose prompt has not
     /// been handled yet. Rendered inline by `GoogleAccountsSection`; re-evaluated on every Google
@@ -225,6 +239,13 @@ final class MeetingsViewModel: ObservableObject {
             authorization: calendarService.authorizationStatus,
             accounts: googleAccountStore?.accounts ?? []
         )
+        // [PR #7 review finding 5] …and the per-source problem flag, which is *not* the same
+        // question (see `showsSystemCalendarProblem`).
+        self.showsSystemCalendarProblem = Self.showsSystemCalendarProblem(
+            authorization: calendarService.authorizationStatus,
+            accounts: googleAccountStore?.accounts ?? [],
+            dismissed: false
+        )
         self.upcomingEvents = calendarService.upcomingEvents
         self.earlierEvents = calendarService.earlierEvents
         self.calendarErrorMessage = calendarService.errorMessage
@@ -296,10 +317,16 @@ final class MeetingsViewModel: ObservableObject {
             .sink { [weak self] events in
                 guard let self else { return }
                 self.upcomingEvents = events
+                // [Google Phase 1 · M4 / PR #7 review finding 4] Collapse cross-provider CalDAV
+                // twins for the *automatic* consumers only: the published list above (and the
+                // Calendars selection UI) keeps both copies — D-G6 owns the visible half — but
+                // auto-created meetings, brief jobs on the cap-1 `llm` lane and start
+                // notifications must fire once per real event, not once per provider copy.
+                let deduplicated = CalendarEventTwinCollapser.collapse(events)
                 // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
-                self.startNotificationService.notifyStartingMeetings(events)
+                self.startNotificationService.notifyStartingMeetings(deduplicated)
                 // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
-                self.briefScheduler.tick(events: events, now: Date())
+                self.briefScheduler.tick(events: deduplicated, now: Date())
             }
             .store(in: &cancellables)
         calendarService.$earlierEvents
@@ -428,11 +455,46 @@ final class MeetingsViewModel: ObservableObject {
         authorization == .authorized || accounts.contains { $0.status == .connected }
     }
 
+    /// [PR #7 review finding 5] Whether the "macOS Calendar access denied" per-source row belongs
+    /// on screen. Distinct from `hasAnyCalendarSource`, which answers "is there *any* source":
+    ///
+    /// - EventKit denied/restricted **and no** working Google account ⇒ `false` — the connect-card
+    ///   / denied-state path already owns that screen; two errors would stack.
+    /// - EventKit denied/restricted **with** a connected Google account ⇒ `true` — the app renders
+    ///   events happily while the user's iCloud/Exchange/local calendars are silently missing,
+    ///   which reads as "the app lost half my meetings" (D-G4's suppression of the error message
+    ///   is correct for the *gate*, not for the user's mental model).
+    /// - EventKit fine (whatever Google's state) ⇒ `false` — a Google account in `.needsReauth`
+    ///   surfaces on its own settings row, not here.
+    ///
+    /// Pure static so the matrix is unit-testable without the view model.
+    nonisolated static func showsSystemCalendarProblem(
+        authorization: CalendarAuthorizationStatus,
+        accounts: [GoogleAccount],
+        dismissed: Bool
+    ) -> Bool {
+        guard !dismissed else { return false }
+        guard authorization == .denied || authorization == .restricted else { return false }
+        return hasAnyCalendarSource(authorization: authorization, accounts: accounts)
+    }
+
     private func recomputeHasAnyCalendarSource() {
+        let accounts = googleAccountStore?.accounts ?? []
         hasAnyCalendarSource = Self.hasAnyCalendarSource(
             authorization: calendarAuthorizationStatus,
-            accounts: googleAccountStore?.accounts ?? []
+            accounts: accounts
         )
+        showsSystemCalendarProblem = Self.showsSystemCalendarProblem(
+            authorization: calendarAuthorizationStatus,
+            accounts: accounts,
+            dismissed: systemCalendarProblemDismissed
+        )
+    }
+
+    /// [PR #7 review finding 5] Hide the per-source problem row for this launch.
+    func dismissSystemCalendarProblem() {
+        systemCalendarProblemDismissed = true
+        recomputeHasAnyCalendarSource()
     }
 
     /// Re-run twin detection (D-G6) over the fanned-in calendar list for every not-yet-handled
@@ -460,6 +522,10 @@ final class MeetingsViewModel: ObservableObject {
             for twin in prompt.twins {
                 calendarService.setCalendarSelected(false, for: twin.id)
             }
+            // [PR #7 review finding 7] The Calendars section renders from a local `@State` row
+            // snapshot; without this bump its checkboxes keep showing the just-hidden calendars as
+            // selected (and clicking one only re-sends the same deselection).
+            calendarSelectionRevision += 1
             loadUpcoming(now: now)
         }
         googleAccountStore?.markTwinPromptHandled(prompt.accountID)
@@ -522,6 +588,7 @@ final class MeetingsViewModel: ObservableObject {
     /// scheduler + notifications, which consume them) immediately reflect the change.
     func setCalendarSelected(_ selected: Bool, for calendarID: String, now: Date = Date()) {
         calendarService.setCalendarSelected(selected, for: calendarID)
+        calendarSelectionRevision += 1
         loadUpcoming(now: now)
     }
 
@@ -530,6 +597,7 @@ final class MeetingsViewModel: ObservableObject {
     /// single-calendar path.
     func setCalendarsSelected(_ selected: Bool, for calendarIDs: [String], now: Date = Date()) {
         calendarService.setCalendarsSelected(selected, for: calendarIDs)
+        calendarSelectionRevision += 1
         loadUpcoming(now: now)
     }
 
