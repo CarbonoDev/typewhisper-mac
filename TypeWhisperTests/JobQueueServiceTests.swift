@@ -297,6 +297,43 @@ final class JobQueueServiceTests: XCTestCase {
         XCTAssertFalse(recorder.committed.contains("job"), "the commit side-effect must not happen on cancel")
     }
 
+    func testCancelAllCancelsOnlyThatMeetingsActiveJobs() async {
+        let queue = makeQueue()
+        let recorder = Recorder()
+        let gate = Gate()
+        let target = UUID()
+        let other = UUID()
+
+        // Holder occupies the (cap-1) llm lane so both same-meeting jobs below stay `.queued`, and a
+        // different meeting's job is enqueued too — it must survive `cancelAll(for: target)`.
+        queue.enqueue(kind: .summary, meetingID: UUID(), operation: op("holder", recorder: recorder, gate: gate))
+        await waitUntil({ queue.runningCount == 1 }, "holder should be running")
+
+        let targetSummary = queue.enqueue(kind: .summary, meetingID: target, operation: op("target-summary", recorder: recorder))
+        let targetBrief = queue.enqueue(kind: .brief, meetingID: target, operation: op("target-brief", recorder: recorder))
+        let otherSummary = queue.enqueue(kind: .extendedAnalysis, meetingID: other, operation: op("other", recorder: recorder))
+
+        queue.cancelAll(for: target)
+
+        XCTAssertEqual(queue.jobs.first { $0.id == targetSummary }?.state, .cancelled)
+        XCTAssertEqual(queue.jobs.first { $0.id == targetBrief }?.state, .cancelled)
+        XCTAssertEqual(queue.jobs.first { $0.id == otherSummary }?.state, .queued, "a different meeting's job is untouched")
+
+        gate.open()
+        await queue.drain()
+        XCTAssertFalse(recorder.started.contains("target-summary"))
+        XCTAssertFalse(recorder.started.contains("target-brief"))
+        XCTAssertTrue(recorder.committed.contains("other"), "the unrelated meeting's job still ran")
+    }
+
+    func testCancelAllForMeetingWithNoJobsIsNoOp() async {
+        let queue = makeQueue()
+        // No jobs at all — must not throw/trap on an empty filter.
+        queue.cancelAll(for: UUID())
+        await queue.drain()
+        XCTAssertTrue(queue.jobs.isEmpty)
+    }
+
     // MARK: - Failure & retry
 
     func testFailedOperationMarksFailedWithMessage() async {

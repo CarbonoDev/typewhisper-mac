@@ -19,6 +19,11 @@ struct MeetingsListView: View {
     // wall-clock instant — see `dayAlignedRange` (LX-1 finding #3).
     @State private var customEnd = Calendar.current.startOfDay(for: Date())
     @State private var isPresentingCustomDate = false
+    /// Discoverability for bulk merge (plan LX-2 follow-up): the row context menu's "Merge N
+    /// meetings…" only surfaces once a user already knows ⌘/⇧-click builds a multi-selection. This
+    /// mirrors that same affordance as a visible filter-bar button the moment 2+ rows are selected —
+    /// same confirmation copy, same `MeetingsViewModel.mergeMeetings` call, no second merge path.
+    @State private var isConfirmingListMerge = false
 
     /// The meetings shown after applying the coordinator's active folder + tag filters AND the LX-1
     /// filter-bar facets, which all compose (AND) through the one pure choke point (plan D8/LX-1),
@@ -62,6 +67,12 @@ struct MeetingsListView: View {
     /// The on-screen selection (selection intersected with the currently displayed meetings).
     private var visibleSelectionCount: Int {
         viewModel.visibleSelection(in: displayedMeetings.map(\.id)).count
+    }
+
+    /// The selected rows actually on screen, in list order — what the filter-bar "Merge N meetings…"
+    /// button (and its confirmation) targets, matching `visibleSelectionCount`.
+    private var selectedVisibleMeetings: [Meeting] {
+        displayedMeetings.filter { viewModel.selectedMeetingIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -217,9 +228,39 @@ struct MeetingsListView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            if visibleSelectionCount >= 2 {
+                Button {
+                    isConfirmingListMerge = true
+                } label: {
+                    Label(
+                        String(format: String(localized: "meetings.menu.mergeCount"), visibleSelectionCount),
+                        systemImage: "arrow.triangle.merge"
+                    )
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!MeetingMergeService.canMerge(selectedVisibleMeetings))
+                .help(String(localized: "meetings.menu.mergeCount.help"))
+            }
         }
         .padding(.horizontal, MeetingTheme.s3)
         .padding(.vertical, MeetingTheme.s2)
+        // Reuses the exact bulk-merge confirmation copy and `mergeMeetings` call the row context
+        // menu's "Merge N meetings…" uses (`MeetingRowContextMenu.bulkMenu`) — this button is a
+        // second entry point into the same flow, not a second implementation of it.
+        .confirmationDialog(
+            String(localized: "meetings.merge.confirm.title"),
+            isPresented: $isConfirmingListMerge,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "meetings.merge.confirm.action")) {
+                viewModel.mergeMeetings(selectedVisibleMeetings)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(format: String(localized: "meetings.merge.confirm.message"), selectedVisibleMeetings.count))
+        }
     }
 
     /// The count the Filter button badges: every non-default facet except search (which is visible
@@ -821,6 +862,14 @@ private struct ArchiveRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.green)
                 .help(String(localized: "home.badge.briefReady"))
+        }
+        // A quiet "there's a transcript here" marker (a row that outlives its deleted meeting for one
+        // render degrades to nothing rather than trapping — the `isDeletedFromStore` convention).
+        if !meeting.isDeletedFromStore, !meeting.segments.isEmpty {
+            Image(systemName: "text.quote")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .help(String(localized: "meetings.row.hasTranscript"))
         }
         if meeting.state == .completed,
            let facts = homeViewModel.actionFacts(for: meeting),
