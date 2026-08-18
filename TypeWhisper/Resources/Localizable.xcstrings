@@ -29127,6 +29127,22 @@
         }
       }
     },
+    "meetings.menu.ongoing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In progress: %@"
+          }
+        }
+      }
+    },
     "meetings.menu.open": {
       "localizations": {
         "de": {
@@ -29139,6 +29155,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open"
+          }
+        }
+      }
+    },
+    "meetings.menu.openAndJoin": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In MeetingWhisper öffnen und Anruf beitreten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in MeetingWhisper and join the call"
           }
         }
       }

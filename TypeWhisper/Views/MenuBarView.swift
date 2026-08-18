@@ -294,34 +294,81 @@ struct MenuBarView: View {
         ManagedAppWindowOpener.shared.open(id: id)
     }
 
-    /// Owner requests 3 & 4: a single entry above the main menu that reflects, in priority order, an
-    /// in-progress meeting recording (opens + focuses that meeting) or the soonest upcoming calendar
-    /// meeting within the lead window (opens the main window). Recording wins when both apply. Nothing
-    /// is shown when neither applies, and the existing click-through-to-menu behavior is unchanged.
+    /// The tray's meeting entry: one item above the main menu that names exactly what the tray
+    /// *title* is showing, in the same precedence order (recording > in-progress > upcoming, via
+    /// `MeetingTrayIndicator.menuTarget`). Clicking it does both halves of "take me into this
+    /// meeting": it opens the meeting's document in MeetingWhisper *and* — when the event carries a
+    /// conference URL — joins the call through `MeetingJoinLauncher`, which lands it in the owning
+    /// Google account's Chrome profile instead of whichever profile Chrome used last. Nothing is
+    /// shown when neither applies, and the existing click-through-to-menu behavior is unchanged.
     @ViewBuilder
     private var meetingIndicatorSection: some View {
-        if meetings.isCapturing, let active = meetings.activeMeeting {
+        switch MeetingTrayIndicator.menuTarget(
+            recordingTitle: meetings.isCapturing ? meetings.activeMeeting?.title : nil,
+            events: meetings.upcomingEvents,
+            now: Date()
+        ) {
+        case .recording:
+            if let active = meetings.activeMeeting {
+                Button {
+                    openAndJoin(meeting: active)
+                } label: {
+                    Label(
+                        String(format: String(localized: "meetings.menu.recording"), active.title),
+                        systemImage: active.conferencingURL == nil ? "record.circle" : "video"
+                    )
+                }
+                .help(String(localized: "meetings.menu.openAndJoin"))
+                Divider()
+            }
+        case let .event(event, isOngoing):
+            // Two literal keys, not one interpolated key: the string extractor only sees literals.
+            let format = isOngoing
+                ? String(localized: "meetings.menu.ongoing")
+                : String(localized: "meetings.menu.upcoming")
             Button {
-                meetings.requestFocus(on: active)
-                openManagedWindow(AppWindowID.main)
+                openAndJoin(event: event)
             } label: {
                 Label(
-                    String(format: String(localized: "meetings.menu.recording"), active.title),
-                    systemImage: "record.circle"
+                    String(format: format, event.title),
+                    systemImage: event.conferencingURL == nil ? "calendar" : "video"
                 )
             }
+            .help(String(localized: "meetings.menu.openAndJoin"))
             Divider()
-        } else if let event = MeetingTrayIndicator.nextUpcoming(events: meetings.upcomingEvents, now: Date()) {
-            Button {
-                openManagedWindow(AppWindowID.main)
-            } label: {
-                Label(
-                    String(format: String(localized: "meetings.menu.upcoming"), event.title),
-                    systemImage: "calendar"
-                )
-            }
-            Divider()
+        case .none:
+            EmptyView()
         }
+    }
+
+    /// Open an already-created meeting's document and join its call. Focus goes through the existing
+    /// `requestFocus` bridge (the main window may not be open yet, so the window is opened right
+    /// after and honours the pending focus on appear).
+    private func openAndJoin(meeting: Meeting) {
+        meetings.requestFocus(on: meeting)
+        openManagedWindow(AppWindowID.main)
+        join(urlString: meeting.conferencingURL, calendarEventID: meeting.calendarEventID)
+    }
+
+    /// Same, for a calendar event that may not have a meeting yet: `createMeeting(from:)` dedupes by
+    /// `calendarEventID`, so repeated clicks reuse the one document rather than piling up duplicates.
+    private func openAndJoin(event: CalendarEventDTO) {
+        let meeting = meetings.createMeeting(from: event)
+        meetings.requestFocus(on: meeting)
+        openManagedWindow(AppWindowID.main)
+        join(urlString: event.conferencingURL, calendarEventID: event.id)
+    }
+
+    /// The join half. No conference URL (ad-hoc meeting, event without a link) means the click just
+    /// opens the document — never a stray browser window. The account `sub` parsed out of the
+    /// namespaced calendar event ID is what picks the Chrome profile; an EventKit-bare ID yields
+    /// `nil` and falls back to the system browser, exactly as every other join affordance does.
+    private func join(urlString: String?, calendarEventID: String?) {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        MeetingJoinLauncher.open(
+            url: url,
+            accountSub: calendarEventID.flatMap(GoogleCalendarID.accountSub(fromNamespacedID:))
+        )
     }
 
     @ViewBuilder
