@@ -184,6 +184,39 @@ enum MeetingTrayIndicator {
         return .idle
     }
 
+    // MARK: - Tray menu entry
+
+    /// What the tray *menu*'s top entry acts on. Mirrors `display(...)`'s precedence exactly
+    /// (recording > ongoing > upcoming) so the menu entry always names the meeting the tray title is
+    /// showing — clicking it opens that meeting's document *and* joins its call in the owning
+    /// account's Chrome profile (via `MeetingJoinLauncher`).
+    enum MenuTarget: Equatable {
+        /// A meeting capture is running: the entry acts on the active meeting itself.
+        case recording(title: String)
+        /// A calendar meeting is happening right now (`.ongoing`) or starts within the tray window
+        /// (`isOngoing == false`). Carries the event so the click can create-or-reuse its meeting.
+        case event(CalendarEventDTO, isOngoing: Bool)
+    }
+
+    /// Resolve the tray menu's top entry. `recordingTitle` is the active capture's meeting title
+    /// (`nil`/empty when nothing is capturing) — recording wins outright, exactly as in `display`.
+    /// Otherwise the same `trayCandidate` the tray *title* uses is surfaced, so title and menu never
+    /// name different meetings; `nil` means no entry is shown at all.
+    static func menuTarget(
+        recordingTitle: String?,
+        events: [CalendarEventDTO],
+        now: Date,
+        leadWindow: TimeInterval = trayTitleWindow
+    ) -> MenuTarget? {
+        if let recordingTitle, !recordingTitle.isEmpty {
+            return .recording(title: recordingTitle)
+        }
+        guard let candidate = trayCandidate(events: events, now: now, leadWindow: leadWindow) else {
+            return nil
+        }
+        return .event(candidate, isOngoing: CalendarService.isCurrent(candidate, now: now))
+    }
+
     /// The soonest calendar meeting that starts strictly after `now` and within `leadWindow` — the
     /// in-*menu* "Upcoming: …" candidate. Reuses the existing `upcomingEvents` detection rather than
     /// a new query; all-day events are excluded (mirrors the start-notification gate).

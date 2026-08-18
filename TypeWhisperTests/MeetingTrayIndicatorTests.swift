@@ -421,6 +421,73 @@ final class MeetingTrayIndicatorTests: XCTestCase {
         XCTAssertTrue(hint?.contains("5") == true, "hint should include the minute count, got \(hint ?? "nil")")
     }
 
+    // MARK: - Tray menu entry (open the document + join in the account's Chrome profile)
+
+    func testMenuTargetPrefersTheActiveRecordingOverAnyCalendarMeeting() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let ongoing = event(id: "ongoing", startsIn: -300, now: now)
+        let target = MeetingTrayIndicator.menuTarget(
+            recordingTitle: "Standup",
+            events: [ongoing],
+            now: now
+        )
+        XCTAssertEqual(target, .recording(title: "Standup"))
+    }
+
+    func testMenuTargetIgnoresAnEmptyRecordingTitle() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let soon = event(id: "in5m", startsIn: 5 * 60, now: now)
+        let target = MeetingTrayIndicator.menuTarget(recordingTitle: "", events: [soon], now: now)
+        XCTAssertEqual(target, .event(soon, isOngoing: false))
+    }
+
+    func testMenuTargetMarksAnInProgressMeetingAsOngoing() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let ongoing = event(id: "ongoing", startsIn: -600, now: now)
+        let target = MeetingTrayIndicator.menuTarget(recordingTitle: nil, events: [ongoing], now: now)
+        XCTAssertEqual(target, .event(ongoing, isOngoing: true))
+    }
+
+    func testMenuTargetMatchesTheTrayTitleCandidate() {
+        // The menu entry must never name a different meeting than the tray title: both resolve
+        // through `trayCandidate`, so an in-progress meeting wins over a sooner-starting one.
+        let now = Date(timeIntervalSince1970: 10_000)
+        let soon = event(id: "in5m", startsIn: 5 * 60, now: now)
+        let inProgress = event(id: "ongoing", startsIn: -120, now: now)
+        let target = MeetingTrayIndicator.menuTarget(
+            recordingTitle: nil,
+            events: [soon, inProgress],
+            now: now
+        )
+        XCTAssertEqual(target, .event(inProgress, isOngoing: true))
+        XCTAssertEqual(
+            MeetingTrayIndicator.trayCandidate(events: [soon, inProgress], now: now)?.id,
+            "ongoing"
+        )
+    }
+
+    func testMenuTargetIsNilWhenNothingIsRecordingOrScheduled() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let far = event(id: "in3h", startsIn: 3 * 60 * 60, now: now)
+        XCTAssertNil(MeetingTrayIndicator.menuTarget(recordingTitle: nil, events: [far], now: now))
+        XCTAssertNil(MeetingTrayIndicator.menuTarget(recordingTitle: nil, events: [], now: now))
+    }
+
+    func testMenuTargetCarriesTheConferenceURLTheClickJoins() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        var soon = event(id: "in5m", startsIn: 5 * 60, now: now)
+        soon.conferencingURL = "https://meet.google.com/abc-defg-hij"
+        guard case let .event(resolved, isOngoing)? = MeetingTrayIndicator.menuTarget(
+            recordingTitle: nil,
+            events: [soon],
+            now: now
+        ) else {
+            return XCTFail("expected an event target")
+        }
+        XCTAssertFalse(isOngoing)
+        XCTAssertEqual(resolved.conferencingURL, "https://meet.google.com/abc-defg-hij")
+    }
+
     // MARK: - Localization coverage
 
     func testNewTrayAndMenuStringsHaveEnglishAndGerman() throws {
@@ -434,7 +501,9 @@ final class MeetingTrayIndicatorTests: XCTestCase {
             "meetings.tray.ongoing.hoursMinutes",
             "meetings.tray.accessibility.ongoing",
             "meetings.menu.recording",
-            "meetings.menu.upcoming"
+            "meetings.menu.upcoming",
+            "meetings.menu.ongoing",
+            "meetings.menu.openAndJoin"
         ] {
             let en = try TestSupport.localizedCatalogValue(for: key, language: "en")
             let de = try TestSupport.localizedCatalogValue(for: key, language: "de")
