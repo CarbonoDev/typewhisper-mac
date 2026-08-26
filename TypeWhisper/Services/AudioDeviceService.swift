@@ -21,8 +21,9 @@ enum AudioInputDeviceCompatibilityIssue: Sendable, Equatable {
         switch self {
         case .cannotSetDevice, .invalidInputFormat, .engineStartFailed:
             return localizedAppText(
-                "This microphone can't be used by TypeWhisper for preview or recording.",
-                de: "Dieses Mikrofon kann von TypeWhisper nicht für Test oder Aufnahme verwendet werden."
+                "This microphone can't be used by MeetingWhisper for preview or recording.",
+                de: "Dieses Mikrofon kann von MeetingWhisper nicht für Test oder Aufnahme verwendet werden.",
+                ja: "このマイクは、プレビューまたは録音のためにMeetingWhisperで使用することはできません。"
             )
         }
     }
@@ -99,6 +100,31 @@ struct AudioInputDevice: Identifiable, Equatable, Sendable {
     var compatibility: AudioInputDeviceCompatibility = .unknown
 
     var id: String { uid }
+}
+
+struct AudioInputDevicePriorityItem: Identifiable, Codable, Equatable, Sendable {
+    let uid: String
+    var name: String
+
+    var id: String { uid }
+}
+
+struct ResolvedRecordingInputSelection: Equatable, Sendable {
+    let deviceUID: String?
+    let deviceID: AudioDeviceID?
+    let deviceName: String?
+    let usesBluetoothTransport: Bool
+
+    var hasExplicitDeviceSelection: Bool {
+        deviceUID != nil && deviceID != nil
+    }
+
+    static let systemDefault = ResolvedRecordingInputSelection(
+        deviceUID: nil,
+        deviceID: nil,
+        deviceName: nil,
+        usesBluetoothTransport: false
+    )
 }
 
 struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
@@ -232,6 +258,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             handleSelectedDeviceSelectionChange(from: oldValue, to: selectedDeviceUID)
         }
     }
+    @Published private(set) var inputDevicePriorityList: [AudioInputDevicePriorityItem] = []
     @Published var disconnectedDeviceName: String?
     @Published var isPreviewActive: Bool = false
     @Published var previewAudioLevel: Float = 0
@@ -247,9 +274,13 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let selectionEngineValidator: AudioInputSelectionEngineValidating
     private let inputCaptureFactory: AudioInputCaptureFactory
+    private let clamshellStateProvider: ClamshellStateProviding
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
+        if let device = inputDevices.first(where: { $0.uid == uid }) {
+            return resolvedAudioDeviceID(for: device)
+        }
         if let audioDeviceIDResolverOverride {
             return audioDeviceIDResolverOverride(uid)
         }
@@ -287,6 +318,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
     private var isApplyingValidatedSelection = false
     private var isInitializingSelection = false
+    private var isSynchronizingSelectionFromPriorityList = false
+    private var pendingPrimaryPriorityReplacementUID: String?
     private static let bluetoothPreviewConfigurationChangeIgnoreWindow: TimeInterval = 3.0
 
     private var hasMicrophonePermission: Bool {
@@ -372,7 +405,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         selectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
-        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard()
+        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
+        clamshellStateProvider: ClamshellStateProviding = IOKitClamshellStateProvider()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.transportResolver = transportResolver
@@ -380,10 +414,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         self.selectionEngineValidator = selectionEngineValidator
         self.inputCaptureFactory = inputCaptureFactory
         self.inputActivationGuard = inputActivationGuard
+        self.clamshellStateProvider = clamshellStateProvider
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         inputDevices = applyCompatibilityCache(to: initialInputDevices ?? listInputDevices())
+        inputDevicePriorityList = initialInputDevicePriorityList(
+            savedSelectionUID: selectedDeviceUID,
+            devices: inputDevices
+        )
         if monitorDeviceChanges {
             installDeviceListener()
         }
@@ -408,6 +447,109 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         stopPreview()
     }
 
+    var inputDevicePriorityCandidates: [AudioInputDevice] {
+        let prioritizedUIDs = Set(inputDevicePriorityList.map(\.uid))
+        return inputDevices.filter { !prioritizedUIDs.contains($0.uid) }
+    }
+
+    func displayName(for priorityItem: AudioInputDevicePriorityItem) -> String {
+        if let device = inputDevices.first(where: { $0.uid == priorityItem.uid }) {
+            return displayName(for: device)
+        }
+        return priorityItem.name
+    }
+
+    func isInputDevicePriorityItemAvailable(_ item: AudioInputDevicePriorityItem) -> Bool {
+        guard let device = inputDevices.first(where: { $0.uid == item.uid }) else { return false }
+        if transportType(for: device.deviceID) == kAudioDeviceTransportTypeBuiltIn, clamshellStateProvider.isLidClosed() {
+            return false
+        }
+        return true
+    }
+
+    func addInputDeviceToPriorityList(_ device: AudioInputDevice) {
+        var items = inputDevicePriorityList
+        guard !items.contains(where: { $0.uid == device.uid }) else { return }
+        items.append(AudioInputDevicePriorityItem(uid: device.uid, name: device.name))
+        setInputDevicePriorityList(items)
+    }
+
+    func removeInputDevicePriorityItem(_ item: AudioInputDevicePriorityItem) {
+        setInputDevicePriorityList(inputDevicePriorityList.filter { $0.uid != item.uid })
+    }
+
+    func moveInputDevicePriorityItems(from source: IndexSet, to destination: Int) {
+        guard !source.isEmpty else { return }
+
+        var items = inputDevicePriorityList
+        let validSource = source.filter { items.indices.contains($0) }.sorted()
+        guard !validSource.isEmpty else { return }
+
+        let movingItems = validSource.map { items[$0] }
+        for index in validSource.reversed() {
+            items.remove(at: index)
+        }
+
+        let removedBeforeDestination = validSource.filter { $0 < destination }.count
+        let adjustedDestination = max(0, min(items.count, destination - removedBeforeDestination))
+        items.insert(contentsOf: movingItems, at: adjustedDestination)
+        setInputDevicePriorityList(items)
+    }
+
+    func clearInputDevicePriorityList() {
+        setInputDevicePriorityList([])
+    }
+
+    func selectInputDeviceAsPrimary(_ uid: String) {
+        pendingPrimaryPriorityReplacementUID = uid
+        if selectedDeviceUID == uid {
+            replaceInputDevicePriorityListWithDevice(uid: uid)
+            pendingPrimaryPriorityReplacementUID = nil
+            return
+        }
+
+        selectedDeviceUID = uid
+        if selectedDeviceUID != uid {
+            pendingPrimaryPriorityReplacementUID = nil
+        }
+    }
+
+    func resolvedRecordingInputSelection() -> ResolvedRecordingInputSelection {
+        var candidateUIDs = inputDevicePriorityList.map(\.uid)
+        if candidateUIDs.isEmpty, let selectedDeviceUID {
+            candidateUIDs = [selectedDeviceUID]
+        }
+
+        let lidClosed = clamshellStateProvider.isLidClosed()
+
+        for uid in candidateUIDs {
+            guard let device = inputDevices.first(where: { $0.uid == uid }) else { continue }
+            guard let deviceID = resolvedAudioDeviceID(for: device) else { continue }
+
+            // When the MacBook lid is closed, the built-in microphone is
+            // physically disconnected by Apple Silicon / T2 hardware security,
+            // but CoreAudio still reports it as available. Skip it so failover
+            // proceeds to the next candidate in the priority list. See #888.
+            if lidClosed,
+               let transport = transportType(for: deviceID),
+               Self.isBuiltInTransportType(transport) {
+                logger.info("Skipping built-in microphone \(device.name, privacy: .public) because lid is closed (clamshell mode)")
+                continue
+            }
+
+            let usesBluetoothTransport = transportType(for: deviceID)
+                .map(Self.isBluetoothTransportType) ?? false
+            return ResolvedRecordingInputSelection(
+                deviceUID: uid,
+                deviceID: deviceID,
+                deviceName: device.name,
+                usesBluetoothTransport: usesBluetoothTransport
+            )
+        }
+
+        return .systemDefault
+    }
+
     // MARK: - Audio Preview
 
     func startPreview() {
@@ -418,13 +560,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        let preferredDeviceID = selectedDeviceID
-        if let selectionError = selectedInputDeviceError(for: preferredDeviceID) {
+        let resolvedInputSelection = resolvedRecordingInputSelection()
+        let preferredDeviceID = resolvedInputSelection.deviceID
+        if let selectionError = selectedInputDeviceError(for: resolvedInputSelection) {
             previewError = selectionError
             return
         }
 
-        let usesBluetoothPreviewInput = previewInputUsesBluetoothTransport(preferredDeviceID)
+        let usesBluetoothPreviewInput = resolvedInputSelection.usesBluetoothTransport
         let captureRoute = AudioInputCaptureRoute.selectedRoute(
             selectedDeviceID: preferredDeviceID,
             usesBluetoothTransport: usesBluetoothPreviewInput
@@ -477,7 +620,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 }
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start-override-failed")
                 outputVolumeGuard.clear()
-                previewError = selectedDeviceUID == nil ? nil : .incompatible(.engineStartFailed)
+                previewError = resolvedInputSelection.hasExplicitDeviceSelection ? .incompatible(.engineStartFailed) : nil
                 isPreviewActive = false
             }
             return
@@ -486,22 +629,24 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         if case .inputOnlyDevice(let inputOnlyDeviceID) = captureRoute {
             do {
                 try startInputOnlyPreviewCapture(deviceID: inputOnlyDeviceID, label: "preview")
-                if selectedDeviceUID != nil {
-                    markSelectedDeviceCompatibility(.compatible)
+                if let uid = resolvedInputSelection.deviceUID {
+                    markInputDeviceCompatibility(.compatible, uid: uid)
                 }
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start")
                 outputVolumeGuard.clear()
                 isPreviewActive = true
             } catch let error as SelectedInputDeviceError {
                 if case .incompatible(let issue) = error {
-                    markSelectedDeviceCompatibility(.incompatible(issue))
+                    if let uid = resolvedInputSelection.deviceUID {
+                        markInputDeviceCompatibility(.incompatible(issue), uid: uid)
+                    }
                 }
                 previewError = error
                 cleanupAfterFailedInputOnlyPreviewStart()
             } catch {
                 logger.error("Failed to start input-only preview capture: \(error.localizedDescription)")
-                if selectedDeviceUID != nil {
-                    markSelectedDeviceCompatibility(.incompatible(.engineStartFailed))
+                if let uid = resolvedInputSelection.deviceUID {
+                    markInputDeviceCompatibility(.incompatible(.engineStartFailed), uid: uid)
                     previewError = .incompatible(.engineStartFailed)
                 }
                 cleanupAfterFailedInputOnlyPreviewStart()
@@ -526,8 +671,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         do {
             try startPreviewEngineWithRecovery(engine, preferredDeviceID: enginePreferredDeviceID, label: "preview")
-            if selectedDeviceUID != nil {
-                markSelectedDeviceCompatibility(.compatible)
+            if let uid = resolvedInputSelection.deviceUID {
+                markInputDeviceCompatibility(.compatible, uid: uid)
             }
 
             let startupRecoveryAction = previewRecoveryCoordinator.finishStartingSuccessfully()
@@ -545,14 +690,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             isPreviewActive = true
         } catch let error as SelectedInputDeviceError {
             if case .incompatible(let issue) = error {
-                markSelectedDeviceCompatibility(.incompatible(issue))
+                if let uid = resolvedInputSelection.deviceUID {
+                    markInputDeviceCompatibility(.incompatible(issue), uid: uid)
+                }
             }
             previewError = error
             cleanupAfterFailedPreviewStart(engine)
         } catch {
             logger.error("Failed to start preview engine: \(error.localizedDescription)")
-            if selectedDeviceUID != nil {
-                markSelectedDeviceCompatibility(.incompatible(.engineStartFailed))
+            if let uid = resolvedInputSelection.deviceUID {
+                markInputDeviceCompatibility(.incompatible(.engineStartFailed), uid: uid)
                 previewError = .incompatible(.engineStartFailed)
             }
             cleanupAfterFailedPreviewStart(engine)
@@ -989,8 +1136,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
-        inputChannelCount(for: deviceID) > 0
+        guard inputChannelCount(for: deviceID) > 0 else { return false }
+
+        if transportType(for: deviceID) == kAudioDeviceTransportTypeBuiltIn, IOKitClamshellStateProvider().isLidClosed() {
+            return false
+        }
+
+        return true
     }
+
+
 
     private func listInputDevices() -> [AudioInputDevice] {
         Self.availableInputDevices()
@@ -1295,6 +1450,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             || transportType == kAudioDeviceTransportTypeBluetoothLE
     }
 
+    static func isBuiltInTransportType(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeBuiltIn
+    }
+
     fileprivate static func transportType(for deviceID: AudioDeviceID) -> UInt32? {
         var transportType: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -1428,6 +1587,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             newDevices.contains(where: { $0.uid == uid })
         }
         inputDevices = applyCompatibilityCache(to: newDevices)
+        refreshInputDevicePriorityNames()
 
         if let uid = selectedDeviceUID,
            !newDevices.contains(where: { $0.uid == uid }) {
@@ -1448,9 +1608,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 if refreshedDevices.contains(where: { $0.uid == uid }) {
                     logger.info("Device reappeared after reconfiguration: \(deviceName ?? uid)")
                     self.inputDevices = refreshedDevices
+                    self.refreshInputDevicePriorityNames()
                 } else {
                     logger.info("Selected device confirmed disconnected: \(deviceName ?? uid)")
                     self.inputDevices = refreshedDevices
+                    self.refreshInputDevicePriorityNames()
                     if self.isPreviewActive { self.stopPreview() }
                     self.selectedDeviceUID = nil
                     self.disconnectedDeviceName = deviceName
@@ -1473,12 +1635,29 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func markSelectedDeviceCompatibility(_ compatibility: AudioInputDeviceCompatibility) {
         guard let selectedDeviceUID else { return }
-        compatibilityCache[selectedDeviceUID] = compatibility
+        markInputDeviceCompatibility(compatibility, uid: selectedDeviceUID)
+    }
+
+    func markRecordingInputSelectionCompatibility(
+        _ compatibility: AudioInputDeviceCompatibility,
+        selection: ResolvedRecordingInputSelection
+    ) {
+        guard let uid = selection.deviceUID else { return }
+        markInputDeviceCompatibility(compatibility, uid: uid)
+    }
+
+    private func markInputDeviceCompatibility(_ compatibility: AudioInputDeviceCompatibility, uid: String) {
+        compatibilityCache[uid] = compatibility
         inputDevices = applyCompatibilityCache(to: inputDevices)
     }
 
     private func handleSelectedDeviceSelectionChange(from oldValue: String?, to newValue: String?) {
         if isInitializingSelection {
+            return
+        }
+
+        if isSynchronizingSelectionFromPriorityList {
+            persistSelectedDeviceUID()
             return
         }
 
@@ -1503,6 +1682,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             compatibilityCache[newValue] = .compatible
             inputDevices = applyCompatibilityCache(to: inputDevices)
             persistSelectedDeviceUID()
+            if pendingPrimaryPriorityReplacementUID == newValue {
+                replaceInputDevicePriorityListWithDevice(uid: newValue)
+                pendingPrimaryPriorityReplacementUID = nil
+            } else {
+                promoteInputDeviceToPriorityList(uid: newValue)
+            }
 
             if isPreviewActive {
                 stopPreview()
@@ -1514,17 +1699,29 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 inputDevices = applyCompatibilityCache(to: inputDevices)
             }
             previewError = error
+            if pendingPrimaryPriorityReplacementUID == newValue {
+                pendingPrimaryPriorityReplacementUID = nil
+            }
             revertSelectedDeviceUID(to: oldValue)
         } catch {
             compatibilityCache[newValue] = .incompatible(.engineStartFailed)
             inputDevices = applyCompatibilityCache(to: inputDevices)
             previewError = .incompatible(.engineStartFailed)
+            if pendingPrimaryPriorityReplacementUID == newValue {
+                pendingPrimaryPriorityReplacementUID = nil
+            }
             revertSelectedDeviceUID(to: oldValue)
         }
     }
 
     private func validateDeviceSelection(uid: String) throws {
-        guard let deviceID = audioDeviceIDResolverOverride?(uid) ?? Self.audioDeviceID(fromUID: uid) else {
+        let deviceID: AudioDeviceID?
+        if let device = inputDevices.first(where: { $0.uid == uid }) {
+            deviceID = resolvedAudioDeviceID(for: device)
+        } else {
+            deviceID = audioDeviceIDResolverOverride?(uid) ?? Self.audioDeviceID(fromUID: uid)
+        }
+        guard let deviceID else {
             throw SelectedInputDeviceError.unavailable
         }
 
@@ -1654,6 +1851,113 @@ final class AVAudioInputSelectionEngineValidator: AudioInputSelectionEngineValid
 }
 
 extension AudioDeviceService {
+    private static func loadInputDevicePriorityList() -> [AudioInputDevicePriorityItem] {
+        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.inputDevicePriorityList) else {
+            return []
+        }
+        return (try? JSONDecoder().decode([AudioInputDevicePriorityItem].self, from: data)) ?? []
+    }
+
+    private static func persistInputDevicePriorityList(_ items: [AudioInputDevicePriorityItem]) {
+        if items.isEmpty {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        UserDefaults.standard.set(data, forKey: UserDefaultsKeys.inputDevicePriorityList)
+    }
+
+    private func initialInputDevicePriorityList(
+        savedSelectionUID: String?,
+        devices: [AudioInputDevice]
+    ) -> [AudioInputDevicePriorityItem] {
+        let savedItems = Self.normalizedInputDevicePriorityList(
+            Self.loadInputDevicePriorityList(),
+            devices: devices
+        )
+        if !savedItems.isEmpty {
+            Self.persistInputDevicePriorityList(savedItems)
+            return savedItems
+        }
+
+        guard let savedSelectionUID else { return [] }
+        let item = AudioInputDevicePriorityItem(
+            uid: savedSelectionUID,
+            name: devices.first(where: { $0.uid == savedSelectionUID })?.name ?? savedSelectionUID
+        )
+        Self.persistInputDevicePriorityList([item])
+        return [item]
+    }
+
+    private static func normalizedInputDevicePriorityList(
+        _ items: [AudioInputDevicePriorityItem],
+        devices: [AudioInputDevice]
+    ) -> [AudioInputDevicePriorityItem] {
+        var seenUIDs = Set<String>()
+        var normalized: [AudioInputDevicePriorityItem] = []
+
+        for item in items {
+            let uid = item.uid.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uid.isEmpty, !seenUIDs.contains(uid) else { continue }
+            seenUIDs.insert(uid)
+
+            let name = devices.first(where: { $0.uid == uid })?.name
+                ?? item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalized.append(AudioInputDevicePriorityItem(
+                uid: uid,
+                name: name.isEmpty ? uid : name
+            ))
+        }
+
+        return normalized
+    }
+
+    private func setInputDevicePriorityList(_ items: [AudioInputDevicePriorityItem]) {
+        let previousSelectedDeviceUID = selectedDeviceUID
+        let normalized = Self.normalizedInputDevicePriorityList(items, devices: inputDevices)
+        inputDevicePriorityList = normalized
+        Self.persistInputDevicePriorityList(normalized)
+        synchronizeSelectedDeviceUIDFromPriorityList()
+
+        if isPreviewActive, previousSelectedDeviceUID != selectedDeviceUID {
+            stopPreview()
+            startPreview()
+        }
+    }
+
+    private func synchronizeSelectedDeviceUIDFromPriorityList() {
+        isSynchronizingSelectionFromPriorityList = true
+        selectedDeviceUID = inputDevicePriorityList.first(where: { isInputDevicePriorityItemAvailable($0) })?.uid
+        isSynchronizingSelectionFromPriorityList = false
+        persistSelectedDeviceUID()
+    }
+
+    private func promoteInputDeviceToPriorityList(uid: String) {
+        guard let device = inputDevices.first(where: { $0.uid == uid }) else { return }
+        let promotedItem = AudioInputDevicePriorityItem(uid: device.uid, name: device.name)
+        let remainingItems = inputDevicePriorityList.filter { $0.uid != uid }
+        setInputDevicePriorityList([promotedItem] + remainingItems)
+    }
+
+    private func replaceInputDevicePriorityListWithDevice(uid: String) {
+        guard let device = inputDevices.first(where: { $0.uid == uid }) else { return }
+        setInputDevicePriorityList([AudioInputDevicePriorityItem(uid: device.uid, name: device.name)])
+    }
+
+    private func refreshInputDevicePriorityNames() {
+        let normalized = Self.normalizedInputDevicePriorityList(inputDevicePriorityList, devices: inputDevices)
+        guard normalized != inputDevicePriorityList else { return }
+        inputDevicePriorityList = normalized
+        Self.persistInputDevicePriorityList(normalized)
+    }
+
+    private func resolvedAudioDeviceID(for device: AudioInputDevice) -> AudioDeviceID? {
+        if let audioDeviceIDResolverOverride {
+            return audioDeviceIDResolverOverride(device.uid)
+        }
+        return Self.audioDeviceID(fromUID: device.uid) ?? device.deviceID
+    }
+
     private func revertSelectedDeviceUID(to value: String?) {
         isApplyingValidatedSelection = true
         selectedDeviceUID = value
@@ -1664,11 +1968,12 @@ extension AudioDeviceService {
         UserDefaults.standard.set(selectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
     }
 
-    private func selectedInputDeviceError(for preferredDeviceID: AudioDeviceID?) -> SelectedInputDeviceError? {
-        guard let selectedDeviceUID else { return nil }
-        guard preferredDeviceID != nil else { return .unavailable }
+    private func selectedInputDeviceError(for selection: ResolvedRecordingInputSelection) -> SelectedInputDeviceError? {
+        guard let deviceUID = selection.deviceUID else { return nil }
+        guard selection.deviceID != nil else { return .unavailable }
 
-        switch compatibilityCache[selectedDeviceUID] ?? selectedDevice?.compatibility ?? .unknown {
+        let deviceCompatibility = inputDevices.first(where: { $0.uid == deviceUID })?.compatibility
+        switch compatibilityCache[deviceUID] ?? deviceCompatibility ?? .unknown {
         case .incompatible(let issue):
             return .incompatible(issue)
         case .unknown, .compatible:
@@ -2047,6 +2352,9 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
 }
 
 final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
+    private static let callbackQuiescenceInterval: TimeInterval = 0.3
+    private static let callbackDrainRetryInterval: TimeInterval = 0.01
+
     final class RenderState: @unchecked Sendable {
         let audioUnit: AudioUnit
         let operations: CoreAudioHALInputOperating
@@ -2066,11 +2374,119 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         }
     }
 
-    private let audioUnit: AudioUnit
-    private let operations: CoreAudioHALInputOperating
-    private let renderState: RenderState
-    private let lock = NSLock()
-    private var isStopped = false
+    private final class CallbackLifetime: @unchecked Sendable {
+        private static let teardownQueue = DispatchQueue(
+            label: "com.typewhisper.coreaudio-hal-teardown",
+            qos: .utility
+        )
+        let audioUnit: AudioUnit
+        let operations: CoreAudioHALInputOperating
+        let renderState: RenderState
+        let callbackContext: OpaquePointer
+
+        private let lifecycleLock = NSLock()
+        private var teardownStarted = false
+        private var disposalStarted = false
+        private var finalized = false
+
+        init(
+            audioUnit: AudioUnit,
+            operations: CoreAudioHALInputOperating,
+            renderState: RenderState,
+            callbackContext: OpaquePointer
+        ) {
+            self.audioUnit = audioUnit
+            self.operations = operations
+            self.renderState = renderState
+            self.callbackContext = callbackContext
+        }
+
+        func openCallbackGate() -> Bool {
+            let canOpen = lifecycleLock.withLock { !teardownStarted }
+            guard canOpen else { return false }
+            return CoreAudioHALCallbackContextOpen(callbackContext)
+        }
+
+        func stop() {
+            let shouldStartTeardown = lifecycleLock.withLock { () -> Bool in
+                guard !teardownStarted else { return false }
+                teardownStarted = true
+                return true
+            }
+            guard shouldStartTeardown else { return }
+
+            // The C context is the only state the real-time callback may touch before
+            // this closes. From this point on, late callbacks return without allocating
+            // a buffer or rendering from the AudioUnit.
+            guard CoreAudioHALCallbackContextBeginTeardown(callbackContext) else { return }
+            operations.stop(audioUnit)
+            scheduleFinalization()
+        }
+
+        private func scheduleFinalization() {
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
+                finalizeWhenDrained()
+            }
+        }
+
+        private func finalizeWhenDrained() {
+            guard CoreAudioHALCallbackContextIsDrained(callbackContext) else {
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
+                    finalizeWhenDrained()
+                }
+                return
+            }
+
+            let shouldStartDisposal = lifecycleLock.withLock { () -> Bool in
+                guard teardownStarted, !disposalStarted else { return false }
+                disposalStarted = true
+                return true
+            }
+            guard shouldStartDisposal else { return }
+
+            operations.uninitialize(audioUnit)
+            operations.dispose(audioUnit)
+            sealCallbackContextWhenDrained()
+        }
+
+        private func sealCallbackContextWhenDrained() {
+            // The seal atomically verifies the last admitted callback has left and
+            // prevents another callback from entering the final drain-to-destroy gap.
+            guard CoreAudioHALCallbackContextSealForDestruction(callbackContext) else {
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
+                    sealCallbackContextWhenDrained()
+                }
+                return
+            }
+
+            // Keep the sealed refCon alive for one more quiescence window so a native
+            // callback that had not yet touched the atomic state can still reject safely.
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
+                destroySealedCallbackContext()
+            }
+        }
+
+        private func destroySealedCallbackContext() {
+            let shouldFinalize = lifecycleLock.withLock { () -> Bool in
+                guard disposalStarted, !finalized else { return false }
+                finalized = true
+                return true
+            }
+            guard shouldFinalize else { return }
+
+            CoreAudioHALCallbackContextDestroy(callbackContext)
+        }
+    }
+
+    private let callbackLifetime: CallbackLifetime
 
     init(
         deviceID: AudioDeviceID,
@@ -2080,8 +2496,6 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         operations: CoreAudioHALInputOperating,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws {
-        self.operations = operations
-
         let audioUnit: AudioUnit
         do {
             audioUnit = try operations.makeInputUnit()
@@ -2094,36 +2508,20 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             )
             throw error
         }
-        self.audioUnit = audioUnit
 
-        do {
-            let disabled: UInt32 = 0
-            let enabled: UInt32 = 1
-            try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
-            try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
-            try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
-
-            var streamDescription = try Self.streamDescription(for: format)
-            try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
-
-            let renderState = RenderState(
-                audioUnit: audioUnit,
-                operations: operations,
-                format: format,
-                onBuffer: onBuffer
+        let renderState = RenderState(
+            audioUnit: audioUnit,
+            operations: operations,
+            format: format,
+            onBuffer: onBuffer
+        )
+        guard let callbackContext = CoreAudioHALCallbackContextCreate(
+            Unmanaged.passUnretained(renderState).toOpaque()
+        ) else {
+            let error = CoreAudioHALInputOperationError(
+                operation: "\(label) create HAL callback context",
+                status: -1
             )
-            self.renderState = renderState
-            var callback = AURenderCallbackStruct(
-                inputProc: coreAudioHALInputRenderCallback,
-                inputProcRefCon: Unmanaged.passUnretained(renderState).toOpaque()
-            )
-            try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
-            try operations.initialize(audioUnit, label: label)
-            try operations.start(audioUnit, label: label)
-
-            AudioInputCaptureDiagnosticsStore.clear()
-            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
-        } catch {
             operations.stop(audioUnit)
             operations.uninitialize(audioUnit)
             operations.dispose(audioUnit)
@@ -2135,6 +2533,53 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             )
             throw error
         }
+        self.callbackLifetime = CallbackLifetime(
+            audioUnit: audioUnit,
+            operations: operations,
+            renderState: renderState,
+            callbackContext: callbackContext
+        )
+
+        do {
+            let disabled: UInt32 = 0
+            let enabled: UInt32 = 1
+            try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
+            try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
+            try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
+
+            var streamDescription = try Self.streamDescription(for: format)
+            try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
+
+            var callback = AURenderCallbackStruct(
+                inputProc: coreAudioHALInputRenderCallback,
+                inputProcRefCon: UnsafeMutableRawPointer(callbackContext)
+            )
+            try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
+            try operations.initialize(audioUnit, label: label)
+            guard callbackLifetime.openCallbackGate() else {
+                throw CoreAudioHALInputOperationError(
+                    operation: "\(label) open HAL callback gate",
+                    status: -1
+                )
+            }
+            try operations.start(audioUnit, label: label)
+
+            AudioInputCaptureDiagnosticsStore.clear()
+            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
+        } catch {
+            callbackLifetime.stop()
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
+            throw error
+        }
+    }
+
+    deinit {
+        callbackLifetime.stop()
     }
 
     static func captureFormat(for deviceID: AudioDeviceID) throws -> AVAudioFormat {
@@ -2155,15 +2600,7 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 
     func stop() {
-        let shouldStop = lock.withLock { () -> Bool in
-            guard !isStopped else { return false }
-            isStopped = true
-            return true
-        }
-        guard shouldStop else { return }
-        operations.stop(audioUnit)
-        operations.uninitialize(audioUnit)
-        operations.dispose(audioUnit)
+        callbackLifetime.stop()
     }
 
     private static func streamDescription(for format: AVAudioFormat) throws -> AudioStreamBasicDescription {
@@ -2185,8 +2622,16 @@ private func coreAudioHALInputRenderCallback(
     inNumberFrames: UInt32,
     ioData: UnsafeMutablePointer<AudioBufferList>?
 ) -> OSStatus {
+    let callbackContext = OpaquePointer(inRefCon)
+    var renderStatePointer: UnsafeMutableRawPointer?
+    guard CoreAudioHALCallbackContextEnter(callbackContext, &renderStatePointer) else {
+        return noErr
+    }
+    defer { CoreAudioHALCallbackContextLeave(callbackContext) }
+    guard let renderStatePointer else { return noErr }
+
     let renderState = Unmanaged<CoreAudioHALInputCaptureSession.RenderState>
-        .fromOpaque(inRefCon)
+        .fromOpaque(renderStatePointer)
         .takeUnretainedValue()
 
     guard let buffer = AVAudioPCMBuffer(
@@ -2845,6 +3290,53 @@ extension AudioDeviceService {
 extension CoreAudioHALInputCaptureSession {
     static func testingInputOnlyCaptureChannelCount(for hardwareChannelCount: AVAudioChannelCount) -> AVAudioChannelCount {
         inputOnlyCaptureChannelCount(for: hardwareChannelCount)
+    }
+
+    static var testingCallbackQuiescenceInterval: TimeInterval {
+        callbackQuiescenceInterval
+    }
+
+    static func testingCallbackContextSealTransitions() -> (
+        sealedWhileInFlight: Bool,
+        sealedAfterDrain: Bool,
+        enteredAfterSeal: Bool,
+        payloadAfterSealWasNil: Bool
+    ) {
+        var payloadStorage: UInt8 = 0
+        return withUnsafeMutablePointer(to: &payloadStorage) { payloadPointer in
+            guard let callbackContext = CoreAudioHALCallbackContextCreate(
+                UnsafeMutableRawPointer(payloadPointer)
+            ) else {
+                return (false, false, true, false)
+            }
+            defer { CoreAudioHALCallbackContextDestroy(callbackContext) }
+
+            guard CoreAudioHALCallbackContextOpen(callbackContext) else {
+                return (false, false, true, false)
+            }
+
+            var admittedPayload: UnsafeMutableRawPointer?
+            guard CoreAudioHALCallbackContextEnter(callbackContext, &admittedPayload) else {
+                return (false, false, true, false)
+            }
+            guard CoreAudioHALCallbackContextBeginTeardown(callbackContext) else {
+                CoreAudioHALCallbackContextLeave(callbackContext)
+                return (false, false, true, false)
+            }
+
+            let sealedWhileInFlight = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+            CoreAudioHALCallbackContextLeave(callbackContext)
+            let sealedAfterDrain = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+
+            var payloadAfterSeal: UnsafeMutableRawPointer?
+            let enteredAfterSeal = CoreAudioHALCallbackContextEnter(callbackContext, &payloadAfterSeal)
+            return (
+                sealedWhileInFlight,
+                sealedAfterDrain,
+                enteredAfterSeal,
+                payloadAfterSeal == nil
+            )
+        }
     }
 }
 #endif

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEV_SUPPORT="${DEV_SUPPORT:-$HOME/Library/Application Support/TypeWhisper-Dev}"
-SEED_SUPPORT="${SEED_SUPPORT:-$HOME/Library/Application Support/TypeWhisper-Dev-Seed}"
-SEED_DEFAULTS_PLIST="${SEED_DEFAULTS_PLIST:-$SEED_SUPPORT/defaults/com.typewhisper.mac.dev.plist}"
-DEV_DEFAULTS="${DEV_DEFAULTS:-com.typewhisper.mac.dev}"
-BACKUP_ROOT="${BACKUP_ROOT:-$HOME/Library/Application Support/TypeWhisper-Dev-Backups}"
+DEV_SUPPORT="${DEV_SUPPORT:-$HOME/Library/Application Support/MeetingWhisper-Dev}"
+SEED_SUPPORT="${SEED_SUPPORT:-$HOME/Library/Application Support/MeetingWhisper-Dev-Seed}"
+SEED_DEFAULTS_PLIST="${SEED_DEFAULTS_PLIST:-$SEED_SUPPORT/defaults/com.meetingwhisper.mac.dev.plist}"
+DEV_DEFAULTS="${DEV_DEFAULTS:-com.meetingwhisper.mac.dev}"
+BACKUP_ROOT="${BACKUP_ROOT:-$HOME/Library/Application Support/MeetingWhisper-Dev-Backups}"
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$BACKUP_ROOT/$timestamp"
 
 log() {
-  printf '[typewhisper-dev-sync] %s\n' "$*"
+  printf '[meetingwhisper-dev-sync] %s\n' "$*"
 }
 
 table_for_store() {

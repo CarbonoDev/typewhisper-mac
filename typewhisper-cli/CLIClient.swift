@@ -23,10 +23,10 @@ enum CLIError: Error {
         switch self {
         case .connectionFailed(let port):
             return """
-                Error: Cannot connect to TypeWhisper on port \(port).
+                Error: Cannot connect to MeetingWhisper on port \(port).
 
-                Make sure TypeWhisper is running and the API server is enabled:
-                  1. Open TypeWhisper
+                Make sure MeetingWhisper is running and the API server is enabled:
+                  1. Open MeetingWhisper
                   2. Go to Settings > Advanced
                   3. Enable "API Server"
                 """
@@ -35,11 +35,11 @@ enum CLIError: Error {
                 return """
                     Error: API authentication failed.
 
-                    Restart TypeWhisper so the CLI can refresh its local API token, or pass --api-token / TYPEWHISPER_API_TOKEN when using a custom port.
+                    Restart MeetingWhisper so the CLI can refresh its local API token, or pass --api-token / MEETINGWHISPER_API_TOKEN when using a custom port.
                     """
             }
             if code == 503 {
-                return "Error: No model loaded in TypeWhisper. Load a model first."
+                return "Error: No model loaded in MeetingWhisper. Load a model first."
             }
             return "Error: Server returned \(code) - \(message)"
         case .invalidResponse:
@@ -164,6 +164,59 @@ struct CLIClient {
         request.httpBody = body
         request.timeoutInterval = 300
 
+        return try await performRequest(request)
+    }
+
+    // MARK: - Meetings
+
+    func importMeetingTranscript(
+        fileURL: URL,
+        title: String?,
+        date: String?,
+        folder: String?,
+        tags: [String],
+        language: String?,
+        matchCalendar: Bool
+    ) async throws -> Data {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CLIError.fileNotFound(fileURL.path)
+        }
+
+        // Direct handoff of the local file path (no bytes uploaded), like `transcribe`.
+        var payload: [String: Any] = ["path": fileURL.path]
+        if let title { payload["title"] = title }
+        if let date { payload["date"] = date }
+        if let folder { payload["folder"] = folder }
+        if !tags.isEmpty { payload["tags"] = tags }
+        if let language { payload["language"] = language }
+        if matchCalendar { payload["match_calendar"] = true }
+
+        let url = URL(string: "\(baseURL)/v1/meetings/import-transcript")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        request.timeoutInterval = 120
+
+        return try await performRequest(request)
+    }
+
+    func listMeetings(
+        folder: String?,
+        tag: String?,
+        from: String?,
+        to: String?
+    ) async throws -> Data {
+        var components = URLComponents(string: "\(baseURL)/v1/meetings")!
+        var items: [URLQueryItem] = []
+        if let folder { items.append(URLQueryItem(name: "folder", value: folder)) }
+        if let tag { items.append(URLQueryItem(name: "tag", value: tag)) }
+        if let from { items.append(URLQueryItem(name: "from", value: from)) }
+        if let to { items.append(URLQueryItem(name: "to", value: to)) }
+        if !items.isEmpty { components.queryItems = items }
+
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 30
         return try await performRequest(request)
     }
 

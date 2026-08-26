@@ -45,6 +45,18 @@ struct HTTPResponse {
         return .json(ErrorBody(error: .init(code: code, message: message)), status: status, headers: headers)
     }
 
+    /// Return a copy carrying `extra` merged over the existing headers. Used by the router to stamp
+    /// CORS headers on every response without every handler having to know about them.
+    func adding(headers extra: [String: String]) -> HTTPResponse {
+        guard !extra.isEmpty else { return self }
+        return HTTPResponse(
+            status: status,
+            contentType: contentType,
+            body: body,
+            headers: headers.merging(extra) { _, new in new }
+        )
+    }
+
     func serialized() -> Data {
         let statusText: String
         switch status {

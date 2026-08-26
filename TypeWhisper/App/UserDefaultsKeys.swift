@@ -54,10 +54,14 @@ enum UserDefaultsKeys {
     static let apiServerEnabled = "apiServerEnabled"
     static let apiServerPort = "apiServerPort"
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
+    /// Browser-extension ids (or full extension origins) allowed to call the local API, comma- or
+    /// newline-separated. Empty by default: no extension is trusted until the user adds one.
+    static let apiServerAllowedExtensionIDs = "apiServerAllowedExtensionIDs"
     static let updateChannel = "updateChannel"
 
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
+    static let inputDevicePriorityList = "inputDevicePriorityList"
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
@@ -69,6 +73,7 @@ enum UserDefaultsKeys {
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
+    static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"
@@ -86,6 +91,11 @@ enum UserDefaultsKeys {
     static let showMenuBarIcon = "showMenuBarIcon"
     static let dockIconBehaviorWhenMenuBarHidden = "dockIconBehaviorWhenMenuBarHidden"
     static let menuBarIconHiddenAlertShown = "menuBarIconHiddenAlertShown"
+
+    // MARK: - Main window (meetings-first UI, UI Step 0 · D2/D10)
+    /// Whether the meetings-first main window opens automatically at launch (registered default ON).
+    /// Launch precedence: first-run setup > post-update license prompt > this toggle (D2).
+    static let showMainWindowAtLaunch = "mainwindow.showAtLaunch"
 
     // MARK: - Memory
     static let memoryEnabled = "memoryEnabled"
@@ -141,26 +151,107 @@ enum UserDefaultsKeys {
     static let watchFolderModel = "watchFolderModel"
 
     // MARK: - Workflows
+    static let llmFallbackPriorityList = "llmFallbackPriorityList"
+    // Legacy values retained solely as migration inputs for llmFallbackPriorityList.
     static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
-    // MARK: - Licensing
+    // MARK: - Post-update release tracking
+    // TypeWhisper is free and open source (GPLv3); the licensing/supporter keys
+    // have been removed. `usageIntent` and `welcomeSheetShown` are retained only
+    // because a couple of tests still reference them.
     static let usageIntent = "usageIntent"
-    static let userType = "userType"
-    static let licenseStatus = "licenseStatus"
-    static let licenseTier = "licenseTier"
-    static let lastLicenseValidation = "lastLicenseValidation"
-    static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
-    static let workUsagePromptDismissed = "workUsagePromptDismissed"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
     static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
 
-    // MARK: - Supporter
-    static let supporterTier = "supporterTier"
-    static let supporterStatus = "supporterStatus"
-    static let lastSupporterValidation = "lastSupporterValidation"
-    static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
-    static let supporterDiscordSessionId = "supporterDiscordSessionId"
+    // MARK: - Meetings
+    /// Absolute path of the Obsidian vault connected as a knowledge base (plan M5, D9).
+    static let meetingsObsidianVaultPath = "meetings.obsidianVaultPath"
+    /// Vault-relative root folder that all meeting exports are nested under (plan D7/M4). Registered
+    /// default `"Meetings"`; an empty value collapses to exporting at the vault root (the escape
+    /// hatch). The exporter prepends its sanitized components before the per-meeting `folderPath`.
+    static let meetingsObsidianRootFolder = "meetings.obsidianRootFolder"
+    /// JSON-encoded `[folderPath: FolderContextConfig]` map (Amendment 1, DA4): per-folder description,
+    /// attached vault notes/folders, and the "No vault context" toggle that scope brief/Q&A retrieval.
+    /// Absent/empty ⇒ no folder has context configured (every meeting retrieves whole-vault).
+    static let meetingsFolderContextConfigs = "meetings.folderContextConfigs"
+    /// Opt-in bridge (addendum AD5, default OFF): when true, finishing a meeting also emits a
+    /// legacy `.transcriptionCompleted` on the classic dictation `EventBus` so dictation-keyed
+    /// integrations (Obsidian auto-export, `transcriptionCompleted` webhooks) fire for meetings.
+    static let meetingsBridgeToDictationEvents = "meetings.bridgeToDictationEvents"
+    /// [M11] Identifiers (`EKCalendar.calendarIdentifier`) of calendars the user has DEselected in
+    /// Settings › Meetings › Calendars. Deselected (not selected) ids are stored so that calendars
+    /// added later default to selected: an id absent from this set — including a brand-new one — is
+    /// shown. Empty/absent ⇒ all calendars selected.
+    static let meetingsCalendarDeselectedIDs = "meetings.calendar.deselectedIDs"
+    /// [Google Phase 1 · settings polish] Collapsed group ids of the Calendars settings list
+    /// (newline-separated `CalendarSelectionGroup.id`s). Absent/empty ⇒ every group expanded —
+    /// groups default open and only an explicit fold is remembered. Pure UI state (same
+    /// `@AppStorage` discipline as the other `meetings.*` view preferences).
+    static let meetingsCalendarCollapsedGroups = "meetings.calendar.collapsedGroups"
+    // MARK: - Meetings · Final re-transcription (addendum AD8, Track C)
+    /// Global default final re-transcription mode: "off" | "sameEngine" | "engine".
+    static let meetingsFinalPassDefaultMode = "meetings.finalPass.defaultMode"
+    /// Override engine (plugin provider id) when the global mode is "engine".
+    static let meetingsFinalPassEngineId = "meetings.finalPass.engineId"
+    /// Override cloud model id when the global mode is "engine".
+    static let meetingsFinalPassModel = "meetings.finalPass.model"
+
+    // MARK: - Meetings · Language detection (plan D5, M2)
+    /// LLM provider id used for per-meeting language detection. Empty/unset ⇒ inherit the current
+    /// prompt-provider selection (the "Use prompt provider" default). Reused verbatim by
+    /// `MeetingModelPurpose.languageDetection` (plan D9/M4 — detection is configured in one place).
+    static let meetingsLanguageDetectionProviderId = "meetings.language.detectionProviderId"
+    /// Cloud model id for language detection when a specific detection provider is chosen. Empty/unset
+    /// ⇒ the provider default.
+    static let meetingsLanguageDetectionModel = "meetings.language.detectionModel"
+
+    // MARK: - Meetings · Per-purpose model routing (plan D9, M4)
+    // Precedence `template > purpose > app default`, resolved per call by `MeetingModelRouter`. Empty/
+    // unset ⇒ "Use app default" (inherit the prompt-provider selection). `languageDetection` reuses the
+    // legacy `meetings.language.detection*` keys above rather than adding new ones (back-compat).
+    /// Provider override for summaries / analysis outputs (`MeetingModelPurpose.summariesAnalysis`).
+    static let meetingsModelSummariesProviderId = "meetings.models.summaries.providerId"
+    /// Model override for summaries / analysis outputs.
+    static let meetingsModelSummariesModel = "meetings.models.summaries.model"
+    /// Provider override for pre-meeting briefs (`MeetingModelPurpose.briefs`).
+    static let meetingsModelBriefsProviderId = "meetings.models.briefs.providerId"
+    /// Model override for pre-meeting briefs.
+    static let meetingsModelBriefsModel = "meetings.models.briefs.model"
+    /// Provider override for in-meeting Q&A (`MeetingModelPurpose.qa`).
+    static let meetingsModelQAProviderId = "meetings.models.qa.providerId"
+    /// Model override for in-meeting Q&A.
+    static let meetingsModelQAModel = "meetings.models.qa.model"
+    /// Provider override for the related-documents relevance judge (`MeetingModelPurpose.relatedDocsJudge`).
+    static let meetingsModelRelatedDocsProviderId = "meetings.models.relatedDocs.providerId"
+    /// Model override for the related-documents relevance judge.
+    static let meetingsModelRelatedDocsModel = "meetings.models.relatedDocs.model"
+
+    // [Track D] Automatic pre-meeting briefs (plan AD9).
+    /// Whether pre-meeting briefs are generated automatically (default ON).
+    static let meetingsAutoBriefEnabled = "meetings.brief.auto.enabled"
+    /// How many minutes before a meeting's start the brief is generated (default 20, range 5–60).
+    static let meetingsAutoBriefLeadMinutes = "meetings.brief.auto.leadMinutes"
+    /// How recent an existing brief must be to skip regeneration (default 6 hours).
+    static let meetingsAutoBriefFreshnessHours = "meetings.brief.auto.freshnessHours"
+    /// Minimum attendee count for an event to auto-generate a brief (default 1).
+    static let meetingsAutoBriefMinAttendees = "meetings.brief.auto.minAttendees"
+
+    // MARK: - Meetings · Speaker labels (speaker-recognition amendment, M9-SPK-A)
+    /// Whether provider (cloud) speaker labels are adopted when a speaker-capable engine returns them,
+    /// taking precedence over local diarization (D-A2/D-A7). Registered default ON.
+    static let meetingsPreferProviderSpeakerLabels = "meetings.speakers.preferProviderLabels"
+
+    // MARK: - Meetings · Google accounts (D-G5)
+    // All `google.*` keys are written only by `GoogleAccountStore` (single-writer); secrets
+    // (refresh tokens, client secret) live in the Keychain, never here.
+    /// JSON-encoded `[GoogleAccount]` — the connected-accounts index (non-secret metadata only).
+    static let googleAccountsIndex = "google.accounts.index"
+    /// The pasted Google OAuth client ID (a public identifier, so plain defaults is fine).
+    static let googleOAuthClientID = "google.oauth.clientID"
+    /// `sub`s of accounts whose one-time duplicate-calendars prompt already ran (D-G6). Written only
+    /// through `GoogleAccountStore.markTwinPromptHandled(_:)`.
+    static let googleTwinPromptHandled = "google.twinPrompt.handled"
 }

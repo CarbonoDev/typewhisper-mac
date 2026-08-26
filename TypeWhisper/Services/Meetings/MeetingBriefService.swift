@@ -1,0 +1,385 @@
+import Foundation
+import Combine
+import TypeWhisperPluginSDK
+import os.log
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MeetingBriefService")
+
+/// Generates a pre-meeting brief (plan M5): it gathers summaries of prior related meetings
+/// (`MeetingService.priorMeetings(matching:)` — shared attendee email OR recurrence series) and
+/// relevant knowledge-base passages from the connected Obsidian vault, assembles them into a
+/// budget-bounded context (plan D7), makes one single-turn LLM call (`skipMemoryInjection: true`,
+/// plan D6), and persists the result as a `MeetingOutput(kind: .brief)` (plan D15).
+///
+/// Degrades gracefully: with no vault it uses prior meetings only; with no prior meetings it uses
+/// vault passages only; with neither it throws `insufficientContext` (never a crash).
+@MainActor
+final class MeetingBriefService: ObservableObject {
+    @Published private(set) var isGenerating = false
+
+    private let meetingService: MeetingService
+    private let vaultService: ObsidianVaultService
+    private let processor: any PromptProcessing
+    /// Source of the editable `.brief` template (plan M6, amendment DA2). Optional so unit tests and
+    /// any call site that predates templating construct the service without a prompt store; a nil
+    /// store (or no `.brief` template) falls back to the built-in `meetings.brief.systemPrompt`.
+    private let promptActionService: PromptActionService?
+    /// Source of the per-folder `VaultRetrievalScope` (Amendment 1, DA5): the meeting's folder config
+    /// restricts brief knowledge-base retrieval to attached notes/folders (or disables it). Optional so
+    /// tests/call sites that predate folder context construct the service without it — a nil store
+    /// keeps whole-vault retrieval (today's behavior).
+    private let folderMetadataStore: MeetingFolderMetadataStore?
+    /// Per-purpose model router (plan D9/M4): resolves `template > purpose(briefs) > app default` per
+    /// call. Defaulted so predating call sites/tests construct the service without it.
+    private let modelRouter: MeetingModelRouter
+    /// Related-email retrieval ([Google Phase 3 · M3], D-M3): the meeting-centric Gmail seam.
+    /// Nil-defaulted so every predating call site and test compiles unchanged — a nil service
+    /// means "no email block" (the `folderMetadataStore`/`promptActionService` pattern).
+    private let gmailService: GmailContextRetrieving?
+    private let charBudget: Int
+
+    /// Cap on how many prior related meetings feed a brief (most recent first). Bounds cost and
+    /// stops a long history from dominating the budget (M5 review finding 2).
+    private let maxPriorMeetings = 5
+
+    init(
+        meetingService: MeetingService,
+        vaultService: ObsidianVaultService,
+        processor: any PromptProcessing,
+        promptActionService: PromptActionService? = nil,
+        folderMetadataStore: MeetingFolderMetadataStore? = nil,
+        modelRouter: MeetingModelRouter? = nil,
+        gmailService: GmailContextRetrieving? = nil,
+        charBudget: Int = TranscriptContextBuilder.defaultCharBudget
+    ) {
+        self.meetingService = meetingService
+        self.vaultService = vaultService
+        self.processor = processor
+        self.promptActionService = promptActionService
+        self.folderMetadataStore = folderMetadataStore
+        self.modelRouter = modelRouter ?? MeetingModelRouter(processor: processor)
+        self.gmailService = gmailService
+        self.charBudget = charBudget
+    }
+
+    /// Build and persist a brief for `meeting`. Regeneration inserts a new `.brief` row; the UI
+    /// shows the newest (history retained — plan D15).
+    ///
+    /// `providerOverride`/`modelOverride` (plan M5/D10) are a one-shot pick from a Generate/Regenerate
+    /// menu: they win the routing ladder for *this run only* (`one-shot > template > purpose(briefs) >
+    /// app default`) and persist nowhere — only recorded in the output's provenance. Both default nil, so
+    /// existing call sites keep today's behavior.
+    @discardableResult
+    func generateBrief(
+        for meeting: Meeting,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) async throws -> MeetingOutput {
+        // Synchronous re-entrancy guard (mirrors `MeetingLLMService`): claim the flag before the
+        // first `await` so a double-click can't launch two concurrent briefs.
+        guard !isGenerating else { throw MeetingBriefError.alreadyGenerating }
+        isGenerating = true
+        defer { isGenerating = false }
+
+        let priorBlock = priorMeetingsBlock(for: meeting)
+        let kbBlock = knowledgeBaseBlock(for: meeting)
+        // D-M3 sole-grounding restriction (normative): email context may SOLELY satisfy the guard
+        // only when the meeting's Gmail query carried a non-empty attendee clause — title-term-only
+        // matches augment a brief but never solely ground a persisted one. The signal comes from the
+        // Gmail service itself (`hasAttendeeQuery`), the single computer of the D-M2 exclusion set,
+        // so this guard and the issued query cannot diverge (review finding: a local `isSelf`-only
+        // check missed the connected-account emails the service also subtracts).
+        let hasAttendeeClause = gmailService?.hasAttendeeQuery(for: meeting) ?? false
+
+        // Fast-fail BEFORE any network work (review finding): when neither local block produced
+        // anything and email context could not ground a brief on its own, the outcome is
+        // `insufficientContext` whatever Gmail returns — so the fetch must not run at all (it would
+        // burn Gmail quota on every scheduled attempt for a meeting that can never ground).
+        guard !priorBlock.isEmpty || !kbBlock.isEmpty || hasAttendeeClause else {
+            throw MeetingBriefError.insufficientContext
+        }
+
+        // [Google Phase 3 · M3] The third context block (D-M3). Runs inside the existing `.brief`
+        // job — the 1–2 s fetch is invisible pre-meeting; no scheduler/queue change.
+        let emailBlock = await relatedEmailsBlock(for: meeting)
+
+        let emailBlockSufficient = !emailBlock.isEmpty && hasAttendeeClause
+        guard !priorBlock.isEmpty || !kbBlock.isEmpty || emailBlockSufficient else {
+            throw MeetingBriefError.insufficientContext
+        }
+
+        let context = assembleContext(
+            meeting: meeting,
+            priorBlock: priorBlock,
+            kbBlock: kbBlock,
+            emailBlock: emailBlock
+        )
+
+        // Plan M6 (amendment DA1/DA2): the brief prompt is now a user-editable `.brief` template.
+        // Resolve the first `.brief` template (sort-ordered) as the system prompt — identical to how
+        // summary/extended templates work (`template.prompt` = instruction layer, the assembled
+        // context stays the `text` argument). Falls back to the built-in `meetings.brief.systemPrompt`
+        // so a user who deleted every brief template never breaks briefs. The template's
+        // provider/model/temperature overrides are honored (mirroring `MeetingLLMService.run`), and
+        // its id is recorded on the output.
+        let template = promptActionService?.meetingTemplates(ofKind: .brief).first
+        let basePrompt = template?.prompt ?? String(localized: "meetings.brief.systemPrompt")
+        // Plan D4: the brief is a final output — the meeting's language directive is appended on top
+        // of the resolved template (or the fallback default).
+        let systemPrompt = MeetingLanguageDirective.appending(
+            for: meeting.languageCode,
+            to: basePrompt
+        )
+        // Plan D9/M4 + D10/M5: `one-shot > template > purpose(briefs) > app default`, resolved per call.
+        let content = try await processor.process(
+            prompt: systemPrompt,
+            text: context,
+            providerOverride: modelRouter.overrideProvider(
+                for: .briefs, templateProvider: template?.providerType, oneShotProvider: providerOverride
+            ),
+            cloudModelOverride: modelRouter.overrideModel(
+                for: .briefs, templateModel: template?.cloudModel,
+                oneShotModel: modelOverride, oneShotProvider: providerOverride
+            ),
+            temperatureDirective: template?.temperatureDirective ?? .inheritProviderSetting,
+            skipMemoryInjection: true
+        )
+
+        return meetingService.addOutput(
+            to: meeting,
+            kind: .brief,
+            content: content,
+            templateID: template?.id,
+            providerUsed: resolvedProvider(for: template, oneShotProvider: providerOverride),
+            modelUsed: resolvedModel(for: template, oneShotModel: modelOverride, oneShotProvider: providerOverride)
+        )
+    }
+
+    // MARK: - Context blocks
+
+    /// Prior related meetings rendered as labeled excerpts (their latest summary/extended/brief
+    /// output when present, else a bounded transcript excerpt). Empty when there are none.
+    private func priorMeetingsBlock(for meeting: Meeting) -> String {
+        let prior = meetingService.priorMeetings(matching: meeting)
+        guard !prior.isEmpty else { return "" }
+
+        // Deterministic ordering: most recent first, capped so a long history can't crowd out the
+        // knowledge-base section (M5 review finding 2).
+        let ordered = prior.sorted { lhs, rhs in
+            (lhs.startDate ?? lhs.createdAt) > (rhs.startDate ?? rhs.createdAt)
+        }.prefix(maxPriorMeetings)
+
+        var entries: [String] = []
+        for prev in ordered {
+            guard let excerpt = summaryExcerpt(for: prev) else { continue }
+            let dateLabel = (prev.startDate ?? prev.createdAt).formatted(date: .abbreviated, time: .omitted)
+            entries.append("### \(prev.title) (\(dateLabel))\n\(excerpt)")
+        }
+        return entries.joined(separator: "\n\n")
+    }
+
+    /// The best available textual summary of a prior meeting for brief context: newest summary,
+    /// else newest extended, else newest brief, else a bounded transcript excerpt.
+    private func summaryExcerpt(for meeting: Meeting) -> String? {
+        for kind in [MeetingOutputKind.summary, .extended, .brief] {
+            if let output = meetingService.latestOutput(ofKind: kind, for: meeting) {
+                let trimmed = output.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return TranscriptContextBuilder.truncateWords(trimmed, to: charBudget / 4)
+                }
+            }
+        }
+        let transcript = TranscriptContextBuilder.renderTranscript(
+            meeting.segments
+                .sorted { $0.order < $1.order }
+                .map { TranscriptContextBuilder.Segment(start: $0.start, text: $0.text) }
+        )
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return TranscriptContextBuilder.truncateWords(trimmed, to: charBudget / 4)
+    }
+
+    /// Relevant vault passages rendered as labeled excerpts. Empty when no vault is connected or
+    /// nothing matches.
+    private func knowledgeBaseBlock(for meeting: Meeting) -> String {
+        guard vaultService.isConnected else { return "" }
+        // Amendment 1 (DA5) + Amendment 2 (DB5): the meeting's curated related notes ∪ its folder
+        // config scope vault retrieval. `.none` (the folder's "No vault context" toggle, absolute) ⇒
+        // an empty KB block (brief falls back to prior meetings only); no curated set / no folder
+        // attachments ⇒ `.wholeVault` (today's behavior).
+        let scope = retrievalScope(for: meeting)
+        if case .none = scope { return "" }
+        let query = retrievalQuery(for: meeting)
+        guard !query.isEmpty else { return "" }
+        let passages = vaultService.retrieve(query: query, limit: 3, scope: scope)
+        guard !passages.isEmpty else { return "" }
+        return passages
+            .map { passage in
+                let tagSuffix = passage.tags.isEmpty ? "" : " [\(passage.tags.joined(separator: ", "))]"
+                return "### \(passage.title)\(tagSuffix)\n\(passage.content)"
+            }
+            .joined(separator: "\n\n")
+    }
+
+    /// The DB5 consumption scope for a meeting: curated related notes (discovered ∪ manual, minus
+    /// exclusions) unioned with the folder's live attachment scope, `noVaultContext` absolute
+    /// (Amendment 2, DB5). A nil folder store keeps whole-vault behavior (predating call sites/tests).
+    private func retrievalScope(for meeting: Meeting) -> VaultRetrievalScope {
+        guard let folderMetadataStore else { return .wholeVault }
+        return folderMetadataStore.retrievalScope(
+            forFolderPath: meeting.folderPath,
+            curatedNotePaths: meeting.relatedNotePaths.map(\.path),
+            excludedNotePaths: meeting.excludedNotePaths
+        )
+    }
+
+    /// The lexical query used to find relevant vault notes: the meeting title plus attendee names.
+    private func retrievalQuery(for meeting: Meeting) -> String {
+        var terms = [meeting.title]
+        terms.append(contentsOf: meeting.attendees.map(\.name))
+        return terms.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Related emails rendered as labeled excerpts ([Google Phase 3 · M3], D-M3 — the
+    /// `knowledgeBaseBlock` mirror). Empty when no Gmail-enabled account covers the meeting,
+    /// nothing matches, or the fetch fails: **a Gmail outage must never fail a brief** that prior
+    /// meetings or the vault could still ground — the error is logged, and `.needsReauth` already
+    /// drives the settings badge. The service resolves accounts/window/self-exclusion internally
+    /// (D-M1 meeting-centric seam); the query is the same title + attendee-names text the vault
+    /// retrieval uses.
+    private func relatedEmailsBlock(for meeting: Meeting) async -> String {
+        guard let gmailService, gmailService.isConnected(for: meeting) else { return "" }
+        let query = retrievalQuery(for: meeting)
+        guard !query.isEmpty else { return "" }
+        do {
+            let passages = try await gmailService.retrieve(for: meeting, query: query, limit: 3)
+            guard !passages.isEmpty else { return "" }
+            return passages
+                .map { passage in
+                    let dateLabel = passage.date.formatted(date: .abbreviated, time: .omitted)
+                    return "### \(passage.subject) — \(passage.from), \(dateLabel)\n\(passage.content)"
+                }
+                .joined(separator: "\n\n")
+        } catch {
+            logger.warning("Related-emails block degraded to empty: \(error.localizedDescription)")
+            return ""
+        }
+    }
+
+    // MARK: - Assembly
+
+    /// Compose and bound the final brief context: meeting metadata, prior-meeting summaries,
+    /// knowledge-base passages, and related emails (plan D7 + [Google Phase 3 · M3], D-M3).
+    /// Section headers are localized so the scaffolding matches the rest of the UI.
+    ///
+    /// Rather than truncate the whole joined string at the end — which let several substantial prior
+    /// meetings silently truncate the trailing blocks away entirely (M5 review finding 2) — the KB
+    /// and email blocks each get a reserved slice (at most ~a quarter of the budget; the email
+    /// reserve is additionally capped at what that block actually needs) and the prior-meeting block
+    /// absorbs the remainder. **D-M3 budget fix (normative)**: the KB block, now a *middle*
+    /// section, must subtract the trailing email reserve — exactly as the prior block subtracts
+    /// `kbReserve` — otherwise a large KB block eats the email section's slice. Each block carries a
+    /// localized truncation notice when it is cut; final whole-string bound unchanged.
+    private func assembleContext(
+        meeting: Meeting,
+        priorBlock: String,
+        kbBlock: String,
+        emailBlock: String
+    ) -> String {
+        let notice = String(localized: "meetings.output.truncationNotice")
+        var sections: [String] = []
+
+        var meta = ["\(String(localized: "meetings.brief.context.meetingLabel")) \(meeting.title)"]
+        if let start = meeting.startDate {
+            meta.append("\(String(localized: "meetings.brief.context.dateLabel")) \(start.formatted(date: .abbreviated, time: .shortened))")
+        }
+        let attendeeNames = meeting.attendees.map(\.name).filter { !$0.isEmpty }
+        if !attendeeNames.isEmpty {
+            meta.append("\(String(localized: "meetings.brief.context.attendeesLabel")) \(attendeeNames.joined(separator: ", "))")
+        }
+        let metaSection = meta.joined(separator: "\n")
+        sections.append(metaSection)
+
+        var runningLength = metaSection.count
+        let kbHeader = String(localized: "meetings.brief.context.knowledgeHeader")
+        let emailsHeader = String(localized: "meetings.brief.context.emailsHeader")
+        let kbReserve = kbBlock.isEmpty ? 0 : charBudget / 4
+        // Reserve only what the email section can actually use (review finding): a fixed
+        // `charBudget / 4` truncated the KB block to hold space a 120-char email never occupied,
+        // dropping vault facts from a brief that fit under budget. The cap keeps the D-M3 guarantee
+        // (the email slice survives oversized upstream blocks) while a small block reserves small.
+        let emailReserve = emailBlock.isEmpty
+            ? 0
+            : min(emailBlock.count + emailsHeader.count + 4, charBudget / 4)
+
+        if !priorBlock.isEmpty {
+            let priorHeader = String(localized: "meetings.brief.context.priorHeader")
+            let priorBudget = max(0, charBudget - runningLength - kbReserve - emailReserve - priorHeader.count - 4)
+            let bounded = bound(priorBlock, to: priorBudget, notice: notice)
+            let section = "\(priorHeader)\n\(bounded)"
+            sections.append(section)
+            runningLength += section.count + 2
+        }
+        if !kbBlock.isEmpty {
+            // Remaining budget minus the trailing email reserve (the D-M3 fix — "all remaining"
+            // here would starve the email section below its slice).
+            let kbBudget = max(0, charBudget - runningLength - emailReserve - kbHeader.count - 4)
+            let bounded = bound(kbBlock, to: kbBudget, notice: notice)
+            let section = "\(kbHeader)\n\(bounded)"
+            sections.append(section)
+            runningLength += section.count + 2
+        }
+        if !emailBlock.isEmpty {
+            // The trailing block gets the remainder (≥ its reserve by construction).
+            let emailBudget = max(0, charBudget - runningLength - emailsHeader.count - 4)
+            let bounded = bound(emailBlock, to: emailBudget, notice: notice)
+            sections.append("\(emailsHeader)\n\(bounded)")
+        }
+
+        let assembled = sections.joined(separator: "\n\n")
+        return TranscriptContextBuilder.truncateWords(assembled, to: charBudget)
+    }
+
+    /// Truncate `text` at a word boundary to `budget`, appending `notice` when content is cut.
+    private func bound(_ text: String, to budget: Int, notice: String) -> String {
+        guard budget > 0, text.count > budget else { return text }
+        let truncated = TranscriptContextBuilder.truncateWords(text, to: max(0, budget - notice.count - 1))
+        return "\(truncated) \(notice)"
+    }
+
+    // MARK: - Provenance
+
+    /// Provider recorded on the brief: the effective value under `one-shot > template > purpose(briefs) >
+    /// app default` (plan D9/M4 + D10/M5 — provenance follows the same rungs the call does).
+    private func resolvedProvider(for template: PromptAction?, oneShotProvider: String? = nil) -> String? {
+        modelRouter.effectiveProvider(
+            for: .briefs, templateProvider: template?.providerType, oneShotProvider: oneShotProvider
+        )
+    }
+
+    /// Model recorded on the brief: the effective value under the same ladder.
+    private func resolvedModel(
+        for template: PromptAction?, oneShotModel: String? = nil, oneShotProvider: String? = nil
+    ) -> String? {
+        modelRouter.effectiveModel(
+            for: .briefs, templateModel: template?.cloudModel,
+            oneShotModel: oneShotModel, oneShotProvider: oneShotProvider
+        )
+    }
+}
+
+enum MeetingBriefError: LocalizedError, Equatable {
+    /// Neither a prior related meeting nor a connected vault produced any usable context.
+    case insufficientContext
+    /// A brief generation is already in progress on this service.
+    case alreadyGenerating
+
+    var errorDescription: String? {
+        switch self {
+        case .insufficientContext:
+            return String(localized: "meetings.brief.error.insufficientContext")
+        case .alreadyGenerating:
+            return String(localized: "meetings.brief.error.alreadyGenerating")
+        }
+    }
+}

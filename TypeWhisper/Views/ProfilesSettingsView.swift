@@ -48,8 +48,9 @@ struct ProfilesSettingsView: View {
                 Text(localizedAppText("Rules", de: "Regeln"))
                     .font(.headline)
                 Text(localizedAppText(
-                    "When context X is detected, TypeWhisper uses behavior Y.",
-                    de: "Wenn Kontext X erkannt wird, nutzt TypeWhisper Verhalten Y."
+                    "When context X is detected, MeetingWhisper uses behavior Y.",
+                    de: "Wenn Kontext X erkannt wird, nutzt MeetingWhisper Verhalten Y.",
+                    ja: "コンテキストXが検出されると、MeetingWhisperは動作Yを使用します。"
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -75,8 +76,9 @@ struct ProfilesSettingsView: View {
         } description: {
             VStack(alignment: .leading, spacing: 8) {
                 Text(localizedAppText(
-                    "Rules tell TypeWhisper which language, engine, or output format should apply in which context.",
-                    de: "Regeln erklären TypeWhisper, wann welche Sprache, Engine oder Ausgabeform gelten soll."
+                    "Rules tell MeetingWhisper which language, engine, or output format should apply in which context.",
+                    de: "Regeln erklären MeetingWhisper, wann welche Sprache, Engine oder Ausgabeform gelten soll.",
+                    ja: "ルールによって、MeetingWhisperがどのコンテキストでどの言語、エンジン、または出力形式を適用するかを指定します。"
                 ))
                 Text(localizedAppText(
                     "Examples: Slack -> English with Auto Enter, github.com -> code prompt, Mail -> German with translation.",
@@ -517,7 +519,7 @@ private struct RuleEditorSheet: View {
                 de: "App und Website sind optional. Lass beides leer, um eine globale Fallback-Regel zu erstellen."
             )
         case .behavior:
-            return localizedAppText("Define how TypeWhisper should respond in this context.", de: "Lege fest, wie TypeWhisper in diesem Kontext reagieren soll.")
+            return localizedAppText("Define how MeetingWhisper should respond in this context.", de: "Lege fest, wie MeetingWhisper in diesem Kontext reagieren soll.", ja: "このコンテキストでMeetingWhisperがどのように応答するかを定義します。")
         case .review:
             return localizedAppText("Review the name, matching, and advanced options before saving.", de: "Prüfe Name, Matching und fortgeschrittene Optionen vor dem Speichern.")
         }
@@ -910,7 +912,7 @@ private struct RuleBehaviorStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(localizedAppText("How should TypeWhisper respond?", de: "Wie soll TypeWhisper reagieren?"))
+                Text(localizedAppText("How should MeetingWhisper respond?", de: "Wie soll MeetingWhisper reagieren?", ja: "MeetingWhisperはどのように応答すべきですか？"))
                     .font(.title3.weight(.semibold))
                 Text(localizedAppText(
                     "Here you define language, prompt, engine, and output for this context. Priority and manual override come in the next step.",
@@ -929,7 +931,7 @@ private struct RuleBehaviorStep: View {
                 VStack(spacing: 0) {
                     settingRow(
                         title: localizedAppText("Spoken Language", de: "Gesprochene Sprache"),
-                        description: localizedAppText("Which language TypeWhisper should expect in this context.", de: "Welche Sprache TypeWhisper in diesem Kontext erwarten soll.")
+                        description: localizedAppText("Which language MeetingWhisper should expect in this context.", de: "Welche Sprache MeetingWhisper in diesem Kontext erwarten soll.", ja: "このコンテキストでMeetingWhisperが想定する言語。")
                     ) {
                         LanguageSelectionEditor(
                             selection: Binding(
@@ -954,7 +956,7 @@ private struct RuleBehaviorStep: View {
 
                         settingRow(
                             title: localizedAppText("Translation", de: "Übersetzung"),
-                            description: localizedAppText("Whether TypeWhisper should translate the text automatically before inserting it.", de: "Ob TypeWhisper den Text vor dem Einfügen automatisch übersetzen soll.")
+                            description: localizedAppText("Whether MeetingWhisper should translate the text automatically before inserting it.", de: "Ob MeetingWhisper den Text vor dem Einfügen automatisch übersetzen soll.", ja: "テキストを挿入する前にMeetingWhisperが自動的に翻訳するかどうか。")
                         ) {
                             Picker(localizedAppText("Translation", de: "Übersetzung"), selection: $viewModel.editorTranslationEnabled) {
                                 Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as Bool?)
@@ -1025,7 +1027,7 @@ private struct RuleBehaviorStep: View {
                 VStack(spacing: 0) {
                     settingRow(
                         title: localizedAppText("Transcription Engine", de: "Transkriptions-Engine"),
-                        description: localizedAppText("Which engine TypeWhisper should prefer here.", de: "Welche Engine TypeWhisper hier bevorzugt verwenden soll.")
+                        description: localizedAppText("Which engine MeetingWhisper should prefer here.", de: "Welche Engine MeetingWhisper hier bevorzugt verwenden soll.", ja: "ここでMeetingWhisperが優先するエンジン。")
                     ) {
                         Picker(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"), selection: $viewModel.editorEngineOverride) {
                             Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as String?)

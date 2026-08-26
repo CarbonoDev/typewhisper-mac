@@ -76,6 +76,11 @@ struct DiagnosticWorkflowInfo: Encodable, Equatable {
     let usesAppleTranslate: Bool
 }
 
+struct DiagnosticCorrectionLearningInfo: Encodable, Equatable, Sendable {
+    let enabled: Bool
+    let lastAttempt: TargetAppCorrectionLearningAttemptSnapshot?
+}
+
 enum PluginDiagnosticsSupport {
     static func appBundlePathKind(
         for bundleURL: URL,
@@ -422,6 +427,7 @@ private struct DiagnosticsReport: Encodable {
     let plugins: [PluginInfo]
     let skippedExternalBundles: [SkippedExternalBundleInfo]
     let workflows: DiagnosticWorkflowSnapshot
+    let correctionLearning: DiagnosticCorrectionLearningInfo
     let settings: SettingsSnapshot
     let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
@@ -555,7 +561,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 8,
+            schemaVersion: 9,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -617,7 +623,14 @@ final class ErrorLogService: ObservableObject {
             ),
             plugins: pluginDiagnostics,
             skippedExternalBundles: skippedExternalBundleDiagnostics,
-            workflows: Self.workflowDiagnosticsSnapshot(from: container.workflowService),
+            workflows: Self.workflowDiagnosticsSnapshot(
+                from: container.workflowService,
+                promptProcessingService: container.promptProcessingService
+            ),
+            correctionLearning: DiagnosticCorrectionLearningInfo(
+                enabled: defaults.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled),
+                lastAttempt: container.targetAppCorrectionLearningService.latestAttempt
+            ),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
                 selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,
@@ -666,18 +679,24 @@ final class ErrorLogService: ObservableObject {
         )
     }
 
-    static func workflowDiagnosticsSnapshot(from workflowService: WorkflowService) -> DiagnosticWorkflowSnapshot {
+    static func workflowDiagnosticsSnapshot(
+        from workflowService: WorkflowService,
+        promptProcessingService: PromptProcessingService
+    ) -> DiagnosticWorkflowSnapshot {
         let workflows = workflowService.workflows
         let enabledWorkflows = workflows.filter(\.isEnabled)
+        let primaryFallbackItem = promptProcessingService.primaryFallbackItem
         return DiagnosticWorkflowSnapshot(
             totalCount: workflows.count,
             enabledCount: enabledWorkflows.count,
-            defaultLLMProviderId: trimmedOrNil(workflowService.defaultProviderId),
-            defaultLLMCloudModel: trimmedOrNil(workflowService.defaultCloudModel),
+            defaultLLMProviderId: trimmedOrNil(primaryFallbackItem?.providerId),
+            defaultLLMCloudModel: trimmedOrNil(primaryFallbackItem?.modelId),
             enabledWorkflows: enabledWorkflows.map { workflow in
                 let behavior = workflow.behavior
                 let output = workflow.output
                 let trigger = workflow.trigger
+                let explicitProviderId = trimmedOrNil(behavior.providerId)
+                let inheritedFallbackItem = explicitProviderId == nil ? primaryFallbackItem : nil
 
                 return DiagnosticWorkflowInfo(
                     name: workflow.name,
@@ -690,8 +709,10 @@ final class ErrorLogService: ObservableObject {
                     outputFormat: trimmedOrNil(output.format),
                     outputAutoEnter: output.autoEnter,
                     targetActionPluginId: trimmedOrNil(output.targetActionPluginId),
-                    llmProviderId: workflowService.llmProviderId(for: workflow),
-                    llmCloudModel: workflowService.llmCloudModel(for: workflow),
+                    llmProviderId: explicitProviderId ?? trimmedOrNil(inheritedFallbackItem?.providerId),
+                    llmCloudModel: explicitProviderId == nil
+                        ? trimmedOrNil(inheritedFallbackItem?.modelId)
+                        : trimmedOrNil(behavior.cloudModel),
                     transcriptionEngineId: trimmedOrNil(behavior.transcriptionEngineId),
                     transcriptionModelId: trimmedOrNil(behavior.transcriptionModelId),
                     hasCustomInstruction: hasCustomWorkflowInstruction(behavior.settings),

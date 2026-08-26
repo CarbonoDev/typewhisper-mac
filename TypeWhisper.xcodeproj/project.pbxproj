@@ -14,6 +14,7 @@
 		1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */; };
 		4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */; };
 		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
+		C4290000000000000MIR001 /* MeetingTranscriptMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
@@ -55,7 +56,10 @@
 		D20000000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000002 /* onnxruntime */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
+		5B10000000000000000A0005 /* MeetingOutputParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0005 /* MeetingOutputParserTests.swift */; };
+		5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
+		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
@@ -119,6 +123,7 @@
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
 		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
+		AADA7A0000000000000002 /* DataMigrationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBDA7A0000000000000002 /* DataMigrationServiceTests.swift */; };
 		A40500000000000000000101 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */; };
 		7B8C9D0E1F22334455667790 /* FloatingPanelSpacePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */; };
@@ -146,12 +151,276 @@
 		AA00000000000000000030 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000030 /* AudioRecordingService.swift */; };
 		AA00000000000000000031 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000031 /* HotkeyService.swift */; };
 		AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000362 /* SecureInputDiagnostics.swift */; };
+		CC88800000000000000001 /* ClamshellStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC88800000000000000002 /* ClamshellStateProvider.swift */; };
 		AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000361 /* ClipboardContentFormatter.swift */; };
 		AA00000000000000000370 /* DiarizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000370 /* DiarizationProvider.swift */; };
 		AA00000000000000000371 /* PyannoteDiarizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000371 /* PyannoteDiarizationProvider.swift */; };
 		AA00000000000000000372 /* LocalDiarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000372 /* LocalDiarizationService.swift */; };
 		AA00000000000000000373 /* DiarizationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000373 /* DiarizationSettingsView.swift */; };
 		AA00000000000000000374 /* diarize_sidecar.py in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000374 /* diarize_sidecar.py */; };
+		AA00000000000000000375 /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000375 /* Meeting.swift */; };
+		AA00000000000000000376 /* MeetingSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000376 /* MeetingSegment.swift */; };
+		AA00000000000000000377 /* MeetingNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000377 /* MeetingNote.swift */; };
+		AA00000000000000000378 /* MeetingOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000378 /* MeetingOutput.swift */; };
+		AA00000000000000000701 /* PersistentModel+Deleted.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000701 /* PersistentModel+Deleted.swift */; };
+		AA00000000000000000379 /* MeetingQATurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000379 /* MeetingQATurn.swift */; };
+		AA00000000000000000380 /* MeetingTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000380 /* MeetingTemplate.swift */; };
+		AA00000000000000000381 /* MeetingEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000381 /* MeetingEnums.swift */; };
+		AA00000000000000000382 /* Attendee.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000382 /* Attendee.swift */; };
+		AA00000000000000000383 /* MeetingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000383 /* MeetingService.swift */; };
+		AA00000000000000000384 /* MeetingSegmentMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000384 /* MeetingSegmentMapper.swift */; };
+		AA00000000000000000385 /* MeetingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000385 /* MeetingsViewModel.swift */; };
+		AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000386 /* MeetingsSettingsView.swift */; };
+		AA00000000000000000387 /* CalendarEventProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000387 /* CalendarEventProviding.swift */; };
+		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
+		GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000001 /* GoogleOAuthFlow.swift */; };
+		GGB0000000000000000002 /* GoogleLoopbackServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000002 /* GoogleLoopbackServer.swift */; };
+		GGB0000000000000000003 /* GoogleHTTPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000003 /* GoogleHTTPTransport.swift */; };
+		GGB0000000000000000004 /* GoogleSecretStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000004 /* GoogleSecretStore.swift */; };
+		GGB0000000000000000005 /* GoogleAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000005 /* GoogleAccountStore.swift */; };
+		GGB0000000000000000006 /* GoogleAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000006 /* GoogleAuthService.swift */; };
+		GGB0000000000000000007 /* GoogleAccountsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000007 /* GoogleAccountsSection.swift */; };
+		GGB0000000000000000011 /* GoogleOAuthFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */; };
+		GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000012 /* GoogleAccountStoreTests.swift */; };
+		GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */; };
+		GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */; };
+		GGB0000000000000000015 /* ChromeProfileDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000015 /* ChromeProfileDetector.swift */; };
+		GGB0000000000000000016 /* MeetingJoinLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000016 /* MeetingJoinLauncher.swift */; };
+		GGB0000000000000000017 /* ChromeProfileDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000017 /* ChromeProfileDetectorTests.swift */; };
+		GGB0000000000000000018 /* MeetingJoinLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000018 /* MeetingJoinLauncherTests.swift */; };
+		GGB0000000000000000021 /* GoogleCalendarAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000021 /* GoogleCalendarAPI.swift */; };
+		GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000022 /* GoogleCalendarMapper.swift */; };
+		GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */; };
+		GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000024 /* GoogleCalendarProvider.swift */; };
+		GGB0000000000000000035 /* CalendarEventTwinCollapser.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000035 /* CalendarEventTwinCollapser.swift */; };
+		GGB0000000000000000036 /* CalendarEventTwinCollapserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000036 /* CalendarEventTwinCollapserTests.swift */; };
+		GGB0000000000000000025 /* TwinCalendarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000025 /* TwinCalendarDetector.swift */; };
+		GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000026 /* CalendarServiceFanInTests.swift */; };
+		GGB0000000000000000027 /* TwinCalendarDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */; };
+		GGB0000000000000000028 /* CalendarSelectionGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000028 /* CalendarSelectionGroupingTests.swift */; };
+		GGB0000000000000000029 /* CalendarSourceAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000029 /* CalendarSourceAvailabilityTests.swift */; };
+		GGB0000000000000000031 /* GoogleCalendarMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */; };
+		GGB0000000000000000032 /* AttendeeCodableCompatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */; };
+		GGB0000000000000000033 /* GoogleCalendarSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */; };
+		GGB0000000000000000034 /* GoogleCalendarProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */; };
+		GGB0000000000000000040 /* GoogleDriveAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000040 /* GoogleDriveAPI.swift */; };
+		GGB0000000000000000041 /* GoogleDriveImportLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000041 /* GoogleDriveImportLedger.swift */; };
+		GGB0000000000000000042 /* DriveTranscriptMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000042 /* DriveTranscriptMatcher.swift */; };
+		GGB0000000000000000043 /* GoogleDriveAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000043 /* GoogleDriveAPITests.swift */; };
+		GGB0000000000000000044 /* GoogleDriveImportLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */; };
+		GGB0000000000000000045 /* DriveTranscriptMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */; };
+		GGB0000000000000000046 /* GoogleDriveTranscriptImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */; };
+		GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */; };
+		GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */; };
+		GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */; };
+		GGB0000000000000000050 /* GoogleFeatureScopes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000050 /* GoogleFeatureScopes.swift */; };
+		GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000051 /* GoogleReauthNudge.swift */; };
+		GGB0000000000000000052 /* GoogleFeatureScopesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */; };
+		GGB0000000000000000053 /* GoogleReauthNudgeRuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */; };
+		GGB0000000000000000054 /* GoogleDriveBackfillPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000054 /* GoogleDriveBackfillPlanner.swift */; };
+		GGB0000000000000000055 /* GoogleDriveBackfillSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000055 /* GoogleDriveBackfillSheet.swift */; };
+		GGB0000000000000000056 /* GoogleDriveBackfillPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000056 /* GoogleDriveBackfillPlannerTests.swift */; };
+		GGB0000000000000000100 /* GmailAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000100 /* GmailAPI.swift */; };
+		GGB0000000000000000101 /* GmailQueryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000101 /* GmailQueryBuilder.swift */; };
+		GGB0000000000000000102 /* GmailBodyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000102 /* GmailBodyText.swift */; };
+		GGB0000000000000000103 /* GmailContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000103 /* GmailContextService.swift */; };
+		GGB0000000000000000104 /* GmailQueryBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000104 /* GmailQueryBuilderTests.swift */; };
+		GGB0000000000000000105 /* GmailBodyTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000105 /* GmailBodyTextTests.swift */; };
+		GGB0000000000000000106 /* GmailContextServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000106 /* GmailContextServiceTests.swift */; };
+		GGB0000000000000000107 /* GmailAccountEligibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000107 /* GmailAccountEligibilityTests.swift */; };
+		GGB0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */; };
+		GGB0000000000000000109 /* GmailWebURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000109 /* GmailWebURLTests.swift */; };
+		GGB0000000000000000110 /* GmailToggleStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000110 /* GmailToggleStateTests.swift */; };
+		GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */; };
+		GGB0000000000000000112 /* MeetingQAComposerEmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */; };
+		GGB0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */; };
+		GGB0000000000000000114 /* MeetingRelatedEmailsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */; };
+		GGB0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */; };
+		GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000116 /* EmailRowPresentationTests.swift */; };
+		GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */; };
+		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
+		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
+		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
+		CA11000000000000000001 /* CalendarColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000001 /* CalendarColor.swift */; };
+		CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000002 /* CalendarSelectionStore.swift */; };
+		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
+		CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000004 /* CalendarSelectionTests.swift */; };
+		MWB0000000000000000001 /* AppWindowID.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000001 /* AppWindowID.swift */; };
+		MWB0000000000000000002 /* MainWindowRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000002 /* MainWindowRoute.swift */; };
+		MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000003 /* MainWindowCoordinator.swift */; };
+		MWB0000000000000000004 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000004 /* MainWindowView.swift */; };
+		MWB0000000000000000005 /* MainWindowSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000005 /* MainWindowSidebar.swift */; };
+		SPCB000000000000000001 /* SidebarSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPCF000000000000000001 /* SidebarSelection.swift */; };
+		MWB0000000000000000006 /* LiveRecordingBand.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000006 /* LiveRecordingBand.swift */; };
+		JQB0000000000000000001 /* MeetingJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000001 /* MeetingJob.swift */; };
+		JQB0000000000000000002 /* JobQueueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000002 /* JobQueueService.swift */; };
+		JQB0000000000000000003 /* MeetingJobClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000003 /* MeetingJobClock.swift */; };
+		JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000004 /* MeetingActivityIndicator.swift */; };
+		JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000005 /* JobQueueServiceTests.swift */; };
+		SPAB000000000000000001 /* SpeakerSourcePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000001 /* SpeakerSourcePlan.swift */; };
+		IOVB000000000000000001 /* ImportOverlapPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = IOVF000000000000000001 /* ImportOverlapPlan.swift */; };
+		SPAB000000000000000002 /* SpeakerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000002 /* SpeakerSection.swift */; };
+		SPAB000000000000000003 /* SpeakerSourcePlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */; };
+		SPAB000000000000000004 /* MeetingTwoPersonSpeakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */; };
+		SPBB000000000000000001 /* SpeakerTimingAligner.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000001 /* SpeakerTimingAligner.swift */; };
+		SPBB000000000000000002 /* SpeakerTimingAlignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */; };
+		SPBB000000000000000003 /* MeetingTimingRepassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPBF000000000000000003 /* MeetingTimingRepassTests.swift */; };
+		SPCB000000000000000002 /* SidebarSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPCF000000000000000002 /* SidebarSelectionTests.swift */; };
+		MGAB000000000000000001 /* MeetingMergePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = MGAF000000000000000001 /* MeetingMergePlan.swift */; };
+		MGAB000000000000000002 /* MeetingMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = MGAF000000000000000002 /* MeetingMergeService.swift */; };
+		MGAB000000000000000003 /* MeetingMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MGAF000000000000000003 /* MeetingMergeTests.swift */; };
+		SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */; };
+		JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000006 /* MeetingActivityPopover.swift */; };
+		JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000007 /* MeetingJobPresentationTests.swift */; };
+		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
+		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
+		TCB0000000000000000001 /* ComingUpCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000001 /* ComingUpCard.swift */; };
+		TCB0000000000000000002 /* MeetingTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000002 /* MeetingTimeline.swift */; };
+		TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000003 /* HomeLiveBanner.swift */; };
+		TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000004 /* HomeFeedViewModel.swift */; };
+		TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000005 /* MeetingsViewModel+Home.swift */; };
+		TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000006 /* CalendarColorProviding.swift */; };
+		TCB0000000000000000007 /* HomeFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000007 /* HomeFeedTests.swift */; };
+		MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000009 /* MeetingDocumentView.swift */; };
+		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
+		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
+		MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MLE0000000000000000002 /* MeetingLinkEventView.swift */; };
+		MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000012 /* MeetingDocumentBody.swift */; };
+		MWB0000000000000000013 /* MeetingBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000013 /* MeetingBottomBar.swift */; };
+		MWB0000000000000000014 /* MeetingTranscriptPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000014 /* MeetingTranscriptPanel.swift */; };
+		MWB0000000000000000015 /* MarkdownDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000015 /* MarkdownDocumentView.swift */; };
+		MWB0000000000000000016 /* MeetingsViewModel+Document.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000016 /* MeetingsViewModel+Document.swift */; };
+		MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000017 /* MeetingDocumentTests.swift */; };
+		SRGB000000000000000001 /* SettingsRegroupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SRGF000000000000000001 /* SettingsRegroupTests.swift */; };
+		AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000389 /* UpcomingMeetingsSection.swift */; };
+		AA00000000000000000390 /* MeetingCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000390 /* MeetingCaptureService.swift */; };
+		CCA000000000000000000001 /* MeetingContextRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000001 /* MeetingContextRule.swift */; };
+		CCA000000000000000000002 /* FinalRetranscriptionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */; };
+		CCA000000000000000000003 /* MeetingContextRuleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000003 /* MeetingContextRuleService.swift */; };
+		CCA000000000000000000004 /* MeetingsViewModel+Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */; };
+		CCA000000000000000000005 /* MeetingContextRulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000005 /* MeetingContextRulesView.swift */; };
+		CCA000000000000000000006 /* MeetingContextRuleEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */; };
+		CCA000000000000000000007 /* FinalRetranscriptionSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */; };
+		AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTBUS0000000000000001 /* MeetingEventBus.swift */; };
+		AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */; };
+		AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000391 /* MeetingStartNotificationService.swift */; };
+		CE10000000000000000001 /* MeetingEndReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE10000000000000000002 /* MeetingEndReminderService.swift */; };
+		CE10000000000000000003 /* MeetingTrayIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE10000000000000000004 /* MeetingTrayIndicator.swift */; };
+		AA00000000000000000394 /* MeetingNotesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000394 /* MeetingNotesPane.swift */; };
+		AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000396 /* TranscriptContextBuilder.swift */; };
+		AA00000000000000000397 /* MeetingLLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000397 /* MeetingLLMService.swift */; };
+		AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000398 /* MeetingTemplatePresets.swift */; };
+		AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000400 /* MeetingTemplateEditorView.swift */; };
+		AAB0000000000000000B01 /* PromptSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B01 /* PromptSurface.swift */; };
+		AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B02 /* MeetingTemplateMigration.swift */; };
+		AAB0000000000000000B03 /* PromptTemplateEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B03 /* PromptTemplateEditor.swift */; };
+		AAB0000000000000000B04 /* PromptLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B04 /* PromptLibraryView.swift */; };
+		AAB0000000000000000B05 /* PromptSurfaceScopingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */; };
+		AAB0000000000000000B06 /* MeetingTemplateMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */; };
+		AAB0000000000000000B07 /* PromptTemplateEditorModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */; };
+		AA00000000000000000401 /* LexicalRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000401 /* LexicalRetriever.swift */; };
+		AA00000000000000000402 /* ObsidianVaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000402 /* ObsidianVaultService.swift */; };
+		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
+		M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */; };
+		M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000002 /* MeetingFolderDetailView.swift */; };
+		TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000001 /* SpaceTreeModel.swift */; };
+		TEB0000000000000000002 /* SpaceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000002 /* SpaceSelection.swift */; };
+		TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000003 /* SpaceSidebarSection.swift */; };
+		TEB0000000000000000004 /* SpaceFolderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000004 /* SpaceFolderView.swift */; };
+		TEB0000000000000000005 /* SpaceNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000005 /* SpaceNoteView.swift */; };
+		TEB0000000000000000006 /* SpaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000006 /* SpaceViewModel.swift */; };
+		TEB0000000000000000007 /* SpaceReveal.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000007 /* SpaceReveal.swift */; };
+		TEB0000000000000000008 /* VaultNoteWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000008 /* VaultNoteWriter.swift */; };
+		TEB0000000000000000009 /* SpaceDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000009 /* SpaceDraft.swift */; };
+		M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000003 /* VaultContextPickerView.swift */; };
+		M7B0000000000000000010 /* MeetingRowContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000010 /* MeetingRowContextMenu.swift */; };
+		M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */; };
+		M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000005 /* MeetingFolderContextTests.swift */; };
+		M8B0000000000000000001 /* MeetingRelatedDocsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000001 /* MeetingRelatedDocsService.swift */; };
+		M8B0000000000000000002 /* MeetingRelatedDocsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */; };
+		M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */; };
+		M8B0000000000000000004 /* MeetingRelatedDocsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */; };
+		M8B0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */; };
+		DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000001 /* MeetingBriefScheduler.swift */; };
+		DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */; };
+		DDB0000000000000000003 /* AutoBriefSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000003 /* AutoBriefSettingsView.swift */; };
+		AA00000000000000000404 /* MeetingBriefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000404 /* MeetingBriefView.swift */; };
+		5B10000000000000000A0001 /* MeetingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0001 /* MeetingTheme.swift */; };
+		5B10000000000000000A0002 /* MeetingDocumentComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0002 /* MeetingDocumentComponents.swift */; };
+		5B10000000000000000A0003 /* MeetingOutputParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0003 /* MeetingOutputParser.swift */; };
+		5B10000000000000000A0004 /* MeetingChecklistStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0004 /* MeetingChecklistStore.swift */; };
+		5B10000000000000000A0006 /* ImportedMeetingTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0006 /* ImportedMeetingTitle.swift */; };
+		AA00000000000000000405 /* MeetingQAView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000405 /* MeetingQAView.swift */; };
+		AA00000000000000000406 /* MeetingObsidianExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000406 /* MeetingObsidianExporter.swift */; };
+		AA00000000000000000407 /* MeetingExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000407 /* MeetingExportView.swift */; };
+		AA00000000000000000408 /* TranscriptFileParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000408 /* TranscriptFileParser.swift */; };
+		AA00000000000000000409 /* MeetingImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000409 /* MeetingImportService.swift */; };
+		AA00000000000000000410 /* TranscriptMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000410 /* TranscriptMerger.swift */; };
+		AA00000000000000000412 /* MeetingDiarizationEnricher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000412 /* MeetingDiarizationEnricher.swift */; };
+		AA00000000000000000411 /* MeetingImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000411 /* MeetingImportView.swift */; };
+		AA00000000000000000413 /* SpeakerMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000413 /* SpeakerMappingView.swift */; };
+		AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000501 /* MeetingLanguageDirective.swift */; };
+		AA00000000000000000502 /* MeetingLanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000502 /* MeetingLanguageService.swift */; };
+		MRB0000000000000000001 /* MeetingModelRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRF0000000000000000001 /* MeetingModelRouter.swift */; };
+		MRB0000000000000000002 /* MeetingModelRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRF0000000000000000002 /* MeetingModelRouterTests.swift */; };
+		M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */; };
+		M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */; };
+		AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000601 /* MeetingOrganizationIndex.swift */; };
+		P2B0000000000000000001 /* Person.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000001 /* Person.swift */; };
+		P2B0000000000000000002 /* PersonIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000002 /* PersonIdentity.swift */; };
+		P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000003 /* ParticipantDirectoryService.swift */; };
+		P3B0000000000000000001 /* ParticipantsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000001 /* ParticipantsSection.swift */; };
+		CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000501 /* MeetingsViewModel+Language.swift */; };
+		CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */; };
+		MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000601 /* MeetingOrganizationTests.swift */; };
+		MEB0000000000000000701 /* MeetingListFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000701 /* MeetingListFilterTests.swift */; };
+		MEB0000000000000000702 /* MeetingListSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000702 /* MeetingListSelectionTests.swift */; };
+		MEB0000000000000000703 /* MeetingBulkMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000703 /* MeetingBulkMutationTests.swift */; };
+		MEB0000000000000000704 /* MeetingRowContextMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000704 /* MeetingRowContextMenuTests.swift */; };
+		MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000602 /* MeetingFolderTests.swift */; };
+		MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000501 /* MeetingLanguageTests.swift */; };
+		MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */; };
+		MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */; };
+		M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */; };
+		P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000101 /* PersonIdentityTests.swift */; };
+		P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */; };
+		P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */; };
+		P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */; };
+		P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */; };
+		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
+		TEB1000000000000000001 /* SpaceTreeModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000001 /* SpaceTreeModelTests.swift */; };
+		TEB1000000000000000002 /* SpaceSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000002 /* SpaceSelectionTests.swift */; };
+		TEB1000000000000000003 /* SpaceViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000003 /* SpaceViewModelTests.swift */; };
+		TEB1000000000000000004 /* SpaceRevealTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000004 /* SpaceRevealTests.swift */; };
+		TEB1000000000000000005 /* VaultNoteWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000005 /* VaultNoteWriterTests.swift */; };
+		TEB1000000000000000006 /* SpaceDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF1000000000000000006 /* SpaceDraftTests.swift */; };
+		MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000009 /* LexicalRetrieverTests.swift */; };
+		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
+		DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */; };
+		DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */; };
+		CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */; };
+		CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */; };
+		MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000011 /* MeetingQAComposerTests.swift */; };
+		MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */; };
+		MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000013 /* TranscriptFileParserTests.swift */; };
+		MEB0000000000000000014 /* TranscriptMergerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000014 /* TranscriptMergerTests.swift */; };
+		MEB0000000000000000015 /* MeetingImportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000015 /* MeetingImportServiceTests.swift */; };
+		MEB0000000000000000603 /* MeetingImportSheetModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000603 /* MeetingImportSheetModeTests.swift */; };
+		MEB0000000000000000016 /* MeetingDiarizationEnricherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000016 /* MeetingDiarizationEnricherTests.swift */; };
+		MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */; };
+		MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000006 /* MeetingLLMServiceTests.swift */; };
+		MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */; };
+		MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */; };
+		CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */; };
+		CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */; };
+		CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */; };
+		MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */; };
+		MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */; };
+		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
+		MEB0000000000000000002 /* MeetingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000002 /* MeetingModelTests.swift */; };
+		MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000003 /* CalendarServiceTests.swift */; };
+		MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010001 /* CalendarVisibilityTests.swift */; };
+		MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
 		AA00000000000000000040 /* HTTPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000040 /* HTTPResponse.swift */; };
@@ -309,7 +578,9 @@
 			AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000198 /* OverlayIndicatorPanel.swift */; };
 			AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000195 /* OverlayIndicatorView.swift */; };
 			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
+			AADA7A0000000000000001 /* DataMigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBDA7A0000000000000001 /* DataMigrationService.swift */; };
 			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
+			4E5353420000000000000001 /* NativeSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5353460000000000000001 /* NativeSearchField.swift */; };
 			AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
 			AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
 			AA00000000000000000209 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
@@ -346,6 +617,7 @@
 		AA00000000000000000224 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000214 /* Localizable.xcstrings */; };
 		AA00000000000000000225 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000026 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000226 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
+		AA0000000000000000MIR01 /* MeetingTranscriptMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */; };
 		AA00000000000000000227 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000217 /* manifest.json */; };
 		AA00000000000000000228 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000218 /* Localizable.xcstrings */; };
 		AA00000000000000000229 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000027 /* TypeWhisperPluginSDK */; };
@@ -422,11 +694,15 @@
 		AA00000000000000000281 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000269 /* Localizable.xcstrings */; };
 		AA00000000000000000282 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000039 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000283 /* DictionaryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000271 /* DictionaryExporter.swift */; };
+		E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D819323529246BCB5504526 /* SettingsBackupExporter.swift */; };
+		AABK0000000000000000M001 /* SettingsBackupExporter+Meetings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBK0000000000000000M001 /* SettingsBackupExporter+Meetings.swift */; };
+		FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
 		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
 		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
 		AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */; };
+		FFA878CD7D794D1A914AF13B /* SettingsBackupExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */; };
 		AA00000000000000000288 /* OpenRouterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000274 /* OpenRouterPlugin.swift */; };
 		AA00000000000000000289 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000275 /* manifest.json */; };
 		AA00000000000000000290 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000276 /* Localizable.xcstrings */; };
@@ -442,7 +718,7 @@
 		AA00000000000000000310 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
 		AA00000000000000000311 /* Gemma4SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000296 /* Gemma4SettingsView.swift */; };
 		AA00000000000000000312 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000297 /* manifest.json */; };
-		AA00000000000000000313 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
+		AA00000000000000000316 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
 		AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000305 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000045 /* MLXLLM */; };
 		AA00000000000000000313 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000047 /* MLXVLM */; };
@@ -462,7 +738,6 @@
 		AA00000000000000000300 /* LicenseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000286 /* LicenseService.swift */; };
 		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
 		AA00000000000000000302 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000288 /* WelcomeSheet.swift */; };
-		AA00000000000000000303 /* SupporterBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000289 /* SupporterBadgeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -565,6 +840,8 @@
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0005 /* MeetingOutputParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOutputParserTests.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitleTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
@@ -585,6 +862,7 @@
 		533C00000000000000000001 /* DictationRecoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000013 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000014 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		CE10000000000000000004 /* MeetingTrayIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTrayIndicator.swift; sourceTree = "<group>"; };
 		BB00000000000000000016 /* FileTranscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTranscriptionView.swift; sourceTree = "<group>"; };
 		533C00000000000000000003 /* DictationRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryView.swift; sourceTree = "<group>"; };
 		BB00000000000000000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -593,11 +871,14 @@
 		BB00000000000000000030 /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000031 /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
 		BB00000000000000000362 /* SecureInputDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputDiagnostics.swift; sourceTree = "<group>"; };
+		CC88800000000000000002 /* ClamshellStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClamshellStateProvider.swift; sourceTree = "<group>"; };
 		BB00000000000000000361 /* ClipboardContentFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentFormatter.swift; sourceTree = "<group>"; };
 		BB00000000000000000032 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000350 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		BB00000000000000000351 /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
+		C85600000000000000000002 /* CoreAudioHALCallbackContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreAudioHALCallbackContext.h; sourceTree = "<group>"; };
+		C85600000000000000000003 /* CoreAudioHALCallbackContext.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CoreAudioHALCallbackContext.c; sourceTree = "<group>"; };
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
@@ -611,6 +892,268 @@
 		BB00000000000000000372 /* LocalDiarizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDiarizationService.swift; sourceTree = "<group>"; };
 		BB00000000000000000373 /* DiarizationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiarizationSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000374 /* diarize_sidecar.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = diarize_sidecar.py; sourceTree = SOURCE_ROOT; };
+		BB00000000000000000375 /* Meeting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meeting.swift; sourceTree = "<group>"; };
+		BB00000000000000000376 /* MeetingSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSegment.swift; sourceTree = "<group>"; };
+		BB00000000000000000377 /* MeetingNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNote.swift; sourceTree = "<group>"; };
+		BB00000000000000000378 /* MeetingOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOutput.swift; sourceTree = "<group>"; };
+		BB00000000000000000701 /* PersistentModel+Deleted.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PersistentModel+Deleted.swift"; sourceTree = "<group>"; };
+		BB00000000000000000379 /* MeetingQATurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingQATurn.swift; sourceTree = "<group>"; };
+		BB00000000000000000380 /* MeetingTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplate.swift; sourceTree = "<group>"; };
+		BB00000000000000000381 /* MeetingEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEnums.swift; sourceTree = "<group>"; };
+		BB00000000000000000382 /* Attendee.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attendee.swift; sourceTree = "<group>"; };
+		BB00000000000000000383 /* MeetingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingService.swift; sourceTree = "<group>"; };
+		BB00000000000000000384 /* MeetingSegmentMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSegmentMapper.swift; sourceTree = "<group>"; };
+		BB00000000000000000385 /* MeetingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000386 /* MeetingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000387 /* CalendarEventProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventProviding.swift; sourceTree = "<group>"; };
+		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		GGF0000000000000000001 /* GoogleOAuthFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthFlow.swift; sourceTree = "<group>"; };
+		GGF0000000000000000002 /* GoogleLoopbackServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleLoopbackServer.swift; sourceTree = "<group>"; };
+		GGF0000000000000000003 /* GoogleHTTPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleHTTPTransport.swift; sourceTree = "<group>"; };
+		GGF0000000000000000004 /* GoogleSecretStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleSecretStore.swift; sourceTree = "<group>"; };
+		GGF0000000000000000005 /* GoogleAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAccountStore.swift; sourceTree = "<group>"; };
+		GGF0000000000000000006 /* GoogleAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthService.swift; sourceTree = "<group>"; };
+		GGF0000000000000000007 /* GoogleAccountsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAccountsSection.swift; sourceTree = "<group>"; };
+		GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleOAuthFlowTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000012 /* GoogleAccountStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountStoreTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAuthServiceTokenTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountRowStateTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000015 /* ChromeProfileDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeProfileDetector.swift; sourceTree = "<group>"; };
+		GGF0000000000000000016 /* MeetingJoinLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingJoinLauncher.swift; sourceTree = "<group>"; };
+		GGF0000000000000000017 /* ChromeProfileDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChromeProfileDetectorTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000018 /* MeetingJoinLauncherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingJoinLauncherTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000021 /* GoogleCalendarAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarAPI.swift; sourceTree = "<group>"; };
+		GGF0000000000000000022 /* GoogleCalendarMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarMapper.swift; sourceTree = "<group>"; };
+		GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncEngine.swift; sourceTree = "<group>"; };
+		GGF0000000000000000024 /* GoogleCalendarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarProvider.swift; sourceTree = "<group>"; };
+		GGF0000000000000000035 /* CalendarEventTwinCollapser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventTwinCollapser.swift; sourceTree = "<group>"; };
+		GGF0000000000000000036 /* CalendarEventTwinCollapserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventTwinCollapserTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000025 /* TwinCalendarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwinCalendarDetector.swift; sourceTree = "<group>"; };
+		GGF0000000000000000026 /* CalendarServiceFanInTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceFanInTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TwinCalendarDetectorTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000028 /* CalendarSelectionGroupingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSelectionGroupingTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000029 /* CalendarSourceAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSourceAvailabilityTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarMapperTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AttendeeCodableCompatTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncEngineTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCalendarProviderTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000040 /* GoogleDriveAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveAPI.swift; sourceTree = "<group>"; };
+		GGF0000000000000000041 /* GoogleDriveImportLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveImportLedger.swift; sourceTree = "<group>"; };
+		GGF0000000000000000042 /* DriveTranscriptMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTranscriptMatcher.swift; sourceTree = "<group>"; };
+		GGF0000000000000000043 /* GoogleDriveAPITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveAPITests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveImportLedgerTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DriveTranscriptMatcherTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveTranscriptImporter.swift; sourceTree = "<group>"; };
+		GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngine.swift; sourceTree = "<group>"; };
+		GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveSyncEngineTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveTranscriptImporterTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000050 /* GoogleFeatureScopes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleFeatureScopes.swift; sourceTree = "<group>"; };
+		GGF0000000000000000051 /* GoogleReauthNudge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleReauthNudge.swift; sourceTree = "<group>"; };
+		GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleFeatureScopesTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleReauthNudgeRuleTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000054 /* GoogleDriveBackfillPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveBackfillPlanner.swift; sourceTree = "<group>"; };
+		GGF0000000000000000055 /* GoogleDriveBackfillSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveBackfillSheet.swift; sourceTree = "<group>"; };
+		GGF0000000000000000056 /* GoogleDriveBackfillPlannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleDriveBackfillPlannerTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000100 /* GmailAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailAPI.swift; sourceTree = "<group>"; };
+		GGF0000000000000000101 /* GmailQueryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailQueryBuilder.swift; sourceTree = "<group>"; };
+		GGF0000000000000000102 /* GmailBodyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailBodyText.swift; sourceTree = "<group>"; };
+		GGF0000000000000000103 /* GmailContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailContextService.swift; sourceTree = "<group>"; };
+		GGF0000000000000000104 /* GmailQueryBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailQueryBuilderTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000105 /* GmailBodyTextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailBodyTextTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000106 /* GmailContextServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailContextServiceTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000107 /* GmailAccountEligibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailAccountEligibilityTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleAccountStoreGmailFlagTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000109 /* GmailWebURLTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailWebURLTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000110 /* GmailToggleStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GmailToggleStateTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceEmailBlockTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerEmailTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceEmailEscalationTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedEmailsSection.swift; sourceTree = "<group>"; };
+		GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+RelatedEmails.swift"; sourceTree = "<group>"; };
+		GGF0000000000000000116 /* EmailRowPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmailRowPresentationTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RelatedEmailsFetchStateTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
+		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
+		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
+		CA11F00000000000000001 /* CalendarColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColor.swift; sourceTree = "<group>"; };
+		CA11F00000000000000002 /* CalendarSelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionStore.swift; sourceTree = "<group>"; };
+		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
+		CA11F00000000000000004 /* CalendarSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSelectionTests.swift; sourceTree = "<group>"; };
+		MWF0000000000000000001 /* AppWindowID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWindowID.swift; sourceTree = "<group>"; };
+		MWF0000000000000000002 /* MainWindowRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowRoute.swift; sourceTree = "<group>"; };
+		MWF0000000000000000003 /* MainWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowCoordinator.swift; sourceTree = "<group>"; };
+		MWF0000000000000000004 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000005 /* MainWindowSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSidebar.swift; sourceTree = "<group>"; };
+		SPCF000000000000000001 /* SidebarSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarSelection.swift; sourceTree = "<group>"; };
+		MWF0000000000000000006 /* LiveRecordingBand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRecordingBand.swift; sourceTree = "<group>"; };
+		JQF0000000000000000001 /* MeetingJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingJob.swift; sourceTree = "<group>"; };
+		JQF0000000000000000002 /* JobQueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobQueueService.swift; sourceTree = "<group>"; };
+		JQF0000000000000000003 /* MeetingJobClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingJobClock.swift; sourceTree = "<group>"; };
+		JQF0000000000000000004 /* MeetingActivityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityIndicator.swift; sourceTree = "<group>"; };
+		JQF0000000000000000005 /* JobQueueServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JobQueueServiceTests.swift; sourceTree = "<group>"; };
+		SPAF000000000000000001 /* SpeakerSourcePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSourcePlan.swift; sourceTree = "<group>"; };
+		IOVF000000000000000001 /* ImportOverlapPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportOverlapPlan.swift; sourceTree = "<group>"; };
+		MGAF000000000000000001 /* MeetingMergePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingMergePlan.swift; sourceTree = "<group>"; };
+		MGAF000000000000000002 /* MeetingMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingMergeService.swift; sourceTree = "<group>"; };
+		MGAF000000000000000003 /* MeetingMergeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingMergeTests.swift; sourceTree = "<group>"; };
+		SPAF000000000000000002 /* SpeakerSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSection.swift; sourceTree = "<group>"; };
+		SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerSourcePlanTests.swift; sourceTree = "<group>"; };
+		SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTwoPersonSpeakerTests.swift; sourceTree = "<group>"; };
+		SPBF000000000000000001 /* SpeakerTimingAligner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTimingAligner.swift; sourceTree = "<group>"; };
+		SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerTimingAlignerTests.swift; sourceTree = "<group>"; };
+		SPBF000000000000000003 /* MeetingTimingRepassTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTimingRepassTests.swift; sourceTree = "<group>"; };
+		SPCF000000000000000002 /* SidebarSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SidebarSelectionTests.swift; sourceTree = "<group>"; };
+		SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsFailureBannerTests.swift; sourceTree = "<group>"; };
+		JQF0000000000000000006 /* MeetingActivityPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingActivityPopover.swift; sourceTree = "<group>"; };
+		JQF0000000000000000007 /* MeetingJobPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingJobPresentationTests.swift; sourceTree = "<group>"; };
+		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
+		TCF0000000000000000001 /* ComingUpCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComingUpCard.swift; sourceTree = "<group>"; };
+		TCF0000000000000000002 /* MeetingTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTimeline.swift; sourceTree = "<group>"; };
+		TCF0000000000000000003 /* HomeLiveBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLiveBanner.swift; sourceTree = "<group>"; };
+		TCF0000000000000000004 /* HomeFeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedViewModel.swift; sourceTree = "<group>"; };
+		TCF0000000000000000005 /* MeetingsViewModel+Home.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Home.swift"; sourceTree = "<group>"; };
+		TCF0000000000000000006 /* CalendarColorProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColorProviding.swift; sourceTree = "<group>"; };
+		TCF0000000000000000007 /* HomeFeedTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFeedTests.swift; sourceTree = "<group>"; };
+		MWF0000000000000000009 /* MeetingDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
+		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
+		MLE0000000000000000002 /* MeetingLinkEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkEventView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000012 /* MeetingDocumentBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentBody.swift; sourceTree = "<group>"; };
+		MWF0000000000000000013 /* MeetingBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBottomBar.swift; sourceTree = "<group>"; };
+		MWF0000000000000000014 /* MeetingTranscriptPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTranscriptPanel.swift; sourceTree = "<group>"; };
+		MWF0000000000000000015 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocumentView.swift; sourceTree = "<group>"; };
+		MWF0000000000000000016 /* MeetingsViewModel+Document.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Document.swift"; sourceTree = "<group>"; };
+		MWF0000000000000000017 /* MeetingDocumentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDocumentTests.swift; sourceTree = "<group>"; };
+		SRGF000000000000000001 /* SettingsRegroupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsRegroupTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000389 /* UpcomingMeetingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingMeetingsSection.swift; sourceTree = "<group>"; };
+		BB00000000000000000390 /* MeetingCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCaptureService.swift; sourceTree = "<group>"; };
+		CCB000000000000000000001 /* MeetingContextRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRule.swift; sourceTree = "<group>"; };
+		CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionPolicy.swift; sourceTree = "<group>"; };
+		CCB000000000000000000003 /* MeetingContextRuleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleService.swift; sourceTree = "<group>"; };
+		CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Rules.swift"; sourceTree = "<group>"; };
+		CCB000000000000000000005 /* MeetingContextRulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRulesView.swift; sourceTree = "<group>"; };
+		CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleEditorView.swift; sourceTree = "<group>"; };
+		CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionSettingsView.swift; sourceTree = "<group>"; };
+		BBEVTBUS0000000000000001 /* MeetingEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventBus.swift; sourceTree = "<group>"; };
+		BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventEmitter.swift; sourceTree = "<group>"; };
+		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
+		CE10000000000000000002 /* MeetingEndReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEndReminderService.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B01 /* PromptSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptSurface.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B02 /* MeetingTemplateMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigration.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B03 /* PromptTemplateEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptTemplateEditor.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B04 /* PromptLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLibraryView.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptSurfaceScopingTests.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigrationTests.swift; sourceTree = "<group>"; };
+		BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptTemplateEditorModelTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000394 /* MeetingNotesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingNotesPane.swift; sourceTree = "<group>"; };
+		BB00000000000000000396 /* TranscriptContextBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilder.swift; sourceTree = "<group>"; };
+		BB00000000000000000397 /* MeetingLLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLLMService.swift; sourceTree = "<group>"; };
+		BB00000000000000000398 /* MeetingTemplatePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresets.swift; sourceTree = "<group>"; };
+		BB00000000000000000400 /* MeetingTemplateEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateEditorView.swift; sourceTree = "<group>"; };
+		BB00000000000000000401 /* LexicalRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalRetriever.swift; sourceTree = "<group>"; };
+		BB00000000000000000402 /* ObsidianVaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianVaultService.swift; sourceTree = "<group>"; };
+		BB00000000000000000403 /* MeetingBriefService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefService.swift; sourceTree = "<group>"; };
+		M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderMetadataStore.swift; sourceTree = "<group>"; };
+		M7F0000000000000000002 /* MeetingFolderDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderDetailView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000001 /* SpaceTreeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceTreeModel.swift; sourceTree = "<group>"; };
+		TEF0000000000000000002 /* SpaceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSelection.swift; sourceTree = "<group>"; };
+		TEF0000000000000000003 /* SpaceSidebarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSidebarSection.swift; sourceTree = "<group>"; };
+		TEF0000000000000000004 /* SpaceFolderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceFolderView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000005 /* SpaceNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceNoteView.swift; sourceTree = "<group>"; };
+		TEF0000000000000000006 /* SpaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceViewModel.swift; sourceTree = "<group>"; };
+		TEF0000000000000000007 /* SpaceReveal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceReveal.swift; sourceTree = "<group>"; };
+		TEF0000000000000000008 /* VaultNoteWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultNoteWriter.swift; sourceTree = "<group>"; };
+		TEF0000000000000000009 /* SpaceDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDraft.swift; sourceTree = "<group>"; };
+		M7F0000000000000000003 /* VaultContextPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultContextPickerView.swift; sourceTree = "<group>"; };
+		M7F0000000000000000010 /* MeetingRowContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRowContextMenu.swift; sourceTree = "<group>"; };
+		M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+FolderContext.swift"; sourceTree = "<group>"; };
+		M7F0000000000000000005 /* MeetingFolderContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderContextTests.swift; sourceTree = "<group>"; };
+		M8F0000000000000000001 /* MeetingRelatedDocsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsService.swift; sourceTree = "<group>"; };
+		M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsSection.swift; sourceTree = "<group>"; };
+		M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+RelatedDocs.swift"; sourceTree = "<group>"; };
+		M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsServiceTests.swift; sourceTree = "<group>"; };
+		M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsPersistenceTests.swift; sourceTree = "<group>"; };
+		DDF0000000000000000001 /* MeetingBriefScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefScheduler.swift; sourceTree = "<group>"; };
+		DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+AutoBrief.swift"; sourceTree = "<group>"; };
+		DDF0000000000000000003 /* AutoBriefSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoBriefSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000404 /* MeetingBriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefView.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0001 /* MeetingTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTheme.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0002 /* MeetingDocumentComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentComponents.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0003 /* MeetingOutputParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOutputParser.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0004 /* MeetingChecklistStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingChecklistStore.swift; sourceTree = "<group>"; };
+		5B10000000000000000B0006 /* ImportedMeetingTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitle.swift; sourceTree = "<group>"; };
+		BB00000000000000000405 /* MeetingQAView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingQAView.swift; sourceTree = "<group>"; };
+		BB00000000000000000406 /* MeetingObsidianExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporter.swift; sourceTree = "<group>"; };
+		BB00000000000000000407 /* MeetingExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingExportView.swift; sourceTree = "<group>"; };
+		BB00000000000000000408 /* TranscriptFileParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFileParser.swift; sourceTree = "<group>"; };
+		BB00000000000000000409 /* MeetingImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingImportService.swift; sourceTree = "<group>"; };
+		BB00000000000000000410 /* TranscriptMerger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptMerger.swift; sourceTree = "<group>"; };
+		BB00000000000000000412 /* MeetingDiarizationEnricher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDiarizationEnricher.swift; sourceTree = "<group>"; };
+		BB00000000000000000411 /* MeetingImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingImportView.swift; sourceTree = "<group>"; };
+		BB00000000000000000413 /* SpeakerMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerMappingView.swift; sourceTree = "<group>"; };
+		BB00000000000000000501 /* MeetingLanguageDirective.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDirective.swift; sourceTree = "<group>"; };
+		BB00000000000000000502 /* MeetingLanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLanguageService.swift; sourceTree = "<group>"; };
+		MRF0000000000000000001 /* MeetingModelRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingModelRouter.swift; sourceTree = "<group>"; };
+		MRF0000000000000000002 /* MeetingModelRouterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelRouterTests.swift; sourceTree = "<group>"; };
+		M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOneShotOverrideTests.swift; sourceTree = "<group>"; };
+		M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerCloudRerunTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000601 /* MeetingOrganizationIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndex.swift; sourceTree = "<group>"; };
+		P2F0000000000000000001 /* Person.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Person.swift; sourceTree = "<group>"; };
+		P2F0000000000000000002 /* PersonIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonIdentity.swift; sourceTree = "<group>"; };
+		P2F0000000000000000003 /* ParticipantDirectoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryService.swift; sourceTree = "<group>"; };
+		P3F0000000000000000001 /* ParticipantsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantsSection.swift; sourceTree = "<group>"; };
+		CCB000000000000000000501 /* MeetingsViewModel+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Language.swift"; sourceTree = "<group>"; };
+		CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Organization.swift"; sourceTree = "<group>"; };
+		MEF0000000000000000601 /* MeetingOrganizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000701 /* MeetingListFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListFilterTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000702 /* MeetingListSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListSelectionTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000703 /* MeetingBulkMutationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBulkMutationTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000704 /* MeetingRowContextMenuTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowContextMenuTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000602 /* MeetingFolderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000501 /* MeetingLanguageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLanguageDetectionTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSpeakerLabelSuppressionTests.swift; sourceTree = "<group>"; };
+		M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderTrackModeTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000101 /* PersonIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonIdentityTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryServiceTests.swift; sourceTree = "<group>"; };
+		P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAttendeeIngestionTests.swift; sourceTree = "<group>"; };
+		P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantsSuggestionTests.swift; sourceTree = "<group>"; };
+		P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryMatchingTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000001 /* SpaceTreeModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceTreeModelTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000002 /* SpaceSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceSelectionTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000003 /* SpaceViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceViewModelTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000004 /* SpaceRevealTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceRevealTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000005 /* VaultNoteWriterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultNoteWriterTests.swift; sourceTree = "<group>"; };
+		TEF1000000000000000006 /* SpaceDraftTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpaceDraftTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000009 /* LexicalRetrieverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LexicalRetrieverTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
+		DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefSchedulerTests.swift; sourceTree = "<group>"; };
+		DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationServiceTests.swift; sourceTree = "<group>"; };
+		CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEndReminderServiceTests.swift; sourceTree = "<group>"; };
+		CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTrayIndicatorTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000011 /* MeetingQAComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporterTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000013 /* TranscriptFileParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFileParserTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000014 /* TranscriptMergerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptMergerTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000015 /* MeetingImportServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingImportServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000603 /* MeetingImportSheetModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingImportSheetModeTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000016 /* MeetingDiarizationEnricherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDiarizationEnricherTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptContextBuilderTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000006 /* MeetingLLMServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLLMServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTemplatePresetsTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureServiceTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingContextRuleServiceTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FinalRetranscriptionResolutionTests.swift; sourceTree = "<group>"; };
+		CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCaptureConfigTests.swift; sourceTree = "<group>"; };
+		MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventBusTests.swift; sourceTree = "<group>"; };
+		MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEventEmissionTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000002 /* MeetingModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000000003 /* CalendarServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000010001 /* CalendarVisibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarVisibilityTests.swift; sourceTree = "<group>"; };
+		MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAdHocMenuTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -765,7 +1308,9 @@
 		BB00000000000000000194 /* CodeSigning.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = CodeSigning.xcconfig; sourceTree = "<group>"; };
 			BB00000000000000000195 /* OverlayIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorView.swift; sourceTree = "<group>"; };
 			BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
+			BBDA7A0000000000000001 /* DataMigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataMigrationService.swift; sourceTree = "<group>"; };
 			BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
+			4E5353460000000000000001 /* NativeSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSearchField.swift; sourceTree = "<group>"; };
 			BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
 			BB00000000000000000309 /* MinimalIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorView.swift; sourceTree = "<group>"; };
 			BB00000000000000000310 /* MinimalIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorPanel.swift; sourceTree = "<group>"; };
@@ -807,6 +1352,7 @@
 		F48400000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		F48400000000000000000012 /* FileJobScriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FileJobScriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000216 /* LiveTranscriptPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptPlugin.swift; sourceTree = "<group>"; };
+		BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTranscriptMirror.swift; sourceTree = "<group>"; };
 		BB00000000000000000217 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000218 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000219 /* LiveTranscriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveTranscriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -885,7 +1431,7 @@
 		4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WhisperKitPluginLifecycleTests.swift; sourceTree = "<group>"; };
 		D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryServiceTests.swift; sourceTree = "<group>"; };
 		D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		DD00000000000000000098 /* typewhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "typewhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD00000000000000000098 /* meetingwhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "meetingwhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIRouterAndHandlersTests.swift; sourceTree = "<group>"; };
 		E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeWhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -912,6 +1458,7 @@
 		F18A00000000000000000012 /* FillerWordsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FillerWordsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
+		BBDA7A0000000000000002 /* DataMigrationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DataMigrationServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
 		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
@@ -932,9 +1479,13 @@
 		BB00000000000000000265 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000271 /* DictionaryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryExporter.swift; sourceTree = "<group>"; };
+		8D819323529246BCB5504526 /* SettingsBackupExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporter.swift; sourceTree = "<group>"; };
+		BBBK0000000000000000M001 /* SettingsBackupExporter+Meetings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsBackupExporter+Meetings.swift"; sourceTree = "<group>"; };
+		80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreSheets.swift; sourceTree = "<group>"; };
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
+		74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporterTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000278 /* SonioxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonioxPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000279 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000280 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -963,7 +1514,6 @@
 		BB00000000000000000286 /* LicenseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseService.swift; sourceTree = "<group>"; };
 		BB00000000000000000287 /* LicenseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000288 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
-		BB00000000000000000289 /* SupporterBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterBadgeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1458,6 +2008,7 @@
 			children = (
 				BB00000000000000000093 /* main.swift */,
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
+				MWF0000000000000000001 /* AppWindowID.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
 				BB00000000000000000070 /* UpdateChecker.swift */,
@@ -1486,6 +2037,19 @@
 				BB00000000000000000080 /* Snippet.swift */,
 				BB00000000000000000110 /* PromptAction.swift */,
 				BB00000000000000000243 /* ErrorLogEntry.swift */,
+				BB00000000000000000381 /* MeetingEnums.swift */,
+				BB00000000000000000382 /* Attendee.swift */,
+				P2F0000000000000000001 /* Person.swift */,
+				BB00000000000000000375 /* Meeting.swift */,
+				CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */,
+				CCB000000000000000000001 /* MeetingContextRule.swift */,
+				BB00000000000000000376 /* MeetingSegment.swift */,
+				BB00000000000000000377 /* MeetingNote.swift */,
+				BB00000000000000000378 /* MeetingOutput.swift */,
+				BB00000000000000000379 /* MeetingQATurn.swift */,
+				BB00000000000000000380 /* MeetingTemplate.swift */,
+				BBB0000000000000000B01 /* PromptSurface.swift */,
+				BB00000000000000000701 /* PersistentModel+Deleted.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1496,16 +2060,22 @@
 				CC00000000000000000012 /* Cloud */,
 				CC00000000000000000014 /* LLM */,
 				CC00000000000000000010 /* HTTPServer */,
+				CC00000000000000000046 /* Meetings */,
+				GGG0000000000000000001 /* Google */,
 				BB00000000000000000009 /* ModelManagerService.swift */,
 				BB00000000000000000010 /* AudioFileService.swift */,
 				BB00000000000000000030 /* AudioRecordingService.swift */,
 				533A00000000000000000003 /* DictationRecoveryAudioStore.swift */,
 				BB00000000000000000350 /* ObjCExceptionCatcher.h */,
 				BB00000000000000000351 /* ObjCExceptionCatcher.m */,
+				C85600000000000000000002 /* CoreAudioHALCallbackContext.h */,
+				C85600000000000000000003 /* CoreAudioHALCallbackContext.c */,
 				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000362 /* SecureInputDiagnostics.swift */,
+				CC88800000000000000002 /* ClamshellStateProvider.swift */,
 				BB00000000000000000196 /* IndicatorCoordinator.swift */,
+				BBDA7A0000000000000001 /* DataMigrationService.swift */,
 				BB00000000000000000361 /* ClipboardContentFormatter.swift */,
 				BB00000000000000000032 /* TextInsertionService.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
@@ -1523,12 +2093,15 @@
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
+				8D819323529246BCB5504526 /* SettingsBackupExporter.swift */,
+				BBBK0000000000000000M001 /* SettingsBackupExporter+Meetings.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
 				C1F000000000000000000001 /* Sync */,
 				BB00000000000000000086 /* SoundService.swift */,
 				BB00000000000000000102 /* AudioDeviceService.swift */,
 				BB00000000000000000320 /* AudioEngineRecoverySupport.swift */,
 				BB00000000000000000111 /* PromptActionService.swift */,
+				BBB0000000000000000B02 /* MeetingTemplateMigration.swift */,
 				BB00000000000000000115 /* PromptProcessingService.swift */,
 				BB00000000000000000123 /* EventBus.swift */,
 				BB00000000000000000124 /* PluginManager.swift */,
@@ -1610,6 +2183,18 @@
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
 				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
 				BB00000000000000000242 /* WatchFolderViewModel.swift */,
+				BB00000000000000000385 /* MeetingsViewModel.swift */,
+				CCB000000000000000000004 /* MeetingsViewModel+Rules.swift */,
+				MWF0000000000000000016 /* MeetingsViewModel+Document.swift */,
+				DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */,
+				TCF0000000000000000004 /* HomeFeedViewModel.swift */,
+				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
+				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
+				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
+				M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */,
+				M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */,
+				GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */,
+				TEF0000000000000000006 /* SpaceViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1623,13 +2208,16 @@
 				BB00000000000000000309 /* MinimalIndicatorView.swift */,
 				6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */,
 				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+				4E5353460000000000000001 /* NativeSearchField.swift */,
 				BB00000000000000000014 /* MenuBarView.swift */,
+				CE10000000000000000004 /* MeetingTrayIndicator.swift */,
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
 				533C00000000000000000003 /* DictationRecoveryView.swift */,
 				BB00000000000000000017 /* SettingsView.swift */,
 				C1F000000000000000000008 /* PremiumSettingsView.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
+				80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
 				BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */,
 				B40800000000000000000001 /* LanguageSelectionEditor.swift */,
@@ -1658,10 +2246,48 @@
 				BB00000000000000000287 /* LicenseSettingsView.swift */,
 				BB00000000000000000288 /* WelcomeSheet.swift */,
 				BB00000000000000000355 /* PostUpdateLicensePromptView.swift */,
-				BB00000000000000000289 /* SupporterBadgeView.swift */,
 				BB00000000000000000373 /* DiarizationSettingsView.swift */,
+				CC00000000000000000047 /* Meetings */,
+				MWG0000000000000000001 /* MainWindow */,
+				TEG0000000000000000001 /* Space */,
+				CCB0000000000000000B01 /* PromptLibrary */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		TEG0000000000000000001 /* Space */ = {
+			isa = PBXGroup;
+			children = (
+				TEF0000000000000000001 /* SpaceTreeModel.swift */,
+				TEF0000000000000000002 /* SpaceSelection.swift */,
+				TEF0000000000000000003 /* SpaceSidebarSection.swift */,
+				TEF0000000000000000004 /* SpaceFolderView.swift */,
+				TEF0000000000000000005 /* SpaceNoteView.swift */,
+				TEF0000000000000000007 /* SpaceReveal.swift */,
+				TEF0000000000000000009 /* SpaceDraft.swift */,
+			);
+			path = Space;
+			sourceTree = "<group>";
+		};
+		MWG0000000000000000001 /* MainWindow */ = {
+			isa = PBXGroup;
+			children = (
+				MWF0000000000000000002 /* MainWindowRoute.swift */,
+				MWF0000000000000000003 /* MainWindowCoordinator.swift */,
+				MWF0000000000000000004 /* MainWindowView.swift */,
+				MWF0000000000000000005 /* MainWindowSidebar.swift */,
+				SPCF000000000000000001 /* SidebarSelection.swift */,
+				MWF0000000000000000006 /* LiveRecordingBand.swift */,
+				JQF0000000000000000004 /* MeetingActivityIndicator.swift */,
+				JQF0000000000000000006 /* MeetingActivityPopover.swift */,
+				MWF0000000000000000007 /* MeetingsListView.swift */,
+				MWF0000000000000000008 /* HomeFeedView.swift */,
+				TCF0000000000000000001 /* ComingUpCard.swift */,
+				TCF0000000000000000002 /* MeetingTimeline.swift */,
+				TCF0000000000000000003 /* HomeLiveBanner.swift */,
+				GGF0000000000000000051 /* GoogleReauthNudge.swift */,
+			);
+			path = MainWindow;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000009 /* Resources */ = {
@@ -1693,6 +2319,107 @@
 			path = HTTPServer;
 			sourceTree = "<group>";
 		};
+		CC00000000000000000046 /* Meetings */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000383 /* MeetingService.swift */,
+				BB00000000000000000384 /* MeetingSegmentMapper.swift */,
+				BB00000000000000000387 /* CalendarEventProviding.swift */,
+				BB00000000000000000388 /* CalendarService.swift */,
+				GGF0000000000000000008 /* ConferenceURLDetector.swift */,
+				CA11F00000000000000001 /* CalendarColor.swift */,
+				CA11F00000000000000002 /* CalendarSelectionStore.swift */,
+				TCF0000000000000000006 /* CalendarColorProviding.swift */,
+				BB00000000000000000390 /* MeetingCaptureService.swift */,
+				CCB000000000000000000003 /* MeetingContextRuleService.swift */,
+				BBEVTBUS0000000000000001 /* MeetingEventBus.swift */,
+				BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */,
+				BB00000000000000000391 /* MeetingStartNotificationService.swift */,
+				CE10000000000000000002 /* MeetingEndReminderService.swift */,
+				BB00000000000000000396 /* TranscriptContextBuilder.swift */,
+				BB00000000000000000397 /* MeetingLLMService.swift */,
+				BB00000000000000000398 /* MeetingTemplatePresets.swift */,
+				BB00000000000000000401 /* LexicalRetriever.swift */,
+				BB00000000000000000402 /* ObsidianVaultService.swift */,
+				BB00000000000000000403 /* MeetingBriefService.swift */,
+				M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */,
+				5B10000000000000000B0003 /* MeetingOutputParser.swift */,
+				5B10000000000000000B0004 /* MeetingChecklistStore.swift */,
+				5B10000000000000000B0006 /* ImportedMeetingTitle.swift */,
+				M8F0000000000000000001 /* MeetingRelatedDocsService.swift */,
+				DDF0000000000000000001 /* MeetingBriefScheduler.swift */,
+				BB00000000000000000406 /* MeetingObsidianExporter.swift */,
+				TEF0000000000000000008 /* VaultNoteWriter.swift */,
+				BB00000000000000000408 /* TranscriptFileParser.swift */,
+				BB00000000000000000409 /* MeetingImportService.swift */,
+				BB00000000000000000410 /* TranscriptMerger.swift */,
+				IOVF000000000000000001 /* ImportOverlapPlan.swift */,
+				BB00000000000000000412 /* MeetingDiarizationEnricher.swift */,
+				BB00000000000000000501 /* MeetingLanguageDirective.swift */,
+				BB00000000000000000502 /* MeetingLanguageService.swift */,
+				MRF0000000000000000001 /* MeetingModelRouter.swift */,
+				BB00000000000000000601 /* MeetingOrganizationIndex.swift */,
+				P2F0000000000000000002 /* PersonIdentity.swift */,
+				P2F0000000000000000003 /* ParticipantDirectoryService.swift */,
+				JQF0000000000000000001 /* MeetingJob.swift */,
+				JQF0000000000000000003 /* MeetingJobClock.swift */,
+				SPAF000000000000000001 /* SpeakerSourcePlan.swift */,
+				MGAF000000000000000001 /* MeetingMergePlan.swift */,
+				MGAF000000000000000002 /* MeetingMergeService.swift */,
+				SPBF000000000000000001 /* SpeakerTimingAligner.swift */,
+				JQF0000000000000000002 /* JobQueueService.swift */,
+			);
+			path = Meetings;
+			sourceTree = "<group>";
+		};
+		CCB0000000000000000B01 /* PromptLibrary */ = {
+			isa = PBXGroup;
+			children = (
+				BBB0000000000000000B03 /* PromptTemplateEditor.swift */,
+				BBB0000000000000000B04 /* PromptLibraryView.swift */,
+			);
+			path = PromptLibrary;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000047 /* Meetings */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000386 /* MeetingsSettingsView.swift */,
+				CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */,
+				CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */,
+				CCB000000000000000000005 /* MeetingContextRulesView.swift */,
+				BB00000000000000000389 /* UpcomingMeetingsSection.swift */,
+				CA11F00000000000000003 /* CalendarSelectionSection.swift */,
+				GGF0000000000000000007 /* GoogleAccountsSection.swift */,
+				GGF0000000000000000055 /* GoogleDriveBackfillSheet.swift */,
+				DDF0000000000000000003 /* AutoBriefSettingsView.swift */,
+				BB00000000000000000394 /* MeetingNotesPane.swift */,
+				MWF0000000000000000009 /* MeetingDocumentView.swift */,
+				MWF0000000000000000011 /* MeetingDocumentHeader.swift */,
+				MLE0000000000000000002 /* MeetingLinkEventView.swift */,
+				MWF0000000000000000012 /* MeetingDocumentBody.swift */,
+				MWF0000000000000000013 /* MeetingBottomBar.swift */,
+				MWF0000000000000000014 /* MeetingTranscriptPanel.swift */,
+				MWF0000000000000000015 /* MarkdownDocumentView.swift */,
+				BB00000000000000000400 /* MeetingTemplateEditorView.swift */,
+				BB00000000000000000404 /* MeetingBriefView.swift */,
+				5B10000000000000000B0001 /* MeetingTheme.swift */,
+				5B10000000000000000B0002 /* MeetingDocumentComponents.swift */,
+				M7F0000000000000000002 /* MeetingFolderDetailView.swift */,
+				M7F0000000000000000003 /* VaultContextPickerView.swift */,
+				M7F0000000000000000010 /* MeetingRowContextMenu.swift */,
+				M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */,
+				GGF0000000000000000114 /* MeetingRelatedEmailsSection.swift */,
+				BB00000000000000000405 /* MeetingQAView.swift */,
+				BB00000000000000000407 /* MeetingExportView.swift */,
+				BB00000000000000000411 /* MeetingImportView.swift */,
+				BB00000000000000000413 /* SpeakerMappingView.swift */,
+				SPAF000000000000000002 /* SpeakerSection.swift */,
+				P3F0000000000000000001 /* ParticipantsSection.swift */,
+			);
+			path = Meetings;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000011 /* Sounds */ = {
 			isa = PBXGroup;
 			children = (
@@ -1701,6 +2428,38 @@
 				BB00000000000000000089 /* error.wav */,
 			);
 			path = Sounds;
+			sourceTree = "<group>";
+		};
+		GGG0000000000000000001 /* Google */ = {
+			isa = PBXGroup;
+			children = (
+				GGF0000000000000000001 /* GoogleOAuthFlow.swift */,
+				GGF0000000000000000002 /* GoogleLoopbackServer.swift */,
+				GGF0000000000000000003 /* GoogleHTTPTransport.swift */,
+				GGF0000000000000000004 /* GoogleSecretStore.swift */,
+				GGF0000000000000000005 /* GoogleAccountStore.swift */,
+				GGF0000000000000000006 /* GoogleAuthService.swift */,
+				GGF0000000000000000021 /* GoogleCalendarAPI.swift */,
+				GGF0000000000000000022 /* GoogleCalendarMapper.swift */,
+				GGF0000000000000000023 /* GoogleCalendarSyncEngine.swift */,
+				GGF0000000000000000024 /* GoogleCalendarProvider.swift */,
+				GGF0000000000000000035 /* CalendarEventTwinCollapser.swift */,
+				GGF0000000000000000025 /* TwinCalendarDetector.swift */,
+				GGF0000000000000000040 /* GoogleDriveAPI.swift */,
+				GGF0000000000000000041 /* GoogleDriveImportLedger.swift */,
+				GGF0000000000000000042 /* DriveTranscriptMatcher.swift */,
+				GGF0000000000000000046 /* GoogleDriveTranscriptImporter.swift */,
+				GGF0000000000000000047 /* GoogleDriveSyncEngine.swift */,
+				GGF0000000000000000050 /* GoogleFeatureScopes.swift */,
+				GGF0000000000000000054 /* GoogleDriveBackfillPlanner.swift */,
+				GGF0000000000000000100 /* GmailAPI.swift */,
+				GGF0000000000000000101 /* GmailQueryBuilder.swift */,
+				GGF0000000000000000102 /* GmailBodyText.swift */,
+				GGF0000000000000000103 /* GmailContextService.swift */,
+				GGF0000000000000000015 /* ChromeProfileDetector.swift */,
+				GGF0000000000000000016 /* MeetingJoinLauncher.swift */,
+			);
+			path = Google;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000012 /* Cloud */ = {
@@ -2000,6 +2759,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000216 /* LiveTranscriptPlugin.swift */,
+				BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */,
 				BB00000000000000000217 /* manifest.json */,
 				BB00000000000000000218 /* Localizable.xcstrings */,
 			);
@@ -2287,6 +3047,7 @@
 				CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */,
 				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
+				BBDA7A0000000000000002 /* DataMigrationServiceTests.swift */,
 				C1F000000000000000000006 /* CloudFolderSyncTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */,
@@ -2301,6 +3062,7 @@
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
+				74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */,
@@ -2318,6 +3080,8 @@
 				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
 				F41BD305007A3A158038C75C /* ProfileServiceTests.swift */,
 				B10000000000000000000005 /* WorkflowServiceTests.swift */,
+				5B10000000000000000B0005 /* MeetingOutputParserTests.swift */,
+				5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */,
 				B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */,
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
@@ -2327,6 +3091,115 @@
 				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
+				MEF0000000000000000001 /* MeetingServiceTests.swift */,
+				MEF0000000000000000002 /* MeetingModelTests.swift */,
+				MEF0000000000000000003 /* CalendarServiceTests.swift */,
+				CA11F00000000000000004 /* CalendarSelectionTests.swift */,
+				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
+				MWF0000000000000000017 /* MeetingDocumentTests.swift */,
+				TCF0000000000000000007 /* HomeFeedTests.swift */,
+				SRGF000000000000000001 /* SettingsRegroupTests.swift */,
+				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
+				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
+				MEF0000000000000000004 /* MeetingCaptureServiceTests.swift */,
+				MEF0000000000000000501 /* MeetingLanguageTests.swift */,
+				MRF0000000000000000002 /* MeetingModelRouterTests.swift */,
+				GGF0000000000000000011 /* GoogleOAuthFlowTests.swift */,
+				GGF0000000000000000012 /* GoogleAccountStoreTests.swift */,
+				GGF0000000000000000013 /* GoogleAuthServiceTokenTests.swift */,
+				GGF0000000000000000014 /* GoogleAccountRowStateTests.swift */,
+				GGF0000000000000000031 /* GoogleCalendarMapperTests.swift */,
+				GGF0000000000000000032 /* AttendeeCodableCompatTests.swift */,
+				GGF0000000000000000033 /* GoogleCalendarSyncEngineTests.swift */,
+				GGF0000000000000000034 /* GoogleCalendarProviderTests.swift */,
+				GGF0000000000000000043 /* GoogleDriveAPITests.swift */,
+				GGF0000000000000000044 /* GoogleDriveImportLedgerTests.swift */,
+				GGF0000000000000000045 /* DriveTranscriptMatcherTests.swift */,
+				GGF0000000000000000048 /* GoogleDriveSyncEngineTests.swift */,
+				GGF0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift */,
+				GGF0000000000000000052 /* GoogleFeatureScopesTests.swift */,
+				GGF0000000000000000053 /* GoogleReauthNudgeRuleTests.swift */,
+				GGF0000000000000000056 /* GoogleDriveBackfillPlannerTests.swift */,
+				GGF0000000000000000104 /* GmailQueryBuilderTests.swift */,
+				GGF0000000000000000105 /* GmailBodyTextTests.swift */,
+				GGF0000000000000000106 /* GmailContextServiceTests.swift */,
+				GGF0000000000000000107 /* GmailAccountEligibilityTests.swift */,
+				GGF0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift */,
+				GGF0000000000000000109 /* GmailWebURLTests.swift */,
+				GGF0000000000000000110 /* GmailToggleStateTests.swift */,
+				GGF0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift */,
+				GGF0000000000000000112 /* MeetingQAComposerEmailTests.swift */,
+				GGF0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift */,
+				GGF0000000000000000116 /* EmailRowPresentationTests.swift */,
+				GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */,
+				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
+				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
+				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
+				GGF0000000000000000036 /* CalendarEventTwinCollapserTests.swift */,
+				GGF0000000000000000027 /* TwinCalendarDetectorTests.swift */,
+				GGF0000000000000000028 /* CalendarSelectionGroupingTests.swift */,
+				GGF0000000000000000029 /* CalendarSourceAvailabilityTests.swift */,
+				GGF0000000000000000017 /* ChromeProfileDetectorTests.swift */,
+				GGF0000000000000000018 /* MeetingJoinLauncherTests.swift */,
+				M5F0000000000000000001 /* MeetingOneShotOverrideTests.swift */,
+				M5F0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift */,
+				MEF0000000000000000601 /* MeetingOrganizationTests.swift */,
+				MEF0000000000000000701 /* MeetingListFilterTests.swift */,
+				MEF0000000000000000702 /* MeetingListSelectionTests.swift */,
+				MEF0000000000000000703 /* MeetingBulkMutationTests.swift */,
+				MEF0000000000000000704 /* MeetingRowContextMenuTests.swift */,
+				MEF0000000000000000602 /* MeetingFolderTests.swift */,
+				M7F0000000000000000005 /* MeetingFolderContextTests.swift */,
+				M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */,
+				M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */,
+				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
+				MEF0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift */,
+				M1F0000000000000000001 /* AudioRecorderTrackModeTests.swift */,
+				P2F0000000000000000101 /* PersonIdentityTests.swift */,
+				P2F0000000000000000102 /* ParticipantDirectoryServiceTests.swift */,
+				P2F0000000000000000103 /* MeetingAttendeeIngestionTests.swift */,
+				P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */,
+				P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */,
+				CCF000000000000000000003 /* MeetingCaptureConfigTests.swift */,
+				CCF000000000000000000002 /* FinalRetranscriptionResolutionTests.swift */,
+				CCF000000000000000000001 /* MeetingContextRuleServiceTests.swift */,
+				MEFEVTBUS000000000000001 /* MeetingEventBusTests.swift */,
+				MEFEVTEMI000000000000001 /* MeetingEventEmissionTests.swift */,
+				MEF0000000000000000005 /* TranscriptContextBuilderTests.swift */,
+				MEF0000000000000000006 /* MeetingLLMServiceTests.swift */,
+				BBB0000000000000000B05 /* PromptSurfaceScopingTests.swift */,
+				BBB0000000000000000B06 /* MeetingTemplateMigrationTests.swift */,
+				BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */,
+				MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */,
+				MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */,
+				MEF0000000000000000009 /* LexicalRetrieverTests.swift */,
+				MEF0000000000000000010 /* MeetingBriefServiceTests.swift */,
+				DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */,
+				JQF0000000000000000005 /* JobQueueServiceTests.swift */,
+				SPAF000000000000000003 /* SpeakerSourcePlanTests.swift */,
+				MGAF000000000000000003 /* MeetingMergeTests.swift */,
+				SPAF000000000000000004 /* MeetingTwoPersonSpeakerTests.swift */,
+				SPBF000000000000000002 /* SpeakerTimingAlignerTests.swift */,
+				SPBF000000000000000003 /* MeetingTimingRepassTests.swift */,
+				SPCF000000000000000002 /* SidebarSelectionTests.swift */,
+				TEF1000000000000000001 /* SpaceTreeModelTests.swift */,
+				TEF1000000000000000002 /* SpaceSelectionTests.swift */,
+				TEF1000000000000000003 /* SpaceViewModelTests.swift */,
+				TEF1000000000000000004 /* SpaceRevealTests.swift */,
+				TEF1000000000000000005 /* VaultNoteWriterTests.swift */,
+				TEF1000000000000000006 /* SpaceDraftTests.swift */,
+				SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */,
+				JQF0000000000000000007 /* MeetingJobPresentationTests.swift */,
+				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
+				CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */,
+				CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */,
+				MEF0000000000000000011 /* MeetingQAComposerTests.swift */,
+				MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */,
+				MEF0000000000000000013 /* TranscriptFileParserTests.swift */,
+				MEF0000000000000000014 /* TranscriptMergerTests.swift */,
+				MEF0000000000000000015 /* MeetingImportServiceTests.swift */,
+				MEF0000000000000000603 /* MeetingImportSheetModeTests.swift */,
+				MEF0000000000000000016 /* MeetingDiarizationEnricherTests.swift */,
 			);
 			name = TypeWhisperTests;
 			path = TypeWhisperTests;
@@ -3770,7 +4643,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000312 /* manifest.json in Resources */,
-				AA00000000000000000313 /* Localizable.xcstrings in Resources */,
+				AA00000000000000000316 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3799,6 +4672,7 @@
 				24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
+				AADA7A0000000000000002 /* DataMigrationServiceTests.swift in Sources */,
 				C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */,
 				A40500000000000000000101 /* CLIClient.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
@@ -3815,8 +4689,118 @@
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
+				FFA878CD7D794D1A914AF13B /* SettingsBackupExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
+				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
+				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
+				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
+				CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */,
+				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
+				MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */,
+				TCB0000000000000000007 /* HomeFeedTests.swift in Sources */,
+				SRGB000000000000000001 /* SettingsRegroupTests.swift in Sources */,
+				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
+				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
+				MEB0000000000000000004 /* MeetingCaptureServiceTests.swift in Sources */,
+				MEB0000000000000000501 /* MeetingLanguageTests.swift in Sources */,
+				MRB0000000000000000002 /* MeetingModelRouterTests.swift in Sources */,
+				GGB0000000000000000011 /* GoogleOAuthFlowTests.swift in Sources */,
+				GGB0000000000000000012 /* GoogleAccountStoreTests.swift in Sources */,
+				GGB0000000000000000013 /* GoogleAuthServiceTokenTests.swift in Sources */,
+				GGB0000000000000000014 /* GoogleAccountRowStateTests.swift in Sources */,
+				GGB0000000000000000031 /* GoogleCalendarMapperTests.swift in Sources */,
+				GGB0000000000000000032 /* AttendeeCodableCompatTests.swift in Sources */,
+				GGB0000000000000000033 /* GoogleCalendarSyncEngineTests.swift in Sources */,
+				GGB0000000000000000034 /* GoogleCalendarProviderTests.swift in Sources */,
+				GGB0000000000000000043 /* GoogleDriveAPITests.swift in Sources */,
+				GGB0000000000000000044 /* GoogleDriveImportLedgerTests.swift in Sources */,
+				GGB0000000000000000045 /* DriveTranscriptMatcherTests.swift in Sources */,
+				GGB0000000000000000048 /* GoogleDriveSyncEngineTests.swift in Sources */,
+				GGB0000000000000000049 /* GoogleDriveTranscriptImporterTests.swift in Sources */,
+				GGB0000000000000000052 /* GoogleFeatureScopesTests.swift in Sources */,
+				GGB0000000000000000053 /* GoogleReauthNudgeRuleTests.swift in Sources */,
+				GGB0000000000000000056 /* GoogleDriveBackfillPlannerTests.swift in Sources */,
+				GGB0000000000000000104 /* GmailQueryBuilderTests.swift in Sources */,
+				GGB0000000000000000105 /* GmailBodyTextTests.swift in Sources */,
+				GGB0000000000000000106 /* GmailContextServiceTests.swift in Sources */,
+				GGB0000000000000000107 /* GmailAccountEligibilityTests.swift in Sources */,
+				GGB0000000000000000108 /* GoogleAccountStoreGmailFlagTests.swift in Sources */,
+				GGB0000000000000000109 /* GmailWebURLTests.swift in Sources */,
+				GGB0000000000000000110 /* GmailToggleStateTests.swift in Sources */,
+				GGB0000000000000000111 /* MeetingBriefServiceEmailBlockTests.swift in Sources */,
+				GGB0000000000000000112 /* MeetingQAComposerEmailTests.swift in Sources */,
+				GGB0000000000000000113 /* MeetingLLMServiceEmailEscalationTests.swift in Sources */,
+				GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */,
+				GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */,
+				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
+				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
+				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
+				GGB0000000000000000036 /* CalendarEventTwinCollapserTests.swift in Sources */,
+				GGB0000000000000000027 /* TwinCalendarDetectorTests.swift in Sources */,
+				GGB0000000000000000028 /* CalendarSelectionGroupingTests.swift in Sources */,
+				GGB0000000000000000029 /* CalendarSourceAvailabilityTests.swift in Sources */,
+				GGB0000000000000000017 /* ChromeProfileDetectorTests.swift in Sources */,
+				GGB0000000000000000018 /* MeetingJoinLauncherTests.swift in Sources */,
+				M5B0000000000000000001 /* MeetingOneShotOverrideTests.swift in Sources */,
+				M5B0000000000000000002 /* MeetingSpeakerCloudRerunTests.swift in Sources */,
+				MEB0000000000000000601 /* MeetingOrganizationTests.swift in Sources */,
+				MEB0000000000000000701 /* MeetingListFilterTests.swift in Sources */,
+				MEB0000000000000000702 /* MeetingListSelectionTests.swift in Sources */,
+				MEB0000000000000000703 /* MeetingBulkMutationTests.swift in Sources */,
+				MEB0000000000000000704 /* MeetingRowContextMenuTests.swift in Sources */,
+				MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */,
+				M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */,
+				M8B0000000000000000004 /* MeetingRelatedDocsServiceTests.swift in Sources */,
+				M8B0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift in Sources */,
+				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
+				MEB0000000000000000503 /* MeetingSpeakerLabelSuppressionTests.swift in Sources */,
+				M1B0000000000000000001 /* AudioRecorderTrackModeTests.swift in Sources */,
+				P2B0000000000000000101 /* PersonIdentityTests.swift in Sources */,
+				P2B0000000000000000102 /* ParticipantDirectoryServiceTests.swift in Sources */,
+				P2B0000000000000000103 /* MeetingAttendeeIngestionTests.swift in Sources */,
+				P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */,
+				P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */,
+				CCM000000000000000000001 /* MeetingContextRuleServiceTests.swift in Sources */,
+				CCM000000000000000000002 /* FinalRetranscriptionResolutionTests.swift in Sources */,
+				CCM000000000000000000003 /* MeetingCaptureConfigTests.swift in Sources */,
+				MEBEVTBUS000000000000001 /* MeetingEventBusTests.swift in Sources */,
+				MEBEVTEMI000000000000001 /* MeetingEventEmissionTests.swift in Sources */,
+				MEB0000000000000000005 /* TranscriptContextBuilderTests.swift in Sources */,
+				MEB0000000000000000006 /* MeetingLLMServiceTests.swift in Sources */,
+				AAB0000000000000000B05 /* PromptSurfaceScopingTests.swift in Sources */,
+				AAB0000000000000000B06 /* MeetingTemplateMigrationTests.swift in Sources */,
+				AAB0000000000000000B07 /* PromptTemplateEditorModelTests.swift in Sources */,
+				MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */,
+				MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */,
+				MEB0000000000000000009 /* LexicalRetrieverTests.swift in Sources */,
+				MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */,
+				DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */,
+				JQB0000000000000000005 /* JobQueueServiceTests.swift in Sources */,
+				SPAB000000000000000003 /* SpeakerSourcePlanTests.swift in Sources */,
+				MGAB000000000000000003 /* MeetingMergeTests.swift in Sources */,
+				SPAB000000000000000004 /* MeetingTwoPersonSpeakerTests.swift in Sources */,
+				SPBB000000000000000002 /* SpeakerTimingAlignerTests.swift in Sources */,
+				SPBB000000000000000003 /* MeetingTimingRepassTests.swift in Sources */,
+				SPCB000000000000000002 /* SidebarSelectionTests.swift in Sources */,
+				TEB1000000000000000001 /* SpaceTreeModelTests.swift in Sources */,
+				TEB1000000000000000002 /* SpaceSelectionTests.swift in Sources */,
+				TEB1000000000000000003 /* SpaceViewModelTests.swift in Sources */,
+				TEB1000000000000000004 /* SpaceRevealTests.swift in Sources */,
+				TEB1000000000000000005 /* VaultNoteWriterTests.swift in Sources */,
+				TEB1000000000000000006 /* SpaceDraftTests.swift in Sources */,
+				SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */,
+				JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */,
+				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
+				CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */,
+				CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */,
+				MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */,
+				MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */,
+				MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */,
+				MEB0000000000000000014 /* TranscriptMergerTests.swift in Sources */,
+				MEB0000000000000000015 /* MeetingImportServiceTests.swift in Sources */,
+				MEB0000000000000000603 /* MeetingImportSheetModeTests.swift in Sources */,
+				MEB0000000000000000016 /* MeetingDiarizationEnricherTests.swift in Sources */,
 				AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
@@ -3834,6 +4818,7 @@
 				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,
 				C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */,
 				C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */,
+				C4290000000000000MIR001 /* MeetingTranscriptMirror.swift in Sources */,
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
@@ -3846,6 +4831,8 @@
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
 				C50700000000000000000001 /* MemoryServiceTests.swift in Sources */,
 				A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */,
+				5B10000000000000000A0005 /* MeetingOutputParserTests.swift in Sources */,
+				5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */,
 				A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */,
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
@@ -3885,6 +4872,41 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
+				MWB0000000000000000001 /* AppWindowID.swift in Sources */,
+				MWB0000000000000000002 /* MainWindowRoute.swift in Sources */,
+				MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */,
+				MWB0000000000000000004 /* MainWindowView.swift in Sources */,
+				MWB0000000000000000005 /* MainWindowSidebar.swift in Sources */,
+				SPCB000000000000000001 /* SidebarSelection.swift in Sources */,
+				MWB0000000000000000006 /* LiveRecordingBand.swift in Sources */,
+				JQB0000000000000000001 /* MeetingJob.swift in Sources */,
+				JQB0000000000000000003 /* MeetingJobClock.swift in Sources */,
+				SPAB000000000000000001 /* SpeakerSourcePlan.swift in Sources */,
+				IOVB000000000000000001 /* ImportOverlapPlan.swift in Sources */,
+				MGAB000000000000000001 /* MeetingMergePlan.swift in Sources */,
+				MGAB000000000000000002 /* MeetingMergeService.swift in Sources */,
+				SPBB000000000000000001 /* SpeakerTimingAligner.swift in Sources */,
+				SPAB000000000000000002 /* SpeakerSection.swift in Sources */,
+				JQB0000000000000000002 /* JobQueueService.swift in Sources */,
+				JQB0000000000000000004 /* MeetingActivityIndicator.swift in Sources */,
+				JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */,
+				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
+				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,
+				TCB0000000000000000001 /* ComingUpCard.swift in Sources */,
+				TCB0000000000000000002 /* MeetingTimeline.swift in Sources */,
+				TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */,
+				GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */,
+				TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */,
+				TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */,
+				TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */,
+				MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */,
+				MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */,
+				MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */,
+				MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */,
+				MWB0000000000000000013 /* MeetingBottomBar.swift in Sources */,
+				MWB0000000000000000014 /* MeetingTranscriptPanel.swift in Sources */,
+				MWB0000000000000000015 /* MarkdownDocumentView.swift in Sources */,
+				MWB0000000000000000016 /* MeetingsViewModel+Document.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
@@ -3902,12 +4924,133 @@
 				AA00000000000000000371 /* PyannoteDiarizationProvider.swift in Sources */,
 				AA00000000000000000372 /* LocalDiarizationService.swift in Sources */,
 				AA00000000000000000373 /* DiarizationSettingsView.swift in Sources */,
+				AA00000000000000000381 /* MeetingEnums.swift in Sources */,
+				AA00000000000000000382 /* Attendee.swift in Sources */,
+				AA00000000000000000375 /* Meeting.swift in Sources */,
+				AA00000000000000000376 /* MeetingSegment.swift in Sources */,
+				AA00000000000000000377 /* MeetingNote.swift in Sources */,
+				AA00000000000000000378 /* MeetingOutput.swift in Sources */,
+				AA00000000000000000701 /* PersistentModel+Deleted.swift in Sources */,
+				AA00000000000000000379 /* MeetingQATurn.swift in Sources */,
+				AA00000000000000000380 /* MeetingTemplate.swift in Sources */,
+				AA00000000000000000383 /* MeetingService.swift in Sources */,
+				AA00000000000000000384 /* MeetingSegmentMapper.swift in Sources */,
+				AA00000000000000000385 /* MeetingsViewModel.swift in Sources */,
+				AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */,
+				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
+				AA00000000000000000388 /* CalendarService.swift in Sources */,
+				GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */,
+				GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */,
+				GGB0000000000000000002 /* GoogleLoopbackServer.swift in Sources */,
+				GGB0000000000000000003 /* GoogleHTTPTransport.swift in Sources */,
+				GGB0000000000000000004 /* GoogleSecretStore.swift in Sources */,
+				GGB0000000000000000005 /* GoogleAccountStore.swift in Sources */,
+				GGB0000000000000000006 /* GoogleAuthService.swift in Sources */,
+				GGB0000000000000000007 /* GoogleAccountsSection.swift in Sources */,
+				GGB0000000000000000055 /* GoogleDriveBackfillSheet.swift in Sources */,
+				GGB0000000000000000021 /* GoogleCalendarAPI.swift in Sources */,
+				GGB0000000000000000022 /* GoogleCalendarMapper.swift in Sources */,
+				GGB0000000000000000023 /* GoogleCalendarSyncEngine.swift in Sources */,
+				GGB0000000000000000024 /* GoogleCalendarProvider.swift in Sources */,
+				GGB0000000000000000035 /* CalendarEventTwinCollapser.swift in Sources */,
+				GGB0000000000000000025 /* TwinCalendarDetector.swift in Sources */,
+				GGB0000000000000000040 /* GoogleDriveAPI.swift in Sources */,
+				GGB0000000000000000041 /* GoogleDriveImportLedger.swift in Sources */,
+				GGB0000000000000000042 /* DriveTranscriptMatcher.swift in Sources */,
+				GGB0000000000000000046 /* GoogleDriveTranscriptImporter.swift in Sources */,
+				GGB0000000000000000047 /* GoogleDriveSyncEngine.swift in Sources */,
+				GGB0000000000000000050 /* GoogleFeatureScopes.swift in Sources */,
+				GGB0000000000000000054 /* GoogleDriveBackfillPlanner.swift in Sources */,
+				GGB0000000000000000100 /* GmailAPI.swift in Sources */,
+				GGB0000000000000000101 /* GmailQueryBuilder.swift in Sources */,
+				GGB0000000000000000102 /* GmailBodyText.swift in Sources */,
+				GGB0000000000000000103 /* GmailContextService.swift in Sources */,
+				GGB0000000000000000015 /* ChromeProfileDetector.swift in Sources */,
+				GGB0000000000000000016 /* MeetingJoinLauncher.swift in Sources */,
+				CA11000000000000000001 /* CalendarColor.swift in Sources */,
+				CA11000000000000000002 /* CalendarSelectionStore.swift in Sources */,
+				CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */,
+				AA00000000000000000389 /* UpcomingMeetingsSection.swift in Sources */,
+				AA00000000000000000390 /* MeetingCaptureService.swift in Sources */,
+				CCA000000000000000000001 /* MeetingContextRule.swift in Sources */,
+				CCA000000000000000000002 /* FinalRetranscriptionPolicy.swift in Sources */,
+				CCA000000000000000000003 /* MeetingContextRuleService.swift in Sources */,
+				CCA000000000000000000004 /* MeetingsViewModel+Rules.swift in Sources */,
+				CCA000000000000000000005 /* MeetingContextRulesView.swift in Sources */,
+				CCA000000000000000000006 /* MeetingContextRuleEditorView.swift in Sources */,
+				CCA000000000000000000007 /* FinalRetranscriptionSettingsView.swift in Sources */,
+				AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */,
+				AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */,
+				AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */,
+				CE10000000000000000001 /* MeetingEndReminderService.swift in Sources */,
+				CE10000000000000000003 /* MeetingTrayIndicator.swift in Sources */,
+				AA00000000000000000394 /* MeetingNotesPane.swift in Sources */,
+				AA00000000000000000396 /* TranscriptContextBuilder.swift in Sources */,
+				AA00000000000000000397 /* MeetingLLMService.swift in Sources */,
+				AA00000000000000000398 /* MeetingTemplatePresets.swift in Sources */,
+				AA00000000000000000401 /* LexicalRetriever.swift in Sources */,
+				AA00000000000000000402 /* ObsidianVaultService.swift in Sources */,
+				AA00000000000000000403 /* MeetingBriefService.swift in Sources */,
+				M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */,
+				M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */,
+				TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */,
+				TEB0000000000000000002 /* SpaceSelection.swift in Sources */,
+				TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */,
+				TEB0000000000000000004 /* SpaceFolderView.swift in Sources */,
+				TEB0000000000000000005 /* SpaceNoteView.swift in Sources */,
+				TEB0000000000000000006 /* SpaceViewModel.swift in Sources */,
+				TEB0000000000000000007 /* SpaceReveal.swift in Sources */,
+				TEB0000000000000000008 /* VaultNoteWriter.swift in Sources */,
+				TEB0000000000000000009 /* SpaceDraft.swift in Sources */,
+				M7B0000000000000000003 /* VaultContextPickerView.swift in Sources */,
+				M7B0000000000000000010 /* MeetingRowContextMenu.swift in Sources */,
+				M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */,
+				M8B0000000000000000001 /* MeetingRelatedDocsService.swift in Sources */,
+				M8B0000000000000000002 /* MeetingRelatedDocsSection.swift in Sources */,
+				GGB0000000000000000114 /* MeetingRelatedEmailsSection.swift in Sources */,
+				GGB0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift in Sources */,
+				M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */,
+				DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */,
+				DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */,
+				DDB0000000000000000003 /* AutoBriefSettingsView.swift in Sources */,
+				AA00000000000000000404 /* MeetingBriefView.swift in Sources */,
+				5B10000000000000000A0001 /* MeetingTheme.swift in Sources */,
+				5B10000000000000000A0002 /* MeetingDocumentComponents.swift in Sources */,
+				5B10000000000000000A0003 /* MeetingOutputParser.swift in Sources */,
+				5B10000000000000000A0004 /* MeetingChecklistStore.swift in Sources */,
+				5B10000000000000000A0006 /* ImportedMeetingTitle.swift in Sources */,
+				AA00000000000000000405 /* MeetingQAView.swift in Sources */,
+				AA00000000000000000406 /* MeetingObsidianExporter.swift in Sources */,
+				AA00000000000000000407 /* MeetingExportView.swift in Sources */,
+				AA00000000000000000408 /* TranscriptFileParser.swift in Sources */,
+				AA00000000000000000409 /* MeetingImportService.swift in Sources */,
+				AA00000000000000000410 /* TranscriptMerger.swift in Sources */,
+				AA00000000000000000412 /* MeetingDiarizationEnricher.swift in Sources */,
+				AA00000000000000000411 /* MeetingImportView.swift in Sources */,
+				AA00000000000000000413 /* SpeakerMappingView.swift in Sources */,
+				AA00000000000000000501 /* MeetingLanguageDirective.swift in Sources */,
+				AA00000000000000000502 /* MeetingLanguageService.swift in Sources */,
+				MRB0000000000000000001 /* MeetingModelRouter.swift in Sources */,
+				AA00000000000000000601 /* MeetingOrganizationIndex.swift in Sources */,
+				P2B0000000000000000001 /* Person.swift in Sources */,
+				P2B0000000000000000002 /* PersonIdentity.swift in Sources */,
+				P2B0000000000000000003 /* ParticipantDirectoryService.swift in Sources */,
+				P3B0000000000000000001 /* ParticipantsSection.swift in Sources */,
+				CCA000000000000000000501 /* MeetingsViewModel+Language.swift in Sources */,
+				CCA000000000000000000502 /* MeetingsViewModel+Organization.swift in Sources */,
+				AA00000000000000000400 /* MeetingTemplateEditorView.swift in Sources */,
+				AAB0000000000000000B01 /* PromptSurface.swift in Sources */,
+				AAB0000000000000000B02 /* MeetingTemplateMigration.swift in Sources */,
+				AAB0000000000000000B03 /* PromptTemplateEditor.swift in Sources */,
+				AAB0000000000000000B04 /* PromptLibraryView.swift in Sources */,
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
+				C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */,
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
 				AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */,
+				CC88800000000000000001 /* ClamshellStateProvider.swift in Sources */,
 				AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */,
 				AA00000000000000000032 /* TextInsertionService.swift in Sources */,
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
@@ -3916,6 +5059,7 @@
 				AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */,
 				A91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift in Sources */,
 				AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */,
+				AADA7A0000000000000001 /* DataMigrationService.swift in Sources */,
 				6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */,
 				AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */,
 				AA00000000000000000040 /* HTTPResponse.swift in Sources */,
@@ -3930,6 +5074,9 @@
 				AA00000000000000000153 /* HistoryExporter.swift in Sources */,
 				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
 				AA00000000000000000283 /* DictionaryExporter.swift in Sources */,
+				E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */,
+				AABK0000000000000000M001 /* SettingsBackupExporter+Meetings.swift in Sources */,
+				FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */,
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,
@@ -4006,6 +5153,7 @@
 					AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */,
 					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
+					4E5353420000000000000001 /* NativeSearchField.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
 				AA00000000000000000152 /* AppConstants.swift in Sources */,
@@ -4048,7 +5196,6 @@
 				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
 				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
-				AA00000000000000000303 /* SupporterBadgeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4258,6 +5405,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000226 /* LiveTranscriptPlugin.swift in Sources */,
+				AA0000000000000000MIR01 /* MeetingTranscriptMirror.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4615,15 +5763,15 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "MeetingWhisper Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meetingwhisper.mac.dev;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -4651,8 +5799,8 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meetingwhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -4667,8 +5815,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_NAME = "typewhisper-cli";
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_NAME = "meetingwhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -4679,8 +5827,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_NAME = "typewhisper-cli";
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_NAME = "meetingwhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -5250,15 +6398,15 @@
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeWhisperWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = "MeetingWhisper Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meetingwhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -5277,15 +6425,15 @@
 				ENABLE_APP_SANDBOX = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeWhisperWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = "MeetingWhisper Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meetingwhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

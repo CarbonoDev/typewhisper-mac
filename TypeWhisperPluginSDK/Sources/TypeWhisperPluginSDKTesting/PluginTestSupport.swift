@@ -37,7 +37,42 @@ public final class PluginTestEventBus: EventBusProtocol, @unchecked Sendable {
     }
 }
 
-public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+public final class MeetingEventTestBus: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handlers: [UUID: @Sendable (MeetingEvent) async -> Void] = [:]
+
+    public init() {}
+
+    @discardableResult
+    public func subscribe(_ handler: @escaping @Sendable (MeetingEvent) async -> Void) -> UUID {
+        let id = UUID()
+        lock.withLock {
+            handlers[id] = handler
+        }
+        return id
+    }
+
+    public func unsubscribe(id: UUID) {
+        _ = lock.withLock {
+            handlers.removeValue(forKey: id)
+        }
+    }
+
+    public func emit(_ event: MeetingEvent) async {
+        let subscribers = lock.withLock {
+            Array(handlers.values)
+        }
+        for handler in subscribers {
+            await handler(event)
+        }
+    }
+
+    public var subscriberCount: Int {
+        lock.withLock { handlers.count }
+    }
+}
+
+public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, MeetingEventObserving, @unchecked Sendable {
     private struct AnySendable: @unchecked Sendable {
         let value: Any
     }
@@ -51,6 +86,10 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
 
     private let lock = NSLock()
     private var state: State
+
+    /// Backing store for meeting events so plugin tests can drive `MeetingEvent`s through the
+    /// same `host.meetingEvents` capability accessor the app host exposes.
+    private let meetingEventStore = MeetingEventTestBus()
 
     public let pluginDataDirectory: URL
     public let eventBus: EventBusProtocol
@@ -136,6 +175,28 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         lock.withLock {
             state.streamingDisplayActiveValues.append(active)
         }
+    }
+
+    // MARK: - Meeting Events
+
+    @discardableResult
+    public func subscribeMeetingEvents(
+        _ handler: @escaping @Sendable (MeetingEvent) async -> Void
+    ) -> UUID {
+        meetingEventStore.subscribe(handler)
+    }
+
+    public func unsubscribeMeetingEvents(id: UUID) {
+        meetingEventStore.unsubscribe(id: id)
+    }
+
+    /// Deliver a meeting event to all subscribers (test driver).
+    public func emitMeetingEvent(_ event: MeetingEvent) async {
+        await meetingEventStore.emit(event)
+    }
+
+    public var meetingEventSubscriberCount: Int {
+        meetingEventStore.subscriberCount
     }
 
     public var capabilitiesChangedCount: Int {

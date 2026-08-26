@@ -41,6 +41,234 @@ enum DockIconVisibility {
     }
 }
 
+/// Pure launch-window precedence (UI Step 0, D2). Decides which window (if any) opens on
+/// `applicationDidFinishLaunching`: first-run setup wins, then a pending post-update license prompt
+/// (which lands in Settings with its startup sheet and suppresses `main` for that launch), then the
+/// "show window at launch" toggle.
+enum LaunchWindowDecision {
+    enum Window: Equatable {
+        case setup
+        case settings
+        case main
+        case none
+    }
+
+    static func decide(
+        isFirstRunSetupIncomplete: Bool,
+        postUpdatePromptPending: Bool,
+        showMainWindowAtLaunch: Bool
+    ) -> Window {
+        if isFirstRunSetupIncomplete { return .setup }
+        if postUpdatePromptPending { return .settings }
+        if showMainWindowAtLaunch { return .main }
+        return .none
+    }
+}
+
+/// Pure matching for the app's managed windows (UI Step 0, D1). Centralizes the substring-hazard
+/// fix: the new `"main"` scene is matched by **prefix** (SwiftUI produces identifiers like
+/// `main-AppWindow-1`), while the pre-existing scenes keep case-insensitive substring matching.
+enum ManagedWindowMatching {
+    /// Scene ids matched by case-insensitive substring (the pre-existing behavior).
+    static let substringIDs = [
+        AppWindowID.settings,
+        AppWindowID.setup,
+        AppWindowID.history,
+        AppWindowID.errors,
+        AppWindowID.meetings
+    ]
+
+    /// Whether a window identifier belongs to a managed scene (identifier check only; callers also
+    /// match localized titles as a fallback).
+    static func isManaged(identifier: String) -> Bool {
+        let lower = identifier.lowercased()
+        if lower.hasPrefix(AppWindowID.main) { return true }
+        return substringIDs.contains { lower.contains($0) }
+    }
+
+    /// Whether an existing window identifier satisfies an `open(id:)` request. `main` is prefix-
+    /// matched; every other id keeps case-insensitive substring matching.
+    static func matches(windowIdentifier: String, requestedID: String) -> Bool {
+        if requestedID == AppWindowID.main {
+            return windowIdentifier.lowercased().hasPrefix(AppWindowID.main)
+        }
+        return windowIdentifier.range(of: requestedID, options: .caseInsensitive) != nil
+    }
+}
+
+@MainActor
+enum ManagedAppWindowRestoration {
+    static func disable(for window: NSWindow) {
+        window.isRestorable = false
+    }
+}
+
+private final class ManagedAppWindowRestorationView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        ManagedAppWindowRestoration.disable(for: window)
+    }
+}
+
+private struct ManagedAppWindowRestorationAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> ManagedAppWindowRestorationView {
+        ManagedAppWindowRestorationView()
+    }
+
+    func updateNSView(_ nsView: ManagedAppWindowRestorationView, context: Context) {
+        guard let window = nsView.window else { return }
+        ManagedAppWindowRestoration.disable(for: window)
+    }
+}
+
+private extension View {
+    func disablesManagedAppWindowRestoration() -> some View {
+        background(ManagedAppWindowRestorationAccessor().frame(width: 0, height: 0))
+    }
+}
+
+struct SettingsManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "Settings"), id: "settings") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1050, height: 600)
+    }
+}
+
+struct SetupManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 820, height: 560)
+    }
+}
+
+struct HistoryManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "History"), id: "history") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 900, height: 500)
+    }
+}
+
+struct ErrorLogManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "Error Log"), id: "errors") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 500, height: 400)
+    }
+}
+
+// Meetings-first main window (UI Step 2, D1/D10) is a first-class managed scene: it participates in
+// the same restoration-disabling + macOS-15 launch-suppression machinery as the pre-existing scenes,
+// so a login/background launch stays windowless (the LaunchWindowDecision authority opens it only
+// when our show-window-at-launch toggle fires) and macOS never restores a stale main window.
+struct MainManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "mainwindow.title"), id: AppWindowID.main) {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1100, height: 720)
+    }
+}
+
+@MainActor
+protocol ManagedAppWindowSceneConfiguration {
+    associatedtype SettingsScene: Scene
+    associatedtype SetupScene: Scene
+    associatedtype HistoryScene: Scene
+    associatedtype ErrorLogScene: Scene
+    associatedtype MainScene: Scene
+
+    static func settings(content: AnyView) -> SettingsScene
+    static func setup(content: AnyView) -> SetupScene
+    static func history(content: AnyView) -> HistoryScene
+    static func errorLog(content: AnyView) -> ErrorLogScene
+    static func main(content: AnyView) -> MainScene
+}
+
+enum LegacyManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func settings(content: AnyView) -> some Scene {
+        SettingsManagedAppWindowScene(content: content)
+    }
+
+    static func setup(content: AnyView) -> some Scene {
+        SetupManagedAppWindowScene(content: content)
+    }
+
+    static func history(content: AnyView) -> some Scene {
+        HistoryManagedAppWindowScene(content: content)
+    }
+
+    static func errorLog(content: AnyView) -> some Scene {
+        ErrorLogManagedAppWindowScene(content: content)
+    }
+
+    static func main(content: AnyView) -> some Scene {
+        MainManagedAppWindowScene(content: content)
+    }
+}
+
+@available(macOS 15.0, *)
+struct SuppressedManagedAppWindowScene<Content: Scene>: Scene {
+    let content: Content
+
+    var body: some Scene {
+        content
+            .defaultLaunchBehavior(.suppressed)
+            .restorationBehavior(.disabled)
+    }
+}
+
+@available(macOS 15.0, *)
+enum SuppressedManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func settings(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: SettingsManagedAppWindowScene(content: content))
+    }
+
+    static func setup(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: SetupManagedAppWindowScene(content: content))
+    }
+
+    static func history(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: HistoryManagedAppWindowScene(content: content))
+    }
+
+    static func errorLog(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: ErrorLogManagedAppWindowScene(content: content))
+    }
+
+    static func main(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: MainManagedAppWindowScene(content: content))
+    }
+}
+
 enum MenuBarIconState {
     static func isRecordingActive(
         dictationState: DictationViewModel.State,
@@ -54,9 +282,11 @@ private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    // Owner requests 3 & 4: scoped capture/calendar state for the tray meeting indicators.
+    @StateObject private var meetingTray = MeetingTrayState()
 
     private var title: String {
-        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+        AppConstants.isDevelopment ? "MeetingWhisper Dev" : "MeetingWhisper"
     }
 
     private var isRecordingActive: Bool {
@@ -67,24 +297,74 @@ private struct MenuBarExtraLabel: View {
     }
 
     var body: some View {
-        Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
-            .resizable()
-            .renderingMode(isRecordingActive ? .original : .template)
-            .frame(width: 18, height: 18)
-            .accessibilityLabel(Text(verbatim: title))
-            .accessibilityValue(
-                isRecordingActive
-                    ? Text(String(localized: "Recording..."))
-                    : Text(String(localized: "Idle"))
-            )
-            .onAppear {
-                ManagedAppWindowOpener.shared.openWindow = openWindow
+        Group {
+            switch MeetingTrayIndicator.display(
+                isRecording: meetingTray.isRecording,
+                recordingTitle: meetingTray.meetingTitle,
+                elapsedSeconds: meetingTray.elapsedSeconds,
+                // An unrelated dictation/recorder capture owns the icon (red glyph), so suppress the
+                // ongoing/upcoming title while it is active — recording state always takes precedence.
+                candidate: isRecordingActive ? nil : meetingTray.upcomingEvent,
+                now: meetingTray.trayNow
+            ) {
+            case .recording(let label):
+                // Owner request 3: recording glyph + truncated meeting title + elapsed time.
+                // HStack, not Label: inside a MenuBarExtra label SwiftUI applies an icon-only
+                // label style by default, silently dropping the Text.
+                HStack(spacing: 4) {
+                    Image(systemName: "record.circle")
+                    Text(label)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(String(localized: "Recording...")))
+            case .ongoing(let label):
+                // Owner: "While meeting is ongoing (whether recording or not) also show the text on
+                // the tray bar" — glyph + truncated meeting title + time since start ("test · 24m",
+                // "now" during the first minute). `meetingTray.trayNow` is the ticked clock so the
+                // elapsed form advances while visible (no always-on timer). HStack, not Label:
+                // inside a MenuBarExtra label SwiftUI applies an icon-only label style by default,
+                // silently dropping the Text.
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                    Text(label)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    Text(String(format: String(localized: "meetings.tray.accessibility.ongoing"), label))
+                )
+            case .upcoming(let label):
+                // Owner requests 1 & 2: Granola-style tray title — glyph + truncated meeting title +
+                // countdown ("test · in 39m"). `meetingTray.trayNow` is the ticked clock so the
+                // countdown re-renders while visible (no always-on timer). HStack, not Label: inside
+                // a MenuBarExtra label SwiftUI applies an icon-only label style by default, silently
+                // dropping the Text.
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                    Text(label)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: label))
+            case .idle:
+                Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
+                    .resizable()
+                    .renderingMode(isRecordingActive ? .original : .template)
+                    .frame(width: 18, height: 18)
+                    .accessibilityLabel(Text(verbatim: title))
+                    .accessibilityValue(
+                        isRecordingActive
+                            ? Text(String(localized: "Recording..."))
+                            : Text(String(localized: "Idle"))
+                    )
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
-                guard let id = notification.userInfo?["id"] as? String else { return }
-                ManagedAppWindowOpener.shared.openWindow = openWindow
-                openWindow(id: id)
-            }
+        }
+        .onAppear {
+            ManagedAppWindowOpener.shared.openWindow = openWindow
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
+            guard let id = notification.userInfo?["id"] as? String else { return }
+            ManagedAppWindowOpener.shared.openWindow = openWindow
+            openWindow(id: id)
+        }
     }
 }
 
@@ -147,7 +427,7 @@ enum MenuBarLogoMarkImage {
     }
 }
 
-struct TypeWhisperApp: App {
+struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @State private var startupSheet: StartupSheetRoute?
@@ -179,34 +459,14 @@ struct TypeWhisperApp: App {
             }
         }
 
-        settingsScene
-
-        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
-            setupContent
-        }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultSize(width: 820, height: 560)
-
-        Window(String(localized: "History"), id: "history") {
-            historyContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 900, height: 500)
-
-        Window(String(localized: "Error Log"), id: "errors") {
-            errorLogContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 500, height: 400)
-    }
-
-    private var settingsScene: some Scene {
-        Window(String(localized: "Settings"), id: "settings") {
-            settingsContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 1050, height: 600)
+        // All managed scenes route through `WindowConfiguration` so they share one restoration /
+        // launch-suppression policy. The meetings-first `main` window is now a first-class managed
+        // scene here (extends upstream's setup/history/errors/settings set).
+        WindowConfiguration.settings(content: AnyView(settingsContent))
+        WindowConfiguration.setup(content: AnyView(setupContent))
+        WindowConfiguration.history(content: AnyView(historyContent))
+        WindowConfiguration.errorLog(content: AnyView(errorLogContent))
+        WindowConfiguration.main(content: AnyView(mainWindowContent))
     }
 
     @ViewBuilder
@@ -271,13 +531,29 @@ struct TypeWhisperApp: App {
         }
     }
 
+    @ViewBuilder
+    private var mainWindowContent: some View {
+        if AppConstants.isRunningTests {
+            EmptyView()
+        } else {
+            MainWindowView()
+        }
+    }
+
     init() {
         guard !AppConstants.isRunningTests else { return }
+
+        // MeetingWhisper rename: migrate legacy TypeWhisper data (app-support dir, UserDefaults
+        // domains, keychain items) BEFORE any service reads AppConstants.appSupportDirectory /
+        // UserDefaults / keychain — otherwise services would create fresh empty stores under the
+        // new name and the move would refuse. Idempotent + guarded against the test host.
+        DataMigrationService.runIfNeeded()
 
         // Trigger ServiceContainer initialization
         _ = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
+        MainWindowCoordinator.shared = MainWindowCoordinator()
         PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         Task { @MainActor in
@@ -425,8 +701,9 @@ final class ManagedAppWindowOpener {
     }
 
     private func managedWindow(id: String) -> NSWindow? {
-        NSApp.windows.first(where: {
-            $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
+        NSApp.windows.first(where: { window in
+            guard let identifier = window.identifier?.rawValue else { return false }
+            return ManagedWindowMatching.matches(windowIdentifier: identifier, requestedID: id)
         })
     }
 
@@ -472,7 +749,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
-    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+    // Sparkle NEUTRALIZED for the MeetingWhisper fork: startingUpdater is false so the updater
+    // never schedules a background check against a feed. Combined with the removal of SUFeedURL in
+    // Info.plist, no code path can reach upstream's appcast. Restore to true once a fork feed exists.
+    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
@@ -498,11 +778,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     static func registerDefaultUserDefaults(_ defaults: UserDefaults = .standard) {
         defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
+            UserDefaultsKeys.showMainWindowAtLaunch: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
-            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false
+            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
+            // Meetings export root folder (plan D7/M4): meeting notes nest under "Meetings" in the
+            // vault by default; clearing the field restores pre-root paths (the escape hatch).
+            UserDefaultsKeys.meetingsObsidianRootFolder: "Meetings",
+            // Speaker-recognition amendment (D-A7): adopt provider speaker labels by default.
+            UserDefaultsKeys.meetingsPreferProviderSpeakerLabels: true
         ])
     }
 
@@ -546,18 +832,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        // Auto-open the standalone setup assistant while first-run setup is incomplete.
-        if HomeViewModel.shared.showSetupWizard {
+        // Launch-window precedence (D2): first-run setup > post-update prompt > main window.
+        // LaunchWindowDecision is the single launch authority; #883's "keep login launches windowless"
+        // intent is subsumed here. With our delicensed coordinator `shouldPresentPrompt` is always
+        // false, so a completed-setup login never auto-opens a window (no `.settings` auto-open) —
+        // the main window opens only when our show-window-at-launch toggle fires. (#883 removed the
+        // `shouldAutoOpenSettingsOnLaunch` indirection; we read `shouldPresentPrompt` directly.)
+        let launchDecision = LaunchWindowDecision.decide(
+            isFirstRunSetupIncomplete: HomeViewModel.shared.showSetupWizard,
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
+            showMainWindowAtLaunch: UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMainWindowAtLaunch)
+        )
+        switch launchDecision {
+        case .setup:
+            // Auto-open the standalone setup assistant while first-run setup is incomplete.
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.openSetupWindow()
             }
-        } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
+        case .settings:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.openSettingsWindow()
             }
+        case .main:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.openMainWindow()
+            }
+        case .none:
+            break
         }
 
         // Observe appearance preference changes
@@ -611,7 +915,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             if HomeViewModel.shared.showSetupWizard {
                 openSetupWindow()
             } else {
-                openSettingsWindow()
+                // Reopen (Dock click) opens the meetings-first main window (D2).
+                openMainWindow()
             }
         }
         return true
@@ -624,31 +929,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func openSettingsWindow() {
-        ManagedAppWindowOpener.shared.open(id: "settings")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
     }
 
     private func openSetupWindow() {
-        ManagedAppWindowOpener.shared.open(id: "setup")
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.setup)
+    }
+
+    private func openMainWindow() {
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.main)
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
-
-        openSettingsWindow()
-
-        Task { @MainActor in
-            await SupporterDiscordService.shared?.handleCallbackURL(url)
+        // [Sprint 1] Deep links into the meetings surface, e.g. from an Obsidian export or
+        // automation: `typewhisper://meeting/<uuid>` opens that meeting document,
+        // `typewhisper://meetings` opens the main window.
+        guard url.scheme?.lowercased() == "typewhisper" else { return }
+        switch url.host?.lowercased() {
+        case "meeting":
+            let idString = url.pathComponents.count > 1 ? url.pathComponents[1] : ""
+            if let id = UUID(uuidString: idString) {
+                openMainWindow()
+                MainWindowCoordinator.shared.openMeeting(id: id)
+            }
+        case "meetings":
+            openMainWindow()
+            MainWindowCoordinator.shared.show(.meetings)
+        case "home":
+            openMainWindow()
+            MainWindowCoordinator.shared.show(.home)
+        case "folder":
+            let path = url.pathComponents.dropFirst().joined(separator: "/")
+            if !path.isEmpty {
+                openMainWindow()
+                MainWindowCoordinator.shared.show(.folder(path))
+            }
+        #if DEBUG
+        case "screenshot":
+            // Dev-only self-capture for design iteration: `typewhisper://screenshot/<name>`
+            // renders the main window's own view tree to /tmp/typewhisper-dev-screenshots/<name>.png.
+            // No Screen Recording permission needed because the app draws itself.
+            let rawName = url.pathComponents.count > 1 ? url.pathComponents[1] : "window"
+            captureMainWindowForDev(named: rawName)
+        #endif
+        default:
+            break
         }
     }
 
+    #if DEBUG
+    private func captureMainWindowForDev(named rawName: String) {
+        let name = rawName.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
+        // Give any just-triggered navigation a beat to settle before drawing.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            guard let window = NSApp.windows.first(where: { self.isManagedWindow($0) && $0.isVisible }),
+                  let frameView = window.contentView?.superview else { return }
+            let bounds = frameView.bounds
+            guard let rep = frameView.bitmapImageRepForCachingDisplay(in: bounds) else { return }
+            frameView.cacheDisplay(in: bounds, to: rep)
+            guard let data = rep.representation(using: .png, properties: [:]) else { return }
+            let dir = URL(fileURLWithPath: "/tmp/typewhisper-dev-screenshots", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: dir.appendingPathComponent("\(name).png"))
+        }
+    }
+    #endif
+
     private func isManagedWindow(_ window: NSWindow) -> Bool {
-        if let identifier = window.identifier?.rawValue.lowercased() {
-            if identifier.contains("settings")
-                || identifier.contains("setup")
-                || identifier.contains("history")
-                || identifier.contains("errors") {
-                return true
-            }
+        if let identifier = window.identifier?.rawValue,
+           ManagedWindowMatching.isManaged(identifier: identifier) {
+            return true
         }
 
         let title = window.title
@@ -656,6 +1006,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             || title == String(localized: "TypeWhisper Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
+            || title == String(localized: "meetings.window.title")
+            || title == String(localized: "mainwindow.title")
     }
 
     private var hasVisibleManagedWindow: Bool {

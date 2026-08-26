@@ -150,11 +150,24 @@ private final class MenuBarState: ObservableObject {
             return (String(localized: "No model loaded"), "exclamationmark.triangle.fill")
         }
 
+        let label = activeModelLabel(engine: modelManager.activeEngineName, model: name)
+
         if modelManager.isModelReady {
-            return (String(localized: "\(name) ready"), "checkmark.circle.fill")
+            return (String(localized: "\(label) ready"), "checkmark.circle.fill")
         }
 
-        return (String(localized: "\(name) selected"), "clock.fill")
+        return (String(localized: "\(label) selected"), "clock.fill")
+    }
+
+    /// Prefixes the model name with its provider/engine (e.g. "Groq • whisper-large-v3") so the
+    /// menu bar shows which provider handles transcription. Skips the prefix when it would be
+    /// redundant — e.g. local engines whose model name already contains the provider ("Parakeet").
+    static func activeModelLabel(engine: String?, model: String) -> String {
+        guard let engine, !engine.isEmpty, engine != model,
+              !model.localizedCaseInsensitiveContains(engine) else {
+            return model
+        }
+        return "\(engine) • \(model)"
     }
 
     private func refreshCopyAvailability() {
@@ -187,6 +200,8 @@ private final class MenuBarState: ObservableObject {
 
 enum MenuBarMenuItem: Hashable {
     case settings
+    case openMainWindow
+    case startMeetingRecording
     case history
     case errorLog
     case toggleRecorder
@@ -197,54 +212,50 @@ enum MenuBarMenuItem: Hashable {
     case copyLastTranscription
     case readBackLastTranscription
     case checkForUpdates
+
+    /// The managed window this item opens, if any. Declared alongside the menu button arms so the
+    /// window target is unit-testable (`MenuBarItemsTests`) and can never silently drift from the id
+    /// constants in `AppWindowID`.
+    var managedWindowTarget: String? {
+        switch self {
+        case .settings, .transcribeFile: return AppWindowID.settings
+        case .openMainWindow: return AppWindowID.main
+        case .history: return AppWindowID.history
+        case .errorLog: return AppWindowID.errors
+        default: return nil
+        }
+    }
 }
 
-enum MenuBarMenuSection: String, CaseIterable, Hashable {
-    case general = "General"
-    case recorder = "Recorder"
-    case transcription = "Transcription"
-    case updates = "Updates"
-
-    var titleLocalizationKey: String {
-        rawValue
+/// The slim menu-bar item set (D8). The visible menu is exactly: status line · Start Meeting
+/// Recording · Recorder toggle · Pause dictation · Recent transcriptions · Open TypeWhisper ·
+/// Settings… · Quit (eight entries). History, Error Log, and Transcribe File are removed from the
+/// menu and reachable only in Settings (Tools › History / File Transcription, Application › Advanced).
+///
+/// "Open TypeWhisper" always targets the meetings-first `AppWindowID.main` window; the legacy
+/// `meetings` window scene was retired (D10), so there is no longer a rollout-flag alternative.
+enum MenuBarLayout {
+    /// Divider-separated groups of the slim menu, in display order.
+    static func groups() -> [[MenuBarMenuItem]] {
+        [
+            [.startMeetingRecording],
+            [.toggleRecorder, .toggleDictationHotkeysPause, .recentTranscriptions],
+            [.openMainWindow, .settings]
+        ]
     }
 
-    var titleResource: LocalizedStringResource {
-        switch self {
-        case .general:
-            "General"
-        case .recorder:
-            "settings.tab.recorder"
-        case .transcription:
-            "Transcription"
-        case .updates:
-            "Updates"
-        }
-    }
-
-    var items: [MenuBarMenuItem] {
-        items(hasRecoverableRecording: true)
-    }
-
-    func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
-        switch self {
-        case .general:
-            [.settings, .history, .errorLog]
-        case .recorder:
-            [.toggleRecorder]
-        case .transcription:
-            hasRecoverableRecording
-                ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-                : [.toggleDictationHotkeysPause, .transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-        case .updates:
-            [.checkForUpdates]
-        }
+    /// Flat ordered item list (groups concatenated).
+    static func items() -> [MenuBarMenuItem] {
+        groups().flatMap { $0 }
     }
 }
 
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
+    // Owner requests 3 & 4: surface the recording / upcoming meeting as an actionable menu entry that
+    // opens the main window focused on that meeting.
+    @ObservedObject private var meetings = MeetingsViewModel.shared
 
     var body: some View {
         Group {
@@ -254,11 +265,15 @@ struct MenuBarView: View {
 
             Divider()
 
-            ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
-                Section(String(localized: section.titleResource)) {
-                    ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
-                        menuItem(for: item)
-                    }
+            meetingIndicatorSection
+
+            let groups = MenuBarLayout.groups()
+            ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 {
+                    Divider()
+                }
+                ForEach(group, id: \.self) { item in
+                    menuItem(for: item)
                 }
             }
 
@@ -279,27 +294,127 @@ struct MenuBarView: View {
         ManagedAppWindowOpener.shared.open(id: id)
     }
 
+    /// The tray's meeting entry: one item above the main menu that names exactly what the tray
+    /// *title* is showing, in the same precedence order (recording > in-progress > upcoming, via
+    /// `MeetingTrayIndicator.menuTarget`). Clicking it does both halves of "take me into this
+    /// meeting": it opens the meeting's document in MeetingWhisper *and* — when the event carries a
+    /// conference URL — joins the call through `MeetingJoinLauncher`, which lands it in the owning
+    /// Google account's Chrome profile instead of whichever profile Chrome used last. Nothing is
+    /// shown when neither applies, and the existing click-through-to-menu behavior is unchanged.
+    @ViewBuilder
+    private var meetingIndicatorSection: some View {
+        switch MeetingTrayIndicator.menuTarget(
+            recordingTitle: meetings.isCapturing ? meetings.activeMeeting?.title : nil,
+            events: meetings.upcomingEvents,
+            now: Date()
+        ) {
+        case .recording:
+            if let active = meetings.activeMeeting {
+                Button {
+                    openAndJoin(meeting: active)
+                } label: {
+                    Label(
+                        String(format: String(localized: "meetings.menu.recording"), active.title),
+                        systemImage: active.conferencingURL == nil ? "record.circle" : "video"
+                    )
+                }
+                .help(String(localized: "meetings.menu.openAndJoin"))
+                Divider()
+            }
+        case let .event(event, isOngoing):
+            // Two literal keys, not one interpolated key: the string extractor only sees literals.
+            let format = isOngoing
+                ? String(localized: "meetings.menu.ongoing")
+                : String(localized: "meetings.menu.upcoming")
+            Button {
+                openAndJoin(event: event)
+            } label: {
+                Label(
+                    String(format: format, event.title),
+                    systemImage: event.conferencingURL == nil ? "calendar" : "video"
+                )
+            }
+            .help(String(localized: "meetings.menu.openAndJoin"))
+            Divider()
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// Open an already-created meeting's document and join its call. Focus goes through the existing
+    /// `requestFocus` bridge (the main window may not be open yet, so the window is opened right
+    /// after and honours the pending focus on appear).
+    private func openAndJoin(meeting: Meeting) {
+        meetings.requestFocus(on: meeting)
+        openManagedWindow(AppWindowID.main)
+        join(urlString: meeting.conferencingURL, calendarEventID: meeting.calendarEventID)
+    }
+
+    /// Same, for a calendar event that may not have a meeting yet: `createMeeting(from:)` dedupes by
+    /// `calendarEventID`, so repeated clicks reuse the one document rather than piling up duplicates.
+    private func openAndJoin(event: CalendarEventDTO) {
+        let meeting = meetings.createMeeting(from: event)
+        meetings.requestFocus(on: meeting)
+        openManagedWindow(AppWindowID.main)
+        join(urlString: event.conferencingURL, calendarEventID: event.id)
+    }
+
+    /// The join half. No conference URL (ad-hoc meeting, event without a link) means the click just
+    /// opens the document — never a stray browser window. The account `sub` parsed out of the
+    /// namespaced calendar event ID is what picks the Chrome profile; an EventKit-bare ID yields
+    /// `nil` and falls back to the system browser, exactly as every other join affordance does.
+    private func join(urlString: String?, calendarEventID: String?) {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        MeetingJoinLauncher.open(
+            url: url,
+            accountSub: calendarEventID.flatMap(GoogleCalendarID.accountSub(fromNamespacedID:))
+        )
+    }
+
     @ViewBuilder
     private func menuItem(for item: MenuBarMenuItem) -> some View {
         switch item {
         case .settings:
             Button {
-                openManagedWindow("settings")
+                openManagedWindow(AppWindowID.settings)
             } label: {
                 Label(String(localized: "Settings..."), systemImage: "gear")
             }
             .keyboardShortcut(",")
 
+        case .startMeetingRecording:
+            Button {
+                // [M10] Create an ad-hoc meeting, start capture, and open the meetings-first `main`
+                // window focused on it. The mutual-exclusion guard surfaces a busy message (never
+                // crashes) when a capture is already active; the window still opens so the user sees
+                // state.
+                Task {
+                    if let meeting = await MeetingsViewModel.shared.startMeetingRecordingFromMenu() {
+                        MeetingsViewModel.shared.requestFocus(on: meeting)
+                    }
+                    openManagedWindow(AppWindowID.main)
+                }
+            } label: {
+                Label(String(localized: "meetings.menu.startRecording"), systemImage: "record.circle")
+            }
+
+        case .openMainWindow:
+            Button {
+                openManagedWindow(AppWindowID.main)
+            } label: {
+                Label(String(localized: "menubar.openMainWindow"), systemImage: "macwindow")
+            }
+
         case .history:
             Button {
-                openManagedWindow("history")
+                openManagedWindow(AppWindowID.history)
             } label: {
                 Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
             }
 
         case .errorLog:
             Button {
-                openManagedWindow("errors")
+                openManagedWindow(AppWindowID.errors)
             } label: {
                 Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
             }
@@ -322,7 +437,7 @@ struct MenuBarView: View {
 
         case .transcribeFile:
             Button {
-                openManagedWindow("settings")
+                openManagedWindow(AppWindowID.settings)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
                 }

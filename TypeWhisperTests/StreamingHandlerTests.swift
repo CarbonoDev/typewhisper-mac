@@ -315,14 +315,6 @@ final class StreamingHandlerTests: XCTestCase {
             self.progressUpdates = progressUpdates
         }
 
-        func setFinalResult(_ finalResult: PluginTranscriptionResult) {
-            self.finalResult = finalResult
-        }
-
-        func setFinishError(_ error: PluginTranscriptionError?) {
-            finishError = error
-        }
-
         func appendAudio(samples: [Float]) async throws {
             appendedChunkSizes.append(samples.count)
             let progressText: String
@@ -335,10 +327,7 @@ final class StreamingHandlerTests: XCTestCase {
         }
 
         func finish() async throws -> PluginTranscriptionResult {
-            if let finishError {
-                throw finishError
-            }
-            return finalResult
+            PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
         }
 
         func cancel() async {}
@@ -346,9 +335,6 @@ final class StreamingHandlerTests: XCTestCase {
         func recordedChunks() -> [Int] {
             appendedChunkSizes
         }
-
-        private var finalResult = PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
-        private var finishError: PluginTranscriptionError?
     }
 
     override func tearDown() {
@@ -763,178 +749,57 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(stable, "Ich bin an Koeln.")
     }
 
-    func testStabilizeTextReplacesCompactedProvisionalCorrections() {
-        let updates = [
-            "Fourscore",
-            "Four score",
-            "Four score and se ven",
-            "Four score and seven years a",
-            "Four score and seven years ago our f",
-            "Four score and seven years ago our fathers",
-            "Four score and seven years ago our fathers brought forth",
-        ]
+    // MARK: - Bounded (frozen-prefix) stabilization (meeting-capture perf fix)
 
-        let stable = updates.reduce("") { confirmed, update in
-            StreamingHandler.stabilizeText(confirmed: confirmed, new: update)
-        }
-
-        XCTAssertEqual(
-            stable,
-            "Four score and seven years ago our fathers brought forth"
+    func testBoundedStabilizeAppendsBeyondFrozenPrefix() {
+        // New content extends the confirmed text; the frozen (already-persisted) prefix is preserved
+        // and the tail is appended, matching the unbounded result.
+        let frozen = "First sentence. Second sentence."
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: frozen,
+            new: "First sentence. Second sentence. Third sentence.",
+            frozenPrefix: frozen
         )
+
+        XCTAssertEqual(stable, "First sentence. Second sentence. Third sentence.")
     }
 
-    func testStabilizeTextDropsRepeatedEarlierPrefixWithGrowingMultilingualTail() {
-        var stable = "Four score and seven years ago our fathers brought forth on this continent a new nation."
-
-        stable = StreamingHandler.stabilizeText(
-            confirmed: stable,
-            new: "brought forth on this continent a new nation. У"
-        )
-        XCTAssertEqual(
-            stable,
-            "Four score and seven years ago our fathers brought forth on this continent a new nation. У"
+    func testBoundedStabilizePreservesFrozenPrefixWhileCorrectingActiveTail() {
+        // A provider correction in the still-active tail is applied, but the persisted prefix ahead
+        // of it stays verbatim (it can no longer change) and is not re-stabilized.
+        let frozen = "First sentence. Second sentence."
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "First sentence. Second sentence. Ich bin an Koin.",
+            new: "First sentence. Second sentence. Ich bin an Koeln.",
+            frozenPrefix: frozen
         )
 
-        stable = StreamingHandler.stabilizeText(
-            confirmed: stable,
-            new: "brought forth on this continent a new nation. У Лукоморья дуб зелёный"
-        )
-        XCTAssertEqual(
-            stable,
-            "Four score and seven years ago our fathers brought forth on this continent a new nation. У Лукоморья дуб зелёный"
-        )
+        XCTAssertEqual(stable, "First sentence. Second sentence. Ich bin an Koeln.")
     }
 
-    func testFinalLiveResultKeepsStablePreviewWhenFinalIsShortUnrelatedTail() {
-        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
-            TranscriptionResult(
-                text: "ครับ",
-                detectedLanguage: "th",
-                duration: 3,
-                processingTime: 0.2,
-                engineUsed: "soniox",
-                segments: []
-            ),
-            stablePreview: "This is the meaningful multilingual preview"
+    func testBoundedStabilizeFallsBackToFullStabilizationWhenPrefixDoesNotLineUp() {
+        // When the frozen prefix is not shared by both snapshots (rare rewrite of committed text),
+        // the bounded variant must produce the same result as the unbounded one.
+        let confirmed = "Ich bin an Koin."
+        let new = "Ich bin an Koeln."
+        let bounded = StreamingHandler.stabilizeText(
+            confirmed: confirmed,
+            new: new,
+            frozenPrefix: "Totally unrelated persisted text."
         )
+        let full = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
 
-        XCTAssertEqual(result.text, "This is the meaningful multilingual preview")
-        XCTAssertNil(result.detectedLanguage)
+        XCTAssertEqual(bounded, full)
+        XCTAssertEqual(bounded, "Ich bin an Koeln.")
     }
 
-    func testFinalLiveResultKeepsStablePreviewWhenFinalIsChineseTail() {
-        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
-            TranscriptionResult(
-                text: "好。",
-                detectedLanguage: "zh",
-                duration: 3,
-                processingTime: 0.2,
-                engineUsed: "soniox",
-                segments: []
-            ),
-            stablePreview: "English and Russian meaningful preview text"
-        )
+    func testBoundedStabilizeWithEmptyFrozenPrefixMatchesUnbounded() {
+        let confirmed = "First sentence. Second sentence."
+        let new = "Second sentence. Third sentence."
+        let bounded = StreamingHandler.stabilizeText(confirmed: confirmed, new: new, frozenPrefix: "")
+        let full = StreamingHandler.stabilizeText(confirmed: confirmed, new: new)
 
-        XCTAssertEqual(result.text, "English and Russian meaningful preview text")
-        XCTAssertNil(result.detectedLanguage)
-    }
-
-    func testFinalLiveResultKeepsLongUnsegmentedProviderFinal() {
-        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
-            TranscriptionResult(
-                text: "这是一个完整的中文最终结果",
-                detectedLanguage: "zh",
-                duration: 3,
-                processingTime: 0.2,
-                engineUsed: "soniox",
-                segments: []
-            ),
-            stablePreview: "This is a much longer stable preview that should not replace the final"
-        )
-
-        XCTAssertEqual(result.text, "这是一个完整的中文最终结果")
-        XCTAssertEqual(result.detectedLanguage, "zh")
-    }
-
-    func testFinishUsesStablePreviewWhenLiveSessionFinalizationFails() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let plugin = MockLivePlugin()
-        await plugin.session.setProgressUpdates([
-            "English and Russian meaningful preview text",
-        ])
-        await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: "com.typewhisper.mock.live",
-                    name: "Mock Live",
-                    version: "1.0.0",
-                    principalClass: "MockLivePlugin",
-                    requiresAPIKey: false
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let modelManager = ModelManagerService()
-        modelManager.selectProvider(plugin.providerId)
-
-        let deltaLock = NSLock()
-        var sentDelta = false
-        let handler = StreamingHandler(
-            modelManager: modelManager,
-            bufferProvider: { [] },
-            recentBufferProvider: { _ in [] },
-            bufferDeltaProvider: { offset in
-                deltaLock.lock()
-                defer { deltaLock.unlock() }
-                guard !sentDelta else { return ([], offset) }
-                sentDelta = true
-                return (Array(repeating: 0.2, count: 4000), 4000)
-            },
-            bufferedDurationProvider: { 0.25 }
-        )
-
-        handler.start(
-            streamPrompt: "Live Terms",
-            engineOverrideId: plugin.providerId,
-            selectedProviderId: plugin.providerId,
-            languageSelection: .auto,
-            task: .transcribe,
-            cloudModelOverride: nil,
-            allowLiveTranscription: true,
-            stateCheck: { true }
-        )
-
-        try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish()
-
-        XCTAssertEqual(result?.text, "English and Russian meaningful preview text")
-        XCTAssertEqual(result?.engineUsed, plugin.providerId)
-    }
-
-    func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
-        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
-            TranscriptionResult(
-                text: "yes",
-                detectedLanguage: "en",
-                duration: 1,
-                processingTime: 0.1,
-                engineUsed: "soniox",
-                segments: []
-            ),
-            stablePreview: "yeah"
-        )
-
-        XCTAssertEqual(result.text, "yes")
-        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(bounded, full)
     }
 
     func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {
@@ -1076,76 +941,6 @@ final class StreamingHandlerTests: XCTestCase {
         let recorded = await plugin.session.recordedChunks()
         XCTAssertEqual(recorded, chunks.map(\.count))
         XCTAssertEqual(plugin.lastPrompt, "Live Terms")
-    }
-
-    func testLiveSessionFinishSendsTailFromFinalSamplesAfterRecorderDrain() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let plugin = MockLivePlugin()
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: "com.typewhisper.mock.live",
-                    name: "Mock Live",
-                    version: "1.0.0",
-                    principalClass: "MockLivePlugin",
-                    requiresAPIKey: false
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let modelManager = ModelManagerService()
-        modelManager.selectProvider(plugin.providerId)
-
-        let firstChunk = Array(repeating: Float(0.2), count: 4000)
-        let tailChunk = Array(repeating: Float(0.3), count: 3000)
-        let finalSamples = firstChunk + tailChunk
-        let deltaLock = NSLock()
-        var sentFirstChunk = false
-
-        let handler = StreamingHandler(
-            modelManager: modelManager,
-            bufferProvider: { [] },
-            recentBufferProvider: { _ in [] },
-            bufferDeltaProvider: { offset in
-                deltaLock.lock()
-                defer { deltaLock.unlock() }
-                guard !sentFirstChunk else {
-                    return ([], offset)
-                }
-                sentFirstChunk = true
-                return (firstChunk, firstChunk.count)
-            },
-            bufferedDurationProvider: { Double(finalSamples.count) / 16_000.0 }
-        )
-
-        var activeChecks = 0
-        handler.start(
-            streamPrompt: "Live Terms",
-            engineOverrideId: plugin.providerId,
-            selectedProviderId: plugin.providerId,
-            languageSelection: .exact("en"),
-            task: .transcribe,
-            cloudModelOverride: nil,
-            allowLiveTranscription: true,
-            stateCheck: {
-                activeChecks += 1
-                return activeChecks <= 2
-            }
-        )
-
-        try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish(finalSamples: finalSamples)
-
-        XCTAssertEqual(result?.text, "finished")
-        let recorded = await plugin.session.recordedChunks()
-        XCTAssertEqual(recorded, [firstChunk.count, tailChunk.count])
     }
 
     func testLiveSessionProgressAllowsProviderCorrections() async throws {

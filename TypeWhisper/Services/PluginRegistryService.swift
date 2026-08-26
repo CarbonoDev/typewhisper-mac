@@ -21,6 +21,20 @@ enum PluginDownloadError: LocalizedError {
     }
 }
 
+enum IncompatiblePluginBundleRemovalError: LocalizedError {
+    case bundleNoLongerRegistered
+    case invalidBundleLocation
+
+    var errorDescription: String? {
+        switch self {
+        case .bundleNoLongerRegistered:
+            return String(localized: "This incompatible plugin bundle is no longer registered.")
+        case .invalidBundleLocation:
+            return String(localized: "The incompatible plugin bundle is outside the managed Plugins folder and cannot be removed.")
+        }
+    }
+}
+
 // MARK: - Plugin Category
 
 enum PluginCategory: String, CaseIterable {
@@ -473,6 +487,7 @@ final class PluginRegistryService: ObservableObject {
     private let userDefaults: UserDefaults
     private let infoDictionary: [String: Any]?
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
+    private let deleteCredentials: (String) throws -> Void
     private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
     private static let lastHostFingerprintCheckKey = "pluginRegistryLastHostFingerprintCheck"
@@ -487,7 +502,15 @@ final class PluginRegistryService: ObservableObject {
     enum InstallState: Equatable {
         case downloading(Double)
         case extracting
+        case restartRequired
         case error(String)
+
+        var requiresRestart: Bool {
+            if case .restartRequired = self {
+                return true
+            }
+            return false
+        }
     }
 
     // MARK: - Version Comparison
@@ -539,6 +562,9 @@ final class PluginRegistryService: ObservableObject {
         cacheDuration: TimeInterval = 300,
         userDefaults: UserDefaults = .standard,
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
+        deleteCredentials: @escaping (String) throws -> Void = { prefix in
+            try KeychainService.deleteAll(withServicePrefix: prefix)
+        },
         fetchData: @escaping (URLRequest) async throws -> (Data, URLResponse) = { request in
             try await URLSession.shared.data(for: request)
         }
@@ -548,6 +574,7 @@ final class PluginRegistryService: ObservableObject {
         self.cacheDuration = cacheDuration
         self.userDefaults = userDefaults
         self.infoDictionary = infoDictionary
+        self.deleteCredentials = deleteCredentials
         self.fetchData = fetchData
 
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
@@ -631,23 +658,24 @@ final class PluginRegistryService: ObservableObject {
         return true
     }
 
-    static func canRepairInstalledPlugin(
-        isBundled: Bool,
+    static func canReplaceIncompatibleExternalBundle(
         registryPlugin: RegistryPlugin?,
         installInfo: PluginInstallInfo,
         installState: InstallState?,
         externalNotice: ExternalBundleNotice?
     ) -> Bool {
-        guard !isBundled,
-              registryPlugin != nil,
+        guard registryPlugin != nil,
               installState == nil,
               externalNotice?.requiresConfirmation == true else {
             return false
         }
-        if case .installed = installInfo {
+
+        switch installInfo {
+        case .installed, .bundled:
             return true
+        case .notInstalled, .updateAvailable:
+            return false
         }
-        return false
     }
 
     func updateAvailableUpdatesCount() {
@@ -748,13 +776,17 @@ final class PluginRegistryService: ObservableObject {
                 return false
             }
 
-            _ = try installBundle(
+            let installResult = try installBundle(
                 at: bundleURL,
                 expectedPluginId: plugin.id,
                 copyBundle: false
             )
 
-            installStates.removeValue(forKey: plugin.id)
+            if installResult.requiresRestart {
+                installStates[plugin.id] = .restartRequired
+            } else {
+                installStates.removeValue(forKey: plugin.id)
+            }
             lastFetchDate = nil // invalidate cache so installInfo refreshes
             updateAvailableUpdatesCount()
             logger.info("Installed plugin \(plugin.id) v\(plugin.version)")
@@ -777,26 +809,68 @@ final class PluginRegistryService: ObservableObject {
         logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
         try? FileManager.default.removeItem(at: bundleURL)
 
+        let keychainError = clearPluginPersistence(
+            pluginId,
+            appSupportDirectory: AppConstants.appSupportDirectory,
+            deleteData: deleteData
+        )
+        logger.info("Uninstalled plugin: \(pluginId)")
+
+        if let error = keychainError {
+            throw error
+        }
+    }
+
+    func removeIncompatibleExternalBundle(_ bundle: IncompatibleExternalBundle) throws {
+        let pluginManager = PluginManager.shared!
+        guard pluginManager.incompatibleExternalBundle(for: bundle.pluginId) == bundle else {
+            throw IncompatiblePluginBundleRemovalError.bundleNoLongerRegistered
+        }
+
+        let pluginsDirectory = pluginManager.pluginsDirectory.standardizedFileURL
+        let bundleURL = bundle.bundleURL.standardizedFileURL
+        guard bundleURL.pathExtension == "bundle",
+              bundleURL.deletingLastPathComponent() == pluginsDirectory else {
+            throw IncompatiblePluginBundleRemovalError.invalidBundleLocation
+        }
+
+        logger.info("Removing incompatible external plugin bundle at \(bundleURL.path, privacy: .public)")
+        try FileManager.default.removeItem(at: bundleURL)
+        pluginManager.clearIncompatibleExternalBundle(bundle.pluginId)
+
+        let keychainError = clearPluginPersistence(
+            bundle.pluginId,
+            appSupportDirectory: pluginsDirectory.deletingLastPathComponent(),
+            deleteData: true
+        )
+        logger.info("Removed incompatible external plugin bundle: \(bundle.pluginId)")
+
+        if let error = keychainError {
+            throw error
+        }
+    }
+
+    private func clearPluginPersistence(
+        _ pluginId: String,
+        appSupportDirectory: URL,
+        deleteData: Bool
+    ) -> Error? {
         var keychainError: Error?
         if deleteData {
-            let dataDir = AppConstants.appSupportDirectory
+            let dataDir = appSupportDirectory
                 .appendingPathComponent("PluginData", isDirectory: true)
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
             do {
-                try KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
+                try deleteCredentials("\(pluginId).")
             } catch {
                 logger.error("Keychain cleanup failed for \(pluginId): \(error.localizedDescription)")
                 keychainError = error
             }
         }
 
-        UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")
-        logger.info("Uninstalled plugin: \(pluginId)")
-
-        if let error = keychainError {
-            throw error
-        }
+        userDefaults.removeObject(forKey: "plugin.\(pluginId).enabled")
+        return keychainError
     }
 
     // MARK: - Install from File
@@ -806,7 +880,9 @@ final class PluginRegistryService: ObservableObject {
         let fm = FileManager.default
 
         if url.pathExtension == "bundle" {
-            return try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            let result = try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            updateInstallState(for: result)
+            return result.manifest
         } else if url.pathExtension == "zip" {
             let tempDir = fm.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -830,17 +906,35 @@ final class PluginRegistryService: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "No .bundle found in ZIP"])
             }
 
-            return try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            let result = try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            updateInstallState(for: result)
+            return result.manifest
         }
 
         throw NSError(domain: "PluginRegistry", code: 5,
                       userInfo: [NSLocalizedDescriptionKey: "Unsupported plugin package"])
     }
 
-    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws -> PluginManifest {
+    private struct InstallResult {
+        let manifest: PluginManifest
+        let requiresRestart: Bool
+    }
+
+    private func updateInstallState(for result: InstallResult) {
+        if result.requiresRestart {
+            installStates[result.manifest.id] = .restartRequired
+        } else {
+            installStates.removeValue(forKey: result.manifest.id)
+        }
+    }
+
+    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws -> InstallResult {
         let fm = FileManager.default
         let manifest = try readManifest(at: bundleURL)
-        let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
+        let existingLoadedPlugin = PluginManager.shared.loadedPlugins.first { $0.manifest.id == manifest.id }
+        let existingLoadedBundleURL = existingLoadedPlugin?.sourceURL
+        let replacingRuntimeLoadedPlugin = existingLoadedPlugin?.isRuntimeLoaded == true
+        let shouldEnableAfterRestart = existingLoadedPlugin?.isEnabled == true
 
         guard manifest.isCompatibleWithCurrentEnvironment else {
             let architecture = RuntimeArchitecture.current
@@ -891,8 +985,17 @@ final class PluginRegistryService: ObservableObject {
                 try fm.moveItem(at: bundleURL, to: destinationURL)
             }
 
-            try PluginManager.shared.loadPlugin(at: destinationURL)
+            if replacingRuntimeLoadedPlugin {
+                try PluginManager.shared.registerUnloadedPlugin(
+                    manifest: manifest,
+                    sourceURL: destinationURL,
+                    isEnabled: shouldEnableAfterRestart
+                )
+            } else {
+                try PluginManager.shared.loadPlugin(at: destinationURL)
+            }
             try removeDuplicateBundles(for: manifest.id, keeping: destinationURL)
+            PluginManager.shared.clearIncompatibleExternalBundle(manifest.id)
 
             if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
                 logger.info("Removing plugin backup after successful install: \(backupURL.path, privacy: .public)")
@@ -915,7 +1018,7 @@ final class PluginRegistryService: ObservableObject {
             throw error
         }
 
-        return manifest
+        return InstallResult(manifest: manifest, requiresRestart: replacingRuntimeLoadedPlugin)
     }
 
     static func validateDownloadedArchiveResponse(_ response: URLResponse) throws {

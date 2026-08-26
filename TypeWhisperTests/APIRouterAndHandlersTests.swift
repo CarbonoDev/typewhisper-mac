@@ -172,6 +172,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
+        enum ProcessOutcome: Sendable {
+            case response(String)
+            case delayedResponse(String, milliseconds: Int)
+            case rateLimit
+            case networkFailure
+            case apiFailure(String)
+            case waitForCancellation
+        }
+
         private let requestLock = NSLock()
         var models: [PluginModelInfo] = []
         var responseText = "processed"
@@ -189,6 +198,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
         nonisolated(unsafe) private var _autoUnloadCount = 0
         nonisolated(unsafe) private var _restoreCount = 0
+        nonisolated(unsafe) private var _processCallCount = 0
+        nonisolated(unsafe) private var _queuedProcessOutcomes: [ProcessOutcome] = []
 
         var lastSystemPrompt: String? {
             requestLock.withLock { _lastSystemPrompt }
@@ -214,6 +225,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
             requestLock.withLock { _restoreCount }
         }
 
+        var processCallCount: Int {
+            requestLock.withLock { _processCallCount }
+        }
+
+        var queuedProcessOutcomes: [ProcessOutcome] {
+            get { requestLock.withLock { _queuedProcessOutcomes } }
+            set { requestLock.withLock { _queuedProcessOutcomes = newValue } }
+        }
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -228,12 +248,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var currentSettingsActivity: PluginSettingsActivity? { nil }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
-            requestLock.withLock {
-                _lastSystemPrompt = systemPrompt
-                _lastUserText = userText
-                _lastRequestedModel = model
-            }
-            return responseText
+            try await resolveProcessOutcome(
+                recordProcessRequest(systemPrompt: systemPrompt, userText: userText, model: model)
+            )
         }
 
         func process(
@@ -242,13 +259,53 @@ final class APIRouterAndHandlersTests: XCTestCase {
             model: String?,
             temperatureDirective: PluginLLMTemperatureDirective
         ) async throws -> String {
+            try await resolveProcessOutcome(
+                recordProcessRequest(
+                    systemPrompt: systemPrompt,
+                    userText: userText,
+                    model: model,
+                    temperatureDirective: temperatureDirective
+                )
+            )
+        }
+
+        private func recordProcessRequest(
+            systemPrompt: String,
+            userText: String,
+            model: String?,
+            temperatureDirective: PluginLLMTemperatureDirective? = nil
+        ) -> ProcessOutcome {
             requestLock.withLock {
                 _lastSystemPrompt = systemPrompt
                 _lastUserText = userText
                 _lastRequestedModel = model
-                _lastTemperatureDirective = temperatureDirective
+                if let temperatureDirective {
+                    _lastTemperatureDirective = temperatureDirective
+                }
+                _processCallCount += 1
+                return _queuedProcessOutcomes.isEmpty
+                    ? .response(responseText)
+                    : _queuedProcessOutcomes.removeFirst()
             }
-            return responseText
+        }
+
+        private func resolveProcessOutcome(_ outcome: ProcessOutcome) async throws -> String {
+            switch outcome {
+            case .response(let response):
+                return response
+            case .delayedResponse(let response, let milliseconds):
+                try await Task.sleep(for: .milliseconds(milliseconds))
+                return response
+            case .rateLimit:
+                throw LLMError.providerError("HTTP 429 Too Many Requests")
+            case .networkFailure:
+                throw URLError(.notConnectedToInternet)
+            case .apiFailure(let message):
+                throw LLMError.providerError(message)
+            case .waitForCancellation:
+                try await Task.sleep(for: .seconds(60))
+                return requestLock.withLock { responseText }
+            }
         }
 
         @objc func triggerAutoUnload() {
@@ -426,7 +483,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
         nonisolated(unsafe) private static var _lastPrompt: String?
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
         nonisolated(unsafe) private static var _responseText = "transcribed"
-        nonisolated(unsafe) private static var _transcribeCallCount = 0
 
         static var lastPrompt: String? {
             promptLock.withLock { _lastPrompt }
@@ -436,16 +492,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
             promptLock.withLock { _lastLanguageSelection }
         }
 
-        static var transcribeCallCount: Int {
-            promptLock.withLock { _transcribeCallCount }
-        }
-
         static func reset() {
             promptLock.withLock {
                 _lastPrompt = nil
                 _lastLanguageSelection = PluginLanguageSelection()
                 _responseText = "transcribed"
-                _transcribeCallCount = 0
             }
         }
 
@@ -475,7 +526,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
             Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = PluginLanguageSelection(requestedLanguage: language)
-                Self._transcribeCallCount += 1
             }
             return PluginTranscriptionResult(text: Self.promptLock.withLock { Self._responseText }, detectedLanguage: language)
         }
@@ -489,55 +539,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
             Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = languageSelection
-                Self._transcribeCallCount += 1
             }
             return PluginTranscriptionResult(
                 text: Self.promptLock.withLock { Self._responseText },
                 detectedLanguage: languageSelection.requestedLanguage ?? languageSelection.languageHints.first
             )
-        }
-    }
-
-    @objc(APIRouterMockLiveTranscriptionPlugin)
-    private final class MockLiveTranscriptionPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
-        static var pluginId: String { "com.typewhisper.mock.live-transcription" }
-        static var pluginName: String { "Mock Live Transcription" }
-
-        var providerId: String { "mock-live" }
-        var providerDisplayName: String { "Mock Live" }
-        var isConfigured: Bool { true }
-        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
-        var selectedModelId: String? { "live" }
-        var supportsTranslation: Bool { false }
-
-        required override init() {}
-
-        func activate(host: HostServices) {}
-        func deactivate() {}
-        func selectModel(_ modelId: String) {}
-
-        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            XCTFail("Batch transcribe should not be used when stable live preview is available")
-            return PluginTranscriptionResult(text: "batch", detectedLanguage: language)
-        }
-
-        func createLiveTranscriptionSession(
-            language: String?,
-            translate: Bool,
-            prompt: String?,
-            onProgress: @Sendable @escaping (String) -> Bool
-        ) async throws -> any LiveTranscriptionSession {
-            MockLiveSession()
-        }
-
-        private actor MockLiveSession: LiveTranscriptionSession {
-            func appendAudio(samples: [Float]) async throws {}
-
-            func finish() async throws -> PluginTranscriptionResult {
-                PluginTranscriptionResult(text: "", detectedLanguage: "en")
-            }
-
-            func cancel() async {}
         }
     }
 
@@ -909,6 +915,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioRecorderService: AudioRecorderService
         let textInsertionService: TextInsertionService
         let ttsProvider: MockTTSProviderPlugin
+        let meetingService: MeetingService
         private let retainedObjects: [AnyObject]
 
         init(
@@ -924,6 +931,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecorderService: AudioRecorderService,
             textInsertionService: TextInsertionService,
             ttsProvider: MockTTSProviderPlugin,
+            meetingService: MeetingService,
             retainedObjects: [AnyObject]
         ) {
             self.router = router
@@ -938,6 +946,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.audioRecorderService = audioRecorderService
             self.textInsertionService = textInsertionService
             self.ttsProvider = ttsProvider
+            self.meetingService = meetingService
             self.retainedObjects = retainedObjects
         }
     }
@@ -1194,6 +1203,128 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(badToken.status, 401)
         XCTAssertEqual(goodBearerToken.status, 200)
         XCTAssertEqual(goodHeaderToken.status, 200)
+    }
+
+    // MARK: - Browser-extension origins (caption bridge)
+
+    /// Every extension the browser has installed shares the `chrome-extension://` scheme, so the API
+    /// trusts an *identity*, not a scheme: an unlisted extension is refused outright and gets no CORS
+    /// headers to read a response with.
+    func testRouterRefusesUnlistedBrowserExtensionOrigin() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil }, // token optional for loopback callers — the default
+            extensionOriginPolicy: {
+                .init(allowedOrigins: ["chrome-extension://bridge"], token: "secret-token")
+            }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: ["origin": "chrome-extension://someone-elses-extension", "authorization": "Bearer secret-token"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 403)
+        XCTAssertNil(response.headers["Access-Control-Allow-Origin"])
+    }
+
+    /// An allowlisted extension is CORS-approved but still has to authenticate — the loopback
+    /// "no token configured ⇒ authorized" rule never covers browser code.
+    func testRouterRequiresTokenFromAllowlistedExtensionEvenWhenTokenIsOptional() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil },
+            extensionOriginPolicy: {
+                .init(allowedOrigins: ["chrome-extension://bridge"], token: "secret-token")
+            }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+        router.register("GET", "/v1/status") { _ in .json(["status": "ready"]) }
+
+        let headers = ["origin": "chrome-extension://bridge"]
+        let withoutToken = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: [:], headers: headers, body: Data()
+        ))
+        let wrongToken = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: headers.merging(["authorization": "Bearer nope"]) { _, new in new },
+            body: Data()
+        ))
+        let withToken = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: headers.merging(["authorization": "Bearer secret-token"]) { _, new in new },
+            body: Data()
+        ))
+        // Even the otherwise-public status route is token-gated for an extension caller.
+        let publicRoute = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/status", queryParams: [:], headers: headers, body: Data()
+        ))
+        // The CORS preflight carries no Authorization (browsers strip it) and must still pass.
+        let preflight = await router.route(HTTPRequest(
+            method: "OPTIONS", path: "/v1/meetings", queryParams: [:], headers: headers, body: Data()
+        ))
+
+        XCTAssertEqual(withoutToken.status, 401)
+        XCTAssertEqual(wrongToken.status, 401)
+        XCTAssertEqual(withToken.status, 200)
+        XCTAssertEqual(publicRoute.status, 401)
+        XCTAssertEqual(preflight.status, 204)
+        XCTAssertEqual(withToken.headers["Access-Control-Allow-Origin"], "chrome-extension://bridge")
+        XCTAssertEqual(preflight.headers["Access-Control-Allow-Origin"], "chrome-extension://bridge")
+    }
+
+    /// A local client (CLI, Raycast, curl) sends no `Origin` and is unaffected by the extension rules.
+    func testRouterLeavesLocalCallersWithoutOriginUntouched() async {
+        let router = APIRouter(
+            apiTokenProvider: { nil },
+            extensionOriginPolicy: { .init(allowedOrigins: [], token: "secret-token") }
+        )
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: [:], headers: [:], body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertNil(response.headers["Access-Control-Allow-Origin"])
+    }
+
+    /// With nothing configured (the default) no extension can reach the API at all.
+    func testRouterDefaultPolicyDeniesEveryExtensionOrigin() async {
+        let router = APIRouter()
+        router.register("GET", "/v1/meetings") { _ in .json(["ok": true]) }
+
+        let response = await router.route(HTTPRequest(
+            method: "GET",
+            path: "/v1/meetings",
+            queryParams: [:],
+            headers: ["origin": "chrome-extension://bridge"],
+            body: Data()
+        ))
+
+        XCTAssertEqual(response.status, 403)
+    }
+
+    func testParseAllowedExtensionOrigins() {
+        // A bare id (what chrome://extensions shows) covers both extension schemes.
+        XCTAssertEqual(
+            APIRouter.parseAllowedExtensionOrigins("AbCdEf"),
+            ["chrome-extension://abcdef", "moz-extension://abcdef"]
+        )
+        // Full origins, comma- or newline-separated, with a stray trailing slash.
+        XCTAssertEqual(
+            APIRouter.parseAllowedExtensionOrigins("chrome-extension://one/, \n moz-extension://two"),
+            ["chrome-extension://one", "moz-extension://two"]
+        )
+        // Anything that is not an extension origin is dropped, and empty means empty.
+        XCTAssertEqual(APIRouter.parseAllowedExtensionOrigins("https://evil.example"), [])
+        XCTAssertEqual(APIRouter.parseAllowedExtensionOrigins("   "), [])
     }
 
     func testLocalAPIAuthenticatorEnforcesTokenOnlyWhenEnabled() {
@@ -2601,7 +2732,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 return outputURL
             }
@@ -2685,7 +2816,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 return outputURL
             }
@@ -2755,7 +2886,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 let entry = await gate.enter()
                 if entry == 1 {
@@ -3389,6 +3520,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.pasteVerificationAttempts = 0
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
         service.focusedTextStateOverride = { _ in
@@ -3425,6 +3557,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.verifiedRestoreGraceDelay = .milliseconds(1)
 
         var didAttemptDirectAXInsertion = false
@@ -3513,6 +3646,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in
@@ -3552,6 +3686,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in
@@ -3781,183 +3916,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testApiStopRecordingMovesToProcessingAndRejectsRestartWhileRecorderDrains() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        let stopGate = RecorderStartGate()
-
-        var startCount = 0
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {
-            startCount += 1
-        }
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            _ = await stopGate.enter()
-            await stopGate.waitForRelease()
-            return []
-        }
-
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .recording)
-        XCTAssertEqual(startCount, 1)
-
-        _ = context.dictationViewModel.apiStopRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .processing)
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .processing)
-
-        await stopGate.waitForFirstEntry()
-
-        let ignoredSessionID = context.dictationViewModel.apiStartRecording()
-        XCTAssertEqual(startCount, 1)
-        XCTAssertEqual(context.dictationViewModel.state, .processing)
-        XCTAssertNil(context.dictationViewModel.apiDictationSession(id: ignoredSessionID))
-
-        await stopGate.release()
-
-        for _ in 0..<40 {
-            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
-    }
-
-    @MainActor
-    func testCancelDuringProcessingCancelsStopFinalizationBeforeTranscriptionTaskExists() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            MockTranscriptionPlugin.reset()
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        MockTranscriptionPlugin.reset()
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        let stopGate = RecorderStartGate()
-        var pasteCount = 0
-
-        context.textInsertionService.captureActiveAppOverride = {
-            ("Notes", "com.apple.Notes", nil)
-        }
-        context.textInsertionService.accessibilityGrantedOverride = true
-        context.textInsertionService.selectedTextOverride = { nil }
-        context.textInsertionService.pasteSimulatorOverride = {
-            pasteCount += 1
-        }
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            _ = await stopGate.enter()
-            await stopGate.waitForRelease()
-            return Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-        }
-
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .recording)
-
-        _ = context.dictationViewModel.apiStopRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .processing)
-
-        await stopGate.waitForFirstEntry()
-        context.dictationViewModel.handleCancelHotkey()
-        context.dictationViewModel.handleCancelHotkey()
-
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
-        XCTAssertEqual(
-            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
-            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
-        )
-
-        await stopGate.release()
-
-        for _ in 0..<20 {
-            if MockTranscriptionPlugin.transcribeCallCount > 0 || pasteCount > 0 {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
-        XCTAssertEqual(session.status, .failed)
-        XCTAssertNil(session.transcription)
-        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
-        XCTAssertEqual(pasteCount, 0)
-    }
-
-    @MainActor
-    func testApiStopRecordingUsesStableLivePreviewInsteadOfSlowBatchFallback() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        MockTranscriptionPlugin.reset()
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        let livePlugin = MockLiveTranscriptionPlugin()
-        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
-            manifest: PluginManifest(
-                id: "com.typewhisper.mock.live-transcription",
-                name: "Mock Live",
-                version: "1.0.0",
-                principalClass: "APIRouterMockLiveTranscriptionPlugin"
-            ),
-            instance: livePlugin,
-            bundle: Bundle.main,
-            sourceURL: appSupportDirectory,
-            isEnabled: true
-        ))
-        context.modelManager.selectProvider(livePlugin.providerId)
-        let pasteboard = NSPasteboard.withUniqueName()
-        context.textInsertionService.pasteboardProvider = { pasteboard }
-        context.textInsertionService.captureActiveAppOverride = {
-            ("Notes", "com.apple.Notes", nil)
-        }
-        context.textInsertionService.accessibilityGrantedOverride = true
-        context.textInsertionService.selectedTextOverride = { nil }
-        context.textInsertionService.pasteSimulatorOverride = {}
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-        }
-
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        context.dictationViewModel.partialText = "live preview text"
-
-        _ = context.dictationViewModel.apiStopRecording()
-
-        for _ in 0..<40 {
-            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
-        XCTAssertEqual(session.status, .completed)
-        XCTAssertEqual(session.transcription?.rawText, "live preview text")
-        XCTAssertEqual(session.transcription?.text, "live preview text")
-        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
-    }
-
-    @MainActor
     func testPushToTalkInterruptionDiscardStopsImmediatelyAndMarksSessionFailedByDefault() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -4150,7 +4108,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testDictationDirectInsertionAddsTrailingSpaceWithoutMutatingStoredTranscription() async throws {
+    func testDictationDirectInsertionDoesNotAddTrailingSpace() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
         let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
@@ -4205,7 +4163,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
         XCTAssertEqual(session.status, .completed)
-        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed ")
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
         XCTAssertEqual(session.transcription?.text, "transcribed")
         XCTAssertEqual(context.historyService.records.first?.finalText, "transcribed")
         XCTAssertEqual(
@@ -4623,6 +4581,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         let originalAudioDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
         let originalAudioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
         var events: [String] = []
@@ -4657,6 +4616,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
             Self.restoreUserDefault(originalAudioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
             Self.restoreUserDefault(originalAudioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
         }
@@ -4707,6 +4667,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_keepsStartSoundForUSBInputAfterInputIsReady() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         var events: [String] = []
         let usbDeviceID = AudioDeviceID(410)
         let soundService = MockSoundService { event, enabled in
@@ -4726,6 +4687,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -4762,6 +4724,92 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+    }
+
+    @MainActor
+    func testApiStartRecordingUsesNextAvailablePriorityMicrophone() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let usbDeviceID = AudioDeviceID(510)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: transportResolver
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, usbDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, usbDeviceID)
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
+    }
+
+    @MainActor
+    func testApiStartRecordingFallsBackToSystemDefaultWhenPriorityMicrophonesUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = []
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertNil(selectedDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertNil(context.audioRecordingService.selectedDeviceID)
+            XCTAssertFalse(context.audioRecordingService.hasExplicitDeviceSelection)
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
     }
 
     #if !APPSTORE
@@ -5197,6 +5245,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_showsNoMicDetectedErrorWhenSelectedInputUnavailable() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         let deviceID = AudioDeviceID(42)
         let transportResolver = FakeAudioDeviceTransportResolver(
             transports: [deviceID: kAudioDeviceTransportTypeUSB]
@@ -5211,6 +5260,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -5479,7 +5529,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    private static func makeAPIContext(appSupportDirectory: URL, withMockTranscriptionPlugin: Bool = false) -> APIContext {
+    private static func makeAPIContext(
+        appSupportDirectory: URL,
+        withMockTranscriptionPlugin: Bool = false,
+        calendarProvider: CalendarEventProviding? = nil
+    ) -> APIContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         let ttsProvider = MockTTSProviderPlugin()
@@ -5579,8 +5633,25 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioRecorderViewModel = AudioRecorderViewModel(
             recorderService: audioRecorderService,
             modelManager: modelManager,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            audioDeviceService: audioDeviceService
         )
+
+        let meetingService = MeetingService(appSupportDirectory: appSupportDirectory)
+        let meetingImportService = MeetingImportService(
+            meetingService: meetingService,
+            audioFileService: audioFileService,
+            transcriber: modelManager
+        )
+        let calendarService: CalendarService? = calendarProvider.map { provider in
+            CalendarService(
+                provider: provider,
+                selectionStore: CalendarSelectionStore(
+                    defaults: UserDefaults(suiteName: UUID().uuidString)!,
+                    key: UUID().uuidString
+                )
+            )
+        }
 
         let router = APIRouter()
         let handlers = APIHandlers(
@@ -5591,7 +5662,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
-            audioRecorderViewModel: audioRecorderViewModel
+            audioRecorderViewModel: audioRecorderViewModel,
+            meetingService: meetingService,
+            meetingImportService: meetingImportService,
+            calendarService: calendarService
         )
         handlers.register(on: router)
 
@@ -5608,6 +5682,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecorderService: audioRecorderService,
             textInsertionService: textInsertionService,
             ttsProvider: ttsProvider,
+            meetingService: meetingService,
             retainedObjects: [
                 PluginManager.shared,
                 ttsProvider,
@@ -5633,6 +5708,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 settingsViewModel,
                 dictationViewModel,
                 audioRecorderViewModel,
+                meetingService,
+                meetingImportService,
                 router,
                 handlers
             ]
@@ -5727,7 +5804,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     private final class DictationContext: @unchecked Sendable {
         let dictationViewModel: DictationViewModel
-        let modelManager: ModelManagerService
         let audioRecordingService: AudioRecordingService
         let hotkeyService: HotkeyService
         let audioDeviceService: AudioDeviceService
@@ -5742,7 +5818,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         init(
             dictationViewModel: DictationViewModel,
-            modelManager: ModelManagerService,
             audioRecordingService: AudioRecordingService,
             hotkeyService: HotkeyService,
             audioDeviceService: AudioDeviceService,
@@ -5756,7 +5831,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
             retainedObjects: [AnyObject]
         ) {
             self.dictationViewModel = dictationViewModel
-            self.modelManager = modelManager
             self.audioRecordingService = audioRecordingService
             self.hotkeyService = hotkeyService
             self.audioDeviceService = audioDeviceService
@@ -5886,7 +5960,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         return DictationContext(
             dictationViewModel: dictationViewModel,
-            modelManager: modelManager,
             audioRecordingService: audioRecordingService,
             hotkeyService: hotkeyService,
             audioDeviceService: audioDeviceService,
@@ -5942,6 +6015,37 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    private static func makeEmptyLLMFallbackDefaults() -> (suiteName: String, defaults: UserDefaults) {
+        let suiteName = "APIRouterAndHandlersTests.LLMFallbacks.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(Data("[]".utf8), forKey: UserDefaultsKeys.llmFallbackPriorityList)
+        return (suiteName, defaults)
+    }
+
+    @MainActor
+    private static func installLLMFallbackTestProviders(
+        _ providers: [MockLLMProviderPlugin],
+        appSupportDirectory: URL
+    ) {
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = providers.enumerated().map { index, provider in
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.tests.llm-fallback.\(index)",
+                    name: "LLM Fallback Test \(index)",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: provider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        }
+    }
+
     private static func multipartTranscribeBody(
         wavData: Data,
         boundary: String,
@@ -5972,6 +6076,795 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+
+    // MARK: - Meetings API
+
+    /// Minimal fake so `match_calendar` runs without a live EKEventStore. Returns its canned events
+    /// for any window and reports authorized.
+    private final class FakeMeetingsCalendarProvider: CalendarEventProviding {
+        var authorizationStatus: CalendarAuthorizationStatus = .authorized
+        var eventsToReturn: [CalendarEventDTO]
+
+        init(events: [CalendarEventDTO]) { self.eventsToReturn = events }
+
+        func requestAccess() async -> CalendarAuthorizationStatus { authorizationStatus }
+        func events(from start: Date, to end: Date) -> [CalendarEventDTO] { eventsToReturn }
+        func calendars() -> [CalendarInfo] { [] }
+    }
+
+    private static func iso8601(_ string: String) -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: string)!
+    }
+
+    private static func jsonBody(_ object: [String: Any]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: object)
+    }
+
+    func testImportMeetingTranscriptPersistsFolderTagsLanguage() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome to the sync.\nBob: Great to be here.",
+            "title": "Acme Sync",
+            "folder": "Clients/Acme",
+            "tags": ["sales", "q1"],
+            "language": "EN"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Acme Sync")
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+        let id = try XCTUnwrap(json["id"] as? String)
+
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertNotNil(meeting)
+            XCTAssertEqual(meeting?.folderPath, "Clients/Acme")
+            XCTAssertEqual(meeting?.tags, ["sales", "q1"])
+            XCTAssertEqual(meeting?.languageCode, "en") // normalized to lowercase
+            XCTAssertEqual(meeting?.segments.isEmpty, false)
+            XCTAssertEqual(meeting?.source, .importedTranscript)
+        }
+    }
+
+    func testImportMeetingTranscriptPersistsNotesAndAttendees() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome to the sync.\nBob: Great to be here.",
+            "title": "Acme Sync",
+            "summary": "The team agreed to ship on Friday.",
+            "extended": "## Details\n\nRelease scope was cut to the payments fix.",
+            "attendees": [
+                ["name": "Alice Adams", "email": "alice@acme.test", "is_self": true],
+                ["name": "Bob Baker"],
+                ["name": "   "], // dropped: blank names never reach the roster
+            ]
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let id = try XCTUnwrap(json["id"] as? String)
+
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            let outputs = meeting?.outputs ?? []
+            XCTAssertEqual(outputs.first { $0.kind == .summary }?.content, "The team agreed to ship on Friday.")
+            XCTAssertEqual(
+                outputs.first { $0.kind == .extended }?.content,
+                "## Details\n\nRelease scope was cut to the payments fix."
+            )
+            XCTAssertEqual(meeting?.attendees.map(\.name), ["Alice Adams", "Bob Baker"])
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.test")
+            XCTAssertEqual(meeting?.attendees.first?.isSelf, true)
+        }
+    }
+
+    func testImportMeetingTranscriptFromLocalFilePath() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let fileURL = appSupportDirectory.appendingPathComponent("archive.txt")
+        try "Alice: Opening remarks.\nBob: Closing remarks.".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let body = try Self.jsonBody(["path": fileURL.path])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "archive") // falls back to file name
+    }
+
+    func testImportMeetingTranscriptMatchCalendarLinksBestEvent() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "acme-event#1",
+                title: "Acme Sync",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800),
+                attendees: [Attendee(name: "Alice", email: "alice@acme.com")]
+            ),
+            CalendarEventDTO(
+                id: "unrelated#1",
+                title: "Dentist",
+                startDate: eventDate.addingTimeInterval(3600),
+                endDate: eventDate.addingTimeInterval(5400)
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome.\nBob: Thanks.",
+            "title": "Acme Sync",
+            "date": "2026-01-05T10:00:00Z",
+            "match_calendar": true
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let matched = try XCTUnwrap(json["matched_event"] as? [String: Any])
+        XCTAssertEqual(matched["id"] as? String, "acme-event#1")
+        XCTAssertEqual(matched["title"] as? String, "Acme Sync")
+
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.calendarEventID, "acme-event#1")
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.com")
+        }
+    }
+
+    func testImportMeetingTranscriptMatchCalendarReportsNullWhenNoConfidentMatch() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "unrelated#1",
+                title: "Completely Different Topic",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800)
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "text": "Alice: Welcome.",
+            "title": "Acme Sync",
+            "date": "2026-01-05T10:00:00Z",
+            "match_calendar": true
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+    }
+
+    /// A calendar-created Meet call carries the event's own name as the tab title, so a live session
+    /// that starts with a real title should link to the matching calendar event and adopt its roster,
+    /// exactly like `match_calendar` on import.
+    func testLiveSessionCreateMatchesCalendarEventByTitle() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let eventDate = Self.iso8601("2026-01-05T10:00:00Z")
+        let events = [
+            CalendarEventDTO(
+                id: "acme-event#1",
+                title: "Acme Sync",
+                startDate: eventDate,
+                endDate: eventDate.addingTimeInterval(1800),
+                attendees: [Attendee(name: "Alice", email: "alice@acme.com")]
+            )
+        ]
+        context = await MainActor.run {
+            let provider = FakeMeetingsCalendarProvider(events: events)
+            return Self.makeAPIContext(appSupportDirectory: appSupportDirectory, calendarProvider: provider)
+        }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "session_key": "abc-defg-hij",
+            "title": "Acme Sync",
+            "started_at": "2026-01-05T10:01:00Z"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/live",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Acme Sync")
+        let matched = try XCTUnwrap(json["matched_event"] as? [String: Any])
+        XCTAssertEqual(matched["id"] as? String, "acme-event#1")
+
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.calendarEventID, "acme-event#1")
+            XCTAssertEqual(meeting?.attendees.first?.email, "alice@acme.com")
+            XCTAssertEqual(meeting?.externalSessionKey, "abc-defg-hij")
+        }
+    }
+
+    /// When the tab title is just the Meet call code, it is a session identity, not a name: no
+    /// calendar match is attempted with it, and the meeting is named from the date and the account
+    /// the call was joined from instead.
+    func testLiveSessionCodeTitleFallsBackToDateAndAccountTitle() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody([
+            "session_key": "abc-defg-hij",
+            "title": "abc-defg-hij",
+            "account": "marco@carbonodev.com",
+            "started_at": "2026-01-05T10:01:00Z"
+        ])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/live",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        let title = try XCTUnwrap(json["title"] as? String)
+        XCTAssertNotEqual(title, "abc-defg-hij")
+        XCTAssertTrue(title.contains("marco@carbonodev.com"), "fallback title names the account: \(title)")
+        XCTAssertNil(json["matched_event"] as? [String: Any])
+    }
+
+    /// A recurring Meet link reuses one call code forever, so `session_key` identifies the room, not
+    /// the call. A meeting left `.live` because its `/end` never landed (app closed at hang-up) must
+    /// not swallow the next occurrence: the stale one is closed out and a fresh meeting starts.
+    func testLiveSessionDoesNotResumeAStaleMeetingForTheSameCallCode() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        func startSession(startedAt: String) async throws -> [String: Any] {
+            let body = try Self.jsonBody([
+                "session_key": "abc-defg-hij",
+                "title": "abc-defg-hij",
+                "started_at": startedAt
+            ])
+            let response = await apiContext.router.route(HTTPRequest(
+                method: "POST",
+                path: "/v1/meetings/live",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: body
+            ))
+            XCTAssertEqual(response.status, 200)
+            return try Self.jsonObject(response)
+        }
+
+        let yesterday = try await startSession(startedAt: "2026-01-05T10:00:00Z")
+        XCTAssertEqual(yesterday["created"] as? Bool, true)
+        let staleID = try XCTUnwrap(yesterday["id"] as? String)
+
+        // Same call code, next day: the old meeting is never resumed.
+        let today = try await startSession(startedAt: "2026-01-06T10:00:00Z")
+        XCTAssertEqual(today["created"] as? Bool, true)
+        let freshID = try XCTUnwrap(today["id"] as? String)
+        XCTAssertNotEqual(freshID, staleID)
+
+        await MainActor.run {
+            let stale = apiContext.meetingService.meetings.first { $0.id.uuidString == staleID }
+            XCTAssertEqual(stale?.state, .completed, "the abandoned session is closed out on the way past")
+            let fresh = apiContext.meetingService.meetings.first { $0.id.uuidString == freshID }
+            XCTAssertEqual(fresh?.state, .live)
+        }
+
+        // A reconnect inside the same call still resumes — idempotency on `session_key` is intact.
+        let reconnect = try await startSession(startedAt: "2026-01-06T10:35:00Z")
+        XCTAssertEqual(reconnect["created"] as? Bool, false)
+        XCTAssertEqual(reconnect["id"] as? String, freshID)
+    }
+
+    func testCanResumeLiveSession() {
+        let start = Self.iso8601("2026-01-05T10:00:00Z")
+        // Same call: a mid-call reconnect, even hours in.
+        XCTAssertTrue(APIHandlers.canResumeLiveSession(
+            existingStart: start,
+            incomingStart: start.addingTimeInterval(90 * 60)
+        ))
+        // Next occurrence of the same recurring call code.
+        XCTAssertFalse(APIHandlers.canResumeLiveSession(
+            existingStart: start,
+            incomingStart: start.addingTimeInterval(24 * 60 * 60)
+        ))
+        // A meeting with no recorded start cannot be aged; forking on every retry would be worse.
+        XCTAssertTrue(APIHandlers.canResumeLiveSession(existingStart: nil, incomingStart: start))
+    }
+
+    func testIsMeetCodeTitle() {
+        XCTAssertTrue(APIHandlers.isMeetCodeTitle("abc-defg-hij"))
+        XCTAssertTrue(APIHandlers.isMeetCodeTitle("XYZ-ABCD-EFG"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle("Weekly Sync"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle("abc-defg-hij extra"))
+        XCTAssertFalse(APIHandlers.isMeetCodeTitle(""))
+    }
+
+    func testImportMeetingTranscriptInvalidDateReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody(["text": "Alice: Hi.", "date": "not-a-date"])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testImportMeetingTranscriptEmptyTranscriptReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let body = try Self.jsonBody(["text": "   \n\n   "])
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testImportMeetingTranscriptRawTextBodyWithQueryOptions() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/import-transcript",
+            queryParams: ["title": "Raw Import", "folder": "Inbox", "tags": "a,b"],
+            headers: ["content-type": "text/plain"],
+            body: Data("Alice: Raw body line.".utf8)
+        ))
+        XCTAssertEqual(response.status, 200)
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["title"] as? String, "Raw Import")
+        let id = try XCTUnwrap(json["id"] as? String)
+        await MainActor.run {
+            let meeting = apiContext.meetingService.meetings.first { $0.id.uuidString == id }
+            XCTAssertEqual(meeting?.folderPath, "Inbox")
+            XCTAssertEqual(meeting?.tags, ["a", "b"])
+        }
+    }
+
+    func testListMeetingsFiltersByFolderTagAndDate() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        await MainActor.run {
+            let service = apiContext.meetingService
+            let m1 = service.createMeeting(title: "Acme One", startDate: Self.iso8601("2026-01-05T10:00:00Z"))
+            service.setFolder("Clients/Acme", for: m1)
+            service.setObsidianTags(["sales"], for: m1)
+
+            let m2 = service.createMeeting(title: "Beta Ops", startDate: Self.iso8601("2026-02-01T10:00:00Z"))
+            service.setFolder("Clients/Beta", for: m2)
+            service.setObsidianTags(["ops"], for: m2)
+
+            let m3 = service.createMeeting(title: "Acme Sub", startDate: Self.iso8601("2026-03-01T10:00:00Z"))
+            service.setFolder("Clients/Acme/Deep", for: m3)
+            service.setObsidianTags(["sales"], for: m3)
+        }
+
+        // Folder subtree match: Clients/Acme includes Clients/Acme/Deep.
+        let byFolder = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["folder": "Clients/Acme"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(byFolder["total"] as? Int, 2)
+
+        // Tag filter.
+        let byTag = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["tag": "ops"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual((byTag["meetings"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((byTag["meetings"] as? [[String: Any]])?.first?["title"] as? String, "Beta Ops")
+
+        // Date range filter.
+        let byDate = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["from": "2026-02-15"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(byDate["total"] as? Int, 1)
+        XCTAssertEqual((byDate["meetings"] as? [[String: Any]])?.first?["title"] as? String, "Acme Sub")
+
+        // Combined folder + date.
+        let combined = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings",
+            queryParams: ["folder": "Clients/Acme", "from": "2026-02-15"], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(combined["total"] as? Int, 1)
+    }
+
+    func testListMeetingsInvalidFromDateReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let response = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings", queryParams: ["from": "garbage"], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(response.status, 400)
+    }
+
+    func testGetMeetingDetailIncludesTranscriptOnRequest() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let id: String = await MainActor.run {
+            let meeting = apiContext.meetingService.createFromImport(
+                title: "Detail Meeting",
+                source: .importedTranscript,
+                segments: [
+                    TranscriptionSegment(text: "First line.", start: 0, end: 1, speakerLabel: "Alice"),
+                    TranscriptionSegment(text: "Second line.", start: 1, end: 2, speakerLabel: "Bob")
+                ],
+                segmentSource: .importedTranscript
+            )
+            return meeting.id.uuidString
+        }
+
+        // Without include: no transcript text.
+        let plain = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(id)", queryParams: [:], headers: [:], body: Data()
+        )))
+        XCTAssertEqual(plain["title"] as? String, "Detail Meeting")
+        XCTAssertEqual(plain["has_transcript"] as? Bool, true)
+        XCTAssertNil(plain["transcript"] as? String)
+
+        // With include=transcript.
+        let detailed = try Self.jsonObject(await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(id)", queryParams: ["include": "transcript"], headers: [:], body: Data()
+        )))
+        let transcript = try XCTUnwrap(detailed["transcript"] as? String)
+        XCTAssertTrue(transcript.contains("Alice: First line."))
+        XCTAssertTrue(transcript.contains("Bob: Second line."))
+    }
+
+    func testGetMeetingUnknownIdReturns404AndInvalidIdReturns400() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let unknown = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/\(UUID().uuidString)", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(unknown.status, 404)
+
+        let invalid = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/not-a-uuid", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(invalid.status, 400)
+    }
+
+    // MARK: - POST /v1/meetings/merge
+
+    private static func mergeRequest(_ ids: [String]) -> HTTPRequest {
+        HTTPRequest(
+            method: "POST",
+            path: "/v1/meetings/merge",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try! JSONSerialization.data(withJSONObject: ["meeting_ids": ids])
+        )
+    }
+
+    /// The happy path over the same `MeetingMergeService` seam the UI uses: two completed meetings
+    /// collapse into one, the earlier-starting meeting survives (the planner's primary pick), the
+    /// other is reported as absorbed, and the store is left with exactly one row.
+    func testMergeMeetingsCollapsesTwoMeetingsAndReportsSurvivor() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let (primaryID, duplicateID) = await MainActor.run {
+            let service = apiContext.meetingService
+            let primary = service.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            )
+            let duplicate = service.createFromImport(
+                title: "Weekly Sync (re-join)",
+                source: .importedTranscript,
+                segments: [
+                    TranscriptionSegment(text: "First line.", start: 0, end: 1, speakerLabel: "Alice"),
+                    TranscriptionSegment(text: "Second line.", start: 1, end: 2, speakerLabel: "Bob")
+                ],
+                segmentSource: .importedTranscript
+            )
+            service.setMeetingDate(Self.iso8601("2026-03-01T10:20:00Z"), for: duplicate)
+            return (primary.id.uuidString, duplicate.id.uuidString)
+        }
+
+        let response = await apiContext.router.route(Self.mergeRequest([primaryID, duplicateID]))
+        XCTAssertEqual(response.status, 200)
+
+        let json = try Self.jsonObject(response)
+        XCTAssertEqual(json["id"] as? String, primaryID)
+        XCTAssertEqual(json["title"] as? String, "Weekly Sync")
+        XCTAssertEqual(json["absorbed_ids"] as? [String], [duplicateID])
+        XCTAssertEqual(json["segment_count"] as? Int, 2)
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 1)
+            XCTAssertEqual(apiContext.meetingService.meetings.first?.id.uuidString, primaryID)
+        }
+    }
+
+    /// An id that resolves to no meeting is a 404 that names the offender — and nothing is merged.
+    func testMergeMeetingsUnknownIdReturns404() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let existingID = await MainActor.run {
+            apiContext.meetingService.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            ).id.uuidString
+        }
+        let missingID = UUID().uuidString
+
+        let response = await apiContext.router.route(Self.mergeRequest([existingID, missingID]))
+        XCTAssertEqual(response.status, 404)
+        let message = String(data: response.body, encoding: .utf8) ?? ""
+        XCTAssertTrue(message.contains(missingID), "the 404 must name the id that was not found")
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 1, "a failed merge changes nothing")
+        }
+    }
+
+    /// A meeting that is still recording (`.live`) makes the set unmergeable — `canMerge` refuses,
+    /// the endpoint answers 409, and both rows survive untouched.
+    func testMergeMeetingsWithLiveMeetingReturns409() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let (completedID, liveID) = await MainActor.run {
+            let service = apiContext.meetingService
+            let completed = service.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            )
+            let live = service.createMeeting(
+                title: "Weekly Sync (recording)",
+                state: .live,
+                startDate: Self.iso8601("2026-03-01T10:20:00Z")
+            )
+            return (completed.id.uuidString, live.id.uuidString)
+        }
+
+        let response = await apiContext.router.route(Self.mergeRequest([completedID, liveID]))
+        XCTAssertEqual(response.status, 409)
+
+        await MainActor.run {
+            XCTAssertEqual(apiContext.meetingService.meetings.count, 2, "a refused merge changes nothing")
+        }
+    }
+
+    /// Guard rails on the payload itself: a single id is not a merge, and a malformed uuid is a 400
+    /// (not a 404) because it never identified a meeting in the first place.
+    func testMergeMeetingsRejectsTooFewAndMalformedIds() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        let id = await MainActor.run {
+            apiContext.meetingService.createMeeting(
+                title: "Weekly Sync",
+                state: .completed,
+                startDate: Self.iso8601("2026-03-01T10:00:00Z")
+            ).id.uuidString
+        }
+
+        let single = await apiContext.router.route(Self.mergeRequest([id]))
+        XCTAssertEqual(single.status, 400)
+
+        // The same id twice is one meeting, not two.
+        let duplicated = await apiContext.router.route(Self.mergeRequest([id, id]))
+        XCTAssertEqual(duplicated.status, 400)
+
+        let malformed = await apiContext.router.route(Self.mergeRequest([id, "not-a-uuid"]))
+        XCTAssertEqual(malformed.status, 400)
+
+        let empty = await apiContext.router.route(HTTPRequest(
+            method: "POST", path: "/v1/meetings/merge", queryParams: [:],
+            headers: ["content-type": "application/json"], body: Data()
+        ))
+        XCTAssertEqual(empty.status, 400)
+    }
+
+    /// The literal `/v1/meetings/merge` route must never be swallowed by the `/v1/meetings/{id}`
+    /// pattern — a GET on the same path still falls through to the id route (and 400s on the
+    /// un-parseable "merge" id), proving the two coexist.
+    func testMergeRouteIsNotShadowedByMeetingIdRoute() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+
+        // POST hits the merge handler (400 for a missing body), not the GET-only id route.
+        let posted = await apiContext.router.route(HTTPRequest(
+            method: "POST", path: "/v1/meetings/merge", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(posted.status, 400)
+
+        // GET still resolves through `/v1/meetings/{id}`, which rejects "merge" as an id.
+        let fetched = await apiContext.router.route(HTTPRequest(
+            method: "GET", path: "/v1/meetings/merge", queryParams: [:], headers: [:], body: Data()
+        ))
+        XCTAssertEqual(fetched.status, 400)
     }
 
     @MainActor
@@ -6037,17 +6930,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     @MainActor
     func testPromptProcessingUsesStableProviderIdsAndLegacyAliases() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            Self.restoreUserDefault(originalProvider, forKey: providerKey)
-            Self.restoreUserDefault(originalModel, forKey: modelKey)
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "APIRouterAndHandlersTests.LegacyLLMAlias.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6074,8 +6962,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        UserDefaults.standard.set("OpenAI Compatible", forKey: providerKey)
-        let service = PromptProcessingService()
+        defaults.set("OpenAI Compatible", forKey: "llmProviderType")
+        let service = PromptProcessingService(userDefaults: defaults)
         service.validateSelectionAfterPluginLoad()
 
         XCTAssertEqual(service.selectedProviderId, "openai-compatible:alter")
@@ -6334,88 +7222,352 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingRepairsInvalidGlobalCloudModelBeforeRequest() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
+    func testPromptProcessingFallsBackAfterRateLimitNetworkAndAPIErrors() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("legacy-direct-model", forKey: modelKey)
+        let rateLimited = MockLLMProviderPlugin()
+        rateLimited.configuredProviderId = "rate-limited"
+        rateLimited.queuedProcessOutcomes = [.rateLimit]
+        let networkFailed = MockLLMProviderPlugin()
+        networkFailed.configuredProviderId = "network-failed"
+        networkFailed.queuedProcessOutcomes = [.networkFailure]
+        let apiFailed = MockLLMProviderPlugin()
+        apiFailed.configuredProviderId = "api-failed"
+        apiFailed.queuedProcessOutcomes = [.apiFailure("API rejected the request")]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "succeeding"
+        succeeding.queuedProcessOutcomes = [.response("fallback result")]
 
-        EventBus.shared = EventBus()
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        Self.installLLMFallbackTestProviders(
+            [rateLimited, networkFailed, apiFailed, succeeding],
+            appSupportDirectory: appSupportDirectory
+        )
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        for provider in [rateLimited, networkFailed, apiFailed, succeeding] {
+            service.addLLMFallback(providerId: provider.providerId)
+        }
 
-        let plugin = MockLLMProviderPlugin()
-        plugin.models = [
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "fallback result")
+        XCTAssertEqual(rateLimited.processCallCount, 1)
+        XCTAssertEqual(networkFailed.processCallCount, 1)
+        XCTAssertEqual(apiFailed.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackAfterUnavailableLocalProviderCannotRestore() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let unavailableLocal = MockLLMProviderPlugin()
+        unavailableLocal.configuredProviderId = "unavailable-local"
+        unavailableLocal.available = false
+        unavailableLocal.requiresExternalCredentials = false
+        unavailableLocal.unavailableReason = "The local model could not be restored."
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "remote-fallback"
+        succeeding.queuedProcessOutcomes = [.response("remote fallback result")]
+
+        Self.installLLMFallbackTestProviders([unavailableLocal, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: unavailableLocal.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "remote fallback result")
+        XCTAssertEqual(unavailableLocal.restoreCount, 1)
+        XCTAssertEqual(unavailableLocal.processCallCount, 0)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackWhenSavedProviderIsNoLongerInstalled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "installed-fallback"
+        succeeding.queuedProcessOutcomes = [.response("installed fallback result")]
+
+        Self.installLLMFallbackTestProviders([succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: "removed-provider")
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "installed fallback result")
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackAfterEmptyResult() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let empty = MockLLMProviderPlugin()
+        empty.configuredProviderId = "empty-result"
+        empty.queuedProcessOutcomes = [.response(" \n\t ")]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "non-empty-result"
+        succeeding.queuedProcessOutcomes = [.response("usable fallback result")]
+
+        Self.installLLMFallbackTestProviders([empty, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: empty.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "usable fallback result")
+        XCTAssertEqual(empty.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testWorkflowProcessingFallsBackAfterScaffoldOnlyResult() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let scaffoldOnly = MockLLMProviderPlugin()
+        scaffoldOnly.configuredProviderId = "scaffold-only"
+        scaffoldOnly.queuedProcessOutcomes = [
+            .response(
+                """
+                BEGIN TYPEWHISPER DICTATED TEXT
+                END TYPEWHISPER DICTATED TEXT
+                """
+            )
+        ]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "workflow-fallback"
+        succeeding.queuedProcessOutcomes = [.response("usable workflow result")]
+
+        Self.installLLMFallbackTestProviders([scaffoldOnly, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: scaffoldOnly.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.processWorkflow(
+            prompt: "Fix grammar",
+            text: "hello world",
+            behavior: WorkflowBehavior()
+        )
+
+        XCTAssertEqual(result, "usable workflow result")
+        XCTAssertEqual(scaffoldOnly.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingReportsAggregateErrorAfterFallbackListExhaustion() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let rateLimited = MockLLMProviderPlugin()
+        rateLimited.configuredProviderId = "rate-limited"
+        rateLimited.queuedProcessOutcomes = [.rateLimit]
+        let networkFailed = MockLLMProviderPlugin()
+        networkFailed.configuredProviderId = "network-failed"
+        networkFailed.queuedProcessOutcomes = [.networkFailure]
+
+        Self.installLLMFallbackTestProviders([rateLimited, networkFailed], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: rateLimited.providerId)
+        service.addLLMFallback(providerId: networkFailed.providerId)
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Expected the fallback list to be exhausted")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.map(\.providerId), ["rate-limited", "network-failed"])
+            XCTAssertEqual(error.failures.count, 2)
+            XCTAssertTrue(error.failures[0].reason.contains("429"))
+            XCTAssertFalse(error.failures[1].reason.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderDoesNotCallGlobalFallbackList() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let explicit = MockLLMProviderPlugin()
+        explicit.configuredProviderId = "strict-workflow-provider"
+        explicit.queuedProcessOutcomes = [.apiFailure("Explicit workflow provider failed")]
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "global-fallback"
+        fallback.queuedProcessOutcomes = [.response("must not be used")]
+
+        Self.installLLMFallbackTestProviders([explicit, fallback], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: fallback.providerId)
+
+        do {
+            _ = try await service.processWorkflow(
+                prompt: "Fix grammar",
+                text: "hello world",
+                behavior: WorkflowBehavior(providerId: explicit.providerId)
+            )
+            XCTFail("Expected the explicit workflow provider error")
+        } catch is LLMFallbackExhaustedError {
+            XCTFail("An explicit workflow provider must not use the global fallback list")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "LLM error: Explicit workflow provider failed")
+        }
+
+        XCTAssertEqual(explicit.processCallCount, 1)
+        XCTAssertEqual(fallback.processCallCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingCancellationDoesNotStartNextFallbackAttempt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let blocking = MockLLMProviderPlugin()
+        blocking.configuredProviderId = "blocking"
+        blocking.queuedProcessOutcomes = [.waitForCancellation]
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "must-not-start"
+        fallback.queuedProcessOutcomes = [.response("must not be used")]
+
+        Self.installLLMFallbackTestProviders([blocking, fallback], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: blocking.providerId)
+        service.addLLMFallback(providerId: fallback.providerId)
+
+        let task = Task { @MainActor in
+            try await service.process(prompt: "Fix grammar", text: "hello world")
+        }
+        for _ in 0..<100 {
+            if blocking.processCallCount == 1 { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(blocking.processCallCount, 1)
+
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected prompt processing to be cancelled")
+        } catch is CancellationError {
+            // Expected: cancellation bypasses all remaining fallbacks.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        XCTAssertEqual(fallback.processCallCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackWhenConfiguredModelIsUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let unavailableModel = MockLLMProviderPlugin()
+        unavailableModel.configuredProviderId = "unavailable-model"
+        unavailableModel.models = [
             PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
             PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
         ]
-
-        let manifest = PluginManifest(
-            id: "com.typewhisper.mock.llm",
-            name: "Mock LLM",
-            version: "1.0.0",
-            principalClass: "APIRouterMockLLMProviderPlugin"
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "model-fallback"
+        fallback.queuedProcessOutcomes = [.response("fallback result")]
+        Self.installLLMFallbackTestProviders(
+            [unavailableModel, fallback],
+            appSupportDirectory: appSupportDirectory
         )
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: manifest,
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(
+            providerId: unavailableModel.providerId,
+            modelId: "legacy-direct-model"
+        )
+        service.addLLMFallback(providerId: fallback.providerId)
         let result = try await service.process(prompt: "Fix grammar", text: "hello world")
 
-        XCTAssertEqual(result, "processed")
-        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-flash")
-        XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-flash")
-        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-flash")
+        XCTAssertEqual(result, "fallback result")
+        XCTAssertEqual(unavailableModel.processCallCount, 0)
+        XCTAssertEqual(fallback.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingDefersLocalAutoUnloadAcrossSameProviderFallbacks() async throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            Self.restoreUserDefault(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let local = MockLLMProviderPlugin()
+        local.configuredProviderId = "multi-model-local"
+        local.requiresExternalCredentials = false
+        local.models = [
+            PluginModelInfo(id: "first-model", displayName: "First Model"),
+            PluginModelInfo(id: "second-model", displayName: "Second Model")
+        ]
+        local.queuedProcessOutcomes = [
+            .apiFailure("First model failed"),
+            .delayedResponse("second model result", milliseconds: 300)
+        ]
+
+        Self.installLLMFallbackTestProviders([local], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        let modelManager = ModelManagerService()
+        service.modelManagerService = modelManager
+        service.addLLMFallback(providerId: local.providerId, modelId: "first-model")
+        service.addLLMFallback(providerId: local.providerId, modelId: "second-model")
+        modelManager.scheduleAutoUnloadIfNeeded(for: local)
+
+        let processingTask = Task { @MainActor in
+            try await service.process(prompt: "Fix grammar", text: "hello world")
+        }
+        for _ in 0..<100 where local.processCallCount < 2 {
+            await Task.yield()
+        }
+        XCTAssertEqual(local.processCallCount, 2)
+
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(local.autoUnloadCount, 0, "Auto-unload must wait until the fallback chain finishes")
+
+        let processingResult = try await processingTask.value
+        XCTAssertEqual(processingResult, "second model result")
+        await waitForAutoUnloadCount(local, toBecome: 1)
     }
 
     @MainActor
     func testPromptProcessingIgnoresInvalidPromptOverrideWithoutPersistingIt() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6442,7 +7594,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId, modelId: "gemini-2.5-pro")
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
@@ -6452,33 +7605,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
         XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-pro")
-        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-pro")
+        XCTAssertEqual(service.primaryFallbackItem?.modelId, "gemini-2.5-pro")
     }
 
     @MainActor
     func testPromptProcessingPassesTemperatureDirectiveToTemperatureAwareProvider() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6502,7 +7637,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId, modelId: "gemini-2.5-pro")
         _ = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
@@ -6514,29 +7650,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingReturnsSetupRequiredForLocalProviderWithoutLoadedModel() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
+    func testPromptProcessingAggregatesSetupFailureForLocalProviderWithoutLoadedModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemma 4 (MLX)", forKey: providerKey)
-        UserDefaults.standard.removeObject(forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6563,16 +7681,17 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId)
 
         do {
             _ = try await service.process(prompt: "Fix grammar", text: "hello world")
-            XCTFail("Expected local provider setup error")
+            XCTFail("Expected the fallback list to be exhausted")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.map(\.providerId), [plugin.providerId])
+            XCTAssertTrue(error.localizedDescription.contains("Load a Gemma 4 model"))
         } catch {
-            XCTAssertEqual(
-                error.localizedDescription,
-                "Load a Gemma 4 model in Integrations before using it for prompts."
-            )
+            XCTFail("Expected LLMFallbackExhaustedError, got \(error)")
         }
     }
 
@@ -8272,6 +9391,56 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testEventTapDefersDictationStartOutOfCallback() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        XCTAssertEqual(startCount, 0)
+
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testEventTapDisableRecoversReleasedPushToTalkHotkey() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .pushToTalk)
+
+        var physicalKeyIsDown = true
+        service.keyStateProvider = { keyCode in
+            keyCode == 0x31 && physicalKeyIsDown
+        }
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        physicalKeyIsDown = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
     func testSuppressingEventTapMaskOnlyIncludesMouseEventsWhenRequested() {
         let keyboardOnlyMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: false)
 
@@ -8624,7 +9793,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testMiddleMouseHotkeyPassesThroughEvenWhenSideMouseHotkeyUsesSuppressingTap() throws {
+    func testMiddleMouseHotkeyPassesThroughEvenWhenSideMouseHotkeyUsesSuppressingTap() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.setHotkeysForTesting([
@@ -8642,11 +9811,12 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
         XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
         XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
     }
 
     @MainActor
-    func testMatchingSideMouseHotkeyDispatchesAndSuppressesClick() throws {
+    func testMatchingSideMouseHotkeyDispatchesAndSuppressesClick() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.setHotkeyForTesting(UnifiedHotkey(mouseButton: 3), for: .toggle)
@@ -8662,6 +9832,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
         XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
         XCTAssertTrue(service.processEventForTesting(sideMouseDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertTrue(service.processEventForTesting(sideMouseUp, source: .eventTap))
     }
@@ -9283,7 +10454,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testHybridRightOptionSingleTapStillTogglesDictation() throws {
+    func testHybridRightOptionSingleTapStillTogglesDictation() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
@@ -9298,11 +10469,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let keyUp = try makeRightOptionModifierEvent(isDown: false)
 
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .pushToTalk)
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .toggle)
@@ -10171,13 +11344,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             restoredService.onDictationStop = { stopCount += 1 }
 
             let oldKeyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])
-            XCTAssertFalse(restoredService.processEventForTesting(oldKeyDown, source: .eventTap))
+            XCTAssertFalse(restoredService.processEventForTesting(oldKeyDown, source: .monitor))
             XCTAssertEqual(startCount, 0)
 
             let newKeyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
             let newKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [.maskCommand, .maskAlternate])
-            XCTAssertTrue(restoredService.processEventForTesting(newKeyDown, source: .eventTap))
-            XCTAssertTrue(restoredService.processEventForTesting(newKeyUp, source: .eventTap))
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyDown, source: .monitor))
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyUp, source: .monitor))
             XCTAssertEqual(startCount, 1)
             XCTAssertEqual(stopCount, 1)
         }

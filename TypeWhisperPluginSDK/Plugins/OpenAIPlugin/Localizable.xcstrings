@@ -102,13 +102,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+            "value": "Schliessen Sie den OpenAI-Login im Browser ab. MeetingWhisper verbindet den Account danach automatisch."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete the OpenAI login in your browser. MeetingWhisper will finish the connection automatically."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ブラウザでOpenAIログインを完了してください。TypeWhisperはその後自動でアカウントを接続します。"
+            "value": "ブラウザでOpenAIログインを完了してください。MeetingWhisperはその後自動でアカウントを接続します。"
           }
         }
       }

@@ -6,6 +6,25 @@ struct HTTPRequest {
     let queryParams: [String: String]
     let headers: [String: String]
     let body: Data
+    /// Values captured from `{placeholder}` segments of the route the request matched (e.g. the
+    /// meeting id in `/v1/meetings/{id}`). Empty for exact-path routes. Populated by `APIRouter`.
+    let pathParams: [String: String]
+
+    init(
+        method: String,
+        path: String,
+        queryParams: [String: String],
+        headers: [String: String],
+        body: Data,
+        pathParams: [String: String] = [:]
+    ) {
+        self.method = method
+        self.path = path
+        self.queryParams = queryParams
+        self.headers = headers
+        self.body = body
+        self.pathParams = pathParams
+    }
 }
 
 struct MultipartPart {

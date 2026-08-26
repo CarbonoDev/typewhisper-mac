@@ -2,9 +2,57 @@ import SwiftUI
 import AppKit
 import TypeWhisperPluginSDK
 
-enum SettingsTab: Hashable {
-    case home, general, recording, hotkeys, recorder
-    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, diarization, advanced, license, about
+enum SettingsTab: Hashable, CaseIterable {
+    case home, general, dictation, hotkeys, recorder
+    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, meetings, diarization, advanced, license, about
+}
+
+/// Named settings groups (D7). Single source of truth for the meetings-first regroup of the 20
+/// settings tabs into five sidebar sections. The regroup is purely presentational: it never adds,
+/// removes, or renames a `SettingsTab` case or a `settingsDetail(for:)` arm, so every deep-link
+/// caller keeps landing on its tab.
+enum SettingsGroup: String, CaseIterable, Hashable {
+    case dictation, meetings, library, tools, application
+
+    var title: String {
+        switch self {
+        case .dictation: return String(localized: "settings.group.dictation")
+        case .meetings: return String(localized: "settings.group.meetings")
+        case .library: return String(localized: "settings.group.library")
+        case .tools: return String(localized: "settings.group.tools")
+        case .application: return String(localized: "settings.group.application")
+        }
+    }
+}
+
+/// Ordered membership of each settings group (D7). Exposed at internal access so the grouping is
+/// unit-testable (`SettingsGroupingTests`) without instantiating any SwiftUI view.
+enum SettingsGrouping {
+    /// Deep-link-only tabs that resolve to themselves but have no sidebar row. TypeWhisper is free
+    /// and open source (GPLv3), so the License page is retained as an informational "Free & Open
+    /// Source" panel reachable via `navigateToLicense`, but is no longer pinned in the sidebar.
+    static let deepLinkOnlyTabs: Set<SettingsTab> = [.license]
+
+    /// Canonical (group, tabs) layout in display order. Availability filtering (e.g. the
+    /// conditional Recovery row) is applied when destinations are materialized.
+    ///
+    /// The Library group carries the three prompt-authoring panes in their historical adjacency:
+    /// Workflows (`WorkflowsSettingsView`), Prompts (`PromptActionsSettingsView`, which owns the
+    /// global default-LLM-provider picker), and Rules (`ProfilesSettingsView`). Prompts and Rules
+    /// each have their own row and detail view — they are no longer aliased onto Workflows, which
+    /// previously left both panes (and their deep links) unreachable.
+    static let orderedGroups: [(group: SettingsGroup, tabs: [SettingsTab])] = [
+        (.dictation, [.home, .general, .dictation, .hotkeys, .dictionary, .snippets, .dictationRecovery]),
+        (.meetings, [.meetings, .diarization]),
+        (.library, [.workflows, .prompts, .profiles]),
+        (.tools, [.recorder, .fileTranscription, .history]),
+        (.application, [.integrations, .premium, .advanced, .about])
+    ]
+
+    /// Every grouped tab, in group order. Used to assert each tab is placed exactly once.
+    static var allGroupedTabs: [SettingsTab] {
+        orderedGroups.flatMap(\.tabs)
+    }
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -18,6 +66,7 @@ private struct SettingsDestination: Identifiable, Hashable {
 
 private struct SettingsDestinationSection: Identifiable {
     let id: String
+    let title: String?
     let destinations: [SettingsDestination]
 }
 
@@ -32,9 +81,9 @@ struct SettingsView: View {
 
     private var destinations: [SettingsDestination] {
         [
-            SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
+            SettingsDestination(tab: .home, title: String(localized: "settings.tab.overview"), systemImage: "chart.bar.doc.horizontal", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
-            SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
+            SettingsDestination(tab: .dictation, title: String(localized: "Dictation"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
             SettingsDestination(
                 tab: .recorder,
@@ -59,8 +108,20 @@ struct SettingsView: View {
                 badge: nil
             ),
             SettingsDestination(
+                tab: .prompts,
+                title: localizedAppText("Prompts", de: "Prompts"),
+                systemImage: "text.bubble",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .profiles,
+                title: localizedAppText("Rules", de: "Regeln"),
+                systemImage: "list.bullet.rectangle",
+                badge: nil
+            ),
+            SettingsDestination(
                 tab: .premium,
-                title: localizedAppText("Premium", de: "Premium"),
+                title: localizedAppText("Correction & Sync", de: "Korrektur & Sync"),
                 systemImage: "sparkles",
                 badge: nil
             ),
@@ -70,9 +131,9 @@ struct SettingsView: View {
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
+            SettingsDestination(tab: .meetings, title: String(localized: "settings.tab.meetings"), systemImage: "calendar.badge.clock", badge: nil),
             SettingsDestination(tab: .diarization, title: String(localized: "Speaker Diarization"), systemImage: "person.2.wave.2", badge: nil),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
     }
@@ -118,17 +179,30 @@ struct SettingsView: View {
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
             switch request.tab {
-            case .profiles, .prompts, .workflows:
+            case .workflows:
+                // Reset the Workflows pane to its list root when navigated to directly.
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
-                selectedTab = Self.availableTab(request.tab)
+                // Prompts (`PromptActionsSettingsView`) and Rules (`ProfilesSettingsView`) are now
+                // their own rows; deep links land on them directly rather than collapsing onto
+                // Workflows. Every other tab already resolves to itself.
+                selectedTab = Self.resolvedTab(for: request.tab)
             }
         }
     }
 
     static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
+    }
+
+    /// Pure deep-link resolution (D7): maps a `SettingsNavigationCoordinator` request tab to the
+    /// tab that is actually selected. Every tab — including the Library group's `.workflows`,
+    /// `.prompts`, and `.profiles` rows — now resolves to itself and has its own sidebar row and
+    /// detail view. Kept pure/static so the deep-link contract is unit-testable
+    /// (`SettingsDeepLinkTests`).
+    static func resolvedTab(for requestTab: SettingsTab) -> SettingsTab {
+        availableTab(requestTab)
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
@@ -144,7 +218,7 @@ struct SettingsView: View {
             HomeSettingsView()
         case .general:
             GeneralSettingsView()
-        case .recording:
+        case .dictation:
             RecordingSettingsView()
         case .hotkeys:
             HotkeySettingsView()
@@ -163,13 +237,15 @@ struct SettingsView: View {
         case .workflows:
             WorkflowsSettingsView()
         case .profiles:
-            WorkflowsSettingsView()
+            ProfilesSettingsView()
         case .prompts:
-            WorkflowsSettingsView()
+            PromptActionsSettingsView()
         case .premium:
             PremiumSettingsView()
         case .integrations:
             PluginSettingsView()
+        case .meetings:
+            MeetingsSettingsView()
         case .diarization:
             DiarizationSettingsView()
         case .advanced:
@@ -189,6 +265,148 @@ private struct SettingsModernShell: View {
     let detail: (SettingsTab) -> AnyView
 
     @State private var sidebarSearchText = ""
+    @State private var isSidebarVisible = true
+
+    var body: some View {
+        SettingsSplitView(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections,
+            isSidebarVisible: $isSidebarVisible,
+            detail: detail
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: { isSidebarVisible.toggle() }) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+}
+
+// Bridges to a native AppKit NSSplitViewController rather than SwiftUI's
+// NavigationSplitView or a hand-rolled HStack. Three prior pure-SwiftUI attempts
+// each fixed one property at the cost of another:
+//   - NavigationSplitView: resize is fluid (native), but its built-in collapse
+//     animation reflows row labels frame-by-frame — a visible glitch on this
+//     macOS version.
+//   - Custom HStack + zero-duration toggle: fixed the glitch, but the divider
+//     and sidebar content could pop out of sync with each other.
+//   - Custom HStack + live @GestureState width: fixed the sync issue, but
+//     SwiftUI's List (backed by NSTableView) can't relayout at pointer-tracking
+//     speed, so rows visibly lag behind the resizing frame during a live drag.
+// NSSplitViewController is the actual mechanism Finder/Mail/Notes use for their
+// sidebars — it owns both resize and collapse natively, so neither is fighting
+// a SwiftUI layout pass, and VoiceOver/keyboard resize support comes for free.
+@available(macOS 15, *)
+private struct SettingsSplitView: NSViewControllerRepresentable {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
+    @Binding var isSidebarVisible: Bool
+    let detail: (SettingsTab) -> AnyView
+
+    func makeNSViewController(context: Context) -> NSSplitViewController {
+        let splitViewController = NSSplitViewController()
+        splitViewController.splitView.dividerStyle = .thin
+
+        let sidebarHostingController = NSHostingController(
+            rootView: SettingsSidebarContent(
+                selectedTab: $selectedTab,
+                sidebarSearchText: $sidebarSearchText,
+                sections: sections
+            )
+        )
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarHostingController)
+        sidebarItem.minimumThickness = 240
+        sidebarItem.maximumThickness = 320
+        sidebarItem.canCollapse = true
+        sidebarItem.isCollapsed = !isSidebarVisible
+
+        let detailHostingController = NSHostingController(
+            rootView: AnyView(
+                detail(selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            )
+        )
+        let detailItem = NSSplitViewItem(viewController: detailHostingController)
+
+        splitViewController.addSplitViewItem(sidebarItem)
+        splitViewController.addSplitViewItem(detailItem)
+
+        context.coordinator.sidebarItem = sidebarItem
+        context.coordinator.sidebarHostingController = sidebarHostingController
+        context.coordinator.detailHostingController = detailHostingController
+        context.coordinator.isSidebarVisible = $isSidebarVisible
+        // The user can collapse the sidebar natively — dragging the divider past
+        // its minimum thickness, or double-clicking it — without going through
+        // our toolbar button at all. Without this observer, isSidebarVisible
+        // never learns about it, so the button's next click just re-asserts the
+        // (already collapsed) state as a no-op, requiring a second click to
+        // actually reopen it.
+        context.coordinator.observeCollapseState(of: sidebarItem)
+
+        return splitViewController
+    }
+
+    func updateNSViewController(_ splitViewController: NSSplitViewController, context: Context) {
+        context.coordinator.sidebarHostingController?.rootView = SettingsSidebarContent(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections
+        )
+        context.coordinator.detailHostingController?.rootView = AnyView(
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        )
+        context.coordinator.isSidebarVisible = $isSidebarVisible
+
+        guard let sidebarItem = context.coordinator.sidebarItem else { return }
+        let shouldBeCollapsed = !isSidebarVisible
+        guard sidebarItem.isCollapsed != shouldBeCollapsed else { return }
+
+        NSAnimationContext.runAnimationGroup { animationContext in
+            animationContext.duration = 0.2
+            animationContext.allowsImplicitAnimation = true
+            sidebarItem.animator().isCollapsed = shouldBeCollapsed
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var sidebarItem: NSSplitViewItem?
+        var sidebarHostingController: NSHostingController<SettingsSidebarContent>?
+        var detailHostingController: NSHostingController<AnyView>?
+        var isSidebarVisible: Binding<Bool>?
+        private var collapseObservation: NSKeyValueObservation?
+
+        // Captures the binding itself rather than `self` — `Coordinator` is a
+        // plain (non-Sendable) class, and KVO's changeHandler is `@Sendable`, so
+        // capturing `self` (even weakly) to reach `self.isSidebarVisible` trips
+        // Swift 6 strict concurrency checking. The binding's identity is stable
+        // for the representable's lifetime, so a snapshot at observation time
+        // stays valid.
+        func observeCollapseState(of sidebarItem: NSSplitViewItem) {
+            let isSidebarVisible = isSidebarVisible
+            collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { _, change in
+                guard let isCollapsed = change.newValue else { return }
+                let shouldBeVisible = !isCollapsed
+                if isSidebarVisible?.wrappedValue != shouldBeVisible {
+                    isSidebarVisible?.wrappedValue = shouldBeVisible
+                }
+            }
+        }
+    }
+}
+
+private struct SettingsSidebarContent: View {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -198,6 +416,7 @@ private struct SettingsModernShell: View {
             .map { section in
                 SettingsDestinationSection(
                     id: section.id,
+                    title: section.title,
                     destinations: section.destinations.filter { destination in
                         destination.title.localizedCaseInsensitiveContains(query)
                     }
@@ -207,7 +426,9 @@ private struct SettingsModernShell: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        VStack(spacing: 0) {
+            SettingsSidebarSearchField(text: $sidebarSearchText)
+
             List(selection: $selectedTab) {
                 ForEach(filteredSections) { section in
                     Section {
@@ -215,90 +436,68 @@ private struct SettingsModernShell: View {
                             SettingsSidebarRow(destination: destination)
                                 .tag(destination.tab)
                         }
+                    } header: {
+                        if let title = section.title {
+                            Text(title)
+                        }
                     }
                 }
             }
             .listStyle(.sidebar)
-            .searchable(
-                text: $sidebarSearchText,
-                placement: .sidebar,
-                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
-            )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
-        } detail: {
-            detail(selectedTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Changing the section/row count via search filtering can leave stale,
+            // blank space behind from SwiftUI's incremental List diffing. Keying the
+            // List on the query forces a clean rebuild instead of a partial diff.
+            .id(sidebarSearchText)
         }
     }
 }
 
-private func settingsDestination(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination {
-    destinations.first(where: { $0.tab == tab })!
+private struct SettingsSidebarSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(
+                localizedAppText("Search Settings", de: "Einstellungen durchsuchen"),
+                text: $text
+            )
+            .textFieldStyle(.plain)
+
+            if !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(localizedAppText("Clear Search", de: "Suche löschen"))
+                .accessibilityLabel(localizedAppText("Clear Search", de: "Suche löschen"))
+            }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 4, trailing: 8))
+    }
 }
 
 private func settingsDestinationIfAvailable(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination? {
     destinations.first(where: { $0.tab == tab })
 }
 
-private func settingsTitle(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
-    settingsDestination(destinations, tab).title
-}
-
-private func settingsSystemImage(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
-    settingsDestination(destinations, tab).systemImage
-}
-
-private func settingsBadge(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> Int? {
-    settingsDestination(destinations, tab).badge
-}
-
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
-    var coreDestinations = [
-        settingsDestination(destinations, .general),
-        settingsDestination(destinations, .recording)
-    ]
-    if let recoveryDestination = settingsDestinationIfAvailable(destinations, .dictationRecovery) {
-        coreDestinations.append(recoveryDestination)
-    }
-    coreDestinations.append(contentsOf: [
-        settingsDestination(destinations, .hotkeys),
-        settingsDestination(destinations, .fileTranscription),
-        settingsDestination(destinations, .recorder)
-    ])
-
-    var workspaceDestinations = [
-        settingsDestination(destinations, .history),
-        settingsDestination(destinations, .dictionary),
-        settingsDestination(destinations, .snippets),
-        settingsDestination(destinations, .workflows),
-        settingsDestination(destinations, .premium)
-    ]
-
-    workspaceDestinations.append(settingsDestination(destinations, .integrations))
-
-    return [
-        SettingsDestinationSection(
-            id: "home",
-            destinations: [settingsDestination(destinations, .home)]
-        ),
-        SettingsDestinationSection(
-            id: "core",
-            destinations: coreDestinations
-        ),
-        SettingsDestinationSection(
-            id: "workspace",
-            destinations: workspaceDestinations
-        ),
-        SettingsDestinationSection(
-            id: "system",
-            destinations: [
-                settingsDestination(destinations, .diarization),
-                settingsDestination(destinations, .advanced),
-                settingsDestination(destinations, .license),
-                settingsDestination(destinations, .about)
-            ]
+    // Meetings-first regroup (D7): five titled groups built from the single-source
+    // `SettingsGrouping.orderedGroups`. Rows are filtered by availability (so the conditional
+    // Recovery row only appears when present) but never reordered or dropped otherwise.
+    SettingsGrouping.orderedGroups.compactMap { group, tabs in
+        let rows = tabs.compactMap { settingsDestinationIfAvailable(destinations, $0) }
+        guard !rows.isEmpty else { return nil }
+        return SettingsDestinationSection(
+            id: group.rawValue,
+            title: group.title,
+            destinations: rows
         )
-    ]
+    }
 }
 
 private struct SettingsSidebarShell<DetailContent: View>: View {
@@ -317,6 +516,10 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
                             ForEach(section.destinations) { destination in
                                 SettingsSidebarRow(destination: destination)
                                     .tag(destination.tab)
+                            }
+                        } header: {
+                            if let title = section.title {
+                                Text(title)
                             }
                         }
                     }
@@ -395,6 +598,7 @@ struct RecordingSettingsView: View {
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
+    @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     private let soundService = ServiceContainer.shared.soundService
 
     private var needsPermissions: Bool {
@@ -421,6 +625,175 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var inputDeviceSelectionBinding: Binding<String?> {
+        Binding(
+            get: { audioDevice.selectedDeviceUID },
+            set: { newValue in
+                if let newValue {
+                    audioDevice.selectInputDeviceAsPrimary(newValue)
+                } else {
+                    audioDevice.clearInputDevicePriorityList()
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var microphonePriorityEditor: some View {
+        if shouldShowMicrophonePriorityList {
+            LabeledContent(String(localized: "Microphone Priority")) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    microphonePriorityList
+                        .frame(maxWidth: 560, alignment: .leading)
+
+                    microphonePriorityAddMenu
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack {
+                Spacer()
+                microphonePriorityAddMenu
+            }
+        }
+    }
+
+    private var shouldShowMicrophonePriorityList: Bool {
+        let priorityList = audioDevice.inputDevicePriorityList
+        guard priorityList.count == 1, let item = priorityList.first else {
+            return priorityList.count > 1
+        }
+
+        return !audioDevice.isInputDevicePriorityItemAvailable(item)
+    }
+
+    @ViewBuilder
+    private var microphonePriorityList: some View {
+        if !audioDevice.inputDevicePriorityList.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(audioDevice.inputDevicePriorityList.enumerated()), id: \.element.id) { index, item in
+                    microphonePriorityRow(index: index, item: item)
+                        .onDrag {
+                            draggedInputDevicePriorityItem = item
+                            return NSItemProvider(object: item.uid as NSString)
+                        }
+                        .onDrop(
+                            of: ["public.text"],
+                            delegate: MicrophonePriorityDropDelegate(
+                                item: item,
+                                audioDevice: audioDevice,
+                                draggedItem: $draggedInputDevicePriorityItem
+                            )
+                        )
+
+                    if index < audioDevice.inputDevicePriorityList.count - 1 {
+                        Divider()
+                            .padding(.leading, 40)
+                    }
+                }
+            }
+        }
+    }
+
+    private var microphonePriorityAddMenu: some View {
+        Menu {
+            if audioDevice.inputDevicePriorityCandidates.isEmpty {
+                Text(String(localized: "No more microphones"))
+            } else {
+                ForEach(audioDevice.inputDevicePriorityCandidates) { device in
+                    Button(audioDevice.displayName(for: device)) {
+                        audioDevice.addInputDeviceToPriorityList(device)
+                    }
+                }
+            }
+        } label: {
+            Label(String(localized: "Add Microphone"), systemImage: "plus")
+                .font(.callout)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .help(String(localized: "Add Microphone"))
+    }
+
+    private func microphonePriorityRow(index: Int, item: AudioInputDevicePriorityItem) -> some View {
+        let isAvailable = audioDevice.isInputDevicePriorityItemAvailable(item)
+        let canMoveUp = index > 0
+        let canMoveDown = index < audioDevice.inputDevicePriorityList.count - 1
+
+        return HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 12)
+
+            Text("\(index + 1).")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 20, alignment: .trailing)
+
+            Text(audioDevice.displayName(for: item))
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            if !isAvailable {
+                Text(String(localized: "Disconnected"))
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                audioDevice.removeInputDevicePriorityItem(item)
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .font(.system(size: 13))
+            .help(String(localized: "Remove microphone"))
+        }
+        .padding(.vertical, 3)
+        .frame(minHeight: 24)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                moveMicrophonePriorityItemUp(item)
+            } label: {
+                Label(String(localized: "Move Up"), systemImage: "chevron.up")
+            }
+            .disabled(!canMoveUp)
+
+            Button {
+                moveMicrophonePriorityItemDown(item)
+            } label: {
+                Label(String(localized: "Move Down"), systemImage: "chevron.down")
+            }
+            .disabled(!canMoveDown)
+        }
+        .modifier(MicrophonePriorityAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: { moveMicrophonePriorityItemUp(item) },
+            moveDown: { moveMicrophonePriorityItemDown(item) }
+        ))
+    }
+
+    private func moveMicrophonePriorityItemUp(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index > 0 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index - 1)
+    }
+
+    private func moveMicrophonePriorityItemDown(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index < audioDevice.inputDevicePriorityList.count - 1 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index + 2)
     }
 
     var body: some View {
@@ -488,13 +861,15 @@ struct RecordingSettingsView: View {
             }
 
             Section(String(localized: "Microphone")) {
-                Picker(String(localized: "Input Device"), selection: $audioDevice.selectedDeviceUID) {
+                Picker(String(localized: "Input Device"), selection: inputDeviceSelectionBinding) {
                     Text(String(localized: "System Default")).tag(nil as String?)
                     Divider()
                     ForEach(audioDevice.inputDevices) { device in
                         Text(audioDevice.displayName(for: device)).tag(device.uid as String?)
                     }
                 }
+
+                microphonePriorityEditor
 
                 if let message = audioDevice.selectedDeviceStatusMessage {
                     Label(message, systemImage: "exclamationmark.triangle")
@@ -508,18 +883,12 @@ struct RecordingSettingsView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
 
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(.quaternary)
-
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.green.gradient)
-                                    .frame(width: max(0, geo.size.width * CGFloat(audioDevice.previewAudioLevel)))
-                                    .animation(.easeOut(duration: 0.08), value: audioDevice.previewAudioLevel)
-                            }
-                        }
-                        .frame(height: 6)
+                        AudioWaveformView(
+                            audioLevel: audioDevice.previewAudioLevel,
+                            isSetup: false,
+                            compact: true
+                        )
+                        .foregroundStyle(.green)
                     }
                     .padding(.vertical, 4)
                 }
@@ -760,6 +1129,51 @@ private struct SoundEventPicker: View {
         } catch {
             // File copy failed - silently ignore
         }
+    }
+}
+
+private struct MicrophonePriorityAccessibilityActions: ViewModifier {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if canMoveUp && canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else if canMoveUp {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+        } else if canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else {
+            content
+        }
+    }
+}
+
+private struct MicrophonePriorityDropDelegate: DropDelegate {
+    let item: AudioInputDevicePriorityItem
+    let audioDevice: AudioDeviceService
+    @Binding var draggedItem: AudioInputDevicePriorityItem?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedItem,
+              draggedItem != item,
+              let fromIndex = audioDevice.inputDevicePriorityList.firstIndex(of: draggedItem),
+              let toIndex = audioDevice.inputDevicePriorityList.firstIndex(of: item) else { return }
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: fromIndex), to: destination)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedItem = nil
+        return true
     }
 }
 

@@ -10,7 +10,7 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", branch: "main"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", revision: "300165b240c45375add402265f62410b6df33cf1"),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.3"),
@@ -232,6 +232,16 @@ let package = Package(
             name: "AssemblyAIPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/AssemblyAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "ElevenLabsPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ElevenLabsPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -487,6 +497,15 @@ let package = Package(
                 "AssemblyAIPlugin",
             ],
             path: "Plugins/AssemblyAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ElevenLabsPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ElevenLabsPlugin",
+            ],
+            path: "Plugins/ElevenLabsPlugin/Tests"
         ),
         .testTarget(
             name: "Reson8PluginTests",

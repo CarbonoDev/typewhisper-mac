@@ -1,5 +1,7 @@
 # TypeWhisper Support Matrix
 
+> This describes the upstream TypeWhisper project's support matrix and is retained for reference. The fork's release process is not yet defined.
+
 This matrix describes the officially supported direct-download path for the current stable macOS release. The public runtime support floor remains `macOS 14+`.
 
 ## Platform

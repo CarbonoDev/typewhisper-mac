@@ -2,6 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct AdvancedSettingsView: View {
+    /// The managed window the "Open Error Log" button opens. Declared as a testable constant so the
+    /// error-log scene (hosted only in `Window(id: AppWindowID.errors)`) can never again become
+    /// unreachable after the D8 menu-bar slim removed the menu's `.errorLog` opener. Covered by
+    /// `SettingsRegroupTests` so reachability can't silently regress.
+    static let errorLogWindowID = AppWindowID.errors
+
     @ObservedObject private var viewModel = APIServerViewModel.shared
     @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
@@ -16,17 +22,107 @@ struct AdvancedSettingsView: View {
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
+    @State private var apiTokenCopied = false
+    @State private var unmigratedKeychainItems: [String] = DataMigrationService.unmigratedKeychainItems()
+    @State private var keychainEnumerationFailed = DataMigrationService.keychainEnumerationFailed()
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
+
+    @State private var showBackupError = false
+    @State private var backupErrorMessage = ""
+    @State private var showBackupImportResult = false
+    @State private var backupImportResultMessage = ""
+    @State private var isImportingBackup = false
+    @State private var exportBackupDraft: ExportBackupDraft?
+    @State private var showImportSheet = false
 
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
+    // Track A owns the key + launch wiring (D2); Track D renders this toggle in the Application
+    // group. Registered default is ON (`AppDelegate.registerDefaultUserDefaults`).
+    @AppStorage(UserDefaultsKeys.showMainWindowAtLaunch) private var showMainWindowAtLaunch: Bool = true
 
     var body: some View {
         Form {
+            // MARK: - Rename migration report
+            // Shown only when the MeetingWhisper rename could not carry some API keys over. Without
+            // it the failure is invisible until a transcription fails with an auth error.
+            if !unmigratedKeychainItems.isEmpty || keychainEnumerationFailed {
+                Section(localizedAppText("Data Migration", de: "Datenübernahme")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(
+                            localizedAppText(
+                                "Some saved API keys could not be carried over from TypeWhisper.",
+                                de: "Einige gespeicherte API-Schlüssel konnten nicht von TypeWhisper übernommen werden."
+                            ),
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.orange)
+
+                        if !unmigratedKeychainItems.isEmpty {
+                            Text(unmigratedKeychainItems.joined(separator: ", "))
+                                .font(.system(.callout, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        } else {
+                            Text(localizedAppText(
+                                "The keychain could not be read at all, so it is not known which keys were affected.",
+                                de: "Der Schlüsselbund konnte gar nicht gelesen werden, daher ist unbekannt, welche Schlüssel betroffen sind."
+                            ))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Text(localizedAppText(
+                            "Retrying asks the keychain again — macOS may prompt you to allow access. If it keeps failing, re-enter the affected keys in their provider's settings.",
+                            de: "Ein erneuter Versuch fragt den Schlüsselbund noch einmal ab – macOS fragt dabei ggf. nach deiner Erlaubnis. Schlägt es weiterhin fehl, gib die betroffenen Schlüssel in den Einstellungen des jeweiligen Anbieters neu ein."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            Button(localizedAppText("Retry Migration", de: "Übernahme wiederholen")) {
+                                DataMigrationService.retryKeychainMigration()
+                                reloadMigrationReport()
+                            }
+                            Button(localizedAppText("Dismiss", de: "Ausblenden")) {
+                                DataMigrationService.dismissKeychainReport()
+                                reloadMigrationReport()
+                            }
+                        }
+                    }
+                }
+            }
+
+            // MARK: - Window
+            Section(String(localized: "settings.mainWindow.section")) {
+                Toggle(isOn: $showMainWindowAtLaunch) {
+                    SettingsInfoLabel(
+                        title: String(localized: "settings.mainWindow.showAtLaunch.title"),
+                        info: String(localized: "settings.mainWindow.showAtLaunch.help")
+                    )
+                }
+            }
+
             // MARK: - Support Diagnostics
             Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
+                HStack {
+                    Button {
+                        ManagedAppWindowOpener.shared.open(id: Self.errorLogWindowID)
+                    } label: {
+                        Label(
+                            String(localized: "Error Log"),
+                            systemImage: "exclamationmark.triangle"
+                        )
+                    }
+
+                    SettingsInfoButton(text: localizedAppText(
+                        "Opens the app's error log window with recent recording, transcription and plugin errors.",
+                        de: "Öffnet das Fehlerprotokoll-Fenster mit den letzten Aufnahme-, Transkriptions- und Plugin-Fehlern."
+                    ))
+                }
+
                 HStack {
                     Button {
                         exportDiagnostics()
@@ -40,6 +136,41 @@ struct AdvancedSettingsView: View {
                     SettingsInfoButton(text: localizedAppText(
                         "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
                         de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
+                    ))
+                }
+            }
+
+            // MARK: - Backup & Restore
+            Section(localizedAppText("Backup & Restore", de: "Sicherung & Wiederherstellung")) {
+                HStack {
+                    Button {
+                        beginExport()
+                    } label: {
+                        Label(
+                            localizedAppText("Export Settings", de: "Einstellungen exportieren"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .disabled(isImportingBackup)
+
+                    Button {
+                        showImportSheet = true
+                    } label: {
+                        Label(
+                            localizedAppText("Import Settings", de: "Einstellungen importieren"),
+                            systemImage: "square.and.arrow.down"
+                        )
+                    }
+                    .disabled(isImportingBackup)
+
+                    if isImportingBackup {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    SettingsInfoButton(text: localizedAppText(
+                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), meetings (with participants and context rules, no saved audio) plus their preferences, the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.",
+                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), Meetings (mit Teilnehmern und Kontextregeln, keine gespeicherten Audioaufnahmen) samt zugehöriger Einstellungen, den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
                     ))
                 }
             }
@@ -335,6 +466,31 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Allowed Browser Extensions"),
+                        info: String(localized: "Browser extensions are refused by the API unless their ID is listed here — otherwise every extension installed in the browser could read your meetings. Chrome shows the ID on chrome://extensions with Developer mode on; separate several with commas. A listed extension must also send the API token, whatever the setting above says: copy it here and paste it into the extension's options.")
+                    )
+                    TextField(
+                        String(localized: "Extension IDs"),
+                        text: $viewModel.allowedExtensionIDs,
+                        prompt: Text(verbatim: "abcdefghijklmnopabcdefghijklmnop")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+
+                    HStack(spacing: 8) {
+                        Button(String(localized: "Copy API Token")) {
+                            apiTokenCopied = viewModel.copyAPITokenToPasteboard()
+                        }
+                        if apiTokenCopied {
+                            Text(String(localized: "Copied to the clipboard"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 if viewModel.isEnabled {
                     HStack {
                         Image(systemName: "circle.fill")
@@ -364,7 +520,7 @@ struct AdvancedSettingsView: View {
                         .font(.caption2)
                         .accessibilityHidden(true)
                     if cliInstalled {
-                        Text(String(localized: "Installed at /usr/local/bin/typewhisper"))
+                        Text(String(localized: "Installed at /usr/local/bin/meetingwhisper"))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     } else {
@@ -451,6 +607,30 @@ struct AdvancedSettingsView: View {
         } message: {
             Text(diagnosticsExportErrorMessage)
         }
+        .alert(localizedAppText("Backup Failed", de: "Sicherung fehlgeschlagen"), isPresented: $showBackupError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(backupErrorMessage)
+        }
+        .alert(localizedAppText("Import Complete", de: "Import abgeschlossen"), isPresented: $showBackupImportResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(backupImportResultMessage)
+        }
+        .sheet(item: $exportBackupDraft) { draft in
+            BackupExportSheet(backup: draft.backup) { categories in
+                performBackupExport(draft.backup, categories: categories)
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            BackupImportSheet { backup, categories in
+                isImportingBackup = true
+                Task {
+                    await performBackupImport(backup, categories: categories)
+                    isImportingBackup = false
+                }
+            }
+        }
     }
 
     // MARK: - Examples
@@ -506,6 +686,13 @@ struct AdvancedSettingsView: View {
         }
     }
 
+    // MARK: - Rename migration report
+
+    private func reloadMigrationReport() {
+        unmigratedKeychainItems = DataMigrationService.unmigratedKeychainItems()
+        keychainEnumerationFailed = DataMigrationService.keychainEnumerationFailed()
+    }
+
     // MARK: - Support Diagnostics
 
     private func exportDiagnostics() {
@@ -535,12 +722,98 @@ struct AdvancedSettingsView: View {
         return "typewhisper-diagnostics-\(timestamp).json"
     }
 
+    // MARK: - Backup & Restore
+
+    /// Builds a snapshot of the current live state and opens the category
+    /// selection sheet. The backup is built eagerly (rather than in the
+    /// sheet's `onExport` callback) so the sheet can show per-category counts
+    /// right away.
+    private func beginExport() {
+        let container = ServiceContainer.shared
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: container.workflowService,
+            dictionaryService: container.dictionaryService,
+            snippetService: container.snippetService,
+            profileService: container.profileService,
+            promptActionService: container.promptActionService,
+            pluginManager: container.pluginManager,
+            historyService: container.historyService,
+            meetingService: container.meetingService,
+            participantDirectoryService: container.participantDirectoryService,
+            meetingContextRuleService: container.meetingContextRuleService
+        )
+        exportBackupDraft = ExportBackupDraft(backup: backup)
+    }
+
+    private func performBackupExport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) {
+        guard let url = SettingsBackupExporter.presentSavePanel() else { return }
+        do {
+            try SettingsBackupExporter.saveToFile(SettingsBackupExporter.filtered(backup, to: categories), to: url)
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+        }
+    }
+
+    private func performBackupImport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) async {
+        let container = ServiceContainer.shared
+        let result = await SettingsBackupExporter.importBackup(
+            SettingsBackupExporter.filtered(backup, to: categories),
+            workflowService: container.workflowService,
+            dictionaryService: container.dictionaryService,
+            snippetService: container.snippetService,
+            profileService: container.profileService,
+            promptActionService: container.promptActionService,
+            pluginManager: container.pluginManager,
+            pluginRegistryService: container.pluginRegistryService,
+            historyService: container.historyService,
+            usageStatisticsService: container.usageStatisticsService,
+            meetingService: container.meetingService,
+            participantDirectoryService: container.participantDirectoryService,
+            meetingContextRuleService: container.meetingContextRuleService
+        )
+
+        backupImportResultMessage = backupImportSummary(result)
+        showBackupImportResult = true
+    }
+
+    private func backupImportSummary(_ result: SettingsBackupExporter.ImportResult) -> String {
+        var lines: [String] = []
+        lines.append(String(format: String(localized: "Workflows: %d imported"), result.workflowsImported))
+        lines.append(String(format: String(localized: "Dictionary: %d imported, %d skipped (already present)"), result.dictionaryImported, result.dictionarySkipped))
+        lines.append(String(format: String(localized: "Snippets: %d imported, %d skipped (already present)"), result.snippetsImported, result.snippetsSkipped))
+        lines.append(String(format: String(localized: "Prompt Actions: %d imported"), result.promptActionsImported))
+        lines.append(String(format: String(localized: "Profiles: %d imported"), result.profilesImported))
+        lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
+        lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
+        if result.pluginsRegistryFetchFailed {
+            lines.append(localizedAppText(
+                "Could not reach the plugin marketplace — some plugins may have been skipped due to a network error, not because they're unavailable.",
+                de: "Der Plugin-Marktplatz konnte nicht erreicht werden – einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
+            ))
+        }
+        lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))
+        if result.historySkippedByRetention > 0 {
+            lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
+        }
+        if result.meetingsImported > 0 || result.participantsImported > 0 || result.meetingRulesImported > 0 {
+            lines.append(String(format: String(localized: "Meetings: %d imported, %d participants, %d rules"), result.meetingsImported, result.participantsImported, result.meetingRulesImported))
+        }
+        if result.updateChannelApplied {
+            lines.append(String(localized: "Update channel applied"))
+        }
+        if result.preferencesApplied > 0 {
+            lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - CLI Installation
 
-    private static let symlinkPath = "/usr/local/bin/typewhisper"
+    private static let symlinkPath = "/usr/local/bin/meetingwhisper"
 
     private var cliBinaryPath: String {
-        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/typewhisper-cli").path
+        Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/meetingwhisper-cli").path
     }
 
     private func checkCLIInstallation() {
@@ -592,6 +865,15 @@ struct AdvancedSettingsView: View {
             _ = speechFeedbackService.disableIfNoProvidersAvailable()
         }
     }
+}
+
+/// Wraps a built `SettingsBackup` snapshot with a stable identity so the
+/// export sheet can be driven by `.sheet(item:)` instead of a separate
+/// `Bool` + optional pair — `.sheet(item:)` never presents until the item is
+/// non-nil, which rules out the sheet ever appearing with no content to show.
+private struct ExportBackupDraft: Identifiable {
+    let id = UUID()
+    let backup: SettingsBackupExporter.SettingsBackup
 }
 
 struct SettingsInfoLabel: View {

@@ -306,7 +306,6 @@ final class DictationViewModel: ObservableObject {
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
-    private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
     private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
@@ -843,15 +842,11 @@ final class DictationViewModel: ObservableObject {
 
     private func setupBindings() {
         hotkeyService.onDictationStart = { [weak self] requestTimestamp in
-            guard let self else { return }
-            logger.info("hotkey→onDictationStart (state=\(String(describing: self.state), privacy: .public))")
-            self.startRecording(requestUptimeNanoseconds: requestTimestamp)
+            self?.startRecording(requestUptimeNanoseconds: requestTimestamp)
         }
 
         hotkeyService.onDictationStop = { [weak self] in
-            guard let self else { return }
-            logger.info("hotkey→onDictationStop (state=\(String(describing: self.state), privacy: .public), stopInFlight=\(String(describing: self.isStopInFlight), privacy: .public))")
-            self.stopDictation()
+            self?.stopDictation()
         }
 
         hotkeyService.onWorkflowDictationStart = { [weak self] workflowId, requestTimestamp in
@@ -977,10 +972,6 @@ final class DictationViewModel: ObservableObject {
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         case .processing:
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
-            stopFinalizationTask?.cancel()
-            stopFinalizationTask = nil
-            streamingHandler.stop()
-            lastStreamingParams = nil
             transcriptionTask?.cancel()
             transcriptionTask = nil
             audioRecordingService.discardActiveRecoveryRecording()
@@ -995,12 +986,6 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
-        guard state == .idle else {
-            logger.warning("startRecording rejected: state=\(String(describing: self.state), privacy: .public); resetting hotkey state")
-            hotkeyService.cancelDictation()
-            return
-        }
-
         let startTimestamp = CFAbsoluteTimeGetCurrent()
         clearRecordingStartCueState()
 
@@ -1026,32 +1011,26 @@ final class DictationViewModel: ObservableObject {
 
         guard canDictate else {
             let errorMessage = TranscriptionEngineError.modelNotLoaded.localizedDescription
-            logger.warning("startRecording rejected: canDictate=false; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")
-            // Resync the hotkey toggle: HotkeyService already flipped isActive=true
-            // before invoking onDictationStart. Without this, a rejected start leaves
-            // the toggle stuck "active", so the next press is consumed as a phantom
-            // stop and every subsequent start/stop needs an extra press.
-            hotkeyService.cancelDictation()
             return
         }
 
         guard audioRecordingService.hasMicrophonePermission else {
             let errorMessage = "Microphone permission required."
-            logger.warning("startRecording rejected: microphone permission missing; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")
-            hotkeyService.cancelDictation()
             return
         }
+
+        let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
 
         do {
             let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
             audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
-            audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
-            audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
-            let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
+            audioRecordingService.selectedDeviceID = resolvedInputSelection.deviceID
+            audioRecordingService.hasExplicitDeviceSelection = resolvedInputSelection.hasExplicitDeviceSelection
+            let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
             audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
             prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
             let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
@@ -1126,7 +1105,10 @@ final class DictationViewModel: ObservableObject {
                 errorMessage = String(localized: "No mic detected.")
             } else if let recordingError = error as? AudioRecordingService.AudioRecordingError,
                       case .selectedInputDeviceIncompatible(let issue) = recordingError {
-                audioDeviceService.markSelectedDeviceCompatibility(.incompatible(issue))
+                audioDeviceService.markRecordingInputSelectionCompatibility(
+                    .incompatible(issue),
+                    selection: resolvedInputSelection
+                )
                 errorMessage = recordingError.localizedDescription
             } else {
                 errorMessage = error.localizedDescription
@@ -1284,22 +1266,12 @@ final class DictationViewModel: ObservableObject {
         guard state == .recording, !isStopInFlight else { return }
         clearCancelWarning()
         isStopInFlight = true
-        state = .processing
-        processingPhase = String(localized: "Processing...")
-        markActiveDictationSessionProcessingIfNeeded()
-        stopFinalizationTask = Task { [weak self] in
-            guard let self else { return }
+        Task {
             await finalizeStopDictation()
         }
     }
 
     private func finalizeStopDictation() async {
-        defer {
-            if Task.isCancelled {
-                isStopInFlight = false
-            }
-            stopFinalizationTask = nil
-        }
         let sessionID = activeDictationSessionID
 
         clearRecordingStartCueState(resetReadiness: false)
@@ -1322,24 +1294,12 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
-        let stopStart = CFAbsoluteTimeGetCurrent()
-        func stopElapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - stopStart) * 1000) }
-
-        let streamingParams = lastStreamingParams
+        let liveSessionResult = await streamingHandler.finish()
         lastStreamingParams = nil
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
-        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
-        guard !Task.isCancelled else { return }
-        logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
-        let liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
-        guard !Task.isCancelled else { return }
-        logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public)")
-        var liveSessionResult = liveSessionResultBeforePreviewFallback.map {
-            StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
-        }
         let hasPreviewText = !previewText.isEmpty
+        let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
 
         if !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -1350,17 +1310,10 @@ final class DictationViewModel: ObservableObject {
             )))
         }
 
+        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
+        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
-        if !hasConfirmedTranscriptionResultText(liveSessionResult),
-           let previewResult = stableLivePreviewFallbackResult(
-            previewText: previewText,
-            streamingParams: streamingParams,
-            duration: rawDuration
-           ) {
-            liveSessionResult = previewResult
-        }
-        let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
         let decision = classifyShortSpeech(
             rawDuration: rawDuration,
             peakLevel: peakLevel,
@@ -1413,17 +1366,14 @@ final class DictationViewModel: ObservableObject {
             durationSeconds: audioDuration
         )))
 
-        processingPhase = liveSessionResult == nil
-            ? String(localized: "Transcribing...")
-            : String(localized: "Processing...")
+        state = .processing
+        processingPhase = String(localized: "Transcribing...")
+        markActiveDictationSessionProcessingIfNeeded()
 
-        guard !Task.isCancelled else { return }
-        let usedLiveSessionResult = liveSessionResult != nil
         transcriptionTask = Task {
             do {
                 // Wait for browser URL resolution so URL-based profile overrides apply
                 await urlResolutionTask?.value
-                logger.info("Stop timing: urlResolutionTask done elapsedMs=\(stopElapsedMs(), privacy: .public)")
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
                 let resolvedOutputFormat = self.resolvedEffectiveOutputFormat(for: activeApp)
@@ -1465,7 +1415,6 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
                 let result = transcription.result
-                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
@@ -1530,7 +1479,6 @@ final class DictationViewModel: ObservableObject {
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
-                logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
                 recentTranscriptionStore.recordTranscription(
@@ -1569,7 +1517,6 @@ final class DictationViewModel: ObservableObject {
                         autoEnter: self.effectiveAutoEnterEnabled,
                         outputFormat: resolvedOutputFormat
                     )
-                    logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
                     if case .pasted(.unverified(let reason)) = insertionResult {
                         logger.info(
                             "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
@@ -1683,45 +1630,6 @@ final class DictationViewModel: ObservableObject {
             }
             self.transcriptionTask = nil
         }
-        stopFinalizationTask = nil
-    }
-
-    private func stableLivePreviewFallbackResult(
-        previewText: String,
-        streamingParams: StreamingParamsSnapshot?,
-        duration: Double
-    ) -> TranscriptionResult? {
-        let preview = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let streamingParams,
-              streamingProviderSupportsLiveSession(streamingParams),
-              StreamingHandler.isSubstantiveStablePreview(preview) else {
-            return nil
-        }
-
-        let engineUsed = streamingParams.engineOverrideId
-            ?? streamingParams.providerId
-            ?? "unknown"
-        logger.info("Using stable live preview as final text because live finalization returned no usable text")
-        return TranscriptionNormalizationService.normalizeResult(
-            text: preview,
-            detectedLanguage: nil,
-            configuredLanguage: streamingParams.languageSelection.requestedLanguage,
-            configuredLanguageCandidates: streamingParams.languageSelection.selectedCodes,
-            duration: duration,
-            processingTime: 0.001,
-            engineUsed: engineUsed,
-            segments: [],
-            task: streamingParams.task,
-            normalizeNumbers: streamingParams.normalizeNumbers
-        )
-    }
-
-    private func streamingProviderSupportsLiveSession(_ streamingParams: StreamingParamsSnapshot) -> Bool {
-        guard let providerId = streamingParams.engineOverrideId ?? streamingParams.providerId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
-            return false
-        }
-        return plugin is any LiveTranscriptionCapablePlugin
     }
 
     private func transcribeFinalAudio(
@@ -1845,10 +1753,6 @@ final class DictationViewModel: ObservableObject {
         errorResetTask?.cancel()
         insertingResetTask?.cancel()
         insertingResetTask = nil
-        stopFinalizationTask?.cancel()
-        stopFinalizationTask = nil
-        transcriptionTask?.cancel()
-        transcriptionTask = nil
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
         metadataCaptureTask?.cancel()
@@ -2196,7 +2100,7 @@ final class DictationViewModel: ObservableObject {
             navigationCoordinator.navigate(to: .dictationRecovery)
         }
         if openSettingsWindow {
-            ManagedAppWindowOpener.shared.open(id: "settings")
+            ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
         }
     }
 
@@ -2235,14 +2139,14 @@ final class DictationViewModel: ObservableObject {
 
         targetAppCorrectionLearningTask = Task { @MainActor [weak self, baseline, insertedText] in
             guard let self else { return }
-            let learned = await self.targetAppCorrectionLearningService.trackInsertion(
+            let result = await self.targetAppCorrectionLearningService.trackInsertion(
                 insertedText: insertedText,
                 baseline: baseline
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            guard !learned.isEmpty else { return }
-            self.showLearnedCorrectionsFeedback(learned)
+            guard !result.learnedCorrections.isEmpty else { return }
+            self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
     }
 
@@ -2383,7 +2287,7 @@ enum DictationInsertionTextFormatter {
         contextualInsertionEnabled: Bool = true
     ) -> String {
         guard contextualInsertionEnabled, let insertionContext else {
-            return textWithTrailingSpaceIfNeeded(text)
+            return text
         }
 
         let boundaries = insertionBoundaries(for: insertionContext)
@@ -2406,17 +2310,9 @@ enum DictationInsertionTextFormatter {
                shouldInsertSpace(between: last, and: next) {
                 result += " "
             }
-        } else {
-            result = textWithTrailingSpaceIfNeeded(result)
         }
 
         return result
-    }
-
-    private static func textWithTrailingSpaceIfNeeded(_ text: String) -> String {
-        guard let lastScalar = text.unicodeScalars.last else { return text }
-        guard !CharacterSet.whitespacesAndNewlines.contains(lastScalar) else { return text }
-        return text + " "
     }
 
     private struct InsertionBoundaries {

@@ -1,11 +1,35 @@
 import AudioToolbox
 import AudioUnit
 import AVFoundation
+import Combine
 import XCTest
 @testable import TypeWhisper
 
 private final class TestClock: @unchecked Sendable {
     var now: TimeInterval = 0
+}
+
+private final class AudioLevelUpdateRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var levels: [Float] = []
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return levels.count
+    }
+
+    var last: Float? {
+        lock.lock()
+        defer { lock.unlock() }
+        return levels.last
+    }
+
+    func append(_ level: Float) {
+        lock.lock()
+        levels.append(level)
+        lock.unlock()
+    }
 }
 
 private func makeMonoBuffer(samples: [Float]) throws -> AVAudioPCMBuffer {
@@ -40,6 +64,38 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
         XCTAssertGreaterThan(level, 0.65)
         XCTAssertLessThan(level, 0.9)
+    }
+
+    @MainActor
+    func testAudioLevelPublishingCoalescesRapidBufferUpdates() async throws {
+        let service = AudioRecordingService()
+        let recorder = AudioLevelUpdateRecorder()
+        let firstUpdate = expectation(description: "first audio level update")
+
+        let cancellable = service.$audioLevel
+            .dropFirst()
+            .sink { level in
+                recorder.append(level)
+                if recorder.count == 1 {
+                    firstUpdate.fulfill()
+                }
+            }
+
+        service.testingProcessConvertedSamples(Array(repeating: 0.25 as Float, count: 160))
+        await fulfillment(of: [firstUpdate], timeout: 1.0)
+
+        service.testingMarkAudioLevelPublishedNow()
+        service.testingProcessConvertedSamples(Array(repeating: 0.10 as Float, count: 160))
+        service.testingProcessConvertedSamples(Array(repeating: 0.20 as Float, count: 160))
+
+        try await Task.sleep(for: .milliseconds(5))
+        XCTAssertEqual(recorder.count, 1)
+
+        try await Task.sleep(for: .milliseconds(45))
+        XCTAssertEqual(recorder.count, 2)
+        XCTAssertEqual(recorder.last ?? -1, AudioLevelMeter.normalizedLevel(rms: 0.20), accuracy: 0.0001)
+
+        cancellable.cancel()
     }
 
     func testAudioInputSignalRejectsZeroFilledBluetoothTapBuffer() throws {
@@ -520,11 +576,14 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
 final class AudioDeviceServiceCompatibilityTests: XCTestCase {
     private var originalSelectedDeviceUID: Any?
+    private var originalInputDevicePriorityList: Any?
 
     override func setUp() {
         super.setUp()
         originalSelectedDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        originalInputDevicePriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
     }
 
     override func tearDown() {
@@ -533,7 +592,17 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         }
+        if let originalInputDevicePriorityList {
+            UserDefaults.standard.set(originalInputDevicePriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
         super.tearDown()
+    }
+
+    private func savedInputDevicePriorityList() throws -> [AudioInputDevicePriorityItem] {
+        let data = try XCTUnwrap(UserDefaults.standard.data(forKey: UserDefaultsKeys.inputDevicePriorityList))
+        return try JSONDecoder().decode([AudioInputDevicePriorityItem].self, from: data)
     }
 
     func testStartPreview_selectedIncompatibleDeviceDoesNotActivatePreview() {
@@ -805,6 +874,304 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(service.selectedDeviceUID, "display-mic")
         XCTAssertEqual(service.selectedDevice?.uid, "display-mic")
         XCTAssertNotNil(service.selectedDeviceStatusMessage)
+    }
+
+    func testMigratesSavedSelectedInputDeviceToPriorityList() throws {
+        UserDefaults.standard.set("usb-input", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let device = AudioInputDevice(
+            deviceID: AudioDeviceID(42),
+            name: "USB Mic",
+            uid: "usb-input"
+        )
+
+        let service = AudioDeviceService(
+            initialInputDevices: [device],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.inputDevicePriorityList, [
+            AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+        ])
+        XCTAssertEqual(try savedInputDevicePriorityList(), service.inputDevicePriorityList)
+    }
+
+    func testMovingInputDevicePriorityUpdatesSelectedDeviceAndPersistsDeduplicatedList() throws {
+        let builtIn = AudioInputDevice(deviceID: AudioDeviceID(1), name: "Built-in Mic", uid: "built-in")
+        let usb = AudioInputDevice(deviceID: AudioDeviceID(2), name: "USB Mic", uid: "usb-input")
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic"),
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [builtIn, usb],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["built-in", "usb-input"])
+
+        service.moveInputDevicePriorityItems(from: IndexSet(integer: 1), to: 0)
+
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["usb-input", "built-in"])
+        XCTAssertEqual(service.selectedDeviceUID, "usb-input")
+        XCTAssertEqual(try savedInputDevicePriorityList().map(\.uid), ["usb-input", "built-in"])
+    }
+
+    func testSelectingPrimaryInputDeviceReplacesMigratedFallbackList() throws {
+        let builtIn = AudioInputDevice(deviceID: AudioDeviceID(1), name: "Built-in Mic", uid: "built-in")
+        let usb = AudioInputDevice(deviceID: AudioDeviceID(2), name: "USB Mic", uid: "usb-input")
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        UserDefaults.standard.set("built-in", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let service = AudioDeviceService(
+            initialInputDevices: [builtIn, usb],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    AudioDeviceID(1): kAudioDeviceTransportTypeBuiltIn,
+                    AudioDeviceID(2): kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            inputActivationGuard: FakeAudioInputDeviceActivator()
+        )
+
+        service.selectInputDeviceAsPrimary("usb-input")
+
+        XCTAssertEqual(service.selectedDeviceUID, "usb-input")
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["usb-input"])
+        XCTAssertEqual(try savedInputDevicePriorityList().map(\.uid), ["usb-input"])
+    }
+
+    func testResolvedRecordingInputSelectionSkipsDisconnectedPrimaryDevice() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let usbDeviceID = AudioDeviceID(42)
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: transportResolver
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "usb-input")
+        XCTAssertEqual(selection.deviceID, usbDeviceID)
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionKeepsAvailablePrimaryWhenFallbackExists() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "hyperx-input", name: "HyperX QuadCast 2"),
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let hyperxDeviceID = AudioDeviceID(42)
+        let builtInDeviceID = AudioDeviceID(43)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: hyperxDeviceID, name: "HyperX QuadCast 2", uid: "hyperx-input"),
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    hyperxDeviceID: kAudioDeviceTransportTypeUSB,
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn
+                ]
+            )
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "hyperx-input": return hyperxDeviceID
+            case "built-in": return builtInDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "hyperx-input")
+        XCTAssertEqual(selection.deviceID, hyperxDeviceID)
+        XCTAssertEqual(selection.deviceName, "HyperX QuadCast 2")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionFallsBackToSystemDefaultWhenPriorityListUnavailable() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertNil(selection.deviceUID)
+        XCTAssertNil(selection.deviceID)
+        XCTAssertFalse(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionSkipsBuiltInMicWhenLidIsClosed() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        let usbDeviceID = AudioDeviceID(2)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: true)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in"),
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn,
+                    usbDeviceID: kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "built-in": return builtInDeviceID
+            case "usb-input": return usbDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "usb-input")
+        XCTAssertEqual(selection.deviceID, usbDeviceID)
+        XCTAssertEqual(selection.deviceName, "USB Mic")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionUsesBuiltInMicWhenLidIsOpen() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        let usbDeviceID = AudioDeviceID(2)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: false)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in"),
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn,
+                    usbDeviceID: kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "built-in": return builtInDeviceID
+            case "usb-input": return usbDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "built-in")
+        XCTAssertEqual(selection.deviceID, builtInDeviceID)
+        XCTAssertEqual(selection.deviceName, "MacBook Pro Microphone")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionFallsBackToSystemDefaultWhenAllSkippedInClamshell() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: true)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [builtInDeviceID: kAudioDeviceTransportTypeBuiltIn]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "built-in" ? builtInDeviceID : nil
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertNil(selection.deviceUID)
+        XCTAssertNil(selection.deviceID)
+        XCTAssertFalse(selection.hasExplicitDeviceSelection)
+    }
+
+    func testIOKitClamshellStateProviderReadsClamshellStateFromRootDomain() {
+        let registry = FakeIOKitRegistry(property: NSNumber(value: true))
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertTrue(provider.isLidClosed())
+        XCTAssertEqual(registry.requestedServiceName, "IOPMrootDomain")
+        XCTAssertEqual(registry.requestedPropertyName, "AppleClamshellState")
+    }
+
+    func testIOKitClamshellStateProviderFallsBackToLidOpenWhenPropertyIsMissing() {
+        let registry = FakeIOKitRegistry(property: nil)
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertFalse(provider.isLidClosed())
     }
 
     func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {
@@ -1583,9 +1950,295 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(receivedBuffers.first?.format.sampleRate, 96_000)
         XCTAssertEqual(receivedBuffers.first?.format.channelCount, 2)
 
+        let disposed = expectation(description: "HAL session finalizes after quiescence")
+        operations.disposeHook = { disposed.fulfill() }
         session.stop()
 
         XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStopClosesCallbackGateBeforeHALStopAndDropsLateCallback() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var receivedBufferCount = 0
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(903),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations
+        ) { _ in
+            receivedBufferCount += 1
+        }
+
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "late-callback session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        session.stop()
+
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(receivedBufferCount, 0)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testCallbackContextSealWaitsForDrainAndRejectsFutureEntries() {
+        let transitions = CoreAudioHALInputCaptureSession.testingCallbackContextSealTransitions()
+
+        XCTAssertFalse(transitions.sealedWhileInFlight)
+        XCTAssertTrue(transitions.sealedAfterDrain)
+        XCTAssertFalse(transitions.enteredAfterSeal)
+        XCTAssertTrue(transitions.payloadAfterSealWasNil)
+    }
+
+    func testStartFailureClosesOpenedCallbackGateBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.startError = CoreAudioHALInputOperationError(
+            operation: "test-hal start",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "start failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(907),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(operations.startCalls, 1)
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testDeinitStopsAndFinalizesHALUnitWithoutExplicitStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let disposed = expectation(description: "deinitialized session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        var session: CoreAudioHALInputCaptureSession? = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(908),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+        XCTAssertNotNil(session)
+
+        session = nil
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStopIsIdempotentWhileHALFinalizationIsPending() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(904),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+        let disposed = expectation(description: "idempotent session finalizes once")
+        operations.disposeHook = { disposed.fulfill() }
+
+        session.stop()
+        session.stop()
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testSessionWaitsForAdmittedCallbackBeforeFinalizingHALUnit() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let renderStarted = expectation(description: "render callback started")
+        let callbackFinished = expectation(description: "render callback finished")
+        let disposed = expectation(description: "drained session finalizes")
+        let releaseRender = DispatchSemaphore(value: 0)
+        operations.renderHook = {
+            renderStarted.fulfill()
+            _ = releaseRender.wait(timeout: .now() + 2.0)
+        }
+        operations.disposeHook = { disposed.fulfill() }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(905),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+
+        DispatchQueue.global().async {
+            _ = operations.invokeStoredCallback()
+            callbackFinished.fulfill()
+        }
+        wait(for: [renderStarted], timeout: 1.0)
+
+        session.stop()
+        XCTAssertEqual(operations.stopCalls, 1)
+
+        Thread.sleep(
+            forTimeInterval: CoreAudioHALInputCaptureSession.testingCallbackQuiescenceInterval + 0.05
+        )
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+
+        releaseRender.signal()
+        wait(for: [callbackFinished, disposed], timeout: 2.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testCallbackRegistrationFailureClosesStoredCallbackBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.inputCallbackError = CoreAudioHALInputOperationError(
+            operation: "test-hal set callback",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "failed session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(906),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testInitializationFailureClosesStoredCallbackBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.initializeError = CoreAudioHALInputOperationError(
+            operation: "test-hal initialize",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "initialization failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(909),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(operations.initializeCalls, 1)
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
         XCTAssertEqual(operations.uninitializeCalls, 1)
         XCTAssertEqual(operations.disposeCalls, 1)
     }
@@ -1599,6 +2252,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
             channels: 1,
             interleaved: false
         ))
+        let disposed = expectation(description: "failed current-device session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
 
         XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
             deviceID: AudioDeviceID(901),
@@ -1610,6 +2265,7 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         )) { error in
             XCTAssertEqual(error as? SelectedInputDeviceError, .incompatible(.cannotSetDevice))
         }
+        wait(for: [disposed], timeout: 1.0)
         XCTAssertEqual(operations.disposeCalls, 1)
     }
 
@@ -1628,6 +2284,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
             channels: 1,
             interleaved: false
         ))
+        let disposed = expectation(description: "diagnostic failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
 
         XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
             deviceID: AudioDeviceID(902),
@@ -1649,6 +2307,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(failure.errorDescription, "test-hal set current input device failed with status -50 (-50)")
         XCTAssertEqual(failure.formatSampleRate, 48_000)
         XCTAssertEqual(failure.formatChannelCount, 1)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.disposeCalls, 1)
     }
 }
 
@@ -1975,7 +2635,7 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
     }
 }
 
-private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating {
+private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating, @unchecked Sendable {
     struct EnableIOCall: Equatable {
         let enabled: UInt32
         let scope: AudioUnitScope
@@ -1989,7 +2649,13 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     let audioUnit: AudioUnit = AudioUnit(bitPattern: 0x1)!
     var currentDeviceError: Error?
+    var inputCallbackError: Error?
+    var initializeError: Error?
+    var startError: Error?
     var renderStatus: OSStatus = noErr
+    var stopHook: (() -> Void)?
+    var disposeHook: (() -> Void)?
+    var renderHook: (() -> Void)?
     private(set) var enableIOCalls: [EnableIOCall] = []
     private(set) var currentDeviceCalls: [AudioDeviceID] = []
     private(set) var streamFormatCalls: [AudioStreamBasicDescription] = []
@@ -2026,18 +2692,22 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws {
         inputCallback = callback
+        if let inputCallbackError { throw inputCallbackError }
     }
 
     func initialize(_ audioUnit: AudioUnit, label: String) throws {
         initializeCalls += 1
+        if let initializeError { throw initializeError }
     }
 
     func start(_ audioUnit: AudioUnit, label: String) throws {
         startCalls += 1
+        if let startError { throw startError }
     }
 
     func stop(_ audioUnit: AudioUnit) {
         stopCalls += 1
+        stopHook?()
     }
 
     func uninitialize(_ audioUnit: AudioUnit) {
@@ -2046,6 +2716,7 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     func dispose(_ audioUnit: AudioUnit) {
         disposeCalls += 1
+        disposeHook?()
     }
 
     func render(
@@ -2056,8 +2727,21 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
         frameCount: UInt32,
         data: UnsafeMutablePointer<AudioBufferList>
     ) -> OSStatus {
+        renderHook?()
         renderCalls.append(.init(busNumber: busNumber, frameCount: frameCount))
         return renderStatus
+    }
+
+    @discardableResult
+    func invokeStoredCallback(frameCount: UInt32 = 64) -> OSStatus? {
+        guard let callback = inputCallback,
+              let inputProc = callback.inputProc,
+              let inputProcRefCon = callback.inputProcRefCon else {
+            return nil
+        }
+        var flags = AudioUnitRenderActionFlags()
+        var timestamp = AudioTimeStamp()
+        return inputProc(inputProcRefCon, &flags, &timestamp, 1, frameCount, nil)
     }
 }
 
@@ -2175,5 +2859,33 @@ private final class FakeAudioOutputVolumeController: AudioOutputVolumeControllin
             deviceName: snapshot.deviceName,
             volume: volume
         )
+    }
+}
+
+private final class FakeClamshellStateProvider: ClamshellStateProviding, @unchecked Sendable {
+    private let lidClosed: Bool
+
+    init(lidClosed: Bool) {
+        self.lidClosed = lidClosed
+    }
+
+    func isLidClosed() -> Bool {
+        lidClosed
+    }
+}
+
+private final class FakeIOKitRegistry: IOKitRegistryQuerying, @unchecked Sendable {
+    let returnedProperty: Any?
+    private(set) var requestedServiceName: String?
+    private(set) var requestedPropertyName: String?
+
+    init(property: Any?) {
+        returnedProperty = property
+    }
+
+    func property(forServiceNamed serviceName: String, named propertyName: String) -> Any? {
+        requestedServiceName = serviceName
+        requestedPropertyName = propertyName
+        return returnedProperty
     }
 }

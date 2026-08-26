@@ -12,6 +12,17 @@ final class APIHandlers: @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
     private let audioRecorderViewModel: AudioRecorderViewModel
+    private let meetingService: MeetingService
+    private let meetingImportService: MeetingImportService
+    /// Used for the optional `match_calendar` auto-link on import. Optional so tests (and any
+    /// host without a calendar) can omit it; when nil, `match_calendar` reports `matched_event: null`.
+    private let calendarService: CalendarService?
+    /// Drives the `willAbsorb` seam of `POST /v1/meetings/merge`: the absorbed meetings' queued and
+    /// running jobs are cancelled (and awaited) right before their rows are deleted, exactly as
+    /// `MeetingsViewModel.mergeMeetings` does for the UI path. Optional so a host without a queue
+    /// (tests that never enqueue) can omit it; when nil the merge still runs, it simply has no jobs
+    /// to cancel.
+    private let jobQueue: JobQueueService?
 
     init(
         modelManager: ModelManagerService,
@@ -21,7 +32,11 @@ final class APIHandlers: @unchecked Sendable {
         workflowService: WorkflowService,
         dictionaryService: DictionaryService,
         dictationViewModel: DictationViewModel,
-        audioRecorderViewModel: AudioRecorderViewModel
+        audioRecorderViewModel: AudioRecorderViewModel,
+        meetingService: MeetingService,
+        meetingImportService: MeetingImportService,
+        calendarService: CalendarService?,
+        jobQueue: JobQueueService? = nil
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -31,6 +46,10 @@ final class APIHandlers: @unchecked Sendable {
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
         self.audioRecorderViewModel = audioRecorderViewModel
+        self.meetingService = meetingService
+        self.meetingImportService = meetingImportService
+        self.calendarService = calendarService
+        self.jobQueue = jobQueue
     }
 
     func register(on router: APIRouter) {
@@ -58,6 +77,15 @@ final class APIHandlers: @unchecked Sendable {
         router.register("GET", "/v1/dictionary/corrections", handler: handleGetDictionaryCorrections)
         router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
+        router.register("POST", "/v1/meetings/import-transcript", handler: handleImportMeetingTranscript)
+        // Literal path: `APIRouter.route` matches every exact route before any `{placeholder}`
+        // pattern, so this is never shadowed by `/v1/meetings/{id}` (see the ordering comment there).
+        router.register("POST", "/v1/meetings/merge", handler: handleMergeMeetings)
+        router.register("POST", "/v1/meetings/live", handler: handleStartLiveMeeting)
+        router.register("POST", "/v1/meetings/live/{id}/segments", handler: handleAppendLiveSegments)
+        router.register("POST", "/v1/meetings/live/{id}/end", handler: handleEndLiveMeeting)
+        router.register("GET", "/v1/meetings", handler: handleListMeetings)
+        router.register("GET", "/v1/meetings/{id}", handler: handleGetMeeting)
     }
 
     // MARK: - POST /v1/transcribe
@@ -320,7 +348,7 @@ final class APIHandlers: @unchecked Sendable {
         if resolvedOverride.engineId == nil {
             let hasEngine = await modelManager.selectedProviderId != nil
             guard hasEngine else {
-                return .error(status: 503, message: "No engine selected. Select an engine in TypeWhisper first.")
+                return .error(status: 503, message: "No engine selected. Select an engine in MeetingWhisper first.")
             }
         }
 
@@ -1294,6 +1322,914 @@ final class APIHandlers: @unchecked Sendable {
             output_file: session.outputFile,
             error: session.error
         ))
+    }
+
+    // MARK: - POST /v1/meetings/import-transcript
+
+    /// One attendee on an import payload. `email` and `is_self` are optional so a bare name list
+    /// still decodes.
+    private struct MeetingImportAttendee: Decodable {
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case name, email
+            case isSelf = "is_self"
+        }
+    }
+
+    private struct MeetingImportRequest: Decodable {
+        let path: String?
+        let text: String?
+        let title: String?
+        let date: String?
+        let folder: String?
+        let tags: [String]?
+        let language: String?
+        let matchCalendar: Bool?
+        let summary: String?
+        let extended: String?
+        let attendees: [MeetingImportAttendee]?
+
+        enum CodingKeys: String, CodingKey {
+            case path, text, title, date, folder, tags, language, summary, extended, attendees
+            case matchCalendar = "match_calendar"
+        }
+    }
+
+    /// Resolved, mode-agnostic import inputs (JSON body or raw-text body).
+    private struct MeetingImportInputs {
+        var path: String?
+        var text: String?
+        var title: String?
+        var date: Date?
+        var folder: String?
+        var tags: [String]?
+        var language: String?
+        var matchCalendar: Bool
+        /// Notes that arrived **with** the transcript (an export that carries the meeting-notes app's
+        /// own summary). Persisted verbatim as `.summary` / `.extended` outputs — JSON-body mode only.
+        var summary: String?
+        var extended: String?
+        var attendees: [Attendee]?
+    }
+
+    private struct MatchedEventResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date
+        let confidence: Double
+    }
+
+    private struct MeetingImportResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let matched_event: MatchedEventResponse?
+    }
+
+    private func handleImportMeetingTranscript(_ request: HTTPRequest) async -> HTTPResponse {
+        let inputs: MeetingImportInputs
+        switch parseImportInputs(request) {
+        case .use(let value): inputs = value
+        case .reject(let response): return response
+        }
+
+        let meetingService = self.meetingService
+        let importService = self.meetingImportService
+        let calendarService = self.calendarService
+
+        return await MainActor.run {
+            // 1) Create the meeting from a file (direct handoff) or raw text.
+            let meeting: Meeting
+            do {
+                if let path = inputs.path {
+                    let fileURL = URL(fileURLWithPath: path)
+                    guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                        return .error(status: 400, message: "File not found")
+                    }
+                    meeting = try importService.importTranscriptFile(at: fileURL, title: inputs.title)
+                } else {
+                    meeting = try importService.importTranscriptText(inputs.text ?? "", title: inputs.title)
+                }
+            } catch let error as MeetingImportService.ImportError {
+                switch error {
+                case .unsupportedTranscriptFile, .unreadableTranscriptFile, .emptyTranscript:
+                    return .error(status: 400, message: error.localizedDescription)
+                default:
+                    return .error(status: 500, message: error.localizedDescription)
+                }
+            } catch {
+                return .error(status: 500, message: "Import failed: \(error.localizedDescription)")
+            }
+
+            // 2) Apply optional metadata. Date is set before matching so the calendar query can use it.
+            if let date = inputs.date {
+                meetingService.setMeetingDate(date, for: meeting)
+            }
+            if let folder = inputs.folder {
+                meetingService.setFolder(folder, for: meeting)
+            }
+            if let tags = inputs.tags {
+                meetingService.setObsidianTags(tags, for: meeting)
+            }
+            if let language = inputs.language?.trimmingCharacters(in: .whitespacesAndNewlines), !language.isEmpty {
+                meetingService.setLanguage(language, for: meeting)
+            }
+
+            // 3) Optional calendar matching: auto-link the best historical event above the confidence
+            //    threshold, so the imported meeting feeds prior-meeting briefs.
+            var matched: MatchedEventResponse?
+            if inputs.matchCalendar, let date = inputs.date, let calendarService,
+               let candidate = calendarService.bestAutoLinkCandidate(title: meeting.title, date: date) {
+                let projection = CalendarService.meetingProjection(for: candidate.event)
+                meetingService.linkToCalendarEvent(
+                    calendarEventID: projection.calendarEventID,
+                    seriesID: projection.seriesID,
+                    title: projection.title,
+                    startDate: projection.startDate,
+                    endDate: projection.endDate,
+                    attendees: projection.attendees,
+                    calendarNotes: projection.calendarNotes,
+                    conferencingURL: projection.conferencingURL,
+                    for: meeting
+                )
+                matched = MatchedEventResponse(
+                    id: candidate.event.id,
+                    title: projection.title,
+                    date: candidate.event.startDate,
+                    confidence: candidate.score
+                )
+            }
+
+            // 4) Attendees and pre-existing notes from the export. Attendees are applied **after**
+            //    calendar matching, because `linkToCalendarEvent` replaces the roster wholesale — an
+            //    event with no invitees would otherwise drop the ones parsed out of the export.
+            //    `mergeAttendees` dedupes by identity, so a roster the calendar already supplied is
+            //    not doubled — it only gains the names EventKit could not resolve.
+            if let attendees = inputs.attendees {
+                meetingService.mergeAttendees(attendees, into: meeting)
+            }
+            if let summary = inputs.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
+                meetingService.addOutput(to: meeting, kind: .summary, content: summary)
+            }
+            if let extended = inputs.extended?.trimmingCharacters(in: .whitespacesAndNewlines), !extended.isEmpty {
+                meetingService.addOutput(to: meeting, kind: .extended, content: extended)
+            }
+
+            return .json(MeetingImportResponse(
+                id: meeting.id.uuidString,
+                title: meeting.title,
+                date: meeting.startDate,
+                matched_event: matched
+            ))
+        }
+    }
+
+    // MARK: - POST /v1/meetings/merge
+
+    private struct MeetingMergeRequest: Decodable {
+        let meetingIDs: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case meetingIDs = "meeting_ids"
+        }
+    }
+
+    private struct MeetingMergeResponse: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let absorbed_ids: [String]
+        let segment_count: Int
+    }
+
+    /// Merge two or more existing meetings into one, over the *same* `MeetingMergeService.merge`
+    /// path the UI's bulk "Merge N meetings…" uses — deterministic planner, single plan, absorbed
+    /// rows deleted through the meetings store's single writer. No merge logic lives here.
+    ///
+    /// The `willAbsorb` seam is wired exactly as `MeetingsViewModel.mergeMeetings` wires it (and for
+    /// the same reason): a queued or running job can hold a strong reference to a `Meeting` that is
+    /// about to be deleted, so those jobs are cancelled *and awaited* (`cancelAllAndWait`) from
+    /// inside the callback, which fires once, from within `merge`, with the one plan actually about
+    /// to be applied. Deliberately not re-planned here — a second plan over the same live rows can
+    /// disagree with the one `merge` applies.
+    private func handleMergeMeetings(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+        let payload: MeetingMergeRequest
+        do {
+            payload = try JSONDecoder().decode(MeetingMergeRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body: expected {\"meeting_ids\": [\"…\", \"…\"]}")
+        }
+
+        // Trim, drop blanks, and de-duplicate while preserving order: the same id twice is not two
+        // meetings, and `MeetingMergePlanner` requires two *distinct* rows.
+        var uuids: [UUID] = []
+        for raw in payload.meetingIDs {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let uuid = UUID(uuidString: trimmed) else {
+                return .error(status: 400, message: "Invalid meeting id: '\(trimmed)'")
+            }
+            if !uuids.contains(uuid) { uuids.append(uuid) }
+        }
+        guard uuids.count >= 2 else {
+            return .error(status: 400, message: "Provide at least two distinct 'meeting_ids'")
+        }
+
+        return await performMerge(of: uuids)
+    }
+
+    @MainActor
+    private func performMerge(of uuids: [UUID]) async -> HTTPResponse {
+        let meetingService = self.meetingService
+        let jobQueue = self.jobQueue
+
+        var meetings: [Meeting] = []
+        for uuid in uuids {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found: \(uuid.uuidString)")
+            }
+            meetings.append(meeting)
+        }
+
+        guard MeetingMergeService.canMerge(meetings) else {
+            return .error(
+                status: 409,
+                message: "These meetings cannot be merged: a meeting that is still recording or "
+                    + "processing must finish first (states: "
+                    + meetings.map(\.state.rawValue).joined(separator: ", ") + ")"
+            )
+        }
+
+        var absorbedIDs: [UUID] = []
+        let mergeService = MeetingMergeService(meetingService: meetingService)
+        guard let merged = await mergeService.merge(meetings, willAbsorb: { ids in
+            absorbedIDs = ids
+            for id in ids {
+                await jobQueue?.cancelAllAndWait(for: id)
+            }
+        }) else {
+            // `canMerge` passed above, so this is the narrow race where a state flipped underneath
+            // us (or the planner refused) between the check and the apply.
+            return .error(status: 409, message: "Merge was refused: the meetings changed state mid-merge")
+        }
+
+        for id in absorbedIDs {
+            MeetingChecklistStore.shared.removeAll(meetingID: id)
+        }
+
+        apiLogger.info("Merged \(absorbedIDs.count) meeting(s) into \(merged.id.uuidString, privacy: .public)")
+
+        return .json(MeetingMergeResponse(
+            id: merged.id.uuidString,
+            title: merged.title,
+            date: merged.startDate,
+            absorbed_ids: absorbedIDs.map(\.uuidString),
+            segment_count: merged.segments.count
+        ))
+    }
+
+    private func parseImportInputs(_ request: HTTPRequest) -> MeetingImportInputsResolution {
+        let contentType = request.headers["content-type"] ?? ""
+        var inputs = MeetingImportInputs(matchCalendar: false)
+
+        if contentType.contains("application/json") {
+            guard !request.body.isEmpty else {
+                return .reject(.error(status: 400, message: "Missing JSON body"))
+            }
+            let payload: MeetingImportRequest
+            do {
+                payload = try JSONDecoder().decode(MeetingImportRequest.self, from: request.body)
+            } catch {
+                if Self.hasInvalidJSONBooleanField("match_calendar", in: request.body) {
+                    return .reject(.error(status: 400, message: "Invalid 'match_calendar' value"))
+                }
+                return .reject(.error(status: 400, message: "Invalid JSON body"))
+            }
+
+            let path = payload.path?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let text = (payload.text?.isEmpty == false) ? payload.text : nil
+            guard path != nil || text != nil else {
+                return .reject(.error(status: 400, message: "Provide 'path' or 'text'"))
+            }
+            guard path == nil || text == nil else {
+                return .reject(.error(status: 400, message: "Use either 'path' or 'text', not both"))
+            }
+            inputs.path = path
+            inputs.text = text
+            inputs.title = payload.title
+            inputs.folder = payload.folder
+            inputs.tags = payload.tags
+            inputs.language = payload.language
+            inputs.matchCalendar = payload.matchCalendar ?? false
+            inputs.summary = payload.summary
+            inputs.extended = payload.extended
+            if let attendees = payload.attendees {
+                let parsed: [Attendee] = attendees.compactMap { entry in
+                    let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return nil }
+                    return Attendee(
+                        name: name,
+                        email: entry.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                        isSelf: entry.isSelf
+                    )
+                }
+                inputs.attendees = parsed.isEmpty ? nil : parsed
+            }
+
+            if let dateString = payload.date?.trimmingCharacters(in: .whitespacesAndNewlines), !dateString.isEmpty {
+                guard let date = Self.parseISO8601Date(dateString) else {
+                    return .reject(.error(status: 400, message: "Invalid 'date' value"))
+                }
+                inputs.date = date
+            }
+        } else {
+            guard !request.body.isEmpty, let text = String(data: request.body, encoding: .utf8), !text.isEmpty else {
+                return .reject(.error(status: 400, message: "Missing transcript text body"))
+            }
+            inputs.text = text
+            inputs.title = request.queryParams["title"]
+            inputs.folder = request.queryParams["folder"]
+            inputs.language = request.queryParams["language"]
+            inputs.tags = request.queryParams["tags"]?
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            if let matchValue = request.queryParams["match_calendar"] {
+                guard let parsed = Self.parseBoolean(matchValue) else {
+                    return .reject(.error(status: 400, message: "Invalid 'match_calendar' value"))
+                }
+                inputs.matchCalendar = parsed
+            }
+
+            if let dateString = request.queryParams["date"]?.trimmingCharacters(in: .whitespacesAndNewlines), !dateString.isEmpty {
+                guard let date = Self.parseISO8601Date(dateString) else {
+                    return .reject(.error(status: 400, message: "Invalid 'date' value"))
+                }
+                inputs.date = date
+            }
+        }
+
+        return .use(inputs)
+    }
+
+    private enum MeetingImportInputsResolution {
+        case use(MeetingImportInputs)
+        case reject(HTTPResponse)
+    }
+
+    // MARK: - Live meeting sessions (browser caption bridge)
+
+    /// Ceiling on one `POST .../segments` batch. The Meet extension flushes every few seconds, so a
+    /// healthy batch is single digits; anything near this bound is a malfunctioning or hostile client
+    /// and is rejected outright rather than silently truncated.
+    private static let maxLiveSegmentsPerBatch = 500
+
+    /// Ceiling on a single caption line. Meet caption lines are a sentence or two; this only exists so
+    /// a runaway client cannot write unbounded rows into the store.
+    private static let maxLiveSegmentTextLength = 8_000
+
+    private struct LiveSessionAttendee: Decodable {
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case name, email
+            case isSelf = "is_self"
+        }
+    }
+
+    private struct LiveSessionStartRequest: Decodable {
+        let sessionKey: String?
+        let title: String?
+        let account: String?
+        let startedAt: String?
+        let attendees: [LiveSessionAttendee]?
+
+        enum CodingKeys: String, CodingKey {
+            case title, account, attendees
+            case sessionKey = "session_key"
+            case startedAt = "started_at"
+        }
+    }
+
+    /// Whether a live-session title is just the Meet call code (`abc-defg-hij`). The extension falls
+    /// back to it when the tab has no human title, and a call code is a session identity, not a
+    /// meeting name — treat it as absent for naming and calendar matching alike.
+    static func isMeetCodeTitle(_ title: String) -> Bool {
+        title.range(
+            of: "^[a-z]{3}-[a-z]{4}-[a-z]{3}$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    /// How far apart two live-session starts may sit and still be considered the same call. Long
+    /// enough to cover the longest realistic meeting plus a mid-call app restart (the extension keeps
+    /// posting the *original* session start, so a resumed session's start never drifts); far shorter
+    /// than the gap between two occurrences of a recurring call, which reuse the same Meet code.
+    static let liveSessionResumeWindow: TimeInterval = 6 * 60 * 60
+
+    /// Whether an already-open meeting carrying the same `session_key` is this same call, and may be
+    /// resumed rather than replaced by a fresh meeting.
+    ///
+    /// Recurring Meet links reuse one call code forever, so the key identifies the *room*, not the
+    /// call. A meeting left `.live` because its `/end` never landed would otherwise swallow every
+    /// later occurrence. A meeting with no recorded start cannot be aged — resume it, since forking on
+    /// every retry would be the worse failure.
+    static func canResumeLiveSession(
+        existingStart: Date?,
+        incomingStart: Date,
+        window: TimeInterval = liveSessionResumeWindow
+    ) -> Bool {
+        guard let existingStart else { return true }
+        return abs(incomingStart.timeIntervalSince(existingStart)) <= window
+    }
+
+    /// Title for a live meeting when neither the Meet tab nor a calendar match offers a real one:
+    /// built from the start time and, when known, the Google account the call was joined from.
+    static func liveFallbackTitle(startDate: Date, account: String?) -> String {
+        let dateText = startDate.formatted(date: .abbreviated, time: .shortened)
+        if let account, !account.isEmpty {
+            return String(
+                format: String(localized: "meetings.live.fallbackTitleWithAccount"),
+                dateText,
+                account
+            )
+        }
+        return String(format: String(localized: "meetings.live.fallbackTitle"), dateText)
+    }
+
+    private struct LiveSegmentPayload: Decodable {
+        let text: String
+        let speaker: String?
+        let start: Double
+        let end: Double
+        let confidence: Double?
+    }
+
+    private struct LiveSegmentsRequest: Decodable {
+        let segments: [LiveSegmentPayload]
+    }
+
+    private struct LiveSessionEndRequest: Decodable {
+        let endedAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case endedAt = "ended_at"
+        }
+    }
+
+    /// `POST /v1/meetings/live` — create or resume the meeting backing an external live session.
+    ///
+    /// Idempotent on `session_key` (the Meet call code): an MV3 service worker that Chrome evicts
+    /// mid-call, a page reload, or a second tab joined to the same call all resume the same meeting
+    /// instead of forking duplicates. Only a *non-completed* meeting is resumed, so rejoining a call
+    /// that was already ended starts a fresh one rather than reopening yesterday's.
+    private func handleStartLiveMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty,
+              let payload = try? JSONDecoder().decode(LiveSessionStartRequest.self, from: request.body) else {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+        guard let sessionKey = payload.sessionKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
+            return .error(status: 400, message: "Missing 'session_key'")
+        }
+        guard sessionKey.count <= 256 else {
+            return .error(status: 400, message: "'session_key' is too long")
+        }
+
+        var startDate: Date?
+        if let startedAt = payload.startedAt?.trimmingCharacters(in: .whitespacesAndNewlines), !startedAt.isEmpty {
+            guard let parsed = Self.parseISO8601Date(startedAt) else {
+                return .error(status: 400, message: "Invalid 'started_at' value")
+            }
+            startDate = parsed
+        }
+
+        // A Meet tab carries a human title only when the call was created from a calendar event;
+        // otherwise the extension sends the bare call code, which is not a name.
+        let providedTitle = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let realTitle = providedTitle.flatMap { Self.isMeetCodeTitle($0) ? nil : $0 }
+        let account = payload.account?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let attendees: [Attendee] = (payload.attendees ?? []).compactMap { entry in
+            let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            return Attendee(
+                name: name,
+                email: entry.email?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                isSelf: entry.isSelf
+            )
+        }
+
+        let meetingService = self.meetingService
+        let calendarService = self.calendarService
+        let start = startDate ?? Date()
+        return await MainActor.run {
+            // A Meet call code is *reused* by every occurrence of a recurring meeting, so the session
+            // key alone does not identify a call — only a session key plus recency does. An open
+            // meeting under this key that is hours (or days) old is not this call: it is a session
+            // whose `/end` never landed (the app was closed at hang-up). Resuming it would append
+            // today's captions — with timestamps restarting at 0 — to last week's transcript.
+            let openForKey = meetingService.meetings
+                .filter { $0.externalSessionKey == sessionKey && $0.state != .completed }
+                .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
+
+            if let existing = openForKey.last {
+                if Self.canResumeLiveSession(existingStart: existing.startDate, incomingStart: start) {
+                    return .json(LiveSessionResponse(
+                        id: existing.id.uuidString,
+                        created: false,
+                        title: existing.title,
+                        state: existing.state.rawValue,
+                        segment_count: existing.segments.count,
+                        matched_event: nil
+                    ))
+                }
+
+                // Stale. Close it out on the way past — this is the only place that ever learns the
+                // old session is over, and leaving it `.live` forever would keep it in the way of
+                // every future occurrence of the same recurring call.
+                for stale in openForKey {
+                    stale.endDate = stale.endDate ?? stale.startDate
+                    stale.state = .completed
+                    meetingService.update(stale)
+                }
+                apiLogger.info(
+                    "Closed \(openForKey.count, privacy: .public) stale live meeting(s) for key \(sessionKey, privacy: .public); starting a fresh one"
+                )
+            }
+
+            // Calendar matching mirrors the import path: for calendar-created calls the tab title
+            // *is* the event's name, so a confident title+date match links the live meeting to the
+            // event and adopts its roster. `bestAutoLinkCandidate`'s confidence floor keeps an
+            // ad-hoc call from linking to whatever else happens to be on the calendar right now.
+            var matched: MatchedEventResponse?
+            var projection: CalendarService.MeetingProjection?
+            if let realTitle, let calendarService,
+               let candidate = calendarService.bestAutoLinkCandidate(title: realTitle, date: start) {
+                let eventProjection = CalendarService.meetingProjection(for: candidate.event)
+                projection = eventProjection
+                matched = MatchedEventResponse(
+                    id: candidate.event.id,
+                    title: eventProjection.title,
+                    date: candidate.event.startDate,
+                    confidence: candidate.score
+                )
+            }
+
+            let title = projection?.title
+                ?? realTitle
+                ?? Self.liveFallbackTitle(startDate: start, account: account)
+            let meeting = meetingService.createMeeting(
+                title: title,
+                source: .adHoc,
+                state: .live,
+                startDate: start,
+                attendees: attendees
+            )
+            if let projection {
+                meetingService.linkToCalendarEvent(
+                    calendarEventID: projection.calendarEventID,
+                    seriesID: projection.seriesID,
+                    title: projection.title,
+                    startDate: projection.startDate,
+                    endDate: projection.endDate,
+                    attendees: projection.attendees,
+                    calendarNotes: projection.calendarNotes,
+                    conferencingURL: projection.conferencingURL,
+                    for: meeting
+                )
+                // After the link, because `linkToCalendarEvent` replaces the roster wholesale
+                // (same ordering as import); `mergeAttendees` dedupes by identity.
+                if !attendees.isEmpty {
+                    meetingService.mergeAttendees(attendees, into: meeting)
+                }
+            }
+            meetingService.setExternalSessionKey(sessionKey, for: meeting)
+            apiLogger.info("Started live meeting session for key \(sessionKey, privacy: .public)")
+            return .json(LiveSessionResponse(
+                id: meeting.id.uuidString,
+                created: true,
+                title: meeting.title,
+                state: meeting.state.rawValue,
+                segment_count: 0,
+                matched_event: matched
+            ))
+        }
+    }
+
+    /// `POST /v1/meetings/live/{id}/segments` — append a batch of speaker-attributed caption lines.
+    ///
+    /// Segments land with source `.liveCaptions` so a later re-transcription of our own audio (which
+    /// replaces `.liveCapture` rows) can never destroy the caption-derived speaker timeline.
+    /// `start`/`end` are seconds relative to the meeting start, as measured by the caller.
+    private func handleAppendLiveSegments(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+        guard !request.body.isEmpty,
+              let payload = try? JSONDecoder().decode(LiveSegmentsRequest.self, from: request.body) else {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+        guard !payload.segments.isEmpty else {
+            return .error(status: 400, message: "Missing 'segments'")
+        }
+        guard payload.segments.count <= Self.maxLiveSegmentsPerBatch else {
+            return .error(
+                status: 413,
+                message: "Too many segments in one batch (max \(Self.maxLiveSegmentsPerBatch))"
+            )
+        }
+
+        // Drop blank lines rather than failing the batch: the caption stabilizer can legitimately
+        // emit an empty tail when a speaker's turn is revised away mid-flush.
+        let segments: [TranscriptionSegment] = payload.segments.compactMap { entry in
+            let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, text.count <= Self.maxLiveSegmentTextLength else { return nil }
+            guard entry.start.isFinite, entry.end.isFinite else { return nil }
+            let start = max(0, entry.start)
+            return TranscriptionSegment(
+                text: text,
+                start: start,
+                end: max(start, entry.end),
+                speakerLabel: entry.speaker?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                speakerConfidence: entry.confidence
+            )
+        }
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+            if !segments.isEmpty {
+                meetingService.appendStableSegments(segments, source: .liveCaptions, to: meeting)
+            }
+            return .json(LiveAppendResponse(
+                id: meeting.id.uuidString,
+                appended: segments.count,
+                segment_count: meeting.segments.count
+            ))
+        }
+    }
+
+    /// `POST /v1/meetings/live/{id}/end` — close out an external live session.
+    ///
+    /// Deliberately inert beyond the state transition: it does not kick off summarization, so leaving
+    /// a call never spends tokens without the user asking. The meeting simply becomes a normal
+    /// completed meeting the user can summarize, export, or identify speakers on.
+    private func handleEndLiveMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+
+        var endDate: Date?
+        if !request.body.isEmpty {
+            guard let payload = try? JSONDecoder().decode(LiveSessionEndRequest.self, from: request.body) else {
+                return .error(status: 400, message: "Invalid JSON body")
+            }
+            if let endedAt = payload.endedAt?.trimmingCharacters(in: .whitespacesAndNewlines), !endedAt.isEmpty {
+                guard let parsed = Self.parseISO8601Date(endedAt) else {
+                    return .error(status: 400, message: "Invalid 'ended_at' value")
+                }
+                endDate = parsed
+            }
+        }
+
+        let meetingService = self.meetingService
+        let resolvedEnd = endDate ?? Date()
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+            meeting.endDate = resolvedEnd
+            meeting.state = .completed
+            meetingService.update(meeting)
+            return .json(LiveSessionResponse(
+                id: meeting.id.uuidString,
+                created: false,
+                title: meeting.title,
+                state: meeting.state.rawValue,
+                segment_count: meeting.segments.count,
+                matched_event: nil
+            ))
+        }
+    }
+
+    private struct LiveSessionResponse: Encodable {
+        let id: String
+        let created: Bool
+        let title: String
+        let state: String
+        let segment_count: Int
+        let matched_event: MatchedEventResponse?
+    }
+
+    private struct LiveAppendResponse: Encodable {
+        let id: String
+        let appended: Int
+        let segment_count: Int
+    }
+
+    // MARK: - GET /v1/meetings
+
+    private struct MeetingRow: Encodable {
+        let id: String
+        let title: String
+        let date: Date?
+        let folder: String?
+        let tags: [String]
+        let language: String?
+        let has_transcript: Bool
+        let has_summary: Bool
+        let calendar_linked: Bool
+    }
+
+    private func handleListMeetings(_ request: HTTPRequest) async -> HTTPResponse {
+        let folder = request.queryParams["folder"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let tag = request.queryParams["tag"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let limit = min(Int(request.queryParams["limit"] ?? "") ?? 50, 200)
+        let offset = max(Int(request.queryParams["offset"] ?? "") ?? 0, 0)
+
+        var fromDate: Date?
+        if let fromString = request.queryParams["from"]?.trimmingCharacters(in: .whitespacesAndNewlines), !fromString.isEmpty {
+            guard let parsed = Self.parseISO8601Date(fromString) else {
+                return .error(status: 400, message: "Invalid 'from' value")
+            }
+            fromDate = parsed
+        }
+        var toDate: Date?
+        if let toString = request.queryParams["to"]?.trimmingCharacters(in: .whitespacesAndNewlines), !toString.isEmpty {
+            guard let parsed = Self.parseISO8601Date(toString) else {
+                return .error(status: 400, message: "Invalid 'to' value")
+            }
+            toDate = parsed
+        }
+
+        let tagKey = tag?.lowercased()
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            let folderComponents = folder.map { MeetingService.folderComponents($0) }
+            let filtered = meetingService.meetings.filter { meeting in
+                if let folderComponents, !folderComponents.isEmpty {
+                    let meetingComponents = MeetingService.folderComponents(meeting.folderPath)
+                    guard meetingComponents.count >= folderComponents.count,
+                          Array(meetingComponents.prefix(folderComponents.count)) == folderComponents else {
+                        return false
+                    }
+                }
+                if let tagKey {
+                    guard meeting.tags.contains(where: { $0.lowercased() == tagKey }) else { return false }
+                }
+                if let fromDate {
+                    guard let start = meeting.startDate, start >= fromDate else { return false }
+                }
+                if let toDate {
+                    guard let start = meeting.startDate, start <= toDate else { return false }
+                }
+                return true
+            }
+
+            let total = filtered.count
+            let sliceStart = min(offset, total)
+            let sliceEnd = min(offset + limit, total)
+            let page = Array(filtered[sliceStart..<sliceEnd])
+
+            struct MeetingsResponse: Encodable {
+                let meetings: [MeetingRow]
+                let total: Int
+                let limit: Int
+                let offset: Int
+            }
+
+            return .json(MeetingsResponse(
+                meetings: page.map { Self.meetingRow($0) },
+                total: total,
+                limit: limit,
+                offset: offset
+            ))
+        }
+    }
+
+    // MARK: - GET /v1/meetings/{id}
+
+    private func handleGetMeeting(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.pathParams["id"], let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid meeting id")
+        }
+        let includeTranscript = request.queryParams["include"]?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .contains("transcript") ?? false
+
+        let meetingService = self.meetingService
+        return await MainActor.run {
+            guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Meeting not found")
+            }
+
+            struct MeetingDetailResponse: Encodable {
+                let id: String
+                let title: String
+                let date: Date?
+                let end_date: Date?
+                let state: String
+                let source: String
+                let folder: String?
+                let tags: [String]
+                let language: String?
+                let calendar_linked: Bool
+                let calendar_event_id: String?
+                let has_transcript: Bool
+                let has_summary: Bool
+                let segment_count: Int
+                let attendees: [AttendeeRow]
+                let transcript: String?
+            }
+            struct AttendeeRow: Encodable {
+                let name: String
+                let email: String?
+            }
+
+            let row = Self.meetingRow(meeting)
+            let transcript: String? = includeTranscript ? Self.renderTranscript(meeting) : nil
+
+            return .json(MeetingDetailResponse(
+                id: row.id,
+                title: row.title,
+                date: row.date,
+                end_date: meeting.endDate,
+                state: meeting.state.rawValue,
+                source: meeting.source.rawValue,
+                folder: row.folder,
+                tags: row.tags,
+                language: row.language,
+                calendar_linked: row.calendar_linked,
+                calendar_event_id: meeting.calendarEventID,
+                has_transcript: row.has_transcript,
+                has_summary: row.has_summary,
+                segment_count: meeting.segments.count,
+                attendees: meeting.attendees.map { AttendeeRow(name: $0.name, email: $0.email) },
+                transcript: transcript
+            ))
+        }
+    }
+
+    // MARK: - Meeting helpers
+
+    @MainActor
+    private static func meetingRow(_ meeting: Meeting) -> MeetingRow {
+        let hasSummary = meeting.outputs.contains { $0.kind == .summary || $0.kind == .extended }
+        return MeetingRow(
+            id: meeting.id.uuidString,
+            title: meeting.title,
+            date: meeting.startDate,
+            folder: meeting.folderPath,
+            tags: meeting.tags,
+            language: meeting.languageCode,
+            has_transcript: !meeting.segments.isEmpty,
+            has_summary: hasSummary,
+            calendar_linked: meeting.calendarEventID != nil
+        )
+    }
+
+    /// Render a meeting's segments chronologically into newline-separated `Speaker: text` lines,
+    /// resolving `SPEAKER_xx` labels through the meeting's speaker map when present.
+    @MainActor
+    private static func renderTranscript(_ meeting: Meeting) -> String {
+        let speakerMap = meeting.speakerMap
+        return meeting.segments
+            .sorted { $0.order < $1.order }
+            .map { segment -> String in
+                let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+                    let name = speakerMap[label] ?? label
+                    return "\(name): \(text)"
+                }
+                return text
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private static func parseISO8601Date(_ string: String) -> Date? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFractional.date(from: trimmed) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        if let date = plain.date(from: trimmed) { return date }
+        let dateOnly = ISO8601DateFormatter()
+        dateOnly.formatOptions = [.withFullDate]
+        return dateOnly.date(from: trimmed)
     }
 
     // MARK: - Helpers

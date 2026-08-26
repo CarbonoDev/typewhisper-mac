@@ -224,6 +224,12 @@ final class Qwen3PluginTests: XCTestCase {
 
     func testDeleteDownloadedModelRemovesCacheAndClearsSelection() async throws {
         let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
+        // Hermetic: disable passive model restore so `activate` does NOT spawn a background
+        // `restoreLoadedModel` task. Otherwise, once we set `loadedModel` and create the (partial)
+        // cache directory below, that task calls `loadModel` → a REAL `fromPretrained` network
+        // download that recreates the directory this test deletes, racing the deletion assertion.
+        // `pluginDataDirectory` is already an isolated per-instance temp dir, so with restore off the
+        // only writer to the cache path is this test.
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": model.id],
             shouldRestoreLoadedModelsPassively: false

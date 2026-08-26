@@ -34,17 +34,25 @@ enum LLMError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAvailable:
-            "LLM provider is not available on this device."
+            String(localized: "llm.error.notAvailable")
         case .providerError(let message):
-            "LLM error: \(message)"
+            String(format: String(localized: "llm.error.generic"), message)
         case .providerNotReady(let message):
             message
         case .inputTooLong:
-            "Input text is too long for the selected provider."
+            String(localized: "llm.error.inputTooLong")
         case .noProviderConfigured:
-            "No LLM provider configured. Please select a provider in Settings > Prompts."
+            String(localized: "llm.error.noProviderConfigured")
         case .noApiKey:
-            "API key not configured. Please add your API key in Settings > Models."
+            String(localized: "llm.error.noApiKey")
         }
+    }
+
+    /// True when the failure is specifically "no default LLM provider is configured", so callers can
+    /// surface an actionable deep-link into Settings › Library › Prompts instead of a dead-end
+    /// message. Matched structurally (not by localized string) so it survives translation.
+    var isNoProviderConfigured: Bool {
+        if case .noProviderConfigured = self { return true }
+        return false
     }
 }

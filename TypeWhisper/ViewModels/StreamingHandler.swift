@@ -177,25 +177,20 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     @MainActor
-    func finish(finalSamples: [Float]? = nil) async -> TranscriptionResult? {
-        let finishStart = CFAbsoluteTimeGetCurrent()
-        func elapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - finishStart) * 1000) }
-
+    func finish() async -> TranscriptionResult? {
         streamingTask?.cancel()
         streamingTask = nil
 
-        guard let handle = claimLiveSessionHandleForFinish() else {
+        guard let handle = sharedState.withLock({ $0.liveSessionHandle }) else {
             clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
 
-        let stablePreviewBeforeFinish = sharedState.withLock { $0.confirmedStreamingText }
-        let delta = nextBufferDelta(finalSamples: finalSamples)
+        let delta = nextBufferDelta()
 
         do {
             if !delta.samples.isEmpty {
                 try await handle.session.appendAudio(samples: delta.samples)
-                logger.info("Finish timing: tail appendAudio done elapsedMs=\(elapsedMs(), privacy: .public) tailSamples=\(delta.samples.count, privacy: .public)")
             }
             let result = try await modelManager.finishLiveTranscriptionSession(
                 handle,
@@ -205,32 +200,15 @@ final class StreamingHandler: @unchecked Sendable {
                 task: sharedState.withLock { $0.task },
                 normalizeNumbers: sharedState.withLock { $0.normalizeNumbers }
             )
-            logger.info("Finish timing: live session finalized elapsedMs=\(elapsedMs(), privacy: .public) resultTextLength=\(result.text.count, privacy: .public)")
-            let finalResult = Self.resultPreferringStablePreviewIfNeeded(
-                result,
-                stablePreview: stablePreviewBeforeFinish
-            )
             clearStreamingState(notifyStreamingStopped: true)
 
-            let finalText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             progressText.withLock { $0 = finalText }
             sharedState.withLock { $0.confirmedStreamingText = finalText }
-            return finalResult
+            return result
         } catch {
-            logger.warning("Finalizing live transcription failed: \(error.localizedDescription, privacy: .public) [flushedTailSamples=\(String(describing: delta.samples.count), privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
+            logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
             await modelManager.cancelLiveTranscriptionSession(handle)
-            if let previewResult = stablePreviewResult(
-                stablePreviewBeforeFinish,
-                handle: handle
-            ) {
-                logger.info("Using stable live preview because final live transcription failed")
-                clearStreamingState(notifyStreamingStopped: true)
-
-                let finalText = previewResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                progressText.withLock { $0 = finalText }
-                sharedState.withLock { $0.confirmedStreamingText = finalText }
-                return previewResult
-            }
             clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
@@ -254,14 +232,6 @@ final class StreamingHandler: @unchecked Sendable {
         }
 
         clearStreamingState(notifyStreamingStopped: true)
-    }
-
-    private func claimLiveSessionHandleForFinish() -> ModelManagerService.LiveTranscriptionSessionHandle? {
-        sharedState.withLock { state in
-            let handle = state.liveSessionHandle
-            state.liveSessionHandle = nil
-            return handle
-        }
     }
 
     private func runLiveSessionLoop(stateCheck: @escaping @MainActor @Sendable () -> Bool) async {
@@ -329,15 +299,8 @@ final class StreamingHandler: @unchecked Sendable {
         }
     }
 
-    private func nextBufferDelta(finalSamples: [Float]? = nil) -> (samples: [Float], nextOffset: Int) {
+    private func nextBufferDelta() -> (samples: [Float], nextOffset: Int) {
         let sampleCursor = sharedState.withLock { $0.sampleCursor }
-        if let finalSamples {
-            let clampedOffset = max(0, min(sampleCursor, finalSamples.count))
-            let samples = Array(finalSamples.dropFirst(clampedOffset))
-            sharedState.withLock { $0.sampleCursor = finalSamples.count }
-            return (samples, finalSamples.count)
-        }
-
         let delta = bufferDeltaProvider(sampleCursor)
         sharedState.withLock { $0.sampleCursor = delta.nextOffset }
         return delta
@@ -490,82 +453,28 @@ final class StreamingHandler: @unchecked Sendable {
         return appendPreviewText(confirmed, new)
     }
 
-    nonisolated static func resultPreferringStablePreviewIfNeeded(
-        _ result: TranscriptionResult,
-        stablePreview: String
-    ) -> TranscriptionResult {
-        let preview = stablePreview.trimmingCharacters(in: .whitespacesAndNewlines)
-        let final = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard shouldPreferStablePreview(final: final, preview: preview) else {
-            return result
+    /// Bounded variant of `stabilizeText` for long-running captures (meeting mode). The caller
+    /// supplies `frozenPrefix` — text that has already been committed/persisted and can therefore
+    /// no longer change. When both snapshots share that prefix, only the still-active tail beyond
+    /// it is fed through the (potentially O(n*m)) stabilization heuristics, so per-update cost stays
+    /// bounded by the unpersisted region instead of growing with the whole transcript. Falls back to
+    /// a full `stabilizeText` when the prefix does not line up (rare provider rewrite of committed
+    /// text), preserving the original behavior.
+    nonisolated static func stabilizeText(confirmed: String, new: String, frozenPrefix: String) -> String {
+        let frozen = frozenPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !frozen.isEmpty,
+              confirmed.hasPrefix(frozen),
+              new.hasPrefix(frozen) else {
+            return stabilizeText(confirmed: confirmed, new: new)
         }
 
-        logger.info("Using stable live preview because final live transcript looked like a short unrelated tail")
-        return TranscriptionResult(
-            text: preview,
-            detectedLanguage: nil,
-            duration: result.duration,
-            processingTime: result.processingTime,
-            engineUsed: result.engineUsed,
-            segments: result.segments
-        )
-    }
-
-    private nonisolated static func shouldPreferStablePreview(final: String, preview: String) -> Bool {
-        guard !final.isEmpty, !preview.isEmpty, final != preview else { return false }
-        guard !preview.contains(final), !final.contains(preview) else { return false }
-
-        let finalLength = transcriptContentLength(final)
-        let previewLength = transcriptContentLength(preview)
-        let previewWordCount = transcriptWords(in: preview).count
-
-        guard previewLength >= 12 || previewWordCount >= 2 else { return false }
-
-        let finalLooksTiny = finalLength <= 8
-        let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
-        return finalLooksTiny && previewIsMuchLonger
-    }
-
-    private func stablePreviewResult(
-        _ stablePreview: String,
-        handle: ModelManagerService.LiveTranscriptionSessionHandle
-    ) -> TranscriptionResult? {
-        let preview = stablePreview.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isSubstantiveStablePreview(preview) else { return nil }
-
-        let configuredLanguage = sharedState.withLock { $0.configuredLanguage }
-        let configuredLanguageCandidates = sharedState.withLock { $0.configuredLanguageCandidates }
-        let task = sharedState.withLock { $0.task }
-        let normalizeNumbers = sharedState.withLock { $0.normalizeNumbers }
-
-        return TranscriptionNormalizationService.normalizeResult(
-            text: preview,
-            detectedLanguage: nil,
-            configuredLanguage: configuredLanguage,
-            configuredLanguageCandidates: configuredLanguageCandidates,
-            duration: bufferedDurationProvider(),
-            processingTime: 0.001,
-            engineUsed: handle.providerId,
-            segments: [],
-            task: task,
-            normalizeNumbers: normalizeNumbers
-        )
-    }
-
-    nonisolated static func isSubstantiveStablePreview(_ preview: String) -> Bool {
-        transcriptContentLength(preview) >= 12 || transcriptWords(in: preview).count >= 2
+        let confirmedTail = String(confirmed.dropFirst(frozen.count))
+        let newTail = String(new.dropFirst(frozen.count))
+        let stabilizedTail = stabilizeText(confirmed: confirmedTail, new: newTail)
+        return appendPreviewText(frozen, stabilizedTail)
     }
 
     private nonisolated static func looksLikeProviderCorrection(confirmed: String, new: String) -> Bool {
-        let compactConfirmed = compactNormalizedTranscript(confirmed)
-        let compactNew = compactNormalizedTranscript(new)
-        if compactConfirmed == compactNew {
-            return true
-        }
-        if compactConfirmed.count >= 8, compactNew.hasPrefix(compactConfirmed) {
-            return true
-        }
-
         let confirmedScalars = Array(confirmed.unicodeScalars)
         let newScalars = Array(new.unicodeScalars)
         let shortestCount = min(confirmedScalars.count, newScalars.count)
@@ -591,12 +500,17 @@ final class StreamingHandler: @unchecked Sendable {
         let newWords = transcriptWords(in: new)
         guard confirmedWords.count >= 4, newWords.count >= 4 else { return false }
 
+        // Cheap length gate BEFORE the O(n*m) LCS: a large word-count disparity can never satisfy
+        // the `wordCountRatio <= 1.5` requirement, so reject it in O(1) instead of after a full DP
+        // (perf: this is the hottest path during long meeting captures).
+        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
+        guard wordCountRatio <= 1.5 else { return false }
+
         let matchedCount = approximateWordMatchCount(newWords, in: confirmedWords)
         let newCoverage = Double(matchedCount) / Double(newWords.count)
         let confirmedCoverage = Double(matchedCount) / Double(confirmedWords.count)
-        let wordCountRatio = Double(max(confirmedWords.count, newWords.count)) / Double(min(confirmedWords.count, newWords.count))
 
-        return newCoverage >= 0.72 && confirmedCoverage >= 0.60 && wordCountRatio <= 1.5
+        return newCoverage >= 0.72 && confirmedCoverage >= 0.60
     }
 
     private nonisolated static func approximateWordMatchCount(
@@ -749,20 +663,6 @@ final class StreamingHandler: @unchecked Sendable {
         guard shorterCount >= 4, longerCount - shorterCount <= 2 else { return false }
 
         return lhs.hasPrefix(rhs) || rhs.hasPrefix(lhs)
-    }
-
-    private nonisolated static func transcriptContentLength(_ text: String) -> Int {
-        text.unicodeScalars.filter { scalar in
-            !CharacterSet.whitespacesAndNewlines.contains(scalar)
-        }.count
-    }
-
-    private nonisolated static func compactNormalizedTranscript(_ text: String) -> String {
-        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
-            .unicodeScalars
-            .filter { CharacterSet.alphanumerics.contains($0) }
-            .map(String.init)
-            .joined()
     }
 
     private nonisolated static func transcriptWords(in text: String) -> [(normalized: String, endIndex: String.Index)] {

@@ -32,23 +32,14 @@ struct HistoryView: View {
     private var listPanel: some View {
         VStack(spacing: 0) {
             // Search
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(String(localized: "Search..."), text: $viewModel.searchQuery)
-                    .textFieldStyle(.plain)
-                if !viewModel.searchQuery.isEmpty {
-                    Button {
-                        viewModel.searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Clear search"))
-                }
-            }
-            .padding(8)
+            NativeSearchField(
+                text: $viewModel.searchQuery,
+                placeholder: String(localized: "Search...")
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .background(.bar)
 
             // Filter pickers
@@ -192,6 +183,12 @@ struct HistoryView: View {
                 Label(String(localized: "\(viewModel.selectedRecordIDs.count) items selected"), systemImage: "checkmark.circle")
             } description: {
                 Text(String(localized: "Right-click to export or delete selected entries."))
+            } actions: {
+                Button {
+                    viewModel.selectRecord(nil)
+                } label: {
+                    Label(String(localized: "Close"), systemImage: "xmark")
+                }
             }
         } else if let record = viewModel.selectedRecord {
             RecordDetailView(record: record, viewModel: viewModel)
@@ -572,6 +569,17 @@ private struct RecordDetailView: View {
                 }
                 .help(String(localized: "Delete"))
                 .accessibilityLabel(String(localized: "Delete"))
+
+                Divider()
+                    .frame(height: 14)
+
+                Button {
+                    viewModel.selectRecord(nil)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .help(String(localized: "Close"))
+                .accessibilityLabel(String(localized: "Close"))
             }
         }
         .buttonStyle(.borderless)

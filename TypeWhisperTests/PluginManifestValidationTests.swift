@@ -788,6 +788,24 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         )
     }
 
+    func testGemma4MismatchedParameterShapeErrorsUseCacheRecoveryMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let error = NSError(
+            domain: "Test",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Mismatched parameter language_model.model.per_layer_model_projection.weight in Gemma4.Gemma4TextLanguageModel.Gemma4TextBackbone.Gemma4ScaledLinear shape. Actual [10752, 320], expected [10752, 2560]"
+            ]
+        )
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+        )
+    }
+
     func testGemma4ResetCachedModelDeletesCacheAndClearsLoadedState() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -2070,7 +2088,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
         XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
     }
 
-    func testRepairEligibilityRequiresActionableExternalBundleNotice() {
+    func testReplacementEligibilitySupportsBundledAndInstalledPluginsWithActionableNotice() {
         let registryPlugin = makeRegistryPlugin(id: "com.typewhisper.qwen3")
         let boundaryNotice = ExternalBundleNotice.boundaryUpgradeRequired(
             installedVersion: "1.1.0",
@@ -2078,17 +2096,23 @@ final class PluginRegistryDestinationTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
                 installState: nil,
                 externalNotice: boundaryNotice
             )
         )
+        XCTAssertTrue(
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
+                registryPlugin: registryPlugin,
+                installInfo: .bundled,
+                installState: nil,
+                externalNotice: boundaryNotice
+            )
+        )
         XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
                 installState: nil,
@@ -2096,8 +2120,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
                 installState: nil,
@@ -2105,17 +2128,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: true,
-                registryPlugin: registryPlugin,
-                installInfo: .installed(version: "1.1.1"),
-                installState: nil,
-                externalNotice: boundaryNotice
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: nil,
                 installInfo: .installed(version: "1.1.1"),
                 installState: nil,
@@ -2123,8 +2136,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: registryPlugin,
                 installInfo: .updateAvailable(installed: "1.1.0", available: "1.1.1"),
                 installState: nil,
@@ -2132,8 +2144,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            PluginRegistryService.canRepairInstalledPlugin(
-                isBundled: false,
+            PluginRegistryService.canReplaceIncompatibleExternalBundle(
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
                 installState: .extracting,
@@ -2343,5 +2354,47 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
 
     func testLegacyChatCompletionsKeepTemperature() {
         XCTAssertEqual(OpenAIPlugin.chatCompletionTemperature(for: "gpt-4o", reasoningEffort: nil), 0.3)
+    }
+
+    // MARK: - Bundled vs external plugin precedence (requirement 4)
+
+    func testHigherExternalWins() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.2.0", bundledVersion: "1.1.0"),
+            .external
+        )
+    }
+
+    func testHigherBundledWins() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.0.3", bundledVersion: "1.1.0"),
+            .bundled
+        )
+    }
+
+    func testEqualVersionPrefersExternalForBackCompat() {
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.1.0", bundledVersion: "1.1.0"),
+            .external
+        )
+    }
+
+    func testClaudeBundledManifestVersionBumpedAboveShadowingRelease() throws {
+        // The dynamic-models update shipped without a version bump, so a stale external 1.0.3 could
+        // shadow the bundled copy. The bundled manifest must now sit strictly above 1.0.3 so the
+        // precedence rule loads the bundled copy.
+        let manifestURL = TestSupport.repoRoot
+            .appendingPathComponent("TypeWhisperPluginSDK/Plugins/ClaudePlugin/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+        XCTAssertEqual(
+            PluginRegistryService.compareVersions(manifest.version, "1.0.3"),
+            .orderedDescending,
+            "Bundled Claude manifest \(manifest.version) must be newer than the shadowing 1.0.3 release"
+        )
+        XCTAssertEqual(
+            PluginSourcePrecedence.preferredSource(externalVersion: "1.0.3", bundledVersion: manifest.version),
+            .bundled
+        )
     }
 }

@@ -109,7 +109,7 @@ private enum PluginLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .incompatibleHostVersion(let pluginName, let required, let current):
-            return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
+            return "\(pluginName) requires MeetingWhisper \(required) or newer (current: \(current))"
         case .failedToCreateBundle(let bundleName):
             return "Failed to create bundle for \(bundleName)"
         case .missingPrincipalClass(let className, let bundleName):
@@ -544,7 +544,7 @@ final class PluginManager: ObservableObject {
             let reason = PluginSDKCompatibility.incompatibilityReason(
                 manifestVersion: manifest.sdkCompatibilityVersion,
                 isBundled: isBundledSource
-            ) ?? "is not compatible with this TypeWhisper build"
+            ) ?? "is not compatible with this MeetingWhisper build"
             logger.info(
                 "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )
@@ -639,7 +639,11 @@ final class PluginManager: ObservableObject {
         return false
     }
 
-    private func makeUnloadedPluginRecord(manifest: PluginManifest, sourceURL: URL) throws -> LoadedPlugin {
+    private func makeUnloadedPluginRecord(
+        manifest: PluginManifest,
+        sourceURL: URL,
+        isEnabled: Bool = false
+    ) throws -> LoadedPlugin {
         guard let bundle = Bundle(url: sourceURL) else {
             throw PluginLoadError.failedToCreateBundle(bundleName: sourceURL.lastPathComponent)
         }
@@ -649,8 +653,22 @@ final class PluginManager: ObservableObject {
             instance: UnloadedPluginPlaceholder(),
             bundle: bundle,
             sourceURL: sourceURL,
-            isEnabled: false
+            isEnabled: isEnabled
         )
+    }
+
+    func registerUnloadedPlugin(manifest: PluginManifest, sourceURL: URL, isEnabled: Bool) throws {
+        if let existingIndex = loadedPlugins.firstIndex(where: { $0.manifest.id == manifest.id }) {
+            loadedPlugins.remove(at: existingIndex)
+        }
+
+        loadedPlugins.append(try makeUnloadedPluginRecord(
+            manifest: manifest,
+            sourceURL: sourceURL,
+            isEnabled: isEnabled
+        ))
+        UserDefaults.standard.set(isEnabled, forKey: "plugin.\(manifest.id).enabled")
+        logger.info("Registered plugin \(manifest.id, privacy: .public) v\(manifest.version, privacy: .public) as restart-required unloaded placeholder")
     }
 
     func setRuleNamesProvider(_ provider: @escaping @MainActor () -> [String]) {
@@ -665,6 +683,7 @@ final class PluginManager: ObservableObject {
         let host = HostServicesImpl(
             pluginId: plugin.manifest.id,
             eventBus: EventBus.shared,
+            meetingEventBus: MeetingEventBus.shared,
             ruleNamesProvider: ruleNamesProvider,
             workflowProvider: workflowProvider
         )
@@ -820,15 +839,59 @@ final class PluginManager: ObservableObject {
 
     private func shouldReplace(existing: LoadedPlugin, with incomingManifest: PluginManifest, from incomingURL: URL) -> Bool {
         let incomingIsBundled = Bundle.main.builtInPlugInsURL.map { incomingURL.path.hasPrefix($0.path) } ?? false
-        let versionComparison = PluginRegistryService.compareVersions(incomingManifest.version, existing.manifest.version)
 
+        // Mixed bundled/external copies of the same plugin id: decide purely by semver precedence
+        // (higher version wins; exact tie prefers the external/user-installed copy for back-compat).
+        // Centralized so the rule is unit-testable and both scan orders (external-first, then
+        // bundled) reach the same verdict.
         if incomingIsBundled != existing.isBundled {
-            if incomingIsBundled {
-                return versionComparison != .orderedAscending
-            }
-            return versionComparison == .orderedDescending
+            let incomingVersion = incomingManifest.version
+            let existingVersion = existing.manifest.version
+            let externalVersion = incomingIsBundled ? existingVersion : incomingVersion
+            let bundledVersion = incomingIsBundled ? incomingVersion : existingVersion
+            let winner = PluginSourcePrecedence.preferredSource(
+                externalVersion: externalVersion,
+                bundledVersion: bundledVersion
+            )
+            let incomingWins = incomingIsBundled ? (winner == .bundled) : (winner == .external)
+            logger.info(
+                "Precedence for \(incomingManifest.id, privacy: .public): external=\(externalVersion, privacy: .public) vs bundled=\(bundledVersion, privacy: .public) → preferring \(winner.diagnosticsValue, privacy: .public) copy (\(incomingWins ? "loading incoming" : "keeping existing", privacy: .public))"
+            )
+            return incomingWins
         }
 
-        return versionComparison == .orderedDescending
+        // Same source class (both bundled or both external): the strictly-newer copy wins.
+        return PluginRegistryService.compareVersions(incomingManifest.version, existing.manifest.version) == .orderedDescending
+    }
+}
+
+/// Decides which copy of a plugin (bundled with the app vs external/user-downloaded) should load
+/// when both exist for one plugin id (owner requirement 4). Pure + unit-testable so the precedence
+/// rule is pinned by tests independent of the loader's scan order.
+enum PluginSourcePrecedence: Equatable {
+    case external
+    case bundled
+
+    var diagnosticsValue: String {
+        switch self {
+        case .external: return "external"
+        case .bundled: return "bundled"
+        }
+    }
+
+    /// The preferred copy by semantic version: the strictly-higher version wins; on an exact tie the
+    /// **external** (user-installed) copy is preferred, so an equal-version bundled build never
+    /// silently displaces a plugin the user explicitly downloaded (back-compat). This is why a
+    /// bundled update that ships without a version bump is shadowed by a same/higher external copy —
+    /// the fix is to bump the bundled manifest's version above the external one.
+    static func preferredSource(externalVersion: String, bundledVersion: String) -> PluginSourcePrecedence {
+        switch PluginRegistryService.compareVersions(externalVersion, bundledVersion) {
+        case .orderedDescending:
+            return .external   // external strictly newer
+        case .orderedAscending:
+            return .bundled    // bundled strictly newer
+        case .orderedSame:
+            return .external   // tie → external (back-compat)
+        }
     }
 }

@@ -1,5 +1,12 @@
 # Commercial Licensing
 
+> **Note (fork):** This document is inherited from the upstream
+> [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac) project and
+> describes *upstream's* commercial licensing offer. This fork does not offer
+> commercial licensing; all features are enabled in the open-source build. For
+> commercial licensing of the original TypeWhisper, contact upstream at the
+> address below.
+
 TypeWhisper is available under a dual-licensing model:
 
 - Open-source usage is licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later).

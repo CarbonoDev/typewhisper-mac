@@ -1,0 +1,2003 @@
+import Foundation
+import Combine
+import TypeWhisperPluginSDK
+
+@MainActor
+final class MeetingsViewModel: ObservableObject {
+    nonisolated(unsafe) static var _shared: MeetingsViewModel?
+    static var shared: MeetingsViewModel {
+        guard let instance = _shared else {
+            fatalError("MeetingsViewModel not initialized")
+        }
+        return instance
+    }
+
+    @Published private(set) var meetings: [Meeting] = []
+
+    /// Multi-select on the Meetings list + folder detail surfaces (plan LX-1, D3; the `HistoryViewModel`
+    /// `selectedRecordIDs` analog). Held on the list's data-source VM — not the navigation coordinator
+    /// (frozen API) and not an extension file (extension-file discipline forbids stored state). The
+    /// views bind this into `List(selection:)` (Meetings list) or the hand-rolled `SelectionGesture`
+    /// (timeline) and normalize it to the visible set on filter change. LX-1 adds no action over it.
+    @Published var selectedMeetingIDs: Set<UUID> = []
+
+    /// The selection intersected with a supplied visible-id list (the `HistoryViewModel`
+    /// `visibleSelectedRecordIDs` analog). A convenience for surfaces that want the effective, on-screen
+    /// selection without mutating `selectedMeetingIDs`.
+    func visibleSelection(in visibleIDs: [UUID]) -> Set<UUID> {
+        selectedMeetingIDs.intersection(visibleIDs)
+    }
+
+    // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
+    @Published private(set) var templates: [PromptAction] = []
+    @Published var outputErrorMessage: String?
+    /// Set alongside `outputErrorMessage` when the failure is specifically "no LLM provider
+    /// configured", so the document body can offer a deep link into Settings › Library › Prompts.
+    @Published var outputErrorNeedsProvider = false
+
+    // Calendar (M2)
+    @Published private(set) var calendarAuthorizationStatus: CalendarAuthorizationStatus = .notDetermined
+    /// [Google Phase 1 · M4] Whether *any* calendar source can feed the meetings UI (D-G4):
+    /// the primary (EventKit) provider is authorized **or** ≥ 1 Google account is connected.
+    /// The calendar-UI availability gate (`HomeNextSection`, `UpcomingMeetingsSection`,
+    /// `MeetingLinkEventView`) — without it a Google-only user (EventKit denied) would get fan-in
+    /// events that never render. Fed from the status mirror plus `GoogleAccountStore.$accounts`.
+    @Published private(set) var hasAnyCalendarSource = false
+    /// [PR #7 review finding 5] Whether to surface the "one source is broken" row: macOS Calendar
+    /// access is denied/restricted **while another source still works**, so the D-G4 suppression of
+    /// `calendarErrorMessage` (a working configuration is not an error) would otherwise hide the
+    /// missing iCloud/Exchange/local calendars everywhere outside Settings. Session-dismissible.
+    @Published private(set) var showsSystemCalendarProblem = false
+    /// [PR #7 review finding 7] Bumped whenever calendar *selection* changes through this view
+    /// model (per-calendar toggle, group toggle, twin-prompt resolution). `CalendarSelectionSection`
+    /// keeps a local `@State` row snapshot — selection is read from the service, not a `@Published`
+    /// — so it needs an explicit signal to reload after a selection write it did not make itself.
+    @Published private(set) var calendarSelectionRevision = 0
+    /// In-memory (per launch) dismissal of the per-source problem row — the same "hide it now"
+    /// semantics as `CalendarService.dismiss(eventID:)`, deliberately not persisted: the remedy
+    /// lives in System Settings and the row must come back if the user never applies it.
+    private var systemCalendarProblemDismissed = false
+    /// [Google Phase 1 · M4] Pending "duplicate calendars detected" prompts (D-G6), one per
+    /// connected Google account whose EventKit CalDAV twins were found and whose prompt has not
+    /// been handled yet. Rendered inline by `GoogleAccountsSection`; re-evaluated on every Google
+    /// snapshot change while unhandled.
+    @Published private(set) var twinCalendarPrompts: [TwinCalendarPrompt] = []
+    @Published private(set) var upcomingEvents: [CalendarEventDTO] = []
+    /// [M10] Already-ended events from the lookback window (since start of day) — the collapsible
+    /// "Earlier" section. Mirrored from `CalendarService.earlierEvents`.
+    @Published private(set) var earlierEvents: [CalendarEventDTO] = []
+    @Published private(set) var calendarErrorMessage: String?
+
+    /// [M10] A meeting the UI should navigate to / focus (e.g. after "Start Meeting Recording" from
+    /// the menu bar, or opening a past meeting from the Earlier section). The Meetings window
+    /// observes this and clears it via `consumeFocusRequest()`.
+    @Published var pendingFocusMeetingID: UUID?
+
+    // Capture (M3)
+    @Published private(set) var activeMeeting: Meeting?
+    @Published private(set) var isCapturing = false
+    /// True while `stop()`'s off-MainActor teardown is finalizing this meeting (recorder mixdown,
+    /// audio adopt). Mirrored from the capture service so the live band and the document bottom bar
+    /// show a "Finalizing…" posture the instant Stop is pressed, without the window freezing.
+    @Published private(set) var isFinalizing = false
+    @Published private(set) var liveTranscript: String = ""
+    @Published private(set) var captureElapsedSeconds: TimeInterval = 0
+    @Published private(set) var isDegradedLiveMode = false
+    @Published private(set) var captureErrorMessage: String?
+    // [Track C] AD8 final re-transcription degradation, mirrored from the capture service so the
+    // detail view can surface a status (never an error dialog) when a meeting's final pass ran in a
+    // reduced mode. `finalRetranscriptionDegradedMeetingID` scopes the banner to the affected meeting.
+    @Published private(set) var finalRetranscriptionDegraded = false
+    @Published private(set) var finalRetranscriptionDegradedMeetingID: UUID?
+
+    // Knowledge base + brief (M5)
+    @Published private(set) var isVaultConnected = false
+    @Published private(set) var vaultName: String?
+    // [Track J] `isGeneratingBrief` is no longer a VM mirror — brief generation runs on the `.brief`
+    // job (llm lane) and is surfaced meeting-scoped via `isGeneratingBrief(for:)`.
+    @Published var briefErrorMessage: String?
+    @Published var briefErrorNeedsProvider = false
+
+    // In-meeting Q&A (M6)
+    /// [Track J] Meeting-scoped Q&A activity (plan J2): mirrored from `MeetingLLMService`. Asking a
+    /// question in meeting A must not disable meeting B's Ask field, so this is a set, not a bool.
+    @Published private(set) var answeringMeetingIDs: Set<UUID> = []
+    @Published var qaErrorMessage: String?
+    @Published var qaErrorNeedsProvider = false
+
+    // Obsidian export (M7)
+    @Published var exportErrorMessage: String?
+
+    // Import / merge (M8)
+    // [Track J] `isImporting` is no longer a VM mirror — audio import runs on the `.audioImport` job
+    // (transcription lane) and is surfaced via `isImporting()` (global: a new-meeting import has no
+    // meeting id, and the import UI is a modal sheet).
+    @Published var importErrorMessage: String?
+
+    // Speaker diarization & mapping (M9)
+    // [Track J] `isEnriching` is no longer a VM mirror — diarization runs on the `.diarization` job
+    // (transcription lane) and is surfaced meeting-scoped via `isEnriching(for:)`.
+    @Published var diarizationErrorMessage: String?
+    /// A localized status shown after enrichment finishes without labeling (e.g. "no speakers
+    /// detected"). Cleared when a new enrichment starts.
+    @Published var diarizationStatusMessage: String?
+    /// [M1/D2] The enrichment outcome that produced `diarizationStatusMessage`, tracked alongside the
+    /// localized string so suppression under a resolved `.channel`/`.cloud` plan can distinguish a
+    /// "no path" outcome (`.unavailable`/`.noAudio` — genuinely mutually exclusive with a resolved path,
+    /// suppress it) from an outcome that is still meaningful under a channel/cloud plan (a Redo that
+    /// returns `.timelineMismatch`/`.noSpeakersDetected` — keep it visible; the earlier blanket
+    /// suppression silently swallowed those, leaving the user with zero feedback). Set and cleared in
+    /// lockstep with `diarizationStatusMessage`.
+    @Published private(set) var diarizationStatusOutcome: MeetingDiarizationEnricher.Outcome?
+
+    // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
+    // per-meeting final re-transcription override through it.
+    let meetingService: MeetingService
+    // [Track B] Unified prompt/template library — meeting output templates are `.meeting`-surface
+    // PromptAction rows owned by PromptActionService (plan AD6).
+    private let promptActionService: PromptActionService
+    private let calendarService: CalendarService
+    // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can read
+    // `captureService.activeMeetingDefaultTemplateID` to pre-select the rule-selected default output
+    // template in the generate flow (`defaultTemplate(ofKind:for:)`, addendum AD7).
+    let captureService: MeetingCaptureService
+    private let startNotificationService: MeetingStartNotificationService
+    /// Owner request 2: one-shot "meeting time ended, still recording" reminder. Driven off the
+    /// capture elapsed tick (which runs only while recording).
+    private let endReminderService: MeetingEndReminderService
+    private let llmService: MeetingLLMService
+    // [M2] Per-meeting language detection (plan D5). `internal` so `MeetingsViewModel+Language.swift`
+    // (extension-file discipline) reaches it for the chip's Detect / Re-detect action and the
+    // post-import auto-detect enqueue.
+    let languageService: MeetingLanguageService
+    // [M7] `internal` (not private) so `MeetingsViewModel+FolderContext.swift` reaches it for the
+    // folder detail view's read-only vault search (attachment picker).
+    let vaultService: ObsidianVaultService
+    private let briefService: MeetingBriefService
+    // [M8] Agentic related-document discovery (Amendment 2). `internal` so
+    // `MeetingsViewModel+RelatedDocs.swift` reaches it for the meeting document's Related Documents
+    // section (Find related, manual add/remove, resolved-union rows).
+    let relatedDocsService: MeetingRelatedDocsService
+    // [M7] Per-folder context config store (Amendment 1, DA4). `internal` so the folder-context
+    // extension routes description/attachment/toggle writes through the single-writer store; the
+    // folder detail view observes `MeetingFolderMetadataStore.shared` directly for live updates.
+    let folderMetadataStore: MeetingFolderMetadataStore
+    private let exporter: MeetingObsidianExporter
+    private let importService: MeetingImportService
+    private let diarizationEnricher: MeetingDiarizationEnricher
+    // [Track C] Capture-context rules service (addendum AD7). Rule CRUD, context building, and
+    // resolution preview live in `MeetingsViewModel+Rules.swift`.
+    let contextRuleService: MeetingContextRuleService
+    // [Track D] Auto pre-meeting briefs (plan AD9). Internal so `MeetingsViewModel+AutoBrief` reaches it.
+    let briefScheduler: MeetingBriefScheduler
+    // [Track J] Central background-job queue (plan J1/J2). Output/brief generation, audio import, and
+    // diarization are routed through it so their spinners are meeting-scoped (do not follow
+    // navigation) and double-clicks are deduped. `internal` so `MeetingsViewModel+AutoBrief` can
+    // derive the auto-brief status line from the queue.
+    let jobQueue: JobQueueService
+    // [M3-Participants] The single-writer participant directory (plan D4/D5). Drives ranked add-attendee
+    // suggestions, display-time rename resolution (plan D6), and the settings directory manager. Attendee
+    // *writes* still flow through `meetingService`'s choke points (which fold into the directory via the
+    // ingest seam) — the VM never mutates the directory except through explicit management actions.
+    let participantDirectoryService: ParticipantDirectoryService
+    // [Google Phase 1 · M4] Read-only consumer for `hasAnyCalendarSource` and the twin-prompt
+    // bookkeeping (D-G4/D-G6). Optional so unit tests constructing the VM without the Google stack
+    // keep compiling; the store stays the single writer of all `google.*` state — the VM only
+    // reads `$accounts`/`isTwinPromptHandled` and routes handled-marks through it.
+    private let googleAccountStore: GoogleAccountStore?
+    // ── [Google Phase 3 · M5] Related emails (D-M6) — one self-contained block (spec §10). ──────
+    // The concrete service (optional so unit tests constructing the VM without the Google stack
+    // keep compiling); `internal` so `MeetingsViewModel+RelatedEmails.swift` reaches it.
+    let gmailContextService: GmailContextService?
+    /// Per-meeting related-emails fetch state, owned here and observed directly by
+    /// `MeetingRelatedEmailsSection` (the VM does not republish on its changes).
+    let relatedEmailsModel: RelatedEmailsModel
+    /// D-M6 mirror of `GmailContextService.isConnected`, recomputed on
+    /// `GoogleAccountStore.objectWillChange` with a main-queue hop (the vaultPath re-check
+    /// pattern) — `$accounts` alone would miss Gmail-toggle flips, which announce only via
+    /// `objectWillChange` (D-M7).
+    @Published private(set) var isGmailConnected = false
+    /// Whether ANY Google account exists — with none, the Related emails section renders nothing
+    /// (the briefing page must not advertise plumbing the user never configured, D-M6).
+    var hasGoogleAccounts: Bool { !(googleAccountStore?.accounts.isEmpty ?? true) }
+    /// The first Gmail-enabled account currently in `.needsReauth`, driving the section's
+    /// reconnect hint (D-M6: an owning account needing reauth must not masquerade as "Gmail not
+    /// enabled"). Computed here because the store is private to the VM body.
+    var gmailNeedsReauthAccountEmail: String? {
+        guard let googleAccountStore else { return nil }
+        return googleAccountStore.accounts.first {
+            $0.status == .needsReauth && googleAccountStore.isGmailEnabled(for: $0.id)
+        }?.email
+    }
+    // ── end [Google Phase 3 · M5] block ─────────────────────────────────────────────────────────
+    private var cancellables = Set<AnyCancellable>()
+    private var pollingCancellable: AnyCancellable?
+
+    init(
+        meetingService: MeetingService,
+        promptActionService: PromptActionService,
+        calendarService: CalendarService,
+        captureService: MeetingCaptureService,
+        startNotificationService: MeetingStartNotificationService,
+        endReminderService: MeetingEndReminderService,
+        llmService: MeetingLLMService,
+        languageService: MeetingLanguageService, // [M2]
+        vaultService: ObsidianVaultService,
+        briefService: MeetingBriefService,
+        relatedDocsService: MeetingRelatedDocsService, // [M8]
+        folderMetadataStore: MeetingFolderMetadataStore, // [M7]
+        exporter: MeetingObsidianExporter,
+        importService: MeetingImportService,
+        diarizationEnricher: MeetingDiarizationEnricher,
+        // [Track C]
+        contextRuleService: MeetingContextRuleService,
+        briefScheduler: MeetingBriefScheduler, // [Track D]
+        jobQueue: JobQueueService, // [Track J]
+        participantDirectoryService: ParticipantDirectoryService, // [M3-Participants]
+        googleAccountStore: GoogleAccountStore? = nil, // [Google Phase 1 · M4]
+        gmailContextService: GmailContextService? = nil // [Google Phase 3 · M5]
+    ) {
+        self.googleAccountStore = googleAccountStore // [Google Phase 1 · M4]
+        // [Google Phase 3 · M5] Related emails (D-M6) — assignments for the block above.
+        self.gmailContextService = gmailContextService
+        self.relatedEmailsModel = RelatedEmailsModel(provider: gmailContextService)
+        self.participantDirectoryService = participantDirectoryService // [M3-Participants]
+        self.contextRuleService = contextRuleService
+        self.jobQueue = jobQueue // [Track J]
+        self.meetingService = meetingService
+        self.promptActionService = promptActionService
+        self.calendarService = calendarService
+        self.captureService = captureService
+        self.startNotificationService = startNotificationService
+        self.endReminderService = endReminderService
+        self.llmService = llmService
+        self.languageService = languageService // [M2]
+        self.vaultService = vaultService
+        self.briefService = briefService
+        self.relatedDocsService = relatedDocsService // [M8]
+        self.folderMetadataStore = folderMetadataStore // [M7]
+        self.exporter = exporter
+        self.importService = importService
+        self.diarizationEnricher = diarizationEnricher
+        self.briefScheduler = briefScheduler // [Track D]
+        self.meetings = meetingService.meetings
+        self.templates = promptActionService.meetingActions
+        self.calendarAuthorizationStatus = calendarService.authorizationStatus
+        // [Google Phase 1 · M4] Seed the availability flag from both sources (D-G4).
+        self.hasAnyCalendarSource = Self.hasAnyCalendarSource(
+            authorization: calendarService.authorizationStatus,
+            accounts: googleAccountStore?.accounts ?? []
+        )
+        // [PR #7 review finding 5] …and the per-source problem flag, which is *not* the same
+        // question (see `showsSystemCalendarProblem`).
+        self.showsSystemCalendarProblem = Self.showsSystemCalendarProblem(
+            authorization: calendarService.authorizationStatus,
+            accounts: googleAccountStore?.accounts ?? [],
+            dismissed: false
+        )
+        self.upcomingEvents = calendarService.upcomingEvents
+        self.earlierEvents = calendarService.earlierEvents
+        self.calendarErrorMessage = calendarService.errorMessage
+        self.isVaultConnected = vaultService.isConnected
+        self.vaultName = vaultService.vaultName
+        // [Google Phase 3 · M5] Seed + recompute the D-M6 Gmail mirror on store `objectWillChange`
+        // (main-queue hop — the vaultPath re-check pattern below; `$accounts` alone would miss
+        // Gmail-toggle flips, D-M7).
+        self.isGmailConnected = gmailContextService?.isConnected ?? false
+        if let store = googleAccountStore {
+            store.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    let wasConnected = self.isGmailConnected
+                    let nowConnected = self.gmailContextService?.isConnected ?? false
+                    self.isGmailConnected = nowConnected
+                    // The flip is the single hook both related-emails corrections hang off: on
+                    // connect, refetch the meetings whose load early-returned while Gmail was off
+                    // (an already-open document never re-runs its `.task(id:)`); on disconnect,
+                    // drop the cached rows so the appendix gate stops advertising a count badge
+                    // over a section that can no longer render them.
+                    guard nowConnected != wasConnected else { return }
+                    let model = self.relatedEmailsModel
+                    Task { @MainActor in
+                        await model.connectionDidChange(isConnected: nowConnected)
+                    }
+                }
+                .store(in: &cancellables)
+        }
+
+        meetingService.$meetings
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] meetings in
+                self?.meetings = meetings
+            }
+            .store(in: &cancellables)
+
+        promptActionService.$meetingActions
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] templates in
+                self?.templates = templates
+            }
+            .store(in: &cancellables)
+
+        // [Track J] `isGeneratingOutput` is no longer a VM mirror of `llmService.$isGenerating` — the
+        // Generate spinner is now meeting-scoped, derived from the job queue via
+        // `isGeneratingOutput(for:)`, so it stays on the originating meeting across navigation (J1).
+        // Q&A activity IS mirrored (Q&A stays out of the queue) but is now a per-meeting set (J2).
+        llmService.$answeringMeetingIDs
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.answeringMeetingIDs = value }
+            .store(in: &cancellables)
+
+        calendarService.$authorizationStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self else { return }
+                self.calendarAuthorizationStatus = status
+                // [Google Phase 1 · M4] Both inputs of the availability flag flow through here
+                // or the `$accounts` sink below, so it can never go stale (D-G4). EventKit
+                // authorization also gates twin detection (no EventKit calendars ⇒ no twins).
+                self.recomputeHasAnyCalendarSource()
+                self.evaluateTwinPrompts()
+            }
+            .store(in: &cancellables)
+        // [Google Phase 1 · M4] Google connect state is the second leg of `hasAnyCalendarSource`
+        // (D-G4) — the store publishes every index change (connect, disconnect, status flip).
+        googleAccountStore?.$accounts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.recomputeHasAnyCalendarSource()
+                // [M4 review fix 3] Symmetry with the status/snapshot sinks: a disconnect (or an
+                // account change riding an index write) retracts or surfaces a pending twin
+                // prompt immediately instead of waiting for the next snapshot change.
+                self.evaluateTwinPrompts()
+            }
+            .store(in: &cancellables)
+        // [Google Phase 1 · M4] Snapshot changes re-run the same refresh as the 60 s tick, so new
+        // Google events appear without waiting for the next poll (D-G7) — and re-evaluate the
+        // pending twin prompts (D-G6: the first snapshot after connect can race the calendarList
+        // fetch, so unhandled accounts are re-checked on every change).
+        NotificationCenter.default.publisher(for: .googleCalendarSnapshotDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.loadUpcoming()
+                self.evaluateTwinPrompts()
+            }
+            .store(in: &cancellables)
+        calendarService.$upcomingEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] events in
+                guard let self else { return }
+                self.upcomingEvents = events
+                // [Google Phase 1 · M4 / PR #7 review finding 4] Collapse cross-provider CalDAV
+                // twins for the *automatic* consumers only: the published list above (and the
+                // Calendars selection UI) keeps both copies — D-G6 owns the visible half — but
+                // auto-created meetings, brief jobs on the cap-1 `llm` lane and start
+                // notifications must fire once per real event, not once per provider copy.
+                let deduplicated = CalendarEventTwinCollapser.collapse(events)
+                // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
+                self.startNotificationService.notifyStartingMeetings(deduplicated)
+                // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
+                self.briefScheduler.tick(events: deduplicated, now: Date())
+            }
+            .store(in: &cancellables)
+        calendarService.$earlierEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] events in
+                self?.earlierEvents = events
+            }
+            .store(in: &cancellables)
+        calendarService.$errorMessage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] message in
+                self?.calendarErrorMessage = message
+            }
+            .store(in: &cancellables)
+
+        captureService.$activeMeeting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] meeting in self?.activeMeeting = meeting }
+            .store(in: &cancellables)
+        captureService.$isCapturing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isCapturing = value }
+            .store(in: &cancellables)
+        captureService.$isFinalizing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isFinalizing = value }
+            .store(in: &cancellables)
+        // `removeDuplicates` guards the singleton VM's `objectWillChange` from firing (and rebuilding
+        // every transcript observer) on redundant republishes — the 350 ms live-preview poll and the
+        // 1 s elapsed timer frequently re-emit an unchanged value.
+        captureService.$liveTranscript
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.liveTranscript = value }
+            .store(in: &cancellables)
+        captureService.$elapsedSeconds
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in
+                guard let self else { return }
+                self.captureElapsedSeconds = value
+                // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs
+                // only while recording, so there are no idle wakeups. The reminder self-gates (linked
+                // calendar event required, past-end, once per meeting) inside the service.
+                self.evaluateMeetingEndReminder()
+            }
+            .store(in: &cancellables)
+        captureService.$isDegradedLiveMode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.isDegradedLiveMode = value }
+            .store(in: &cancellables)
+        captureService.$finalRetranscriptionDegraded
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.finalRetranscriptionDegraded = value }
+            .store(in: &cancellables)
+        captureService.$finalRetranscriptionDegradedMeetingID
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.finalRetranscriptionDegradedMeetingID = value }
+            .store(in: &cancellables)
+        captureService.$errorMessage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.captureErrorMessage = value }
+            .store(in: &cancellables)
+
+        vaultService.$vaultPath
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.isVaultConnected = self.vaultService.isConnected
+                self.vaultName = self.vaultService.vaultName
+            }
+            .store(in: &cancellables)
+        // [Track J] `isGeneratingBrief`, `isImporting`, `isEnriching`, and the auto-brief scheduler
+        // status are no longer VM mirrors: brief/import/diarization run as queue jobs and are surfaced
+        // via `isGeneratingBrief(for:)` / `isImporting()` / `isEnriching(for:)`, and the auto-brief
+        // status line is derived from the queue in `autoBriefStatusMessage`. Leaf views observe
+        // `JobQueueService.shared` directly for reactivity (plan §CC7).
+    }
+
+    var hasMeetings: Bool { !meetings.isEmpty }
+
+    /// Clear the per-meeting transient status/error banners. These are singleton `@Published` state
+    /// (each reset at the start of its own operation), so without this they persist across a meeting
+    /// switch and e.g. meeting A's "no speakers detected" status renders under meeting B (finding 7).
+    /// Called from the window when the selected meeting changes.
+    func clearTransientMessages() {
+        outputErrorMessage = nil
+        outputErrorNeedsProvider = false
+        briefErrorMessage = nil
+        briefErrorNeedsProvider = false
+        qaErrorMessage = nil
+        qaErrorNeedsProvider = false
+        exportErrorMessage = nil
+        diarizationErrorMessage = nil
+        diarizationStatusMessage = nil
+        diarizationStatusOutcome = nil
+    }
+
+    /// True when a caught generation error is specifically "no LLM provider configured", so the
+    /// document UI can surface an actionable deep link instead of a dead-end message.
+    private func needsProviderSetup(_ error: Error) -> Bool {
+        (error as? LLMError)?.isNoProviderConfigured ?? false
+    }
+
+    /// Deep-link the user from the meeting document into Settings › Library › Prompts, where the
+    /// default LLM provider is chosen. Opens the Settings window if it isn't already visible.
+    func openProviderSettings() {
+        SettingsNavigationCoordinator.shared?.navigate(to: .prompts)
+        ManagedAppWindowOpener.shared.open(id: AppWindowID.settings)
+    }
+
+    // MARK: - Calendar
+
+    var isCalendarAuthorized: Bool { calendarAuthorizationStatus == .authorized }
+
+    // MARK: - Calendar source availability + twin prompts ([Google Phase 1 · M4])
+
+    /// The D-G4 availability rule as a pure static so it is unit-testable without the full view
+    /// model (`CalendarSourceAvailabilityTests`): a calendar source exists when the primary
+    /// (EventKit) provider is authorized **or** ≥ 1 Google account is `.connected` — an account
+    /// stuck in `.needsReauth` is not a working source (its provider drops out of `.authorized`).
+    nonisolated static func hasAnyCalendarSource(
+        authorization: CalendarAuthorizationStatus,
+        accounts: [GoogleAccount]
+    ) -> Bool {
+        authorization == .authorized || accounts.contains { $0.status == .connected }
+    }
+
+    /// [PR #7 review finding 5] Whether the "macOS Calendar access denied" per-source row belongs
+    /// on screen. Distinct from `hasAnyCalendarSource`, which answers "is there *any* source":
+    ///
+    /// - EventKit denied/restricted **and no** working Google account ⇒ `false` — the connect-card
+    ///   / denied-state path already owns that screen; two errors would stack.
+    /// - EventKit denied/restricted **with** a connected Google account ⇒ `true` — the app renders
+    ///   events happily while the user's iCloud/Exchange/local calendars are silently missing,
+    ///   which reads as "the app lost half my meetings" (D-G4's suppression of the error message
+    ///   is correct for the *gate*, not for the user's mental model).
+    /// - EventKit fine (whatever Google's state) ⇒ `false` — a Google account in `.needsReauth`
+    ///   surfaces on its own settings row, not here.
+    ///
+    /// Pure static so the matrix is unit-testable without the view model.
+    nonisolated static func showsSystemCalendarProblem(
+        authorization: CalendarAuthorizationStatus,
+        accounts: [GoogleAccount],
+        dismissed: Bool
+    ) -> Bool {
+        guard !dismissed else { return false }
+        guard authorization == .denied || authorization == .restricted else { return false }
+        return hasAnyCalendarSource(authorization: authorization, accounts: accounts)
+    }
+
+    private func recomputeHasAnyCalendarSource() {
+        let accounts = googleAccountStore?.accounts ?? []
+        hasAnyCalendarSource = Self.hasAnyCalendarSource(
+            authorization: calendarAuthorizationStatus,
+            accounts: accounts
+        )
+        showsSystemCalendarProblem = Self.showsSystemCalendarProblem(
+            authorization: calendarAuthorizationStatus,
+            accounts: accounts,
+            dismissed: systemCalendarProblemDismissed
+        )
+    }
+
+    /// [PR #7 review finding 5] Hide the per-source problem row for this launch.
+    func dismissSystemCalendarProblem() {
+        systemCalendarProblemDismissed = true
+        recomputeHasAnyCalendarSource()
+    }
+
+    /// Re-run twin detection (D-G6) over the fanned-in calendar list for every not-yet-handled
+    /// Google account. Called on every snapshot change and on EventKit status changes; pure logic
+    /// lives in `TwinCalendarDetector.prompts`.
+    private func evaluateTwinPrompts() {
+        guard let googleAccountStore else {
+            twinCalendarPrompts = []
+            return
+        }
+        twinCalendarPrompts = TwinCalendarDetector.prompts(
+            accounts: googleAccountStore.accounts,
+            eventKitAuthorized: calendarAuthorizationStatus == .authorized,
+            calendars: calendarService.availableCalendars(),
+            isHandled: googleAccountStore.isTwinPromptHandled
+        )
+    }
+
+    /// Resolve a pending twin prompt (D-G6): **Hide duplicates** deselects the twin EventKit
+    /// calendars through the normal selection choke point (reversible in the Calendars list);
+    /// **Keep both** does nothing. Either choice records the account's `sub` as handled through
+    /// the store's single-writer seam, so the prompt never returns for this account.
+    func resolveTwinPrompt(_ prompt: TwinCalendarPrompt, hideDuplicates: Bool, now: Date = Date()) {
+        if hideDuplicates {
+            for twin in prompt.twins {
+                calendarService.setCalendarSelected(false, for: twin.id)
+            }
+            // [PR #7 review finding 7] The Calendars section renders from a local `@State` row
+            // snapshot; without this bump its checkboxes keep showing the just-hidden calendars as
+            // selected (and clicking one only re-sends the same deselection).
+            calendarSelectionRevision += 1
+            loadUpcoming(now: now)
+        }
+        googleAccountStore?.markTwinPromptHandled(prompt.accountID)
+        twinCalendarPrompts.removeAll { $0.accountID == prompt.accountID }
+    }
+
+    /// Prompt for calendar access; refreshes the upcoming list on success.
+    func requestCalendarAccess() async {
+        await calendarService.requestAccess()
+        loadUpcoming()
+    }
+
+    /// Re-query upcoming/current events, excluding any that already back a stored meeting.
+    func loadUpcoming(now: Date = Date()) {
+        calendarService.refresh(
+            now: now,
+            existingCalendarEventIDs: existingCalendarEventIDs
+        )
+    }
+
+    /// Whether an upcoming event is happening right now (for the "in progress" badge).
+    func isCurrent(_ event: CalendarEventDTO, now: Date = Date()) -> Bool {
+        CalendarService.isCurrent(event, now: now)
+    }
+
+    /// [M10] Time-based classification for an event (drives the "in progress" / "ended" badges and
+    /// the upcoming-vs-earlier sectioning).
+    func timeStatus(for event: CalendarEventDTO, now: Date = Date()) -> CalendarService.EventTimeStatus {
+        CalendarService.timeStatus(for: event, now: now)
+    }
+
+    /// [M10] The stored meeting already backing a calendar event, if any — lets an Earlier-section
+    /// row navigate to an existing meeting instead of creating a duplicate.
+    func existingMeeting(for event: CalendarEventDTO) -> Meeting? {
+        meetingService.meetings.first { $0.calendarEventID == event.id }
+    }
+
+    /// [M10] Dismiss an overrunning (recently-ended) event from the Upcoming section for this
+    /// session — the "dismiss" arm of "visible until created / started / dismissed".
+    func dismissEvent(_ event: CalendarEventDTO) {
+        calendarService.dismiss(eventID: event.id)
+    }
+
+    /// [M10] Request that the Meetings window navigate to / focus `meeting`.
+    func requestFocus(on meeting: Meeting) {
+        pendingFocusMeetingID = meeting.id
+    }
+
+    // MARK: - Calendar selection (M11)
+
+    /// Rows for the "Calendars" settings list: every macOS calendar plus whether it is selected.
+    func calendarSelectionRows() -> [CalendarSelectionRow] {
+        Self.makeCalendarRows(
+            calendars: calendarService.availableCalendars(),
+            isSelected: calendarService.isCalendarSelected
+        )
+    }
+
+    /// Toggle a calendar's inclusion, then re-query so the Upcoming/Earlier lists (and thereby the
+    /// scheduler + notifications, which consume them) immediately reflect the change.
+    func setCalendarSelected(_ selected: Bool, for calendarID: String, now: Date = Date()) {
+        calendarService.setCalendarSelected(selected, for: calendarID)
+        calendarSelectionRevision += 1
+        loadUpcoming(now: now)
+    }
+
+    /// Batched inclusion toggle for a whole selection group ([Google Phase 1 · settings polish]):
+    /// one service republish + one re-query for N calendars, instead of N of each through the
+    /// single-calendar path.
+    func setCalendarsSelected(_ selected: Bool, for calendarIDs: [String], now: Date = Date()) {
+        calendarService.setCalendarsSelected(selected, for: calendarIDs)
+        calendarSelectionRevision += 1
+        loadUpcoming(now: now)
+    }
+
+    /// Pure list-rendering projection for the "Calendars" settings section (M11), unit-testable
+    /// without EventKit or the full view model: pairs each calendar with its selection state and
+    /// sorts by account then title for a stable order.
+    static func makeCalendarRows(
+        calendars: [CalendarInfo],
+        isSelected: (String) -> Bool
+    ) -> [CalendarSelectionRow] {
+        calendars
+            .sorted { lhs, rhs in
+                if lhs.sourceName != rhs.sourceName { return lhs.sourceName < rhs.sourceName }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+            .map { CalendarSelectionRow(calendar: $0, isSelected: isSelected($0.id)) }
+    }
+
+    /// [M10] Clear a pending focus request once the window has honoured it.
+    func consumeFocusRequest() {
+        pendingFocusMeetingID = nil
+    }
+
+    /// Create (or return the existing) `.scheduled` meeting for a calendar event, deduping by
+    /// `calendarEventID`. Refreshes the upcoming list so the created event drops out of it.
+    @discardableResult
+    func createMeeting(from event: CalendarEventDTO) -> Meeting {
+        // Read the authoritative synchronous source, not the Combine-mirrored `self.meetings`
+        // (updated via `$meetings.receive(on: .main)`, an async hop even on main). Using the
+        // stale copy would let a rapid double-click insert a duplicate and would leave the
+        // just-created event in the upcoming list until the next poll.
+        if let existing = meetingService.meetings.first(where: { $0.calendarEventID == event.id }) {
+            return existing
+        }
+        let projection = CalendarService.meetingProjection(for: event)
+        let meeting = meetingService.createMeeting(
+            title: projection.title,
+            source: .calendar,
+            state: .scheduled,
+            startDate: projection.startDate,
+            endDate: projection.endDate,
+            calendarEventID: projection.calendarEventID,
+            seriesID: projection.seriesID,
+            attendees: projection.attendees,
+            calendarNotes: projection.calendarNotes,
+            conferencingURL: projection.conferencingURL
+        )
+        loadUpcoming()
+        return meeting
+    }
+
+    // MARK: - Meeting identity: rename / date / calendar linking
+
+    /// Rename a meeting from the document header's inline title editor. Routes through the
+    /// single-writer `MeetingService.setTitle`, which never touches calendar linkage
+    /// (`calendarEventID` / `seriesID` / `attendees`), so the upcoming-list dedupe and prior-meeting
+    /// matching keep recognizing the renamed meeting (owner requirement 1).
+    func renameMeeting(_ meeting: Meeting, to title: String) {
+        meetingService.setTitle(title, for: meeting)
+    }
+
+    /// Whether the document should offer an editable date chip: only for meetings **not** linked to
+    /// a calendar event (ad-hoc + imported). A linked meeting's date is owned by its event. Pure so
+    /// the visibility rule is unit-testable without the full view model (owner requirement 2).
+    nonisolated static func showsDateEditor(calendarEventID: String?) -> Bool {
+        calendarEventID == nil
+    }
+
+    /// Set (or clear) an unlinked meeting's date via the single-writer `MeetingService.setMeetingDate`
+    /// — the same `startDate` the timeline day-grouping, prior-meeting matching, and related-docs
+    /// signals read (owner requirement 2). Callers gate on `showsDateEditor`.
+    func setMeetingDate(_ date: Date?, for meeting: Meeting) {
+        meetingService.setMeetingDate(date, for: meeting)
+    }
+
+    /// Ranked candidate events for the "Link to calendar event…" picker (owner requirement 3):
+    /// historical events within `± window` of the meeting's date, optionally narrowed by the search
+    /// field, ordered by title similarity + date proximity. Empty when calendar access is not
+    /// granted.
+    func linkCandidates(
+        for meeting: Meeting,
+        query: String = "",
+        window: TimeInterval = CalendarService.defaultLinkWindow
+    ) -> [CalendarEventDTO] {
+        let reference = meeting.startDate ?? meeting.createdAt
+        let raw = calendarService.linkCandidates(around: reference, window: window)
+        let filtered = CalendarService.filterLinkCandidates(raw, query: query)
+        return CalendarService.rankedLinkCandidates(
+            events: filtered,
+            targetTitle: meeting.title,
+            targetDate: reference,
+            window: window
+        )
+    }
+
+    /// Link a meeting to a chosen historical calendar event: adopt its id/series/attendees and
+    /// start date (title only if the meeting's is empty/default) via `MeetingService`, then refresh
+    /// the upcoming list so the newly-backed event drops out of it (owner requirement 3).
+    func linkMeeting(_ meeting: Meeting, to event: CalendarEventDTO) {
+        let projection = CalendarService.meetingProjection(for: event)
+        meetingService.linkToCalendarEvent(
+            calendarEventID: projection.calendarEventID,
+            seriesID: projection.seriesID,
+            title: projection.title,
+            startDate: projection.startDate,
+            endDate: projection.endDate,
+            attendees: projection.attendees,
+            calendarNotes: projection.calendarNotes,
+            conferencingURL: projection.conferencingURL,
+            for: meeting
+        )
+        loadUpcoming()
+    }
+
+    /// Unlink a meeting from its calendar event (keeps all content), then refresh the upcoming list
+    /// so the freed event can reappear as an upcoming/earlier candidate (owner requirement 3).
+    func unlinkMeeting(_ meeting: Meeting) {
+        meetingService.unlinkCalendarEvent(for: meeting)
+        loadUpcoming()
+    }
+
+    // MARK: - Bulk / context-menu actions (plan LX-2, D4/D5/D6)
+
+    /// The multi-selected meetings — `selectedMeetingIDs` intersected with the list, in list order.
+    /// The bulk context-menu actions operate over this set.
+    func selectedMeetings() -> [Meeting] {
+        meetings.filter { selectedMeetingIDs.contains($0.id) }
+    }
+
+    /// Delete a single meeting (context-menu "Delete"), removing its audio blob, its action-item
+    /// checklist state, and dropping it from the selection. Callers gate on a confirmation dialog.
+    ///
+    /// Parity fix (review finding, mirrors the merge crash fixes): `meetingService.deleteMeeting`
+    /// deletes the row synchronously, so `id` is captured *before* that call — reading `.id` off the
+    /// argument afterward would hit the same "backing data could no longer be found" trap the merge
+    /// fixes guard against. Its queued/running jobs are cancelled first too, for the same reason a
+    /// merge cancels an absorbed meeting's jobs: a job closure holding this `Meeting` must not resume
+    /// against a deleted row.
+    func deleteMeeting(_ meeting: Meeting) {
+        let id = meeting.id
+        jobQueue.cancelAll(for: id)
+        meetingService.deleteMeeting(meeting)
+        MeetingChecklistStore.shared.removeAll(meetingID: id)
+        selectedMeetingIDs.remove(id)
+    }
+
+    /// Delete a set of meetings in one save (bulk "Delete N meetings"), dropping them from the
+    /// selection. Callers gate on a count-aware confirmation dialog. No-op on an empty set. Same
+    /// parity fix as `deleteMeeting`: ids captured up front, jobs cancelled before the rows go away.
+    func deleteMeetings(_ meetings: [Meeting]) {
+        guard !meetings.isEmpty else { return }
+        let ids = meetings.map(\.id)
+        for id in ids { jobQueue.cancelAll(for: id) }
+        meetingService.deleteMeetings(meetings)
+        for id in ids {
+            MeetingChecklistStore.shared.removeAll(meetingID: id)
+        }
+        selectedMeetingIDs.subtract(ids)
+    }
+
+    /// Orchestrates the bulk "Merge N meetings…" action. Constructed over the meetings store's
+    /// single writer; v1 uses the deterministic conflict resolver (see
+    /// `DeterministicMergeConflictResolver` for why no LLM is wired yet).
+    private lazy var mergeService = MeetingMergeService(meetingService: meetingService)
+
+    /// Merge the given meetings into one (bulk context-menu "Merge N meetings…"). The deterministic
+    /// planner assembles the best data; absorbed meetings are deleted, their checklist state
+    /// dropped (like `deleteMeetings`), and the selection collapses to the surviving meeting.
+    /// Callers gate on a confirmation dialog and `MeetingMergeService.canMerge`.
+    ///
+    /// Crash/leak traps this guards against (review findings):
+    ///  1. `meetings` are live `@Model` rows *now*, but `applyMerge` deletes the absorbed ones. Every
+    ///     id this function needs after the `await` — for checklist cleanup — is captured up front;
+    ///     nothing below the `await` ever reads a property off one of the (possibly-deleted)
+    ///     `meetings` elements (`PersistentModel.isDeletedFromStore`'s "backing data could no longer
+    ///     be found" trap).
+    ///  2. A queued/running job can hold a strong reference to a `Meeting` that is about to be
+    ///     absorbed (`generateOutput`'s job closure captures the model directly, keyed by its id for
+    ///     dedupe) — left alone, that closure could resume against a deleted row mid-merge. Fixed via
+    ///     `MeetingMergeService.merge`'s `willAbsorb` pre-apply seam rather than a second plan
+    ///     computed here: an earlier version of this fix re-planned locally (over the same pure
+    ///     `MeetingMergePlanner`) to learn the about-to-be-absorbed ids ahead of time, but that is a
+    ///     SECOND plan over the same live rows — main-actor work between this call and `merge`'s own
+    ///     internal re-snapshot (a running transcription appending a segment, a caption-bridge resume,
+    ///     a state flip) can make the two plans disagree, cancelling the wrong meeting's jobs. Worse,
+    ///     `merge` can still refuse (return `nil`) for reasons this function cannot see, by which point
+    ///     the side effects had already run. `willAbsorb` fires exactly once, from *inside* `merge`,
+    ///     with the one plan that is actually about to be applied — cancellation and abort can no
+    ///     longer diverge. `cancelAllAndWait` (not `cancelAll`) is used here specifically because this
+    ///     seam runs immediately before `applyMerge` deletes the row: a merely-*requested* cancellation
+    ///     on a still-running job is not enough guarantee at that point.
+    ///  3. If an absorbed meeting's document is open, back out first — mirrors `MeetingDocumentHeader`'s
+    ///     delete flow (leave before the row disappears under the open document). `MainWindowCoordinator`
+    ///     is nil-guarded (not force-unwrapped via `.shared`) so this VM method stays callable from a
+    ///     unit test that never sets the coordinator singleton.
+    func mergeMeetings(_ meetings: [Meeting]) {
+        guard MeetingMergeService.canMerge(meetings) else { return }
+        let targetIDs = meetings.map(\.id)
+
+        Task { [weak self] in
+            guard let self else { return }
+            guard let merged = await self.mergeService.merge(meetings, willAbsorb: { [weak self] absorbedIDs in
+                guard let self else { return }
+                for id in absorbedIDs {
+                    await self.jobQueue.cancelAllAndWait(for: id)
+                }
+                if let coordinator = MainWindowCoordinator.shared,
+                   case let .meeting(openID) = coordinator.route,
+                   absorbedIDs.contains(openID) {
+                    coordinator.show(.meetings)
+                }
+            }) else { return }
+            for id in targetIDs where id != merged.id {
+                MeetingChecklistStore.shared.removeAll(meetingID: id)
+            }
+            self.selectedMeetingIDs = [merged.id]
+        }
+    }
+
+    /// Generate a summary for a meeting using its default summary template (context-menu "Generate
+    /// summary"). Enqueues an `llm`-lane `.summary` job via `generateOutput`; the queue's
+    /// `(kind, meetingID)` dedupe collapses a double-fire. Surfaces an error when no summary template
+    /// exists (the picker is normally seeded, so this is a defensive fallback).
+    func generateSummary(for meeting: Meeting) {
+        guard let template = defaultTemplate(ofKind: .summary, for: meeting) else {
+            outputErrorMessage = String(localized: "meetings.menu.generate.noTemplate")
+            outputErrorNeedsProvider = false
+            return
+        }
+        generateOutput(for: meeting, using: template)
+    }
+
+    /// Bulk "Generate summaries": one `.summary` llm-lane job per meeting. The cap-1 `llm` lane
+    /// serializes the provider and the `(summary, meetingID)` dedupe prevents doubles (plan LX-2 D6).
+    func generateSummaries(for meetings: [Meeting]) {
+        for meeting in meetings { generateSummary(for: meeting) }
+    }
+
+    /// Bulk "Generate briefs": one `.brief` llm-lane job per meeting, deduped on `(brief, meetingID)`
+    /// (plan LX-2 D6).
+    func generateBriefs(for meetings: [Meeting]) {
+        for meeting in meetings { generateBrief(for: meeting) }
+    }
+
+    /// Default export sections for a one-click (context-menu) export — the export sheet's defaults.
+    static let defaultExportSections: [MeetingExportSection] = [.summary, .transcript, .notes]
+
+    /// Export a single meeting to the connected vault via the `.export` job (context-menu "Export to
+    /// vault"). See `enqueueExport` — this is the first real use of the `.export` io lane (plan LX-2 D6).
+    func exportToVault(_ meeting: Meeting) {
+        enqueueExport([meeting])
+    }
+
+    /// Bulk "Export to vault": one `.export` io-lane job per meeting. The `io` lane is unbounded so the
+    /// exports run in parallel without blocking the UI; each records `recordObsidianExport` on success
+    /// so the "In vault" badge appears as each completes (plan LX-2 D6).
+    func exportToVault(_ meetings: [Meeting]) {
+        enqueueExport(meetings)
+    }
+
+    /// Enqueue a `.export` job per meeting on the `io` lane (plan LX-2 D6 — the first `.export`
+    /// enqueue; export was synchronous before). The operation runs the existing synchronous exporter
+    /// off the button, records a real export on success, and rethrows on failure so the job settles
+    /// `.failed` for the activity popover.
+    private func enqueueExport(
+        _ meetings: [Meeting],
+        sections: [MeetingExportSection] = MeetingsViewModel.defaultExportSections,
+        combined: Bool = false
+    ) {
+        exportErrorMessage = nil
+        for meeting in meetings {
+            jobQueue.enqueue(
+                kind: .export,
+                meetingID: meeting.id,
+                progressLabel: String(localized: "meetings.jobs.progress.exporting")
+            ) { [weak self] in
+                guard let self else { return }
+                do {
+                    // Off-main write: `exportOffMain` renders the meeting on the MainActor then hands
+                    // the file I/O to a detached task, so the unbounded io lane's bulk exports overlap
+                    // on disk instead of blocking the UI (plan LX-2 D6). Resumes on the MainActor.
+                    let urls = try await self.exporter.exportOffMain(meeting, sections: sections, combined: combined)
+                    if !urls.isEmpty {
+                        self.meetingService.recordObsidianExport(for: meeting)
+                    }
+                } catch {
+                    self.exportErrorMessage = error.localizedDescription
+                    throw error
+                }
+            }
+        }
+    }
+
+    // MARK: - Capture (M3)
+
+    var canStartCapture: Bool { !isCapturing }
+
+    /// Create an ad-hoc meeting so capture never hard-depends on the calendar (plan §1).
+    @discardableResult
+    func createAdHocMeeting(title: String? = nil) -> Meeting {
+        let resolved = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTitle = (resolved?.isEmpty == false) ? resolved! : String(localized: "meetings.adHoc.defaultTitle")
+        return meetingService.createMeeting(title: finalTitle, source: .adHoc, state: .scheduled, startDate: Date())
+    }
+
+    /// Start live capture for an existing meeting. Surfaces a localized error (e.g. the Recorder
+    /// currently owns the capture stack) via `captureErrorMessage`. `calendarName` (the originating
+    /// calendar's source-list name) feeds the AD7 calendar-name rule tier; nil for ad-hoc captures.
+    func startCapture(for meeting: Meeting, calendarName: String? = nil) async {
+        captureErrorMessage = nil
+        do {
+            try await captureService.start(meeting: meeting, calendarName: calendarName)
+        } catch {
+            captureErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Create an ad-hoc meeting and immediately begin capturing it.
+    func startAdHocCapture(title: String? = nil) async {
+        let meeting = createAdHocMeeting(title: title)
+        await startCapture(for: meeting)
+    }
+
+    /// Create an ad-hoc meeting and begin capturing, guarding synchronously against a concurrent
+    /// capture so a rapid double-click on "New Meeting" cannot persist a stray empty meeting
+    /// (M3 review finding 2). Returns the created meeting, or `nil` if capture was already in
+    /// progress (nothing is created) or start failed (the just-created meeting is removed).
+    @discardableResult
+    func createAndStartAdHocCapture(title: String? = nil) async -> Meeting? {
+        // Authoritative *synchronous* flag on the capture service, not the Combine-mirrored
+        // `self.isCapturing` (a main-queue hop behind). A second click arriving during the first
+        // `start()`'s suspension is rejected here before it can create a second meeting.
+        // Also refuse while a previous session is finalizing (its recorder/buffer are being torn
+        // down), matching `start()`'s guard (finding 2).
+        guard !captureService.isCapturing, !captureService.isFinalizing else { return nil }
+        let meeting = createAdHocMeeting(title: title)
+        do {
+            try await captureService.start(meeting: meeting)
+            return meeting
+        } catch {
+            captureErrorMessage = error.localizedDescription
+            // start() never took ownership (recorderBusy / alreadyCapturing); the just-created
+            // empty meeting would otherwise linger as a stray row. Remove it.
+            meetingService.deleteMeeting(meeting)
+            return nil
+        }
+    }
+
+    /// [M10] Menu-bar entry point ("Start Meeting Recording"): create an ad-hoc meeting, start
+    /// capture, and return it so the caller can focus the window on it. If a capture is already in
+    /// progress (or finalizing) the mutual-exclusion guard surfaces a localized busy message via
+    /// `captureErrorMessage` — never a crash — and returns the already-active meeting so the window
+    /// can focus that instead of silently doing nothing.
+    @discardableResult
+    func startMeetingRecordingFromMenu() async -> Meeting? {
+        // Authoritative synchronous flags on the capture service (not the Combine-mirrored copies).
+        guard !captureService.isCapturing, !captureService.isFinalizing else {
+            captureErrorMessage = String(localized: "meetings.recording.alreadyActive")
+            return captureService.activeMeeting
+        }
+        return await createAndStartAdHocCapture()
+    }
+
+    /// Create (or reuse) the meeting backing a calendar event, then begin capture.
+    func startCapture(from event: CalendarEventDTO) async {
+        let meeting = createMeeting(from: event)
+        // Thread the event's calendar (source-list) name through so a calendar-name capture-context
+        // rule (AD7) can match — it is not persisted on `Meeting`, so it must ride the start call.
+        await startCapture(for: meeting, calendarName: event.calendarName)
+    }
+
+    func stopCapture() async {
+        await captureService.stop()
+    }
+
+    /// Owner request 2: evaluate the end-of-meeting stop reminder against the *authoritative* capture
+    /// service state (not the Combine-mirrored copies, which lag a main-queue hop). Fires at most one
+    /// local notification per meeting when a calendar-linked meeting's scheduled end has passed and it
+    /// is still recording; the service excludes ad-hoc meetings and dedupes per session.
+    private func evaluateMeetingEndReminder() {
+        guard captureService.isCapturing, let meeting = captureService.activeMeeting else { return }
+        endReminderService.evaluate(
+            meetingTitle: meeting.title,
+            calendarEventID: meeting.calendarEventID,
+            scheduledEnd: meeting.endDate,
+            isRecording: true,
+            sessionKey: meeting.id.uuidString
+        )
+    }
+
+    /// Add an in-meeting note to the active capture, timestamped with elapsed seconds.
+    func addNote(_ text: String) {
+        captureService.addNote(text)
+    }
+
+    // MARK: - Outputs & templates (M4)
+
+    /// Templates of a given output kind, in sort order (drives the generate menus).
+    func templates(ofKind kind: MeetingOutputKind) -> [PromptAction] {
+        meetingService.templates(ofKind: kind)
+    }
+
+    /// The newest output of a kind for a meeting (what the detail view surfaces).
+    func latestOutput(ofKind kind: MeetingOutputKind, for meeting: Meeting) -> MeetingOutput? {
+        meetingService.latestOutput(ofKind: kind, for: meeting)
+    }
+
+    /// Generate (or regenerate) an output for a meeting from a template. Regeneration inserts a
+    /// new row; the detail view shows the newest per kind. Surfaces failures via `outputErrorMessage`.
+    ///
+    /// [Track J] Routed through the job queue (plan J1): the actual LLM call runs on the `llm` lane
+    /// (cap 1) as a `summary`/`extendedAnalysis` job. Enqueue is synchronous — the button no longer
+    /// awaits — and a second click while the job is queued/running is deduped by `(kind, meetingID)`,
+    /// so exactly one `MeetingOutput` is produced. A thrown error is recorded for the document's
+    /// "needs provider" deep link *and* rethrown so the job is marked `.failed` for the J3 popover.
+    ///
+    /// [M5/D10] `providerOverride`/`modelOverride` are a one-shot pick from the Generate/Regenerate
+    /// menu's "For this run" submenu: they win the routing ladder for this run only and persist nowhere
+    /// (the output's provenance still records what actually ran). Both default nil = today's behavior.
+    func generateOutput(
+        for meeting: Meeting,
+        using template: PromptAction,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) {
+        outputErrorMessage = nil
+        outputErrorNeedsProvider = false
+        // Three-way kind mapping so a `.brief` template enqueues as `.brief` (not `.summary`): the
+        // auto-brief dedupe on `(brief, meetingID)` and the brief-scoped spinner depend on the job
+        // carrying the correct kind. `.extended` → `.extendedAnalysis`; everything else → `.summary`.
+        //
+        // DEDUPE-PRIORITY (J2 review finding 2): a user-selected `.brief` template shares the
+        // `(brief, meetingID)` dedupe key with the auto-brief scheduler's `.background` jobs. Sharing
+        // the key is intentional — both produce the same brief output — but this enqueue is
+        // `.userInitiated` (the default), so if it dedupes against a still-`.queued` background
+        // auto-brief, `JobQueueService.enqueue` promotes that queued job to `.userInitiated` and the
+        // user no longer waits behind background work. See the promotion note in `JobQueueService`.
+        let kind: MeetingJobKind
+        switch template.meetingKind {
+        case .extended: kind = .extendedAnalysis
+        case .brief: kind = .brief
+        default: kind = .summary
+        }
+        jobQueue.enqueue(
+            kind: kind,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.generating")
+        ) { [weak llmService, weak self] in
+            guard let llmService else { return }
+            do {
+                _ = try await llmService.generateOutput(
+                    for: meeting, using: template,
+                    providerOverride: providerOverride, modelOverride: modelOverride
+                )
+            } catch {
+                self?.recordOutputError(error)
+                throw error
+            }
+        }
+    }
+
+    /// Publish an output-generation failure for the document body (the "needs provider" deep link).
+    /// Split out of `generateOutput` so the job-queue closure can record it before rethrowing.
+    private func recordOutputError(_ error: Error) {
+        outputErrorMessage = error.localizedDescription
+        outputErrorNeedsProvider = needsProviderSetup(error)
+    }
+
+    /// Whether an LLM-lane job (summary/extended today; brief once J2 routes it) is in flight for
+    /// this meeting — drives the bottom bar's Generate spinner. Meeting-scoped so it does not follow
+    /// navigation (the bug J1 targets).
+    func isGeneratingOutput(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(inLane: .llm, meetingID: meeting.id)
+    }
+
+    /// Toggle whether in-meeting notes are folded into generated outputs.
+    func setNotesIncluded(_ included: Bool, for meeting: Meeting) {
+        meetingService.setNotesIncludedInOutputs(included, for: meeting)
+    }
+
+    func deleteOutput(_ output: MeetingOutput) {
+        meetingService.deleteOutput(output)
+    }
+
+    // MARK: - One-shot model overrides (M5 / D10)
+
+    /// [M5/D10] "Save as default…" for a **templated** run (summary/brief): persist the one-shot pick as
+    /// the template's own `providerType`/`cloudModel` default, so it takes effect for every future run of
+    /// this template. Target-aware per adjudication Part A #6 — a summary/brief run is driven by a
+    /// `PromptAction`, and saving to the *purpose* setting would be silently masked by the template's own
+    /// override, so the template is the honest target. Empty strings clear back to "Use app default".
+    func saveModelDefaultToTemplate(provider: String?, model: String?, for template: PromptAction) {
+        promptActionService.setModelDefault(provider: provider, model: model, for: template)
+    }
+
+    /// [M5/D10] "Save as default…" for a **template-less** purpose (Q&A and other purposes with no
+    /// template rung): persist the one-shot pick as that purpose's setting (adjudication Part A #6). Empty
+    /// strings clear back to "Use app default". Provider and model are stored on the purpose's own keys.
+    func saveModelDefaultToPurpose(provider: String?, model: String?, for purpose: MeetingModelPurpose) {
+        let defaults = UserDefaults.standard
+        let trimmedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        defaults.set(trimmedProvider, forKey: purpose.providerDefaultsKey)
+        defaults.set(trimmedModel, forKey: purpose.modelDefaultsKey)
+    }
+
+    // MARK: - Knowledge base & brief (M5)
+
+    /// Auto-detect and connect the most-recently-opened Obsidian vault, if any.
+    @discardableResult
+    func autoConnectVault() -> Bool {
+        vaultService.autoConnect()
+    }
+
+    /// Present a folder picker to choose a vault manually.
+    func chooseVault() {
+        vaultService.chooseVault()
+    }
+
+    /// Forget the connected vault.
+    func disconnectVault() {
+        vaultService.disconnect()
+    }
+
+    /// Detected Obsidian vaults (most-recent first) for a manual connect menu.
+    func detectedVaults() -> [ObsidianVaultService.VaultInfo] {
+        ObsidianVaultService.detectVaults()
+    }
+
+    func connectVault(to path: String) {
+        vaultService.connect(to: path)
+    }
+
+    /// Generate (or regenerate) a pre-meeting brief for a meeting from prior related meetings and
+    /// the connected knowledge base. Surfaces failures via `briefErrorMessage`.
+    ///
+    /// [Track J] Routed through the job queue (plan J2): a `.brief` job on the `llm` lane (cap 1),
+    /// deduped on `(brief, meetingID)`, so a user brief and the auto-brief scheduler never run two LLM
+    /// calls at once for the same meeting and a double-click produces one brief. Enqueue is synchronous.
+    ///
+    /// [M5/D10] `providerOverride`/`modelOverride` are a one-shot pick from the brief's Generate menu:
+    /// they win the ladder for this run only and persist nowhere. Both default nil = today's behavior.
+    func generateBrief(
+        for meeting: Meeting,
+        providerOverride: String? = nil,
+        modelOverride: String? = nil
+    ) {
+        briefErrorMessage = nil
+        briefErrorNeedsProvider = false
+        jobQueue.enqueue(
+            kind: .brief,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.generating")
+        ) { [weak briefService, weak self] in
+            guard let briefService else { return }
+            do {
+                _ = try await briefService.generateBrief(
+                    for: meeting, providerOverride: providerOverride, modelOverride: modelOverride
+                )
+            } catch {
+                self?.recordBriefError(error)
+                throw error
+            }
+        }
+    }
+
+    /// Publish a brief-generation failure for the brief view (the "needs provider" deep link). Split
+    /// out so the job-queue closure can record it before rethrowing (which marks the job `.failed`).
+    private func recordBriefError(_ error: Error) {
+        briefErrorMessage = error.localizedDescription
+        briefErrorNeedsProvider = needsProviderSetup(error)
+    }
+
+    /// Whether a `.brief` job is in flight for this meeting — drives the brief view spinner.
+    /// Meeting-scoped so it does not follow navigation.
+    func isGeneratingBrief(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(kind: .brief, meetingID: meeting.id)
+    }
+
+    // MARK: - In-meeting Q&A (M6)
+
+    /// Ask a question against a meeting's transcript-so-far plus the connected knowledge base and
+    /// prior turns. During live capture of this meeting the transcript is scoped to elapsed time so
+    /// the answer can't draw on words spoken after the question. Persists one `MeetingQATurn` on
+    /// success; surfaces failures via `qaErrorMessage`. Returns `true` on success so the composer can
+    /// keep the user's typed question on failure (M6 review finding 4) instead of losing it.
+    @discardableResult
+    func askQuestion(_ question: String, for meeting: Meeting) async -> Bool {
+        qaErrorMessage = nil
+        qaErrorNeedsProvider = false
+        // Scope on the *meeting timeline* (session-relative elapsed + `sessionTimeOffset`), matching
+        // persisted `segment.start` values, so a restarted session's Q&A doesn't drop nearly the
+        // whole transcript through the composer's `segment.start <= offset` filter (finding 1).
+        let offset: Double? = (isCapturing && activeMeeting?.id == meeting.id) ? captureService.meetingTimelineElapsed : nil
+        do {
+            try await llmService.answerQuestion(for: meeting, question: question, asOfOffset: offset)
+            return true
+        } catch {
+            qaErrorMessage = error.localizedDescription
+            qaErrorNeedsProvider = needsProviderSetup(error)
+            return false
+        }
+    }
+
+    /// Whether a Q&A answer is currently in flight for `meetingID` (plan J2, meeting-scoped): asking
+    /// in meeting A leaves this false for meeting B.
+    func isAnswering(for meetingID: UUID) -> Bool {
+        answeringMeetingIDs.contains(meetingID)
+    }
+
+    // MARK: - Obsidian export (M7)
+
+    /// Persist the meeting's per-meeting export folder (a vault-relative path).
+    func setObsidianFolder(_ folder: String, for meeting: Meeting) {
+        meetingService.setObsidianFolder(folder, for: meeting)
+    }
+
+    /// Persist the meeting's export tags from a comma/space-separated string.
+    func setObsidianTags(_ tagsText: String, for meeting: Meeting) {
+        let tags = tagsText
+            .split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { String($0) }
+        meetingService.setObsidianTags(tags, for: meeting)
+    }
+
+    /// Export the selected sections of `meeting` to the connected vault. Returns the number of files
+    /// written on success, or `nil` on failure (surfaced via `exportErrorMessage`).
+    @discardableResult
+    func export(_ meeting: Meeting, sections: [MeetingExportSection], combined: Bool) -> Int? {
+        exportErrorMessage = nil
+        do {
+            let urls = try exporter.export(meeting, sections: sections, combined: combined)
+            if !urls.isEmpty {
+                // Record the real export event so the "In vault" badge reflects an actual write,
+                // not merely a non-empty `obsidianFolder` field.
+                meetingService.recordObsidianExport(for: meeting)
+            }
+            return urls.count
+        } catch {
+            exportErrorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    // MARK: - Import / merge (M8)
+
+    /// Supported transcript-file extensions for the import file picker (never the audio set).
+    var transcriptFileExtensions: [String] { Array(TranscriptFileParser.supportedExtensions).sorted() }
+
+    /// Supported audio-file extensions for the import file picker.
+    var audioFileExtensions: [String] { Array(AudioFileService.supportedExtensions).sorted() }
+
+    /// Import a transcript-only file (Google Meet / `Speaker:` / timestamped / plain text) as a new
+    /// meeting. Returns the created meeting, or nil on failure (surfaced via `importErrorMessage`).
+    @discardableResult
+    func importTranscriptFile(at url: URL) -> Meeting? {
+        importErrorMessage = nil
+        do {
+            let meeting = try importService.importTranscriptFile(at: url)
+            // [M2] Transcript-ready choke point (plan D5): a transcript-file import creates a meeting
+            // with content but no language — auto-enqueue a background detection.
+            languageService.enqueueAutoDetection(for: meeting)
+            return meeting
+        } catch {
+            importErrorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Import an audio file as a new meeting: it is decoded, transcribed, and adopted into the
+    /// meetings library. `onImported` is called with the created meeting once transcription finishes.
+    ///
+    /// [Track J] Routed through the job queue (plan J2): an `.audioImport` job on the `transcription`
+    /// lane (cap 1), so an import shares the lane with a meeting's final pass instead of contending for
+    /// the same local compute. A new-meeting import has no meeting id (`nil` dedupe key), so two
+    /// different files both import. Cancelling the job creates no meeting (transcription is awaited
+    /// before `createFromImport` runs). Failures surface via `importErrorMessage`.
+    ///
+    /// `languageCode` (plan M1): an optional language chosen in the import sheet's picker. A specific
+    /// code drives transcription and is persisted `.manual` on the created meeting; `nil` = Auto.
+    func importAudioFile(
+        at url: URL,
+        languageCode: String? = nil,
+        onImported: @escaping (Meeting) -> Void = { _ in }
+    ) {
+        importErrorMessage = nil
+        jobQueue.enqueue(
+            kind: .audioImport,
+            meetingID: nil,
+            progressLabel: String(localized: "meetings.jobs.progress.importing")
+        ) { [weak importService, weak self] in
+            guard let importService else { return }
+            do {
+                let meeting = try await importService.importAudioFile(at: url, languageCode: languageCode)
+                // [M2] Transcript-ready choke point (plan D5): auto-enqueue a background detection when
+                // the import was left on Auto (a chosen language persists `.manual`, so the enqueue's own
+                // `languageCode == nil` guard makes this a no-op there).
+                self?.languageService.enqueueAutoDetection(for: meeting)
+                onImported(meeting)
+            } catch {
+                self?.importErrorMessage = error.localizedDescription
+                throw error
+            }
+        }
+    }
+
+    /// Whether any audio-import job is active (plan J2). Global — a new-meeting import has no meeting
+    /// id and the import UI is a modal sheet, so a global signal is correct (plan §CC6).
+    func isImporting() -> Bool {
+        jobQueue.jobs.contains { $0.kind == .audioImport && $0.state.isActive }
+    }
+
+    /// Merge an imported transcript file into an existing meeting, time-ordered and deduped against
+    /// the captured transcript (plan D12). Returns true on success.
+    @discardableResult
+    func mergeTranscriptFile(at url: URL, into meeting: Meeting) -> Bool {
+        importErrorMessage = nil
+        do {
+            try importService.mergeTranscriptFile(at: url, into: meeting)
+            // [M2] Transcript-ready choke point (plan D5): a merge adds transcript content, so a
+            // meeting that still has no language must auto-enqueue a background detection — same
+            // trigger as the new-meeting transcript import. No-op when the language is already set
+            // (the enqueue's own `languageCode == nil` guard).
+            languageService.enqueueAutoDetection(for: meeting)
+            return true
+        } catch {
+            importErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Speaker diarization & mapping (M9)
+
+    /// Whether — and how — speaker identification can run for a meeting (drives showing/hiding the
+    /// "Identify speakers" action). `.unavailable` when there is no audio and no sidecar.
+    func diarizationAvailability(for meeting: Meeting) async -> MeetingDiarizationEnricher.Availability {
+        await diarizationEnricher.availability(for: meeting)
+    }
+
+    /// [M5 finding] Whether the meeting has stored audio a cloud rerun could re-transcribe — the same
+    /// existence check `availability(for:)` guards on. Drives offering the cloud Identify menu on the
+    /// `.none` path (no local sidecar and not separate-track) to a user with a speaker-capable cloud
+    /// engine configured — precisely who cloud rerun serves.
+    func hasStoredAudio(for meeting: Meeting) -> Bool {
+        meetingService.audioFileURL(for: meeting) != nil
+    }
+
+    /// Run opt-in diarization over a meeting's audio and persist speaker labels. Surfaces an explicit
+    /// "no speakers detected" status (plan D8) and any hard failure via published messages.
+    ///
+    /// [Track J] Routed through the job queue (plan J2): a `.diarization` job on the `transcription`
+    /// lane (cap 1), so it serializes with a meeting's final pass / an audio import rather than
+    /// oversubscribing local compute. Enqueue is synchronous; a cancelled pass writes no labels
+    /// (`applySpeakerLabels` runs only after a successful return).
+    func identifySpeakers(for meeting: Meeting) {
+        diarizationErrorMessage = nil
+        clearDiarizationStatus()
+        // [Speaker-recognition amendment, D-A5] Hint pyannote with the known participant count so a
+        // 2-person meeting that fell through to the sidecar (correlated channels) — or any exact-count
+        // meeting — pins the right number of speakers instead of the global default.
+        let numSpeakersHint = SpeakerSourcePlan.effectiveParticipantCount(for: meeting)
+        // [M9-SPK-B / D-A6] When the meeting still carries coarse live timestamps, Identify first runs a
+        // timing-only reference transcription (inside the same job) to refine per-segment timing, so the
+        // spinner label discloses the extra work rather than showing a bare "identifying speakers".
+        let refinesTimingFirst = pyannoteIdentifyRefinesTimingFirst(for: meeting)
+        let progressLabel = refinesTimingFirst
+            ? String(localized: "meetings.speakers.progress.refiningTiming")
+            : String(localized: "meetings.jobs.progress.diarizing")
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: progressLabel
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            do {
+                let outcome = try await diarizationEnricher.enrich(meeting, numSpeakersHint: numSpeakersHint)
+                self?.recordDiarizationOutcome(outcome)
+            } catch is CancellationError {
+                // A cancelled re-pass/diarization wrote nothing (times and labels persist only on
+                // success); surface no error — the job settles `.cancelled` and the meeting is unchanged.
+                throw CancellationError()
+            } catch {
+                self?.diarizationErrorMessage = error.localizedDescription
+                throw error
+            }
+        }
+    }
+
+    /// [M5/D10] A speaker-capable cloud transcription engine offered in the Identify split menu.
+    struct SpeakerCloudEngineOption: Identifiable, Equatable, Sendable {
+        let id: String
+        let name: String
+    }
+
+    /// [M5/D10] A lightweight, value-typed view of a transcription engine's speaker capability, so the
+    /// classifier below is unit-testable without constructing a full plugin conformance. `isStructured`
+    /// is the SDK-visible signal that an engine returns per-segment speaker labels
+    /// (`StructuredTranscriptionEnginePlugin`, e.g. AssemblyAI).
+    struct SpeakerEngineDescriptor: Equatable, Sendable {
+        let id: String
+        let name: String
+        let isStructured: Bool
+        let isConfigured: Bool
+    }
+
+    /// [M5/D10] The installed transcription engines that can return per-segment speaker labels, for the
+    /// Identify split menu's cloud rung. The menu collapses to plain local Identify when this is empty
+    /// (no capable/configured engine).
+    func speakerCapableCloudEngineOptions() -> [SpeakerCloudEngineOption] {
+        let descriptors = PluginManager.shared.transcriptionEngines.map { engine in
+            SpeakerEngineDescriptor(
+                id: engine.providerId,
+                name: engine.providerDisplayName,
+                isStructured: engine is StructuredTranscriptionEnginePlugin,
+                isConfigured: engine.isConfigured
+            )
+        }
+        return Self.speakerCapableCloudEngineOptions(from: descriptors)
+    }
+
+    /// Pure classifier behind `speakerCapableCloudEngineOptions()` (M5) so the "menu collapses without a
+    /// capable engine" rule is unit-testable: keep only configured engines that can return speaker labels
+    /// (a structured engine), preserving order.
+    nonisolated static func speakerCapableCloudEngineOptions(
+        from descriptors: [SpeakerEngineDescriptor]
+    ) -> [SpeakerCloudEngineOption] {
+        descriptors.compactMap { descriptor in
+            guard descriptor.isStructured, descriptor.isConfigured else { return nil }
+            return SpeakerCloudEngineOption(id: descriptor.id, name: descriptor.name)
+        }
+    }
+
+    /// [M5/D10] Run a one-shot speaker-capable cloud re-transcription for `meeting` on the transcription
+    /// lane (via the existing `.diarization` kind), adopting the engine's own speaker labels through the
+    /// `preferProviderLabels` path. Nothing is persisted to `finalRetranscriptionPolicy` or any global —
+    /// this is a per-run action chosen at point of use. A cancelled pass writes nothing.
+    func identifySpeakersWithCloud(engineId: String, model: String? = nil, for meeting: Meeting) {
+        diarizationErrorMessage = nil
+        clearDiarizationStatus()
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.speakers.progress.cloudRerun")
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            let outcome = await diarizationEnricher.rerunCloudSpeakers(meeting, engineId: engineId, model: model)
+            self?.recordDiarizationOutcome(outcome)
+        }
+    }
+
+    /// Whether pressing Identify on `meeting` will first run the keep-live timing re-pass (M9-SPK-B /
+    /// D-A6): true when the segments still carry coarse live timestamps (`timestampsRefined != true`).
+    /// Drives the "(refines timing first)" button copy on the pyannote path so the extra transcription
+    /// cost is disclosed only when it will actually be paid. A meeting whose times were already refined
+    /// by a final pass or a prior re-pass reads `false` and shows the plain "Identify speakers" copy.
+    func pyannoteIdentifyRefinesTimingFirst(for meeting: Meeting) -> Bool {
+        meeting.timestampsRefined != true
+    }
+
+    /// Whether provider (cloud) speaker labels are preferred over local diarization (D-A2/D-A7).
+    /// Registered default ON; read from UserDefaults so the setting drives both adoption and the
+    /// path-aware Identify UI.
+    var preferProviderSpeakerLabels: Bool {
+        UserDefaults.standard.object(forKey: UserDefaultsKeys.meetingsPreferProviderSpeakerLabels) as? Bool ?? true
+    }
+
+    /// The speaker-labeling source that *will* run for a meeting (D-A2/D-A7), so the Identify UI can
+    /// state the path (cloud / channel / pyannote) rather than being a mystery. Async because the
+    /// track availability comes from a cheap audio-header probe.
+    func plannedSpeakerSource(for meeting: Meeting) async -> SpeakerSource {
+        let availability = await diarizationEnricher.availability(for: meeting)
+        // Only *provider*-originated labels feed the cloud rung. A meeting the app already labeled
+        // locally — the two-person channel path (SPEAKER_ME/OTHERS) or local pyannote (SPEAKER_00…) —
+        // must NOT resolve `.cloud`, or it would lose its channel Undo/Redo affordance and hide the
+        // pyannote Identify button (finding). The vocabulary test is shared with the finalization
+        // adoption check so the two paths always agree.
+        let labeled = meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
+        let source = Self.plannedSpeakerSource(
+            segmentsHaveProviderLabels: labeled,
+            preferProviderLabels: preferProviderSpeakerLabels,
+            effectiveParticipantCount: SpeakerSourcePlan.effectiveParticipantCount(for: meeting),
+            trackAvailability: availability
+        )
+        // [M1/D2] A resolved `.channel`/`.cloud` path and a "no path" status (`.unavailable`/`.noAudio`)
+        // are mutually exclusive — a resolved labeling source and "there is no path" cannot both be true,
+        // so clear that stale line whenever the freshly resolved path is channel/cloud.
+        // `diarizationStatusMessage` is one VM-wide `@Published` var that can go stale across a meeting
+        // switch or a plan re-resolution (attendee/toggle change). But a Redo under a `.channel` plan can
+        // legitimately return `.timelineMismatch`/`.noSpeakersDetected` — those stay visible (the earlier
+        // blanket clear swallowed them, leaving the user with no feedback). The view also suppresses
+        // defensively (`showsDiarizationStatus`); clearing here keeps the VM state itself honest.
+        if diarizationStatusOutcome != nil,
+           !Self.showsDiarizationStatus(diarizationStatusOutcome, under: source) {
+            clearDiarizationStatus()
+        }
+        return source
+    }
+
+    /// [M5 finding] Pure core of `plannedSpeakerSource(for:)` (static so the deliberate choice is
+    /// unit-testable without constructing the view model). Only *provider*-originated labels feed the
+    /// cloud rung — a meeting the app labeled locally (channel `SPEAKER_ME/OTHERS` or pyannote
+    /// `SPEAKER_00…`) must keep its channel Undo/Redo or pyannote Identify, never flip to `.cloud`.
+    ///
+    /// The choice: provider labels *already on the transcript* resolve `.cloud` regardless of the
+    /// "prefer provider labels" preference. That preference gates *automatic adoption* at finalize
+    /// (`autoAssignSpeakers`), not the display of labels an explicit "Identify with <cloud engine>" pick
+    /// (or a provider-labeled import) already wrote. Without this, an explicit cloud rerun with the
+    /// preference OFF left the section stuck on the pyannote caption/Identify over cloud-labeled segments,
+    /// inviting a pyannote pass that would overwrite them. With no provider labels present the preference
+    /// still gates the rung as before.
+    nonisolated static func plannedSpeakerSource(
+        segmentsHaveProviderLabels labeled: Bool,
+        preferProviderLabels: Bool,
+        effectiveParticipantCount: Int?,
+        trackAvailability: MeetingDiarizationEnricher.Availability
+    ) -> SpeakerSource {
+        SpeakerSourcePlan.resolve(SpeakerSourceAvailability(
+            segmentsAlreadyLabeled: labeled,
+            preferProviderLabels: labeled ? true : preferProviderLabels,
+            effectiveParticipantCount: effectiveParticipantCount,
+            trackAvailability: trackAvailability
+        ))
+    }
+
+    /// [M1/D2] Whether a transient diarization status line may co-render with the resolved speaker path.
+    /// Pure so the "never a path caption and a *contradictory* status together" rule is unit-testable
+    /// without a view. Under a resolved `.channel`/`.cloud` path only the "no path" outcomes
+    /// (`.unavailable`/`.noAudio`) are contradictory and suppressed; a `.timelineMismatch` or
+    /// `.noSpeakersDetected` (e.g. from a Redo) is a legitimate result under a channel/cloud plan and
+    /// stays visible. Every other path (pyannote / none / not-yet-resolved) may surface any status. A
+    /// nil outcome never shows.
+    nonisolated static func showsDiarizationStatus(
+        _ outcome: MeetingDiarizationEnricher.Outcome?,
+        under source: SpeakerSource?
+    ) -> Bool {
+        guard let outcome else { return false }
+        switch source {
+        case .channel, .cloud:
+            // Only the "no path" outcomes contradict a resolved path; keep everything else visible.
+            switch outcome {
+            case .unavailable, .noAudio:
+                return false
+            default:
+                return true
+            }
+        default:
+            return true
+        }
+    }
+
+    /// Clear the diarization status message and its tracked outcome in lockstep (M1/D2).
+    private func clearDiarizationStatus() {
+        diarizationStatusMessage = nil
+        diarizationStatusOutcome = nil
+    }
+
+    /// Whether the two-person-call toggle should be offered for a meeting (D-A4): only for
+    /// attendee-less (ad-hoc) meetings, where the participant count is otherwise unknown. Calendar
+    /// meetings derive their count from attendees and never show the toggle.
+    func showsTwoPersonToggle(for meeting: Meeting) -> Bool {
+        Self.showsTwoPersonToggle(for: meeting)
+    }
+
+    /// Pure form of the toggle-eligibility rule (D-A4) so it is unit-testable without the view model:
+    /// the toggle reappears the moment the roster drops to empty (plan M3 — adding a participant hides
+    /// it, removing the last one restores it).
+    nonisolated static func showsTwoPersonToggle(for meeting: Meeting) -> Bool {
+        meeting.attendees.isEmpty
+    }
+
+    /// The current state of the two-person-call toggle (D-A4).
+    func isTwoPersonCall(_ meeting: Meeting) -> Bool {
+        meeting.twoPersonCall == true
+    }
+
+    /// Persist the ad-hoc two-person-call override (D-A4).
+    func setTwoPersonCall(_ enabled: Bool, for meeting: Meeting) {
+        meetingService.setTwoPersonCall(enabled ? true : nil, for: meeting)
+    }
+
+    /// Undo speaker labels (D-A4): clear every segment label + the speaker map. Also the escape hatch
+    /// for an automatic labeling the user disagrees with.
+    func clearSpeakerLabels(for meeting: Meeting) {
+        clearDiarizationStatus()
+        diarizationErrorMessage = nil
+        meetingService.clearSpeakerLabels(for: meeting)
+    }
+
+    /// Redo / re-run the two-person channel labeling (D-A4), e.g. after an Undo. Enqueued on the
+    /// transcription lane like Identify so it serializes with other audio work; a no-op when the
+    /// recording is not separate-track.
+    func relabelByChannel(for meeting: Meeting) {
+        diarizationErrorMessage = nil
+        clearDiarizationStatus()
+        let otherName = SpeakerSourcePlan.otherPartyName(for: meeting)
+        jobQueue.enqueue(
+            kind: .diarization,
+            meetingID: meeting.id,
+            progressLabel: String(localized: "meetings.jobs.progress.diarizing")
+        ) { [weak diarizationEnricher, weak self] in
+            guard let diarizationEnricher else { return }
+            let outcome = await diarizationEnricher.autoLabelTwoPersonChannel(meeting, otherPartyName: otherName)
+            self?.recordDiarizationOutcome(outcome)
+        }
+    }
+
+    /// Surface an enrichment outcome as a status line (plan D8). Split out so the job-queue closure
+    /// can publish it on the main actor after a successful (non-throwing) enrich.
+    private func recordDiarizationOutcome(_ outcome: MeetingDiarizationEnricher.Outcome) {
+        // Track the outcome kind alongside the localized string (M1/D2) so the suppression rule can keep
+        // a legitimate `.timelineMismatch`/`.noSpeakersDetected` visible under a channel/cloud plan while
+        // still hiding a contradictory `.unavailable`/`.noAudio`. `.labeled` announces nothing.
+        switch outcome {
+        case .labeled:
+            clearDiarizationStatus() // labels now render in the transcript; nothing to announce
+            return
+        case .noSpeakersDetected:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noSpeakers")
+        case .unavailable:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.unavailable")
+        case .noAudio:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noAudio")
+        case .noTranscript:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.noTranscript")
+        case .captionsOnly:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.captionsOnly")
+        case .timelineMismatch:
+            diarizationStatusMessage = String(localized: "meetings.diarization.status.timelineMismatch")
+        }
+        diarizationStatusOutcome = outcome
+    }
+
+    /// Whether a `.diarization` job is in flight for this meeting — drives the "Identify speakers"
+    /// spinner. Meeting-scoped so it does not follow navigation.
+    func isEnriching(for meeting: Meeting) -> Bool {
+        jobQueue.hasActiveJob(kind: .diarization, meetingID: meeting.id)
+    }
+
+    /// The distinct `SPEAKER_xx` labels present on a meeting's transcript, sorted — the rows of the
+    /// mapping editor.
+    func speakerLabels(in meeting: Meeting) -> [String] {
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for segment in meeting.segments.sorted(by: { $0.order < $1.order }) {
+            guard let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !label.isEmpty, seen.insert(label).inserted else { continue }
+            ordered.append(label)
+        }
+        return ordered.sorted()
+    }
+
+    /// Persist the edited `SPEAKER_xx → name` map; empty names clear a label back to its raw form.
+    func setSpeakerMap(_ map: [String: String], for meeting: Meeting) {
+        meetingService.setSpeakerMap(map, for: meeting)
+    }
+
+    /// Attendee names offered as speaker-mapping suggestions: this meeting's roster first, then the
+    /// broader participant directory (plan M3 — "speaker-map suggestions broadened to directory names"),
+    /// so a known person who is not on the roster can still be picked. De-duplicated case-insensitively,
+    /// roster order preserved.
+    func attendeeNameSuggestions(for meeting: Meeting) -> [String] {
+        let rosterNames = meeting.attendees
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let directoryNames = participantDirectoryService.persons.map(\.displayName)
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for name in rosterNames + directoryNames {
+            let key = name.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            ordered.append(name)
+        }
+        return ordered
+    }
+
+    // MARK: - Participants editor (plan M3 — in-document add/remove with ranked suggestions)
+
+    /// A ranked add-attendee suggestion (plan M3): a directory person, a linked-event calendar
+    /// attendee (carries email + `isSelf`), or the persistent "Create '<name>'" row for a fresh
+    /// name-only participant.
+    struct AttendeeSuggestion: Identifiable, Hashable {
+        enum Kind: Hashable { case directory, calendar, createNew }
+        let name: String
+        let email: String?
+        let isSelf: Bool?
+        let kind: Kind
+
+        /// Stable identity: kind + email (when known) else the lowercased name, so a directory and a
+        /// calendar row for the same person are distinct rows but the Create-new row is unique per name.
+        var id: String { "\(kind)::\(email?.lowercased() ?? name.lowercased())" }
+
+        /// The `Attendee` this suggestion adds — a calendar pick carries its email + `isSelf` through
+        /// (plan M3 acceptance: "add attaches email+isSelf from calendar pick").
+        var attendee: Attendee { Attendee(name: name, email: email, isSelf: isSelf) }
+    }
+
+    /// A directory person reduced to the value inputs the pure ranker needs.
+    struct DirectoryCandidate: Equatable, Hashable {
+        let name: String
+        let email: String?
+    }
+
+    /// Ranked add-attendee suggestions for a meeting given the current type-to-add `query` (plan M3):
+    /// the directory ∪ the linked calendar event's attendees ∪ a persistent "Create '<query>'" row.
+    func attendeeSuggestions(for meeting: Meeting, query: String) -> [AttendeeSuggestion] {
+        let directory = participantDirectoryService.persons.map {
+            DirectoryCandidate(name: $0.displayName, email: $0.emailKey)
+        }
+        return Self.rankedAttendeeSuggestions(
+            query: query,
+            directory: directory,
+            calendar: linkedEventAttendees(for: meeting),
+            existing: meeting.attendees
+        )
+    }
+
+    /// The attendees of the meeting's linked calendar event, if that event is in the current
+    /// upcoming/earlier caches (an upcoming meeting being prepped, or a recently-ended one). These
+    /// carry email + `isSelf`; an archived meeting whose event is out of window simply yields none and
+    /// the directory covers it.
+    private func linkedEventAttendees(for meeting: Meeting) -> [Attendee] {
+        guard let eventID = meeting.calendarEventID else { return [] }
+        return (upcomingEvents + earlierEvents).first(where: { $0.id == eventID })?.attendees ?? []
+    }
+
+    /// Pure suggestion ranking (plan M3), so it is unit-testable without constructing the view model.
+    /// Calendar candidates rank ahead of directory ones for the same identity (they carry email +
+    /// `isSelf`); roster members are excluded; prefix matches sort ahead of substring matches, then
+    /// alphabetically. A persistent "Create '<query>'" row is appended whenever a non-empty query is not
+    /// already an exact roster name.
+    nonisolated static func rankedAttendeeSuggestions(
+        query: String,
+        directory: [DirectoryCandidate],
+        calendar: [Attendee],
+        existing: [Attendee],
+        limit: Int = 8
+    ) -> [AttendeeSuggestion] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryLower = trimmedQuery.lowercased()
+
+        // Roster identity keys (email when present, else name) — used to exclude already-added people.
+        var rosterKeys = Set<String>()
+        for attendee in existing {
+            if let email = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !email.isEmpty {
+                rosterKeys.insert(email)
+            }
+            rosterKeys.insert(attendee.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        }
+
+        func identityKey(name: String, email: String?) -> String {
+            if let email = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !email.isEmpty {
+                return email
+            }
+            return name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        // Calendar first so its richer row (email + isSelf) wins the dedupe over a bare directory row.
+        var candidates: [AttendeeSuggestion] = []
+        var seenKeys = Set<String>()
+        func consider(name rawName: String, email: String?, isSelf: Bool?, kind: AttendeeSuggestion.Kind) {
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            let key = identityKey(name: name, email: email)
+            // Exclude when EITHER the email key OR the lowercased name is already on the roster (M3
+            // review minor): `rosterKeys` carries both keys per roster member, but the previous single
+            // `contains(key)` check only tested the candidate's identity key — so a name-only roster
+            // member ('Alex') failed to exclude an email-carrying candidate for the same name ('Alex
+            // <alex@x.com>'), and picking it appended a duplicate 'Alex' row. Checking both keys makes
+            // the exclusion symmetric.
+            let nameKey = name.lowercased()
+            let emailKey = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if rosterKeys.contains(nameKey) { return }
+            if let emailKey, !emailKey.isEmpty, rosterKeys.contains(emailKey) { return }
+            guard seenKeys.insert(key).inserted else { return }
+            candidates.append(AttendeeSuggestion(name: name, email: email, isSelf: isSelf, kind: kind))
+        }
+        for attendee in calendar {
+            consider(name: attendee.name, email: attendee.email, isSelf: attendee.isSelf, kind: .calendar)
+        }
+        for candidate in directory {
+            consider(name: candidate.name, email: candidate.email, isSelf: nil, kind: .directory)
+        }
+
+        // Query filter (empty query keeps all) over name + email.
+        let filtered = candidates.filter { candidate in
+            guard !queryLower.isEmpty else { return true }
+            if candidate.name.lowercased().contains(queryLower) { return true }
+            if let email = candidate.email?.lowercased(), email.contains(queryLower) { return true }
+            return false
+        }
+
+        // Prefix matches first, then alphabetical; stable and deterministic.
+        let ranked = filtered.enumerated().sorted { lhs, rhs in
+            let lPrefix = queryLower.isEmpty ? false : lhs.element.name.lowercased().hasPrefix(queryLower)
+            let rPrefix = queryLower.isEmpty ? false : rhs.element.name.lowercased().hasPrefix(queryLower)
+            if lPrefix != rPrefix { return lPrefix }
+            let order = lhs.element.name.localizedCaseInsensitiveCompare(rhs.element.name)
+            if order != .orderedSame { return order == .orderedAscending }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+
+        var result = Array(ranked.prefix(limit))
+
+        // Persistent "Create '<query>'" row: offered whenever a non-empty query is not already an exact
+        // roster member (case-insensitive). Coexists with a same-named directory/calendar match so the
+        // owner can always choose to add a fresh name-only participant.
+        if !trimmedQuery.isEmpty, !rosterKeys.contains(queryLower) {
+            result.append(AttendeeSuggestion(name: trimmedQuery, email: nil, isSelf: nil, kind: .createNew))
+        }
+        return result
+    }
+
+    /// Add a picked suggestion to a meeting's roster (plan M3). Routes through the M2 attendee choke
+    /// point, which folds it into the directory; a calendar pick carries its email + `isSelf` through.
+    @discardableResult
+    func addSuggestedAttendee(_ suggestion: AttendeeSuggestion, to meeting: Meeting) -> Bool {
+        meetingService.addAttendee(suggestion.attendee, to: meeting)
+    }
+
+    /// Add a typed name-only attendee to a meeting's roster (the "Create '<name>'" path, plan M3).
+    @discardableResult
+    func addTypedAttendee(named name: String, to meeting: Meeting) -> Bool {
+        meetingService.addAttendee(Attendee(name: name), to: meeting)
+    }
+
+    /// Remove an attendee from a meeting's roster (plan M3 / Part F #6). Routes through the M2 choke
+    /// point, which **never** deletes the backing `Person` — the UI must not call directory delete here.
+    @discardableResult
+    func removeAttendee(_ attendee: Attendee, from meeting: Meeting) -> Bool {
+        meetingService.removeAttendee(attendee, from: meeting)
+    }
+
+    /// The current display name for a roster attendee, resolved by the directory (plan D6 — a rename is
+    /// felt at display time without rewriting historical `attendeesJSON`). Falls back to the attendee's
+    /// own stored name.
+    func currentDisplayName(for attendee: Attendee) -> String {
+        participantDirectoryService.currentDisplayName(for: attendee)
+    }
+
+    // MARK: - Participant directory management (plan M3 — settings surface)
+
+    /// The full participant directory (settings list). Observed live via the service's `@Published`.
+    var directoryPersons: [Person] {
+        participantDirectoryService.persons
+    }
+
+    /// Per-person derived meeting count + last-seen (plan D9), computed over the current archive.
+    func directoryStats() -> [UUID: PersonStats] {
+        ParticipantDirectoryService.derivedStats(
+            persons: participantDirectoryService.persons,
+            meetings: meetings
+        )
+    }
+
+    /// Rename a directory person (plan D6). Display-time only; historical `attendeesJSON` is untouched.
+    func renamePerson(_ person: Person, to newName: String) {
+        participantDirectoryService.rename(person, to: newName)
+    }
+
+    /// Manually merge one directory person into another (plan D5 #11 / Part F #3).
+    func mergePersons(_ loser: Person, into winner: Person) {
+        participantDirectoryService.merge(loser, into: winner)
+    }
+
+    /// Split a merge-recorded secondary email back out into its own person (plan D8 escape hatch).
+    @discardableResult
+    func splitEmail(_ email: String, from person: Person) -> Person? {
+        participantDirectoryService.split(email: email, from: person)
+    }
+
+    /// Delete a directory person (settings action, plan Part F #6 — distinct from removing an attendee).
+    func deletePerson(_ person: Person) {
+        participantDirectoryService.delete(person)
+    }
+
+    // MARK: - Template CRUD (editor — plan AD6 unified library)
+
+    @discardableResult
+    func addMeetingTemplate(_ spec: PromptTemplateSpec) -> PromptAction? {
+        promptActionService.addMeetingTemplate(spec)
+    }
+
+    func updateMeetingTemplate(_ template: PromptAction, with spec: PromptTemplateSpec) {
+        promptActionService.updateMeetingTemplate(template, with: spec)
+    }
+
+    func deleteMeetingTemplate(_ template: PromptAction) {
+        promptActionService.deleteMeetingTemplate(template)
+    }
+
+    /// Dictation-surface prompt actions (read-only) for the unified library's Dictation section.
+    var dictationActions: [PromptAction] {
+        promptActionService.promptActions
+    }
+
+    /// Poll the calendar roughly once a minute while the meetings UI is visible (plan D10).
+    func startCalendarPolling() {
+        loadUpcoming()
+        guard pollingCancellable == nil else { return }
+        pollingCancellable = Timer.publish(every: 60, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.loadUpcoming()
+            }
+    }
+
+    func stopCalendarPolling() {
+        pollingCancellable?.cancel()
+        pollingCancellable = nil
+    }
+
+    /// Derived from the service's synchronously-updated `meetings` (not the Combine-mirrored
+    /// `self.meetings`) so `loadUpcoming()` called right after `createMeeting` sees the newly
+    /// created event and excludes it immediately.
+    ///
+    /// [Track D] Auto-brief placeholder meetings (pre-created by the scheduler without any user
+    /// action, still `.scheduled`) are deliberately NOT excluded: excluding them would drop the
+    /// event from the Upcoming section ~lead-minutes before it starts, taking the "Brief ready"
+    /// affordance and the start-notification prompt with it (AD9/finding 1). Once the user engages
+    /// such a meeting (capture starts → state leaves `.scheduled`), it is excluded like any other.
+    private var existingCalendarEventIDs: Set<String> {
+        Self.engagedCalendarEventIDs(
+            meetings: meetingService.meetings,
+            autoBriefPlaceholders: briefScheduler.placeholderEventIDs
+        )
+    }
+
+    /// The calendar-event ids to exclude from the Upcoming list: every stored meeting's
+    /// `calendarEventID` except auto-brief placeholders still in `.scheduled` state (finding 1).
+    /// Static + pure so the exclusion rule is unit-testable without constructing the full view model.
+    static func engagedCalendarEventIDs(
+        meetings: [Meeting],
+        autoBriefPlaceholders placeholders: Set<String>
+    ) -> Set<String> {
+        Set(
+            meetings.compactMap { meeting -> String? in
+                guard let id = meeting.calendarEventID else { return nil }
+                if meeting.state == .scheduled, placeholders.contains(id) { return nil }
+                return id
+            }
+        )
+    }
+
+    #if DEBUG
+    func seedDemoMeeting() {
+        meetingService.seedDemoMeeting()
+    }
+    #endif
+}

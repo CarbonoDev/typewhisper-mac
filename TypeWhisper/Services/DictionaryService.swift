@@ -32,6 +32,12 @@ struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
     let replacement: String
 }
 
+struct DictionaryCorrectionLearningResult: Equatable, Sendable {
+    let learnedCorrections: [LearnedDictionaryCorrection]
+    let duplicateCount: Int
+    let failed: Bool
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -317,7 +323,22 @@ final class DictionaryService: ObservableObject {
 
     /// Batch delete multiple entries
     func deleteEntries(_ entriesToDelete: [DictionaryEntry]) {
-        guard let context = modelContext, !entriesToDelete.isEmpty else { return }
+        do {
+            try deleteEntries(ids: Set(entriesToDelete.map(\.id)))
+        } catch {
+            logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+        }
+    }
+
+    /// Batch delete entries by stable IDs and report persistence failures to the caller.
+    func deleteEntries(ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        let entriesToDelete = entries.filter { ids.contains($0.id) }
+        guard !entriesToDelete.isEmpty else { return }
 
         for entry in entriesToDelete {
             context.delete(entry)
@@ -327,7 +348,10 @@ final class DictionaryService: ObservableObject {
             try context.save()
             loadEntries()
         } catch {
+            context.rollback()
+            loadEntries()
             logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
     }
 
@@ -534,16 +558,25 @@ final class DictionaryService: ObservableObject {
 
     /// Apply all enabled corrections to the given text
     func applyCorrections(to text: String) -> String {
-        var result = text
+        applyCorrections(to: [text]).first ?? text
+    }
+
+    /// Apply all enabled corrections to related text fields while counting each correction once.
+    func applyCorrections(to texts: [String]) -> [String] {
+        var results = texts
         var needsSave = false
 
         for correction in corrections {
             guard let replacement = correction.replacement else { continue }
 
-            let before = result
-            result = applyCorrection(correction, to: result, replacement: replacement)
+            var correctionWasApplied = false
+            for index in results.indices {
+                let before = results[index]
+                results[index] = applyCorrection(correction, to: before, replacement: replacement)
+                correctionWasApplied = correctionWasApplied || results[index] != before
+            }
 
-            if result != before {
+            if correctionWasApplied {
                 correction.usageCount += 1
                 needsSave = true
             }
@@ -557,7 +590,7 @@ final class DictionaryService: ObservableObject {
             }
         }
 
-        return result
+        return results
     }
 
     private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
@@ -602,7 +635,8 @@ final class DictionaryService: ObservableObject {
         with replacement: String,
         caseSensitive: Bool
     ) -> String {
-        guard !original.isEmpty else { return text }
+        let boundaryOriginal = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty, !boundaryOriginal.isEmpty else { return text }
 
         var result = ""
         var searchStart = text.startIndex
@@ -610,18 +644,100 @@ final class DictionaryService: ObservableObject {
 
         while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
             guard range.lowerBound < range.upperBound else { break }
+            let boundaryRange = boundaryEvaluationRange(for: range, in: text)
 
-            if isBoundaryMatch(range, in: text, original: original) {
-                result += text[searchStart..<range.lowerBound]
-                result += replacement
+            if boundaryRange.lowerBound < boundaryRange.upperBound,
+               isBoundaryMatch(boundaryRange, in: text, original: boundaryOriginal) {
+                let resolvedReplacement = boundaryReplacement(
+                    for: range,
+                    in: text,
+                    replacement: replacement,
+                    lowerLimit: searchStart
+                )
+                result += text[searchStart..<resolvedReplacement.range.lowerBound]
+                result += resolvedReplacement.text
+                searchStart = resolvedReplacement.range.upperBound
             } else {
                 result += text[searchStart..<range.upperBound]
+                searchStart = range.upperBound
             }
-            searchStart = range.upperBound
         }
 
         result += text[searchStart..<text.endIndex]
         return result
+    }
+
+    private func boundaryReplacement(
+        for range: Range<String.Index>,
+        in text: String,
+        replacement: String,
+        lowerLimit: String.Index
+    ) -> (range: Range<String.Index>, text: String) {
+        guard replacement.isEmpty else { return (range, replacement) }
+
+        let deletionRange = emptyBoundaryReplacementRange(for: range, in: text, lowerLimit: lowerLimit)
+        return (deletionRange, separatorAfterDeleting(deletionRange, in: text))
+    }
+
+    private func emptyBoundaryReplacementRange(
+        for range: Range<String.Index>,
+        in text: String,
+        lowerLimit: String.Index
+    ) -> Range<String.Index> {
+        var lowerBound = range.lowerBound
+        var upperBound = range.upperBound
+
+        if upperBound < text.endIndex, text[upperBound].isWhitespace {
+            while upperBound < text.endIndex, text[upperBound].isWhitespace {
+                upperBound = text.index(after: upperBound)
+            }
+        } else if shouldConsumeLeadingWhitespace(for: range, in: text) {
+            while lowerBound > lowerLimit {
+                let previous = text.index(before: lowerBound)
+                guard text[previous].isWhitespace else { break }
+                lowerBound = previous
+            }
+        }
+
+        return lowerBound..<upperBound
+    }
+
+    private func shouldConsumeLeadingWhitespace(for range: Range<String.Index>, in text: String) -> Bool {
+        guard range.lowerBound < range.upperBound else { return false }
+        let lastMatchedIndex = text.index(before: range.upperBound)
+        return !text[lastMatchedIndex].isWhitespace || range.upperBound == text.endIndex
+    }
+
+    private func separatorAfterDeleting(_ range: Range<String.Index>, in text: String) -> String {
+        let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+        let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+
+        if previous?.isLatinOrNumber == true && next?.isLatinOrNumber == true {
+            return " "
+        }
+
+        if previous?.keepsFollowingWordSeparatedAfterDeletion == true && next?.isLatinOrNumber == true {
+            return " "
+        }
+
+        return ""
+    }
+
+    private func boundaryEvaluationRange(for range: Range<String.Index>, in text: String) -> Range<String.Index> {
+        var lowerBound = range.lowerBound
+        var upperBound = range.upperBound
+
+        while lowerBound < upperBound, text[lowerBound].isWhitespace {
+            lowerBound = text.index(after: lowerBound)
+        }
+
+        while lowerBound < upperBound {
+            let previous = text.index(before: upperBound)
+            guard text[previous].isWhitespace else { break }
+            upperBound = previous
+        }
+
+        return lowerBound..<upperBound
     }
 
     private func isBoundaryMatch(_ range: Range<String.Index>, in text: String, original: String) -> Bool {
@@ -651,7 +767,17 @@ final class DictionaryService: ObservableObject {
     /// Batch add corrections learned from user edits. Existing corrections are never overwritten.
     @discardableResult
     func learnCorrections(_ suggestions: [CorrectionSuggestion]) -> [LearnedDictionaryCorrection] {
-        guard let context = modelContext, !suggestions.isEmpty else { return [] }
+        learnCorrectionsWithResult(suggestions).learnedCorrections
+    }
+
+    /// Typed variant used by automatic learning to distinguish duplicates from storage failures.
+    func learnCorrectionsWithResult(_ suggestions: [CorrectionSuggestion]) -> DictionaryCorrectionLearningResult {
+        guard !suggestions.isEmpty else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: false)
+        }
+        guard let context = modelContext else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: true)
+        }
 
         var existingOriginals = Set(
             entries
@@ -660,6 +786,7 @@ final class DictionaryService: ObservableObject {
         )
         let now = Date()
         var learned: [LearnedDictionaryCorrection] = []
+        var duplicateCount = 0
 
         for suggestion in suggestions {
             let original = suggestion.original.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -667,8 +794,11 @@ final class DictionaryService: ObservableObject {
             let originalKey = original.lowercased()
 
             guard !original.isEmpty,
-                  originalKey != replacement.lowercased(),
-                  !existingOriginals.contains(originalKey) else {
+                  originalKey != replacement.lowercased() else {
+                continue
+            }
+            guard !existingOriginals.contains(originalKey) else {
+                duplicateCount += 1
                 continue
             }
 
@@ -690,15 +820,30 @@ final class DictionaryService: ObservableObject {
             ))
         }
 
-        guard !learned.isEmpty else { return [] }
+        guard !learned.isEmpty else {
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: false
+            )
+        }
 
         do {
             try context.save()
             loadEntries()
-            return learned
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: learned,
+                duplicateCount: duplicateCount,
+                failed: false
+            )
         } catch {
+            context.rollback()
             logger.error("Failed to learn corrections: \(error.localizedDescription)")
-            return []
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: true
+            )
         }
     }
 
@@ -912,6 +1057,15 @@ private extension Character {
             (0xF900...0xFAFF).contains(Int(scalar.value)) ||
             (0x20000...0x323AF).contains(Int(scalar.value)) ||
             (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var keepsFollowingWordSeparatedAfterDeletion: Bool {
+        switch self {
+        case ",", ".", "!", "?", ";", ":":
+            return true
+        default:
+            return false
         }
     }
 
