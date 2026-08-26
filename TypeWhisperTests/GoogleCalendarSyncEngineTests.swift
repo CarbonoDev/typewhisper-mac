@@ -126,31 +126,43 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
     private var defaults: UserDefaults!
     /// Injected wall clock (fixed — window math must be deterministic).
     private let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
-    private var snapshotChangeCount = 0
+    /// Counts `.googleCalendarSnapshotDidChange` posts.
+    ///
+    /// Held in a separate reference box rather than as a stored property so the observer closure —
+    /// which `NotificationCenter` declares `@Sendable` — captures the box instead of `self`: a
+    /// `@MainActor` `XCTestCase` is not `Sendable`, so capturing it there is a concurrency warning.
+    private final class SnapshotChangeCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        var count: Int { lock.withLock { value } }
+        func increment() { lock.withLock { value += 1 } }
+        func reset() { lock.withLock { value = 0 } }
+    }
+
+    private let snapshotChanges = SnapshotChangeCounter()
+    private var snapshotChangeCount: Int { snapshotChanges.count }
     private var observer: NSObjectProtocol?
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "GoogleCalendarSyncEngineTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
-        snapshotChangeCount = 0
+        snapshotChanges.reset()
         observer = NotificationCenter.default.addObserver(
             forName: .googleCalendarSnapshotDidChange,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.snapshotChangeCount += 1
-            }
+        ) { [snapshotChanges] _ in
+            snapshotChanges.increment()
         }
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         if let observer {
             NotificationCenter.default.removeObserver(observer)
         }
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     /// One store + engine over the fakes; `accountIDs` become `.connected` accounts with canned

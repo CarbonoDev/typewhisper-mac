@@ -122,15 +122,15 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
     private var defaults: UserDefaults!
     private let fixedNow = Date(timeIntervalSince1970: 1_770_000_000)
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "GoogleDriveSyncEngineTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private struct Harness {

@@ -37,16 +37,16 @@ final class GoogleAccountStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var secretStore: InMemorySecretStore!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "GoogleAccountStoreTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         secretStore = InMemorySecretStore()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeStore() -> GoogleAccountStore {

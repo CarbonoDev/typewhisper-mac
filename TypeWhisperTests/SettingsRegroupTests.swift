@@ -7,6 +7,7 @@ import XCTest
 /// every one is placed in exactly one of the five groups (Dictation/Meetings/Library/Tools/
 /// Application) or is retained as a deep-link-only tab (the License panel). Prompts and Rules are
 /// full Library rows again — they are no longer aliased onto Workflows.
+@MainActor
 final class SettingsGroupingTests: XCTestCase {
     func testAllTwentySettingsTabsExist() {
         XCTAssertEqual(SettingsTab.allCases.count, 20)
@@ -112,6 +113,7 @@ final class SettingsGroupingTests: XCTestCase {
 // MARK: - Settings deep links (Track D · D7)
 
 /// Every verified deep-link caller still lands on a real, grouped row after the regroup.
+@MainActor
 final class SettingsDeepLinkTests: XCTestCase {
     func testEveryTabResolvesToItself() {
         // The regroup no longer aliases any tab onto another — Prompts and Rules each own their row
@@ -157,6 +159,7 @@ final class SettingsDeepLinkTests: XCTestCase {
 /// The slim menu-bar item set: History / Error Log / Transcribe File are removed; Start Meeting
 /// Recording and Open TypeWhisper are present. The legacy `meetings` window scene was retired
 /// (D10), so "Open TypeWhisper" unconditionally targets the meetings-first `main` window.
+@MainActor
 final class MenuBarItemsTests: XCTestCase {
     func testSlimItemSet() {
         XCTAssertEqual(
@@ -206,7 +209,10 @@ final class MenuBarItemsTests: XCTestCase {
     /// opener of the standalone `Window(id: AppWindowID.errors)` error-log scene. Guard that surface
     /// so the error log can't become unreachable again (owner-veto item 2 / D8 follow-up).
     func testAdvancedSettingsExposesTheErrorLogWindow() {
-        XCTAssertEqual(AdvancedSettingsView.errorLogWindowID, AppWindowID.errors)
+        // Read the main-actor property into a local first: XCTAssert's arguments are `@autoclosure`
+        // and stay nonisolated even inside a `@MainActor` test case.
+        let errorLogWindowID = AdvancedSettingsView.errorLogWindowID
+        XCTAssertEqual(errorLogWindowID, AppWindowID.errors)
         XCTAssertEqual(AppWindowID.errors, "errors")
     }
 }

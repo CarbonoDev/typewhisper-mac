@@ -11,8 +11,8 @@ final class MeetingAdHocMenuTests: XCTestCase {
     /// [Track J] The final pass runs on this queue; drained after `stop()`.
     private let captureJobQueue = JobQueueService()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         // `ModelManagerService`/`StreamingHandler` dereference the `PluginManager.shared` global; the
         // isolated test host never builds `ServiceContainer`, so provide an empty manager (mirrors
         // `MeetingCaptureServiceTests`). With no plugins, live streaming is skipped.
@@ -20,10 +20,10 @@ final class MeetingAdHocMenuTests: XCTestCase {
         PluginManager.shared = PluginManager()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         PluginManager.shared = previousPluginManager
         previousPluginManager = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     // MARK: - Helpers (recorder driven entirely through injectable overrides — no real audio engine)

@@ -10,16 +10,16 @@ final class MeetingCaptureConfigTests: XCTestCase {
     /// [Track J] The final pass runs on this queue; tests settle it with `drain()` after `stop()`.
     private let captureJobQueue = JobQueueService()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         previousPluginManager = PluginManager.shared
         PluginManager.shared = PluginManager()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         PluginManager.shared = previousPluginManager
         previousPluginManager = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     // MARK: - Fakes

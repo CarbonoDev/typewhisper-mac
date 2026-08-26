@@ -19,8 +19,8 @@ final class MeetingObsidianExporterTests: XCTestCase {
     /// A fresh handle to the exporter's settings suite (same backing store) for the root tests.
     private var rootDefaults: UserDefaults { UserDefaults(suiteName: suiteName)! }
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         vaultDir = try TestSupport.makeTemporaryDirectory(prefix: "MeetingExportVault")
         addTeardownBlock { [vaultDir] in TestSupport.remove(vaultDir!) }
 

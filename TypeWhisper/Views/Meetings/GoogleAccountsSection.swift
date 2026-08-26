@@ -508,7 +508,9 @@ struct GoogleAccountsSection: View {
     }
 
     private func connect() {
-        runAuthFlow { try await authService.connectAccount() }
+        // The new `GoogleAccount` is discarded here: `runAuthFlow` takes a `-> Void` flow and the
+        // account store is already updated by `connectAccount()` itself.
+        runAuthFlow { _ = try await authService.connectAccount() }
     }
 
     private func reconnect(_ account: GoogleAccount) {

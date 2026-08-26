@@ -35,16 +35,16 @@ final class MeetingEventEmissionTests: XCTestCase {
     /// [Track J] The final pass (and its transcriptReady/ended emissions) now runs on this queue.
     private let captureJobQueue = JobQueueService()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         previousPluginManager = PluginManager.shared
         PluginManager.shared = PluginManager()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         PluginManager.shared = previousPluginManager
         previousPluginManager = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeRecorder(recordingsDirectory: URL) -> AudioRecorderService {

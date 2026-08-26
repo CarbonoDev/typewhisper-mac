@@ -44,7 +44,10 @@ struct LiveRecordingBand: View {
         }
     }
 
-    static func elapsedString(_ seconds: TimeInterval) -> String {
+    /// Pure `mm:ss` / `h:mm:ss` formatting — no view state, so it is `nonisolated` and the tray
+    /// (`MeetingTrayIndicator.elapsed`) can share it from outside the main actor. Matches the
+    /// `nonisolated static func` formatters on `MeetingTranscriptPanel`.
+    nonisolated static func elapsedString(_ seconds: TimeInterval) -> String {
         let total = Int(seconds)
         let h = total / 3600
         let m = (total % 3600) / 60

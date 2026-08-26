@@ -101,17 +101,17 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
     /// Authorization URLs the service "opened in the browser" (flow tests read `state` from them).
     private var openedURLs: [URL] = []
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "GoogleAuthServiceTokenTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         currentDate = Date(timeIntervalSince1970: 1_700_000_000)
         openedURLs = []
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     /// Builds the store (configured client + one connected account with a stored refresh token)
