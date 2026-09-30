@@ -30,8 +30,8 @@ struct MeetingPresenceFacts: Equatable, Sendable {
     var isCaptionSession: Bool
     /// The app holds a recording of it (`Meeting.audioFileName`).
     var hasAudio: Bool
-    /// When the last caption landed (meeting start + the latest caption segment's end). Only
-    /// populated for a caption session still marked `.live`, where it stands in for a missing end.
+    /// When the last caption landed (meeting start + the latest caption segment's end), for a
+    /// caption session. Stands in for a missing end, and caps an end recorded long after the call.
     var lastCaptionAt: Date?
     /// Seconds of transcript attributed to the user; `nil` when the app cannot tell which speaker
     /// the user is.
@@ -99,6 +99,22 @@ struct MeetingPresenceLiveState: Equatable, Sendable {
 
 enum MeetingPresenceProjector {
     static let schemaVersion = 1
+
+    /// A caption session whose recorded end is further than this past its last caption was closed
+    /// after the fact (a lost `/end`, retried or closed by hand days later); its last caption is the
+    /// better end. Generous on purpose: caption times are relative to when the bridge started, which
+    /// can trail a calendar-linked meeting's scheduled start.
+    static let lateEndTolerance: TimeInterval = 60 * 60
+
+    /// How Meet labels the user's *own* captions, per UI locale — it never shows your name there.
+    static let meetSelfCaptionLabels: Set<String> = [
+        "you", // en
+        "tú", "tu", // es, it
+        "du", "sie", // de
+        "vous", // fr
+        "você", "voce", // pt
+        "jij", "u" // nl
+    ]
 
     /// `meet`, `zoom`, `teams` or `webex`, from the join link's host. A caption session is Meet by
     /// definition — the bridge only exists there.
@@ -202,12 +218,16 @@ enum MeetingPresenceProjector {
             let end: Date?
             if inProgress {
                 end = nil
-            } else if facts.state == .live {
-                // Still marked live but nothing is feeding it: a caption session whose end never
-                // arrived, or a capture cut short. Its last caption is the best end we have.
-                end = facts.endDate ?? facts.lastCaptionAt ?? start
             } else {
-                end = facts.endDate ?? start
+                // A meeting still marked live that nothing feeds is a caption session whose end
+                // never arrived, or a capture cut short: its last caption is the best end we have.
+                let recorded = facts.endDate ?? (facts.state == .live ? facts.lastCaptionAt : nil) ?? start
+                if detection == .captions, let lastCaption = facts.lastCaptionAt,
+                   recorded.timeIntervalSince(lastCaption) > lateEndTolerance {
+                    end = max(start, lastCaption)
+                } else {
+                    end = recorded
+                }
             }
             if let until, start > until { return nil }
             if let end, end < since { return nil }
@@ -236,32 +256,38 @@ enum MeetingPresenceProjector {
 
     /// Seconds of transcript attributed to the user, or `nil` when no segment can be pinned on them.
     ///
-    /// The user is identifiable on two paths: the two-person channel split, which labels the mic
-    /// track `selfLabel`, and any labeled transcript whose speaker resolves (through `speakerMap`)
-    /// to the attendee marked as self.
+    /// The user is identifiable on three paths: the two-person channel split, which labels the mic
+    /// track `selfLabel`; Meet captions, which label the user's own turns "You" (localized); and any
+    /// labeled transcript whose speaker resolves (through `speakerMap`) to the attendee marked as self.
     static func speakingSeconds(
-        segments: [(start: Double, end: Double, speakerLabel: String?)],
+        segments: [(start: Double, end: Double, speakerLabel: String?, isCaption: Bool)],
         speakerMap: [String: String],
         selfNames: [String],
         selfLabel: String
     ) -> Int? {
         let names = Set(selfNames.map(normalize).filter { !$0.isEmpty })
         var labeled = false
+        var labeledCaptions = false
         var total: Double = 0
         for segment in segments {
             guard let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !label.isEmpty else { continue }
             labeled = true
+            if segment.isCaption { labeledCaptions = true }
             let resolved = normalize(speakerMap[label] ?? label)
-            if label == selfLabel || names.contains(resolved) {
+            let isSelf = label == selfLabel
+                || names.contains(resolved)
+                || (segment.isCaption && meetSelfCaptionLabels.contains(normalize(label)))
+            if isSelf {
                 total += max(0, segment.end - segment.start)
             }
         }
         // An unlabeled transcript says nothing about who spoke; a labeled one with no way to name
-        // the user says nothing either. Only then is a zero a real zero.
+        // the user says nothing either. Only then is a zero a real zero. Labeled captions always
+        // name the user ("You"), so their silence is real.
         guard labeled else { return nil }
         let usedChannelSplit = segments.contains { $0.speakerLabel == selfLabel }
-        guard usedChannelSplit || !names.isEmpty || total > 0 else { return nil }
+        guard usedChannelSplit || labeledCaptions || !names.isEmpty || total > 0 else { return nil }
         return Int(total.rounded())
     }
 

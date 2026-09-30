@@ -227,6 +227,19 @@ final class MeetingPresenceTests: XCTestCase {
         XCTAssertNil(rows[1].ended_at)
     }
 
+    func testCaptionSessionClosedLongAfterTheCallEndsAtItsLastCaption() {
+        // Real case: the `/end` was lost, and the meeting was closed four weeks later.
+        let lastCaption = t0.addingTimeInterval(2300)
+        let closedLate = facts(state: .completed, end: t0.addingTimeInterval(28 * 86_400), captions: true, lastCaptionAt: lastCaption)
+        // An end within the tolerance is the real end: the call ran on after its last caption.
+        let quietEnding = facts(state: .completed, start: t0.addingTimeInterval(10), end: t0.addingTimeInterval(2300 + 1200), captions: true, lastCaptionAt: lastCaption)
+        // Our own recording is timed by the recorder, not by captions: never capped.
+        let recorded = facts(state: .completed, start: t0.addingTimeInterval(20), end: t0.addingTimeInterval(9 * 3600), captions: true, audio: true, lastCaptionAt: lastCaption)
+
+        let rows = sessions([closedLate, quietEnding, recorded], since: t0)
+        XCTAssertEqual(rows.map(\.ended_at), [lastCaption, t0.addingTimeInterval(3500), t0.addingTimeInterval(9 * 3600)])
+    }
+
     func testSessionJSONEncodesAnExplicitNullEndWhileInProgress() throws {
         let id = UUID()
         let row = try XCTUnwrap(sessions([facts(id: id)], since: t0, capturing: id).first)
@@ -267,9 +280,9 @@ final class MeetingPresenceTests: XCTestCase {
     func testSpeakingSecondsSumsTheMicChannelOfATwoPersonCall() {
         let seconds = MeetingPresenceProjector.speakingSeconds(
             segments: [
-                (start: 0, end: 10, speakerLabel: "SPEAKER_ME"),
-                (start: 10, end: 40, speakerLabel: "SPEAKER_OTHERS"),
-                (start: 40, end: 45.4, speakerLabel: "SPEAKER_ME")
+                (start: 0, end: 10, speakerLabel: "SPEAKER_ME", isCaption: false),
+                (start: 10, end: 40, speakerLabel: "SPEAKER_OTHERS", isCaption: false),
+                (start: 40, end: 45.4, speakerLabel: "SPEAKER_ME", isCaption: false)
             ],
             speakerMap: [:],
             selfNames: [],
@@ -281,9 +294,9 @@ final class MeetingPresenceTests: XCTestCase {
     func testSpeakingSecondsResolvesTheSelfAttendeeThroughTheSpeakerMapAndCaptionNames() {
         let seconds = MeetingPresenceProjector.speakingSeconds(
             segments: [
-                (start: 0, end: 4, speakerLabel: "SPEAKER_01"),
-                (start: 4, end: 9, speakerLabel: "SPEAKER_02"),
-                (start: 9, end: 12, speakerLabel: " ana lópez ")
+                (start: 0, end: 4, speakerLabel: "SPEAKER_01", isCaption: false),
+                (start: 4, end: 9, speakerLabel: "SPEAKER_02", isCaption: false),
+                (start: 9, end: 12, speakerLabel: " ana lópez ", isCaption: true)
             ],
             speakerMap: ["SPEAKER_01": "Ana López", "SPEAKER_02": "Ben"],
             selfNames: ["Ana López"],
@@ -294,7 +307,7 @@ final class MeetingPresenceTests: XCTestCase {
 
     func testSpeakingSecondsIsZeroWhenTheIdentifiedUserNeverSpoke() {
         let seconds = MeetingPresenceProjector.speakingSeconds(
-            segments: [(start: 0, end: 30, speakerLabel: "Ben")],
+            segments: [(start: 0, end: 30, speakerLabel: "Ben", isCaption: false)],
             speakerMap: [:],
             selfNames: ["Ana"],
             selfLabel: "SPEAKER_ME"
@@ -304,13 +317,48 @@ final class MeetingPresenceTests: XCTestCase {
 
     func testSpeakingSecondsIsUnknownWithoutLabelsOrWithoutAWayToNameTheUser() {
         XCTAssertNil(MeetingPresenceProjector.speakingSeconds(
-            segments: [(start: 0, end: 30, speakerLabel: nil)],
+            segments: [(start: 0, end: 30, speakerLabel: nil, isCaption: false)],
             speakerMap: [:],
             selfNames: ["Ana"],
             selfLabel: "SPEAKER_ME"
         ))
         XCTAssertNil(MeetingPresenceProjector.speakingSeconds(
-            segments: [(start: 0, end: 30, speakerLabel: "SPEAKER_00")],
+            segments: [(start: 0, end: 30, speakerLabel: "SPEAKER_00", isCaption: false)],
+            speakerMap: [:],
+            selfNames: [],
+            selfLabel: "SPEAKER_ME"
+        ))
+    }
+
+    func testSpeakingSecondsCountsMeetsOwnCaptionLabelAsTheUser() {
+        // Meet never shows your name on your own captions, and the calendar roster often only has
+        // your email: "You" is the only handle on the user in a caption transcript.
+        let seconds = MeetingPresenceProjector.speakingSeconds(
+            segments: [
+                (start: 0, end: 20, speakerLabel: "Phil Kandera", isCaption: true),
+                (start: 20, end: 31, speakerLabel: "You", isCaption: true),
+                (start: 31, end: 35, speakerLabel: "Tú", isCaption: true)
+            ],
+            speakerMap: [:],
+            selfNames: ["marco@example.com"],
+            selfLabel: "SPEAKER_ME"
+        )
+        XCTAssertEqual(seconds, 15)
+    }
+
+    func testCaptionTranscriptWhereTheUserNeverSpokeIsARealZero() {
+        let seconds = MeetingPresenceProjector.speakingSeconds(
+            segments: [(start: 0, end: 20, speakerLabel: "Phil Kandera", isCaption: true)],
+            speakerMap: [:],
+            selfNames: [],
+            selfLabel: "SPEAKER_ME"
+        )
+        XCTAssertEqual(seconds, 0)
+    }
+
+    func testYouOutsideCaptionsIsJustAName() {
+        XCTAssertNil(MeetingPresenceProjector.speakingSeconds(
+            segments: [(start: 0, end: 20, speakerLabel: "You", isCaption: false)],
             speakerMap: [:],
             selfNames: [],
             selfLabel: "SPEAKER_ME"

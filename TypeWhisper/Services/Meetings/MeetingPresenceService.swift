@@ -138,12 +138,14 @@ final class MeetingPresenceService {
         var speakingSeconds: Int?
         if includeTranscriptFacts {
             let segments = meeting.segments
-            if meeting.state == .live, meeting.externalSessionKey != nil, let start = meeting.startDate,
+            if meeting.externalSessionKey != nil, let start = meeting.startDate,
                let lastEnd = segments.filter({ $0.source == .liveCaptions }).map(\.end).max() {
                 lastCaptionAt = start.addingTimeInterval(lastEnd)
             }
             speakingSeconds = MeetingPresenceProjector.speakingSeconds(
-                segments: segments.map { (start: $0.start, end: $0.end, speakerLabel: $0.speakerLabel) },
+                segments: segments.map {
+                    (start: $0.start, end: $0.end, speakerLabel: $0.speakerLabel, isCaption: $0.source == .liveCaptions)
+                },
                 speakerMap: meeting.speakerMap,
                 selfNames: attendees.filter { $0.isSelf == true }.map(\.name),
                 selfLabel: MeetingDiarizationEnricher.micSpeakerLabel
