@@ -239,6 +239,11 @@
 		GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000116 /* EmailRowPresentationTests.swift */; };
 		GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */; };
 		GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000008 /* ConferenceURLDetector.swift */; };
+		PPB0000000000000000005 /* APIRouterRequiredTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000005 /* APIRouterRequiredTokenTests.swift */; };
+		PPB0000000000000000004 /* MeetingPresenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000004 /* MeetingPresenceTests.swift */; };
+		PPB0000000000000000003 /* APIHandlers+MeetingPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000003 /* APIHandlers+MeetingPresence.swift */; };
+		PPB0000000000000000002 /* MeetingPresenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000002 /* MeetingPresenceService.swift */; };
+		PPB0000000000000000001 /* MeetingPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000001 /* MeetingPresence.swift */; };
 		GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */; };
 		GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */; };
 		CA11000000000000000001 /* CalendarColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000001 /* CalendarColor.swift */; };
@@ -973,6 +978,11 @@
 		GGF0000000000000000116 /* EmailRowPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EmailRowPresentationTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RelatedEmailsFetchStateTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000008 /* ConferenceURLDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetector.swift; sourceTree = "<group>"; };
+		PPF0000000000000000005 /* APIRouterRequiredTokenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "APIRouterRequiredTokenTests.swift"; sourceTree = "<group>"; };
+		PPF0000000000000000004 /* MeetingPresenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "MeetingPresenceTests.swift"; sourceTree = "<group>"; };
+		PPF0000000000000000003 /* APIHandlers+MeetingPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIHandlers+MeetingPresence.swift"; sourceTree = "<group>"; };
+		PPF0000000000000000002 /* MeetingPresenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingPresenceService.swift"; sourceTree = "<group>"; };
+		PPF0000000000000000001 /* MeetingPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingPresence.swift"; sourceTree = "<group>"; };
 		GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConferenceURLDetectorTests.swift; sourceTree = "<group>"; };
 		GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarProjectionRichDetailTests.swift; sourceTree = "<group>"; };
 		CA11F00000000000000001 /* CalendarColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColor.swift; sourceTree = "<group>"; };
@@ -2311,6 +2321,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000040 /* HTTPResponse.swift */,
+				PPF0000000000000000003 /* APIHandlers+MeetingPresence.swift */,
 				BB00000000000000000041 /* HTTPRequestParser.swift */,
 				BB00000000000000000042 /* APIRouter.swift */,
 				BB00000000000000000043 /* HTTPServer.swift */,
@@ -2327,6 +2338,8 @@
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
 				GGF0000000000000000008 /* ConferenceURLDetector.swift */,
+				PPF0000000000000000002 /* MeetingPresenceService.swift */,
+				PPF0000000000000000001 /* MeetingPresence.swift */,
 				CA11F00000000000000001 /* CalendarColor.swift */,
 				CA11F00000000000000002 /* CalendarSelectionStore.swift */,
 				TCF0000000000000000006 /* CalendarColorProviding.swift */,
@@ -3133,6 +3146,8 @@
 				GGF0000000000000000116 /* EmailRowPresentationTests.swift */,
 				GGF0000000000000000117 /* RelatedEmailsFetchStateTests.swift */,
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
+				PPF0000000000000000005 /* APIRouterRequiredTokenTests.swift */,
+				PPF0000000000000000004 /* MeetingPresenceTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
 				GGF0000000000000000036 /* CalendarEventTwinCollapserTests.swift */,
@@ -4734,6 +4749,8 @@
 				GGB0000000000000000116 /* EmailRowPresentationTests.swift in Sources */,
 				GGB0000000000000000117 /* RelatedEmailsFetchStateTests.swift in Sources */,
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
+				PPB0000000000000000005 /* APIRouterRequiredTokenTests.swift in Sources */,
+				PPB0000000000000000004 /* MeetingPresenceTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
 				GGB0000000000000000036 /* CalendarEventTwinCollapserTests.swift in Sources */,
@@ -4940,6 +4957,9 @@
 				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
 				GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */,
+				PPB0000000000000000003 /* APIHandlers+MeetingPresence.swift in Sources */,
+				PPB0000000000000000002 /* MeetingPresenceService.swift in Sources */,
+				PPB0000000000000000001 /* MeetingPresence.swift in Sources */,
 				GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */,
 				GGB0000000000000000002 /* GoogleLoopbackServer.swift in Sources */,
 				GGB0000000000000000003 /* GoogleHTTPTransport.swift in Sources */,

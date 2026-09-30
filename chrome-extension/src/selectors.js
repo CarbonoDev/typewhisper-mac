@@ -485,6 +485,25 @@ function readCallCode() {
   return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(path) ? path : null;
 }
 
+/**
+ * How many people are in the call, or `null` when that cannot be read.
+ *
+ * Counted from the participant tiles, each of which carries a `data-participant-id`. Meet only
+ * renders the tiles that fit the grid, so in a large call this is a *lower bound* — which is all the
+ * keep-alive needs, since its one question is "is anyone else still here?". A presentation is a
+ * participant of its own, so sharing your screen alone in a room reads as two. `null` (no tiles
+ * found at all) means the probe is broken, not that the room is empty: callers must treat it as
+ * unknown rather than as zero.
+ */
+function readParticipantCount() {
+  const ids = new Set();
+  for (const el of document.querySelectorAll('[data-participant-id]')) {
+    const id = el.getAttribute('data-participant-id');
+    if (id) ids.add(id);
+  }
+  return ids.size > 0 ? ids.size : null;
+}
+
 /** Best-effort human title for the call; falls back to the call code. */
 function readMeetingTitle() {
   const title = (document.title || '').trim();
@@ -513,6 +532,7 @@ const TWSelectorsAPI = {
   readAccountEmail,
   readCallCode,
   readMeetingTitle,
+  readParticipantCount,
   isIconToken,
   stripIconTokens,
   looksLikeUIChrome,

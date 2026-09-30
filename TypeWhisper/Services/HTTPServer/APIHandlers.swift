@@ -12,7 +12,7 @@ final class APIHandlers: @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
     private let audioRecorderViewModel: AudioRecorderViewModel
-    private let meetingService: MeetingService
+    let meetingService: MeetingService
     private let meetingImportService: MeetingImportService
     /// Used for the optional `match_calendar` auto-link on import. Optional so tests (and any
     /// host without a calendar) can omit it; when nil, `match_calendar` reports `matched_event: null`.
@@ -23,6 +23,10 @@ final class APIHandlers: @unchecked Sendable {
     /// (tests that never enqueue) can omit it; when nil the merge still runs, it simply has no jobs
     /// to cancel.
     private let jobQueue: JobQueueService?
+    /// Backs the presence endpoints (`APIHandlers+MeetingPresence.swift`) and hears about every sign
+    /// of life from an external caption session. Optional so tests and hosts without live capture
+    /// can omit it; when nil the presence routes answer 503 and the live routes behave as before.
+    let meetingPresence: MeetingPresenceService?
 
     init(
         modelManager: ModelManagerService,
@@ -36,7 +40,8 @@ final class APIHandlers: @unchecked Sendable {
         meetingService: MeetingService,
         meetingImportService: MeetingImportService,
         calendarService: CalendarService?,
-        jobQueue: JobQueueService? = nil
+        jobQueue: JobQueueService? = nil,
+        meetingPresence: MeetingPresenceService? = nil
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -50,6 +55,7 @@ final class APIHandlers: @unchecked Sendable {
         self.meetingImportService = meetingImportService
         self.calendarService = calendarService
         self.jobQueue = jobQueue
+        self.meetingPresence = meetingPresence
     }
 
     func register(on router: APIRouter) {
@@ -86,6 +92,7 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/meetings/live/{id}/end", handler: handleEndLiveMeeting)
         router.register("GET", "/v1/meetings", handler: handleListMeetings)
         router.register("GET", "/v1/meetings/{id}", handler: handleGetMeeting)
+        registerMeetingPresence(on: router)
     }
 
     // MARK: - POST /v1/transcribe
@@ -1828,6 +1835,7 @@ final class APIHandlers: @unchecked Sendable {
 
         let meetingService = self.meetingService
         let calendarService = self.calendarService
+        let presence = self.meetingPresence
         let start = startDate ?? Date()
         return await MainActor.run {
             // A Meet call code is *reused* by every occurrence of a recurring meeting, so the session
@@ -1841,6 +1849,7 @@ final class APIHandlers: @unchecked Sendable {
 
             if let existing = openForKey.last {
                 if Self.canResumeLiveSession(existingStart: existing.startDate, incomingStart: start) {
+                    presence?.noteLiveSessionActivity(meetingID: existing.id)
                     return .json(LiveSessionResponse(
                         id: existing.id.uuidString,
                         created: false,
@@ -1911,6 +1920,7 @@ final class APIHandlers: @unchecked Sendable {
                 }
             }
             meetingService.setExternalSessionKey(sessionKey, for: meeting)
+            presence?.noteLiveSessionActivity(meetingID: meeting.id)
             apiLogger.info("Started live meeting session for key \(sessionKey, privacy: .public)")
             return .json(LiveSessionResponse(
                 id: meeting.id.uuidString,
@@ -1963,6 +1973,7 @@ final class APIHandlers: @unchecked Sendable {
         }
 
         let meetingService = self.meetingService
+        let presence = self.meetingPresence
         return await MainActor.run {
             guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
                 return .error(status: 404, message: "Meeting not found")
@@ -1970,6 +1981,7 @@ final class APIHandlers: @unchecked Sendable {
             if !segments.isEmpty {
                 meetingService.appendStableSegments(segments, source: .liveCaptions, to: meeting)
             }
+            presence?.noteLiveSessionActivity(meetingID: meeting.id)
             return .json(LiveAppendResponse(
                 id: meeting.id.uuidString,
                 appended: segments.count,
@@ -2002,11 +2014,13 @@ final class APIHandlers: @unchecked Sendable {
         }
 
         let meetingService = self.meetingService
+        let presence = self.meetingPresence
         let resolvedEnd = endDate ?? Date()
         return await MainActor.run {
             guard let meeting = meetingService.meetings.first(where: { $0.id == uuid }) else {
                 return .error(status: 404, message: "Meeting not found")
             }
+            presence?.endLiveSession(meetingID: meeting.id)
             meeting.endDate = resolvedEnd
             meeting.state = .completed
             meetingService.update(meeting)
@@ -2218,7 +2232,7 @@ final class APIHandlers: @unchecked Sendable {
             .joined(separator: "\n")
     }
 
-    private static func parseISO8601Date(_ string: String) -> Date? {
+    static func parseISO8601Date(_ string: String) -> Date? {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let withFractional = ISO8601DateFormatter()

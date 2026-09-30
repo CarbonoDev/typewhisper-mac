@@ -138,3 +138,44 @@ test('a session that becomes active again cancels its pending end', async () => 
   assert.equal(apiCalls.length, 0);
   assert.ok(bg.sessions.has(key));
 });
+
+test('a heartbeat reports the open call with its head count, and only for a linked, live session', async () => {
+  const key = 'eee-ffff-ggg';
+  // No meeting yet (nothing has flushed): there is nothing to keep alive.
+  await bg.enqueue(key, [], { startedAt: '2026-08-12T09:00:00.000Z' });
+  await bg.heartbeat(key, 3);
+  assert.equal(apiCalls.length, 0);
+
+  await bg.enqueue(key, [segment('hello')]);
+  await bg.flush(key);
+  apiCalls = [];
+  await bg.heartbeat(key, 3);
+  assert.equal(apiCalls.length, 1);
+  assert.ok(apiCalls[0].url.endsWith('/v1/meetings/live/meeting-1/heartbeat'));
+  assert.deepEqual(apiCalls[0].body, { participants: 3 });
+
+  // A head count the page could not read is sent as "unknown", never as zero.
+  apiCalls = [];
+  await bg.heartbeat(key, null);
+  assert.deepEqual(apiCalls[0].body, {});
+
+  // Once the user has hung up, a late heartbeat must not revive the meeting.
+  apiUp = false;
+  await bg.endSession(key);
+  apiUp = true;
+  apiCalls = [];
+  await bg.heartbeat(key, 3);
+  assert.equal(apiCalls.length, 0);
+});
+
+test('a failed heartbeat leaves the flush backoff and the meeting link alone', async () => {
+  const key = 'fff-gggg-hhh';
+  await bg.enqueue(key, [segment('hello')], { startedAt: '2026-08-12T09:00:00.000Z' });
+  await bg.flush(key);
+
+  apiUp = false;
+  await bg.heartbeat(key, 2);
+  assert.equal(bg.sessions.get(key).failures, 0);
+  assert.equal(bg.sessions.get(key).nextAttemptAt, 0);
+  assert.equal(bg.sessions.get(key).meetingId, 'meeting-1');
+});

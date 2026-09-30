@@ -9,6 +9,7 @@ const {
   findCaptionRoot,
   inActiveCall,
   readCallCode,
+  readParticipantCount,
 } = require('../src/selectors.js');
 
 /** parseCaptionBlock only reads `innerText`, so a plain object stands in for the element. */
@@ -210,4 +211,24 @@ test('plausible speaker names are names, not chrome', () => {
   assert.ok(!isPlausibleSpeakerName('more_vert'));
   assert.ok(!isPlausibleSpeakerName(''));
   assert.ok(!isPlausibleSpeakerName('x'.repeat(49)));
+});
+
+test('the participant count is the number of distinct participant tiles', () => {
+  const tile = (id) => new FakeEl({ attrs: { 'data-participant-id': id } });
+  // Meet renders more than one element per participant (the tile and its name plate).
+  const restore = installDom([tile('spaces/x/devices/1'), tile('spaces/x/devices/1'), tile('spaces/x/devices/2')]);
+  try {
+    assert.equal(readParticipantCount(), 2);
+  } finally {
+    restore();
+  }
+});
+
+test('an unreadable participant count is null, never zero', () => {
+  const restore = installDom([new FakeEl({ attrs: { 'aria-label': 'Leave call' } })]);
+  try {
+    assert.equal(readParticipantCount(), null);
+  } finally {
+    restore();
+  }
 });

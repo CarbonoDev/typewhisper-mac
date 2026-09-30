@@ -96,6 +96,14 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
 | `POST /v1/meetings/live` | Create or resume the meeting for a call. Idempotent on `session_key` (the Meet call code). |
 | `POST /v1/meetings/live/{id}/segments` | Append a batch of caption turns. |
 | `POST /v1/meetings/live/{id}/end` | Close the session. Deliberately does **not** trigger summarization. |
+| `POST /v1/meetings/live/{id}/heartbeat` | Keep-alive, once a minute while someone else is in the call. Body: `{"participants": 3}` (omitted when the head count cannot be read). |
+
+The heartbeat exists for the app's presence API (`GET /v1/meetings/now`): a caption session only
+counts as "in a meeting" while the app has heard from it in the last five minutes — a caption batch
+or a heartbeat. That is what carries a quiet call, and what lets the app notice a call whose `/end`
+never arrived. No heartbeat is sent while you are alone in the room, so a Meet tab left open after
+everyone has gone stops counting. The head count comes from the participant tiles
+(`data-participant-id`), so in a large call it is a lower bound.
 
 On create, the app tries to **match the call to a calendar event by title** (same scoring as import's
 `match_calendar`): a calendar-created Meet call carries the event's name as the tab title, so a

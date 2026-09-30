@@ -67,6 +67,7 @@ final class ServiceContainer: ObservableObject {
     // (D-M1/D-M2). No consumers yet — brief/Q&A/UI wiring lands in M3–M5.
     let gmailContextService: GmailContextService
     let meetingCaptureService: MeetingCaptureService
+    let meetingPresenceService: MeetingPresenceService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
     let meetingStartNotificationService: MeetingStartNotificationService
@@ -496,6 +497,13 @@ final class ServiceContainer: ObservableObject {
         )
 
 
+        meetingPresenceService = MeetingPresenceService(
+            meetingService: meetingService,
+            captureService: meetingCaptureService,
+            audioRecorderService: audioRecorderService,
+            calendarService: calendarService
+        )
+
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
         let router = APIRouter(
@@ -514,7 +522,8 @@ final class ServiceContainer: ObservableObject {
             meetingService: meetingService,
             meetingImportService: meetingImportService,
             calendarService: calendarService,
-            jobQueue: meetingJobQueue
+            jobQueue: meetingJobQueue,
+            meetingPresence: meetingPresenceService
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)

@@ -12,6 +12,10 @@
   const TICK_MS = 1000;
   const PORT_RECYCLE_MS = 4 * 60 * 1000; // Chrome caps port lifetime at 5 minutes.
   const CAPTIONS_WARN_AFTER_MS = 25_000;
+  // How often the app is told the call is still open. The app stops counting a caption session as
+  // "in a meeting" after five minutes without a caption or one of these, so a minute leaves room
+  // for several to go missing.
+  const HEARTBEAT_MS = 60_000;
 
   // Auto-enable bounds: never click-fight a user who deliberately turned captions off.
   const AUTO_CC_MAX_ATTEMPTS = 3;
@@ -41,6 +45,7 @@
   let sessionKey = null;
   let sessionStartedAt = null;
   let notInCallTicks = 0;
+  let lastHeartbeatAt = 0;
   let warnedAboutCaptions = false;
   let enabled = true;
   let autoEnableCaptions = true;
@@ -177,6 +182,8 @@
     // (see `adoptSessionStart`), which is what makes a mid-call reload keep meeting-relative times.
     stabilizer = new CaptionStabilizer({ sessionStart: Date.now() });
     warnedAboutCaptions = false;
+    // The session start is itself a sign of life; the first heartbeat follows one interval later.
+    lastHeartbeatAt = Date.now();
     ccAttempts = 0;
     lastCcAttemptAt = 0;
     langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
@@ -201,6 +208,25 @@
     log('session ended for call', sessionKey);
     sessionKey = null;
     stabilizer = null;
+  }
+
+  /**
+   * Keep-alive for a quiet call: captions are the app's only other evidence that the meeting is
+   * still running, and a long silence (or captions that never turned on) would otherwise read as
+   * "the call is over". Sent only while someone else is in the room — sitting alone in an open
+   * call is not a meeting, and that is exactly the tab-left-open case this must not keep alive.
+   * An unreadable head count still sends: the leave button says the call is open, and a broken
+   * probe must not end it.
+   */
+  function maybeHeartbeat() {
+    if (!sessionKey || Date.now() - lastHeartbeatAt < HEARTBEAT_MS) return;
+    lastHeartbeatAt = Date.now();
+    const participants = TWSelectors.readParticipantCount();
+    if (participants !== null && participants <= 1) return;
+    // Never queued for retry: a heartbeat that missed its moment is worthless, the next one is due
+    // in a minute anyway.
+    if (!port) connect();
+    sendNow({ type: 'heartbeat', sessionKey, participants });
   }
 
   function attachObserver() {
@@ -426,6 +452,7 @@
       maybeAutoEnableCaptions();
       stepLanguageSteering();
       tick();
+      maybeHeartbeat();
     } else if (sessionKey) {
       // Leaving must stick for a few ticks before we end the session: the leave-button probe can
       // miss for a frame during Meet's DOM churn, and a spurious end would complete the meeting

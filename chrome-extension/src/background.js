@@ -246,6 +246,31 @@ async function tryEnd(sessionKey) {
   }
 }
 
+/**
+ * Tell the app the call is still open. The app only counts a caption session as "in a meeting"
+ * while it keeps hearing from it, so this is what carries a quiet call between captions — and its
+ * absence is what lets the app notice a call whose `/end` never arrived.
+ *
+ * Fire-and-forget by design: nothing is queued, persisted, or retried, and a failure leaves the
+ * flush backoff alone. A 404 is not acted on either — an app build without this route answers 404
+ * too, and forgetting the meeting id on that would fork a duplicate meeting on the next flush.
+ */
+async function heartbeat(sessionKey, participants) {
+  await loadSessions();
+  const session = sessions.get(sessionKey);
+  if (!session?.meetingId || session.pendingEnd) return;
+  // The app is known to be unreachable; the flush retry will find out when it is back.
+  if (session.nextAttemptAt && Date.now() < session.nextAttemptAt) return;
+  try {
+    await apiFetch(
+      `/v1/meetings/live/${session.meetingId}/heartbeat`,
+      Number.isInteger(participants) ? { participants } : {}
+    );
+  } catch (error) {
+    console.warn('[tw] heartbeat failed:', error.message);
+  }
+}
+
 async function setBadge(state) {
   const map = {
     ok: { text: '●', color: '#2e7d32' },
@@ -315,6 +340,10 @@ chrome.runtime.onConnect.addListener((port) => {
           sessionKey = message.sessionKey || sessionKey;
           if (message.segments?.length) await enqueue(sessionKey, message.segments);
           break;
+        case 'heartbeat':
+          sessionKey = message.sessionKey || sessionKey;
+          if (sessionKey) await heartbeat(sessionKey, message.participants);
+          break;
         case 'session-end':
           // Take the key from the message like `segments` does: a `session-end` that had to wait in
           // the content script's outbox arrives over a *fresh* port, which has no key of its own —
@@ -343,4 +372,4 @@ chrome.runtime.onConnect.addListener((port) => {
 // Exported for `node --test` only — in the browser this file is driven entirely by the listeners
 // above. The queueing rules (what is persisted, when the backoff applies, when a meeting is ended)
 // are the parts worth regression-testing, and they need no DOM.
-export { sessions, loadSessions, persistSessions, getSession, enqueue, flush, endSession, tryEnd };
+export { sessions, loadSessions, persistSessions, getSession, enqueue, flush, heartbeat, endSession, tryEnd };

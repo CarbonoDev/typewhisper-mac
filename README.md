@@ -539,6 +539,10 @@ curl "http://localhost:8978/v1/meetings?folder=Clients/Acme&tag=sales&from=2026-
 
 # Fetch one meeting, optionally including the transcript text
 curl "http://localhost:8978/v1/meetings/<uuid>?include=transcript"
+
+# Meeting presence for other local apps (always needs the API token)
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8978/v1/meetings/now"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8978/v1/meetings/sessions?since=2026-01-05T00:00:00Z"
 ```
 
 `POST /v1/meetings/import-transcript` accepts either a JSON body with a `path` (a local transcript
@@ -601,6 +605,11 @@ Behavior:
 - `GET /v1/meetings/{id}` returns full detail; add `?include=transcript` for the rendered transcript
   text. A missing or invalid id returns `400 Bad Request`; an unknown id returns `404 Not Found`.
 - An unsupported/empty transcript or an invalid `date` returns `400 Bad Request`.
+- `GET /v1/meetings/now` and `GET /v1/meetings/sessions` tell another local app whether you are in
+  a meeting and which meetings you were in, without any meeting content (no title, transcript, or
+  names). Unlike the other routes they require the API token even when "Require API Token" is off;
+  read it from `api-discovery.json`. Fields and caveats:
+  [docs/specs/2026-09-30-meeting-presence-api-proposal.md](docs/specs/2026-09-30-meeting-presence-api-proposal.md).
 
 ## CLI Tool
 

@@ -4,7 +4,7 @@ import os
 typealias APIHandler = @Sendable (HTTPRequest) async -> HTTPResponse
 
 final class APIRouter: Sendable {
-    private typealias RouteEntry = (method: String, path: String, handler: APIHandler)
+    private typealias RouteEntry = (method: String, path: String, requiresToken: Bool, handler: APIHandler)
 
     /// Who may call the local API from a browser extension, and with what credential.
     ///
@@ -40,9 +40,12 @@ final class APIRouter: Sendable {
         self.extensionOriginPolicy = extensionOriginPolicy
     }
 
-    func register(_ method: String, _ path: String, handler: @escaping APIHandler) {
+    /// `requiresToken` makes the route demand the API token from every caller, even when "Require
+    /// API Token" is off for loopback clients. For routes built for *another app* to poll: that app
+    /// can read the token from `api-discovery.json`, and a browser page probing loopback cannot.
+    func register(_ method: String, _ path: String, requiresToken: Bool = false, handler: @escaping APIHandler) {
         routes.withLock { routes in
-            routes.append((method: method.uppercased(), path: path, handler: handler))
+            routes.append((method: method.uppercased(), path: path, requiresToken: requiresToken, handler: handler))
         }
     }
 
@@ -74,7 +77,7 @@ final class APIRouter: Sendable {
         // `/v1/meetings/import-transcript` is never shadowed by `/v1/meetings/{id}`.
         for route in registeredRoutes where !route.path.contains("{") {
             if route.method == request.method && route.path == request.path {
-                guard isAuthorized(request, extensionPolicy: extensionPolicy) else {
+                guard isAuthorized(request, extensionPolicy: extensionPolicy, requiresToken: route.requiresToken) else {
                     return Self.unauthorized.adding(headers: cors)
                 }
                 return await route.handler(request).adding(headers: cors)
@@ -84,7 +87,7 @@ final class APIRouter: Sendable {
         for route in registeredRoutes where route.path.contains("{") {
             guard route.method == request.method,
                   let pathParams = Self.matchPattern(route.path, path: request.path) else { continue }
-            guard isAuthorized(request, extensionPolicy: extensionPolicy) else {
+            guard isAuthorized(request, extensionPolicy: extensionPolicy, requiresToken: route.requiresToken) else {
                 return Self.unauthorized.adding(headers: cors)
             }
             let matched = HTTPRequest(
@@ -193,12 +196,18 @@ final class APIRouter: Sendable {
         return params
     }
 
-    private func isAuthorized(_ request: HTTPRequest, extensionPolicy: ExtensionOriginPolicy?) -> Bool {
+    private func isAuthorized(
+        _ request: HTTPRequest,
+        extensionPolicy: ExtensionOriginPolicy?,
+        requiresToken: Bool
+    ) -> Bool {
         // An allowlisted extension still authenticates on every route — including the otherwise public
         // `/v1/status` — and is never covered by the "no token configured ⇒ everything is authorized"
-        // rule that exists for local tools the user launched themselves.
-        if let extensionPolicy {
-            guard let expectedToken = extensionPolicy.token, !expectedToken.isEmpty,
+        // rule that exists for local tools the user launched themselves. A token-required route holds
+        // every caller to the same bar; the extension policy carries the *current* token, which is
+        // what it needs (the enforced-requests provider is nil whenever the loopback setting is off).
+        if let policy = extensionPolicy ?? (requiresToken ? self.extensionOriginPolicy() : nil) {
+            guard let expectedToken = policy.token, !expectedToken.isEmpty,
                   let providedToken = request.bearerToken ?? request.apiTokenHeader else {
                 return false
             }
