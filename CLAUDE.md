@@ -114,7 +114,28 @@ SwiftData `@Model` types for meetings live in `TypeWhisper/Models/` (`Meeting`, 
 - **Preview-PR flow** (fork → upstream): the `origin/upstream` branch mirrors `upstream/main`; upstream-worthy fixes branch off it and are opened as preview PRs against it on `origin`, so they can be reviewed in the fork before being proposed to the real upstream.
 - **Design specs**: `docs/specs/` holds the design + implementation plans referenced by commit messages and code comments (e.g. the Space "Track E" spec, workflows design/plan). When code comments cite a plan/decision id (e.g. `D-A2`, `M5`, `AD7`), the corresponding spec is the source of truth.
 
+## File size
+
+**New files: aim for ≤ 500 lines, hard limit 800.** Existing files: never push one across 800, and don't grow one that is already over — put the new code in a sibling file instead.
+
+The repo has ~68 source files over 800 lines today. The limit is about what you add, not a mandate to go refactor them:
+
+- **Upstream-inherited files stay as they are.** ~58 of the oversized files come from upstream (`AudioDeviceService`, `HotkeyService`, `DictationViewModel`, `WorkflowsSettingsView`, `APIHandlers`, the single-file plugins under `TypeWhisperPluginSDK/Plugins/`, `APIRouterAndHandlersTests` at ~11.7k lines, …). **Do not split, reorder, or reformat them** — that turns every upstream cherry-pick into a conflict. Fork additions to them go in a separate file, as `SettingsBackupExporter+Meetings.swift` does.
+- **Fork-owned files over the limit** are split only when a change is already touching them, in its own commit with no behavior change: `MeetingsViewModel` (~2000), `MeetingService` (~1660), `MeetingCaptureService`, `MeetingDiarizationEnricher`, `MeetingsListView`, `MeetingLLMService`, and the `MeetingQAComposer` / `GmailContextService` / `MeetingImportService` test files.
+- **How to split**: by concern into `Type+Concern.swift` extensions next to the type — the established pattern is the nine `MeetingsViewModel` extensions in `TypeWhisper/ViewModels/` (`TypeWhisper/ViewModels/MeetingsViewModel+AutoBrief.swift`, `TypeWhisper/ViewModels/MeetingsViewModel+RelatedDocs.swift`, `TypeWhisper/ViewModels/MeetingsViewModel+Rules.swift`, …). Pure logic goes into its own type behind a fakeable seam (as `SpeakerSourcePlan`, `SpeakerTimingAligner`, `MeetingQAComposer` are) rather than into another extension. Large SwiftUI views break into subviews in their own files (`Views/Meetings/MeetingDocumentComponents.swift`).
+- **Tests**: one test class per file, named after the unit it covers; when a test file nears the limit, split by behavior (`ParticipantDirectoryMatchingTests` vs. the other `ParticipantDirectory*Tests`) rather than appending.
+- **Every new Swift file must be registered by hand in `TypeWhisper.xcodeproj/project.pbxproj`** — the project uses explicit file lists, not synchronized groups, so an unregistered file silently isn't compiled (or isn't run, for tests).
+- Exempt: `Localizable.xcstrings`, `project.pbxproj`, and the design specs in `docs/specs/`.
+
+## Direction
+
+`NORTH-STAR.md` (repo root) says what this fork is for, who it serves, what it is deliberately not, and what has already been rejected and why. Read it before proposing or scoping new work; when something is turned down, add a dated line to its section 5.
+
 ## Pull Requests
 
 - PRs are squash-merged into `main`; keep one feature/fix per PR and fill out the template (Summary + Test Plan).
 - When a PR fixes or implements a GitHub issue (from AGENTS.md): include the issue context in the PR body, an auto-close reference like `Closes #123`, and a short test plan with the exact verification command(s).
+
+<!-- crystl-cli:begin v2.231.0 -->
+@AGENTS.md
+<!-- crystl-cli:end -->
