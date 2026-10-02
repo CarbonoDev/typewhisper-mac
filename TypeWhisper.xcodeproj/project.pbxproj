@@ -283,6 +283,7 @@
 		TCB0000000000000000002 /* MeetingTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000002 /* MeetingTimeline.swift */; };
 		TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000003 /* HomeLiveBanner.swift */; };
 		TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000004 /* HomeFeedViewModel.swift */; };
+		CC1000000000000000000001 /* CaptureClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1000000000000000000002 /* CaptureClock.swift */; };
 		TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000005 /* MeetingsViewModel+Home.swift */; };
 		TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000006 /* CalendarColorProviding.swift */; };
 		TCB0000000000000000007 /* HomeFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000007 /* HomeFeedTests.swift */; };
@@ -1022,6 +1023,7 @@
 		TCF0000000000000000002 /* MeetingTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTimeline.swift; sourceTree = "<group>"; };
 		TCF0000000000000000003 /* HomeLiveBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLiveBanner.swift; sourceTree = "<group>"; };
 		TCF0000000000000000004 /* HomeFeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedViewModel.swift; sourceTree = "<group>"; };
+		CC1000000000000000000002 /* CaptureClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureClock.swift; sourceTree = "<group>"; };
 		TCF0000000000000000005 /* MeetingsViewModel+Home.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Home.swift"; sourceTree = "<group>"; };
 		TCF0000000000000000006 /* CalendarColorProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColorProviding.swift; sourceTree = "<group>"; };
 		TCF0000000000000000007 /* HomeFeedTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFeedTests.swift; sourceTree = "<group>"; };
@@ -2198,6 +2200,7 @@
 				MWF0000000000000000016 /* MeetingsViewModel+Document.swift */,
 				DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */,
 				TCF0000000000000000004 /* HomeFeedViewModel.swift */,
+				CC1000000000000000000002 /* CaptureClock.swift */,
 				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
 				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
 				CCB000000000000000000502 /* MeetingsViewModel+Organization.swift */,
@@ -4914,6 +4917,7 @@
 				TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */,
 				GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */,
 				TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */,
+				CC1000000000000000000001 /* CaptureClock.swift in Sources */,
 				TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */,
 				TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */,
 				MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */,

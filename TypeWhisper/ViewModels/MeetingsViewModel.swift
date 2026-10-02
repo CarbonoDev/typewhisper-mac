@@ -80,8 +80,9 @@ final class MeetingsViewModel: ObservableObject {
     /// audio adopt). Mirrored from the capture service so the live band and the document bottom bar
     /// show a "Finalizing…" posture the instant Stop is pressed, without the window freezing.
     @Published private(set) var isFinalizing = false
-    @Published private(set) var liveTranscript: String = ""
-    @Published private(set) var captureElapsedSeconds: TimeInterval = 0
+    /// The 1 Hz elapsed clock lives on its own small object so its tick doesn't invalidate every view
+    /// observing this singleton; timer views observe `captureClock` directly.
+    let captureClock: CaptureClock
     @Published private(set) var isDegradedLiveMode = false
     @Published private(set) var captureErrorMessage: String?
     // [Track C] AD8 final re-transcription degradation, mirrored from the capture service so the
@@ -248,6 +249,7 @@ final class MeetingsViewModel: ObservableObject {
         self.promptActionService = promptActionService
         self.calendarService = calendarService
         self.captureService = captureService
+        self.captureClock = CaptureClock(captureService: captureService)
         self.startNotificationService = startNotificationService
         self.endReminderService = endReminderService
         self.llmService = llmService
@@ -306,11 +308,10 @@ final class MeetingsViewModel: ObservableObject {
                 .store(in: &cancellables)
         }
 
+        // Synchronous (no main-queue hop): both sides are @MainActor, and the hop only added a deferred
+        // second render pass. `MeetingOrganizationIndex` mirrors `$meetings` the same way.
         meetingService.$meetings
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] meetings in
-                self?.meetings = meetings
-            }
+            .sink { [weak self] meetings in self?.meetings = meetings }
             .store(in: &cancellables)
 
         promptActionService.$meetingActions
@@ -366,11 +367,12 @@ final class MeetingsViewModel: ObservableObject {
                 self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
+        // No `removeDuplicates` here: the time-driven side effects below must see every poll tick.
         calendarService.$upcomingEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in
                 guard let self else { return }
-                self.upcomingEvents = events
+                if self.upcomingEvents != events { self.upcomingEvents = events }
                 // [Google Phase 1 · M4 / PR #7 review finding 4] Collapse cross-provider CalDAV
                 // twins for the *automatic* consumers only: the published list above (and the
                 // Calendars selection UI) keeps both copies — D-G6 owns the visible half — but
@@ -384,6 +386,7 @@ final class MeetingsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         calendarService.$earlierEvents
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in
                 self?.earlierEvents = events
@@ -408,25 +411,13 @@ final class MeetingsViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.isFinalizing = value }
             .store(in: &cancellables)
-        // `removeDuplicates` guards the singleton VM's `objectWillChange` from firing (and rebuilding
-        // every transcript observer) on redundant republishes — the 350 ms live-preview poll and the
-        // 1 s elapsed timer frequently re-emit an unchanged value.
-        captureService.$liveTranscript
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.liveTranscript = value }
-            .store(in: &cancellables)
+        // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs only while
+        // recording, so there are no idle wakeups. The reminder self-gates (linked calendar event
+        // required, past-end, once per meeting). Writes no `@Published` state (the tick is `captureClock`'s).
         captureService.$elapsedSeconds
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in
-                guard let self else { return }
-                self.captureElapsedSeconds = value
-                // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs
-                // only while recording, so there are no idle wakeups. The reminder self-gates (linked
-                // calendar event required, past-end, once per meeting) inside the service.
-                self.evaluateMeetingEndReminder()
-            }
+            .sink { [weak self] _ in self?.evaluateMeetingEndReminder() }
             .store(in: &cancellables)
         captureService.$isDegradedLiveMode
             .receive(on: DispatchQueue.main)
@@ -466,17 +457,18 @@ final class MeetingsViewModel: ObservableObject {
     /// (each reset at the start of its own operation), so without this they persist across a meeting
     /// switch and e.g. meeting A's "no speakers detected" status renders under meeting B (finding 7).
     /// Called from the window when the selected meeting changes.
+    /// Each write is guarded so a navigation with nothing to clear publishes nothing.
     func clearTransientMessages() {
-        outputErrorMessage = nil
-        outputErrorNeedsProvider = false
-        briefErrorMessage = nil
-        briefErrorNeedsProvider = false
-        qaErrorMessage = nil
-        qaErrorNeedsProvider = false
-        exportErrorMessage = nil
-        diarizationErrorMessage = nil
-        diarizationStatusMessage = nil
-        diarizationStatusOutcome = nil
+        if outputErrorMessage != nil { outputErrorMessage = nil }
+        if outputErrorNeedsProvider { outputErrorNeedsProvider = false }
+        if briefErrorMessage != nil { briefErrorMessage = nil }
+        if briefErrorNeedsProvider { briefErrorNeedsProvider = false }
+        if qaErrorMessage != nil { qaErrorMessage = nil }
+        if qaErrorNeedsProvider { qaErrorNeedsProvider = false }
+        if exportErrorMessage != nil { exportErrorMessage = nil }
+        if diarizationErrorMessage != nil { diarizationErrorMessage = nil }
+        if diarizationStatusMessage != nil { diarizationStatusMessage = nil }
+        if diarizationStatusOutcome != nil { diarizationStatusOutcome = nil }
     }
 
     /// True when a caught generation error is specifically "no LLM provider configured", so the

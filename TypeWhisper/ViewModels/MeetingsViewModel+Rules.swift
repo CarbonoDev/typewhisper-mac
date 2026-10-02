@@ -121,8 +121,8 @@ extension MeetingsViewModel {
         meeting.finalRetranscriptionPolicy = policy
         meetingService.update(meeting)
         // The detail-view picker reads the override straight off the `meeting` reference; the
-        // `meetingService.$meetings` mirror into `self.meetings` is an async main hop, so publish
-        // synchronously here for immediate radio-button feedback (mirrors the global setter).
+        // `meetingService.$meetings` mirror only fires when `update` refetches, so publish explicitly
+        // here for immediate radio-button feedback (mirrors the global setter).
         objectWillChange.send()
     }
 

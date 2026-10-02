@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The prominent "recording now" banner at the top of the Home feed while a meeting is being
 /// captured (plan Track C / D6). Reads the existing `isCapturing` / `activeMeeting` /
-/// `captureElapsedSeconds` published state; clicking it routes to the live meeting document via the
+/// `captureClock` tick; clicking it routes to the live meeting document via the
 /// shared coordinator. Renders nothing when no capture is active.
 struct HomeLiveBanner: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
@@ -38,7 +38,7 @@ struct HomeLiveBanner: View {
                     }
                     Spacer(minLength: 8)
                     if !finalizing {
-                        Text(LiveRecordingBand.elapsedString(viewModel.captureElapsedSeconds))
+                        CaptureElapsedText(format: LiveRecordingBand.elapsedString)
                             .font(.title3)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)

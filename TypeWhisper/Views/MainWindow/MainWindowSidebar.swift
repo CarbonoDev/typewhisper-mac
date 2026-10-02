@@ -6,7 +6,8 @@ import SwiftUI
 struct MainWindowSidebar: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // Actions only — reads no published VM state, so it does not observe the singleton.
+    private let viewModel = MeetingsViewModel.shared
 
     /// Non-nil while the rename sheet is up for a tag (its case-folded key), driving the text field.
     @State private var renamingTag: MeetingTagCount?

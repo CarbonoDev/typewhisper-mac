@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Sidebar band shown while a meeting is being captured (UI Step 0, D3). Reads the existing
-/// `isCapturing` / `activeMeeting` / `captureElapsedSeconds` published state; clicking it routes to
+/// `isCapturing` / `activeMeeting` state plus the `captureClock` tick; clicking it routes to
 /// the live meeting document. Renders nothing when no capture is active.
 struct LiveRecordingBand: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
@@ -25,9 +25,9 @@ struct LiveRecordingBand: View {
                         Text(active.title)
                             .lineLimit(1)
                             .font(.callout)
-                        Text(viewModel.isFinalizing
-                            ? String(localized: "meetingdoc.finalizing")
-                            : Self.elapsedString(viewModel.captureElapsedSeconds))
+                        CaptureElapsedText(
+                            overrideText: viewModel.isFinalizing ? String(localized: "meetingdoc.finalizing") : nil,
+                            format: Self.elapsedString)
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)

@@ -3,7 +3,8 @@ import SwiftUI
 /// [Track C] Capture-context rules list (addendum AD7). Rules pick the live engine/model/language,
 /// a default output template, and the final re-transcription policy for matching meetings.
 struct MeetingContextRulesView: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // Actions only — reads no published VM state, so it does not observe the singleton.
+    private let viewModel = MeetingsViewModel.shared
     /// Observe the rules store directly so the list reacts to CRUD.
     @ObservedObject private var ruleService = MeetingsViewModel.shared.contextRuleService
 

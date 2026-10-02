@@ -289,7 +289,7 @@ final class MeetingTrayState: ObservableObject {
         let viewModel = MeetingsViewModel.shared
         isRecording = viewModel.isCapturing
         meetingTitle = viewModel.activeMeeting?.title ?? ""
-        elapsedSeconds = viewModel.captureElapsedSeconds
+        elapsedSeconds = viewModel.captureClock.elapsedSeconds
         recomputeUpcoming(viewModel.upcomingEvents)
 
         viewModel.$isCapturing
@@ -306,7 +306,7 @@ final class MeetingTrayState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] meeting in self?.meetingTitle = meeting?.title ?? "" }
             .store(in: &cancellables)
-        viewModel.$captureElapsedSeconds
+        viewModel.captureClock.$elapsedSeconds
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.elapsedSeconds = value }

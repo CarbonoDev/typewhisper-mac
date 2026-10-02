@@ -158,10 +158,37 @@ final class MeetingOrganizationIndex: ObservableObject {
         meetings.filter { MeetingService.folderComponents($0.folderPath).isEmpty }.count
     }
 
+    /// The inputs the derived index depends on, captured cheaply (raw strings, no tag JSON decode) so a
+    /// `$meetings` publish that changed nothing relevant — e.g. a segment append on the live meeting —
+    /// skips the rebuild entirely.
+    private struct Fingerprint: Equatable {
+        let meetings: [MeetingKey]
+        let configuredPaths: [String]
+
+        struct MeetingKey: Equatable {
+            let id: UUID
+            let folder: String?
+            let tagsJSON: String?
+        }
+    }
+
+    private var lastFingerprint: Fingerprint?
+
     private func rebuild(from meetings: [Meeting]) {
         lastMeetings = meetings
-        tagCounts = Self.tagCounts(from: meetings)
-        folderTree = Self.folderTree(from: meetings, configuredPaths: configuredFolderPathsProvider())
-        unfiledCount = Self.unfiledCount(from: meetings)
+        let configuredPaths = configuredFolderPathsProvider()
+        let fingerprint = Fingerprint(
+            meetings: meetings.map { .init(id: $0.id, folder: $0.obsidianFolder, tagsJSON: $0.obsidianTagsJSON) },
+            configuredPaths: configuredPaths
+        )
+        guard fingerprint != lastFingerprint else { return }
+        lastFingerprint = fingerprint
+        // Compare before assigning so an unchanged derivation does not republish.
+        let newTagCounts = Self.tagCounts(from: meetings)
+        if newTagCounts != tagCounts { tagCounts = newTagCounts }
+        let newFolderTree = Self.folderTree(from: meetings, configuredPaths: configuredPaths)
+        if newFolderTree != folderTree { folderTree = newFolderTree }
+        let newUnfiledCount = Self.unfiledCount(from: meetings)
+        if newUnfiledCount != unfiledCount { unfiledCount = newUnfiledCount }
     }
 }

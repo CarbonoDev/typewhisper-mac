@@ -73,7 +73,7 @@ struct MeetingBottomBar: View {
                     .frame(width: 8, height: 8)
                 Text(String(localized: "meetingdoc.live"))
                     .font(.caption.bold())
-                Text(MeetingTranscriptPanel.timestamp(viewModel.captureElapsedSeconds))
+                CaptureElapsedText(format: MeetingTranscriptPanel.timestamp)
                     .font(.caption.monospacedDigit())
             }
             .foregroundStyle(.red)

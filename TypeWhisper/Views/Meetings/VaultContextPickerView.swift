@@ -14,7 +14,8 @@ struct VaultContextPickerView: View {
     var notesOnly: Bool = false
 
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // Actions only — reads no published VM state, so it does not observe the singleton.
+    private let viewModel = MeetingsViewModel.shared
 
     @State private var query = ""
     @State private var selectedIDs: Set<String> = []
