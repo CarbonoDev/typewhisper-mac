@@ -96,7 +96,7 @@ struct MeetingDocumentHeader: View {
         let seconds: Double
         if let start = meeting.startDate, let end = meeting.endDate, end > start {
             seconds = end.timeIntervalSince(start)
-        } else if let last = meeting.segments.map(\.end).max(), last > 0 {
+        } else if let last = model.facts(for: meeting).transcriptDuration {
             seconds = last
         } else {
             return nil

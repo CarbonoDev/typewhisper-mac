@@ -10,7 +10,9 @@ struct HomeFeedView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
+            // Lazy so the (potentially hundreds-of-rows) timeline below is virtualized by the scroll
+            // view rather than fully built on every invalidation.
+            LazyVStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
                 masthead
                 // [Google Phase 2 · M3] Weekly Testing-mode expiry surface (D-D8): visible at the
                 // top of Home whenever any Google account needs reconnecting.

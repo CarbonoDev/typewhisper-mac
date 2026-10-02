@@ -184,11 +184,11 @@ struct MeetingDocumentBody: View {
         MeetingEmptyStateCard(
             icon: "sparkles",
             title: String(localized: "meetingdoc.output.none"),
-            message: meeting.segments.isEmpty
+            message: model.facts(for: meeting).segmentCount == 0
                 ? String(localized: "meetingdoc.output.needsTranscript")
                 : String(localized: "meetingdoc.output.generateHint")
         ) {
-            if !meeting.segments.isEmpty {
+            if model.facts(for: meeting).segmentCount > 0 {
                 if viewModel.isGeneratingOutput(for: meeting) {
                     ProgressView().controlSize(.small)
                 } else if let template = viewModel.defaultTemplate(ofKind: model.selectedOutputKind, for: meeting) {
@@ -205,35 +205,32 @@ struct MeetingDocumentBody: View {
 
     // MARK: - Appendix
 
-    private var speakerCount: Int {
-        Set(meeting.segments.compactMap { segment -> String? in
-            guard let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !label.isEmpty else { return nil }
-            return label
-        }).count
-    }
-
-    private var transcriptDetail: String {
+    /// Duration · speaker count, from the document model's memoized facts (one segment walk per
+    /// meeting revision, not three per body pass).
+    private func transcriptDetail(_ facts: MeetingDocumentModel.DocumentFacts) -> String {
         var parts: [String] = []
-        if let last = meeting.segments.map(\.end).max(), last > 0 {
+        if let last = facts.transcriptDuration {
             parts.append(Duration.seconds(last).formatted(.units(allowed: [.hours, .minutes], width: .narrow)))
         }
-        if speakerCount > 1 {
-            parts.append(String(format: String(localized: "meetingdoc.appendix.speakerCount"), speakerCount))
+        if facts.speakerCount > 1 {
+            parts.append(String(format: String(localized: "meetingdoc.appendix.speakerCount"), facts.speakerCount))
         }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
     private var appendix: some View {
+        let facts = model.facts(for: meeting)
+        // One lookup per body pass (it stats every related note on disk).
+        let relatedDocuments = viewModel.relatedDocuments(for: meeting)
         VStack(alignment: .leading, spacing: MeetingTheme.s2) {
             MeetingSectionLabel(String(localized: "meetingdoc.appendix"))
 
-            if !meeting.segments.isEmpty {
+            if facts.segmentCount > 0 {
                 MeetingQuietRow(
                     icon: "waveform",
                     title: String(localized: "meetingdoc.transcript.title"),
-                    detail: transcriptDetail
+                    detail: transcriptDetail(facts)
                 ) {
                     model.panelTab = .transcript
                     model.isTranscriptPanelOpen = true
@@ -251,7 +248,7 @@ struct MeetingDocumentBody: View {
                 }
             }
 
-            if !meeting.segments.isEmpty {
+            if facts.segmentCount > 0 {
                 MeetingAppendixRow(
                     title: String(localized: "meetings.diarization.title"),
                     summary: speakerSummary
@@ -269,10 +266,10 @@ struct MeetingDocumentBody: View {
                 }
             }
 
-            if viewModel.isVaultConnected || !viewModel.relatedDocuments(for: meeting).isEmpty {
+            if viewModel.isVaultConnected || !relatedDocuments.isEmpty {
                 MeetingAppendixRow(
                     title: String(localized: "meetingdoc.related.title"),
-                    summary: relatedSummary
+                    summary: relatedDocuments.isEmpty ? nil : "\(relatedDocuments.count)"
                 ) {
                     MeetingRelatedDocsSection(meeting: meeting)
                 }
@@ -302,11 +299,6 @@ struct MeetingDocumentBody: View {
             .filter { !$0.isEmpty }
         guard !mapped.isEmpty else { return nil }
         return mapped.sorted().joined(separator: " · ")
-    }
-
-    private var relatedSummary: String? {
-        let count = viewModel.relatedDocuments(for: meeting).count
-        return count > 0 ? "\(count)" : nil
     }
 
     private var notesAppendixContent: some View {

@@ -150,10 +150,16 @@ extension MeetingsViewModel {
 
     /// Resolve the live presentation for a meeting from current published capture state.
     func documentPresentation(for meeting: Meeting) -> DocumentPresentation {
+        documentPresentation(for: meeting, hasContent: Self.documentHasContent(meeting))
+    }
+
+    /// Same as `documentPresentation(for:)` with a precomputed `hasContent` (the document view passes
+    /// its memoized fact so a body pass never re-walks the meeting's segments).
+    func documentPresentation(for meeting: Meeting, hasContent: Bool) -> DocumentPresentation {
         Self.documentPresentation(
             state: meeting.state,
             isCapturingThisMeeting: isCapturing && activeMeeting?.id == meeting.id,
-            hasContent: Self.documentHasContent(meeting),
+            hasContent: hasContent,
             isFinalizingThisMeeting: isFinalizing && activeMeeting?.id == meeting.id
         )
     }

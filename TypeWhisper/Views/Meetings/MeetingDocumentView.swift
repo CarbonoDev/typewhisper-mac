@@ -13,13 +13,16 @@ struct MeetingDocumentView: View {
     @StateObject private var model = MeetingDocumentModel()
     let meeting: Meeting
 
+    /// Resolved from the cached `DocumentFacts` (no per-call segment walk). Read ONCE per body pass
+    /// (bound via `let` in `body`) and threaded to the header / body / bottom bar.
     private var presentation: MeetingsViewModel.DocumentPresentation {
-        viewModel.documentPresentation(for: meeting)
+        viewModel.documentPresentation(for: meeting, hasContent: model.facts(for: meeting).hasContent)
     }
 
     var body: some View {
+        let presentation = self.presentation
         HStack(spacing: 0) {
-            documentColumn
+            documentColumn(presentation)
             if model.isTranscriptPanelOpen {
                 Divider()
                 MeetingTranscriptPanel(model: model, meeting: meeting)
@@ -49,7 +52,7 @@ struct MeetingDocumentView: View {
         }
     }
 
-    private var documentColumn: some View {
+    private func documentColumn(_ presentation: MeetingsViewModel.DocumentPresentation) -> some View {
         ScrollView {
             // [Sprint 1] The document reads in a centered, measure-limited column — a page, not a
             // form (MeetingTheme.contentMaxWidth).
@@ -117,9 +120,8 @@ final class MeetingDocumentModel: ObservableObject {
     @Published var selectedOutputKind: MeetingOutputKind = .summary
     @Published var isTranscriptPanelOpen = false
     @Published var panelTab: PanelTab = .transcript
-    @Published var transcriptSearch = ""
-    @Published var noteDraft = ""
-    @Published var askDraft = ""
+    // The ask draft and transcript search live in leaf `@State` (`MeetingBottomBar` /
+    // `MeetingTranscriptPanel`) so a keystroke never re-renders the whole document.
     @Published var isPresentingImport = false
     @Published var isPresentingExport = false
     /// The "Link to calendar event…" picker sheet (requirement 3).
@@ -133,10 +135,66 @@ final class MeetingDocumentModel: ObservableObject {
         selectedOutputKind = .summary
         isTranscriptPanelOpen = false
         panelTab = .transcript
-        transcriptSearch = ""
-        noteDraft = ""
-        askDraft = ""
         isPresentingLinkEvent = false
         appliedPanelDefaultForMeetingID = nil
+    }
+
+    // MARK: - Per-render fact cache
+
+    /// Transcript-derived facts the header / body / presentation read on every body pass. Each walk
+    /// over `meeting.segments` faults one SwiftData row per segment (and objects re-fault after every
+    /// save + refetch), so they are computed once per `DocumentFacts.Key` and memoized here, outside
+    /// the model objects.
+    struct DocumentFacts: Equatable {
+        struct Key: Equatable {
+            let meetingID: UUID
+            let updatedAt: Date
+            let segmentCount: Int
+        }
+
+        let segmentCount: Int
+        /// Max segment end in seconds, or nil when there is no positive end (no transcript).
+        let transcriptDuration: Double?
+        /// Distinct non-blank speaker labels across the transcript.
+        let speakerCount: Int
+        /// `MeetingsViewModel.documentHasContent` (a transcript or a non-brief output).
+        let hasContent: Bool
+
+        static func compute(for meeting: Meeting) -> DocumentFacts {
+            let segments = meeting.segments
+            var maxEnd: Double?
+            var labels = Set<String>()
+            for segment in segments {
+                let end = segment.end
+                if maxEnd.map({ end > $0 }) ?? true { maxEnd = end }
+                if let label = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !label.isEmpty {
+                    labels.insert(label)
+                }
+            }
+            return DocumentFacts(
+                segmentCount: segments.count,
+                transcriptDuration: maxEnd.flatMap { $0 > 0 ? $0 : nil },
+                speakerCount: labels.count,
+                hasContent: !segments.isEmpty || meeting.outputs.contains { $0.kind != .brief }
+            )
+        }
+    }
+
+    /// Not `@Published`: filled lazily from `body`, so writing it must never invalidate a view.
+    private var cachedFacts: (key: DocumentFacts.Key, facts: DocumentFacts)?
+
+    /// The memoized facts for `meeting`, recomputed only when its id, `updatedAt` (bumped by every
+    /// `MeetingService` write, including segment appends and output adds), or segment count changes.
+    func facts(for meeting: Meeting) -> DocumentFacts {
+        let key = DocumentFacts.Key(
+            meetingID: meeting.id,
+            updatedAt: meeting.updatedAt,
+            segmentCount: meeting.segments.count
+        )
+        if let cachedFacts, cachedFacts.key == key { return cachedFacts.facts }
+        let facts = DocumentFacts.compute(for: meeting)
+        cachedFacts = (key, facts)
+        return facts
     }
 }

@@ -13,17 +13,54 @@ struct MeetingTranscriptPanel: View {
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
 
+    /// Leaf state: a search keystroke re-renders only this panel, never the whole document.
+    @State private var transcriptSearch = ""
+    /// Memoized bubble build (sort + timestamp formatting over every segment). Reference-typed and
+    /// unobserved so filling it from `body` never invalidates anything.
+    @State private var bubbleCache = BubbleCache()
+
     private var bubbles: [MeetingsViewModel.TranscriptBubble] {
         // Speaker-recognition amendment, Fix A: while THIS meeting is capturing, suppress all speaker
         // attribution at the render choke point so stale labels on preserved/restarted segments never
         // appear on the live transcript.
         let suppressSpeakers = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
-        let all = MeetingsViewModel.transcriptBubbles(
-            segments: meeting.segments,
-            speakerMap: meeting.speakerMap,
-            suppressSpeakers: suppressSpeakers
-        )
-        return MeetingsViewModel.filterTranscriptBubbles(all, query: model.transcriptSearch)
+        let all = bubbleCache.bubbles(for: meeting, suppressSpeakers: suppressSpeakers)
+        return MeetingsViewModel.filterTranscriptBubbles(all, query: transcriptSearch)
+    }
+
+    /// Caches the unfiltered bubbles keyed on everything they derive from, so live ticks for an
+    /// unrelated meeting (and re-renders that don't change the transcript) skip the rebuild.
+    @MainActor
+    final class BubbleCache {
+        private struct Key: Equatable {
+            let meetingID: UUID
+            let segmentCount: Int
+            let updatedAt: Date
+            let speakerMapJSON: String?
+            let suppressSpeakers: Bool
+        }
+
+        private var key: Key?
+        private var value: [MeetingsViewModel.TranscriptBubble] = []
+
+        func bubbles(for meeting: Meeting, suppressSpeakers: Bool) -> [MeetingsViewModel.TranscriptBubble] {
+            let segments = meeting.segments
+            let newKey = Key(
+                meetingID: meeting.id,
+                segmentCount: segments.count,
+                updatedAt: meeting.updatedAt,
+                speakerMapJSON: meeting.speakerMapJSON,
+                suppressSpeakers: suppressSpeakers
+            )
+            if newKey == key { return value }
+            value = MeetingsViewModel.transcriptBubbles(
+                segments: segments,
+                speakerMap: meeting.speakerMap,
+                suppressSpeakers: suppressSpeakers
+            )
+            key = newKey
+            return value
+        }
     }
 
     var body: some View {
@@ -46,6 +83,7 @@ struct MeetingTranscriptPanel: View {
         }
         .frame(width: 380)
         .background(.regularMaterial)
+        .onChange(of: meeting.id) { _, _ in transcriptSearch = "" }
     }
 
     private var header: some View {
@@ -86,11 +124,11 @@ struct MeetingTranscriptPanel: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField(String(localized: "meetingdoc.transcript.searchPlaceholder"), text: $model.transcriptSearch)
+            TextField(String(localized: "meetingdoc.transcript.searchPlaceholder"), text: $transcriptSearch)
                 .textFieldStyle(.plain)
-            if !model.transcriptSearch.isEmpty {
+            if !transcriptSearch.isEmpty {
                 Button {
-                    model.transcriptSearch = ""
+                    transcriptSearch = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -104,6 +142,8 @@ struct MeetingTranscriptPanel: View {
 
     @ViewBuilder
     private var content: some View {
+        // Bound once per body pass (the filter runs over every bubble).
+        let bubbles = self.bubbles
         if meeting.segments.isEmpty {
             emptyState
         } else if bubbles.isEmpty {

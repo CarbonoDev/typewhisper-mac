@@ -14,6 +14,9 @@ struct MeetingBottomBar: View {
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
     let presentation: MeetingsViewModel.DocumentPresentation
+    /// Leaf state (like `MeetingNotesPane` / `MeetingQAView`): typing a question re-renders only the
+    /// bar, never the whole document.
+    @State private var askDraft = ""
 
     var body: some View {
         HStack(spacing: 12) {
@@ -44,6 +47,7 @@ struct MeetingBottomBar: View {
         .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
+        .onChange(of: meeting.id) { _, _ in askDraft = "" }
     }
 
     /// True while `stop()`'s off-MainActor teardown is finalizing *this* meeting — the pill then
@@ -99,7 +103,7 @@ struct MeetingBottomBar: View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles")
                 .foregroundStyle(.secondary)
-            TextField(String(localized: "meetingdoc.bottombar.askPlaceholder"), text: $model.askDraft)
+            TextField(String(localized: "meetingdoc.bottombar.askPlaceholder"), text: $askDraft)
                 .textFieldStyle(.plain)
                 .onSubmit(submitAsk)
                 .disabled(viewModel.isAnswering(for: meeting.id))
@@ -263,16 +267,16 @@ struct MeetingBottomBar: View {
     }
 
     private func submitAsk() {
-        let question = model.askDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let question = askDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !viewModel.isAnswering(for: meeting.id) else { return }
-        model.askDraft = ""
+        askDraft = ""
         // [Sprint 1] Answers render in the side panel's Q&A tab — open it so the reply is visible
         // without pushing the document around.
         model.panelTab = .qa
         model.isTranscriptPanelOpen = true
         Task {
             let ok = await viewModel.askQuestion(question, for: meeting)
-            if !ok, model.askDraft.isEmpty { model.askDraft = question }
+            if !ok, askDraft.isEmpty { askDraft = question }
         }
     }
 }

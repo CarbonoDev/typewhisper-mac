@@ -64,22 +64,13 @@ struct MeetingsListView: View {
             || coordinator.hasActiveFacets
     }
 
-    /// The on-screen selection (selection intersected with the currently displayed meetings).
-    private var visibleSelectionCount: Int {
-        viewModel.visibleSelection(in: displayedMeetings.map(\.id)).count
-    }
-
-    /// The selected rows actually on screen, in list order — what the filter-bar "Merge N meetings…"
-    /// button (and its confirmation) targets, matching `visibleSelectionCount`.
-    private var selectedVisibleMeetings: [Meeting] {
-        displayedMeetings.filter { viewModel.selectedMeetingIDs.contains($0.id) }
-    }
-
     var body: some View {
+        // Evaluated ONCE per body pass (filter + sort over every meeting) and threaded through.
+        let displayed = displayedMeetings
         VStack(spacing: 0) {
-            filterBar
+            filterBar(displayed)
             Divider()
-            list
+            list(displayed)
         }
         .navigationTitle(String(localized: "mainwindow.meetings.title"))
         .toolbar {
@@ -103,7 +94,7 @@ struct MeetingsListView: View {
 
     // MARK: - List
 
-    private var list: some View {
+    private func list(_ displayedMeetings: [Meeting]) -> some View {
         let duplicates = Self.duplicateMeetingIDs(in: displayedMeetings)
         return List(selection: $viewModel.selectedMeetingIDs) {
             if let error = viewModel.captureErrorMessage {
@@ -194,8 +185,12 @@ struct MeetingsListView: View {
 
     /// [Sprint 3] Search-first bar: the search field is the hero, and the four facet dropdowns fold
     /// into one Filter menu whose badge carries the active-facet count.
-    private var filterBar: some View {
-        HStack(spacing: MeetingTheme.s2) {
+    private func filterBar(_ displayed: [Meeting]) -> some View {
+        // The on-screen selection (selection ∩ displayed), and the selected rows in list order — what
+        // the "Merge N meetings…" button (and its confirmation) targets.
+        let visibleSelectionCount = viewModel.visibleSelection(in: displayed.map(\.id)).count
+        let selectedVisibleMeetings = displayed.filter { viewModel.selectedMeetingIDs.contains($0.id) }
+        return HStack(spacing: MeetingTheme.s2) {
             HStack(spacing: MeetingTheme.s1) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)

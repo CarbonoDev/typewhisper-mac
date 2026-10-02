@@ -13,7 +13,8 @@ struct MeetingTimeline: View {
         if viewModel.meetings.isEmpty {
             emptyState
         } else {
-            VStack(alignment: .leading, spacing: MeetingTheme.s3) {
+            // Lazy (as is the Home feed's outer stack) so only on-screen rows are built and measured.
+            LazyVStack(alignment: .leading, spacing: MeetingTheme.s3) {
                 MeetingSectionLabel(String(localized: "home.recent.section"))
                 MeetingTimelineList(meetings: viewModel.meetings)
             }
@@ -59,7 +60,9 @@ struct MeetingTimelineList: View {
     var body: some View {
         let groups = homeViewModel.timelineGroups(from: meetings)
         let orderedIDs = groups.flatMap { $0.meetings.map(\.id) }
-        VStack(alignment: .leading, spacing: 20) {
+        // Lazy at both levels (day groups and rows within a day): with hundreds of meetings a plain
+        // VStack built and measured every row on each invalidation. Headers are not pinned.
+        LazyVStack(alignment: .leading, spacing: 20) {
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(homeViewModel.groupTitle(for: group))
@@ -67,7 +70,7 @@ struct MeetingTimelineList: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
 
-                    VStack(spacing: 6) {
+                    LazyVStack(spacing: 6) {
                         ForEach(group.meetings, id: \.id) { meeting in
                             row(meeting, orderedIDs: orderedIDs)
                         }

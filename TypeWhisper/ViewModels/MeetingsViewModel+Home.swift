@@ -102,11 +102,7 @@ extension MeetingsViewModel {
         from meetings: [Meeting],
         calendar: Calendar = .current
     ) -> [MeetingDayGroup] {
-        let keyFormatter = DateFormatter()
-        keyFormatter.calendar = calendar
-        keyFormatter.timeZone = calendar.timeZone
-        keyFormatter.locale = Locale(identifier: "en_US_POSIX")
-        keyFormatter.dateFormat = "yyyy-MM-dd"
+        let keyFormatter = dayKeyFormatter(for: calendar)
 
         var byDay: [String: (date: Date, meetings: [Meeting])] = [:]
         for meeting in meetings {
@@ -124,6 +120,25 @@ extension MeetingsViewModel {
                 return MeetingDayGroup(id: key, date: value.date, meetings: sorted)
             }
             .sorted { $0.date > $1.date }
+    }
+
+    /// Cached `yyyy-MM-dd` key formatter (a `DateFormatter` per call was measurable on every Home
+    /// render). The key is POSIX-locale, so only the calendar / time zone can invalidate it.
+    private static var cachedDayKeyFormatter: DateFormatter?
+
+    private static func dayKeyFormatter(for calendar: Calendar) -> DateFormatter {
+        if let cached = cachedDayKeyFormatter,
+           cached.calendar == calendar,
+           cached.timeZone == calendar.timeZone {
+            return cached
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        cachedDayKeyFormatter = formatter
+        return formatter
     }
 
     /// Classify a date's day relative to `now` for the timeline section header (pure).
@@ -185,7 +200,7 @@ extension MeetingsViewModel {
                 isRunningLong: isRunningLong
             )
         }
-        let kinds = Set(meeting.outputs.lazy.filter { !$0.isDeletedFromStore }.map(\.kind))
+        let kinds = homeOutputKinds(for: meeting)
         return MeetingBadgeFacts(
             hasSummary: kinds.contains(.summary),
             hasExtended: kinds.contains(.extended),
@@ -195,5 +210,20 @@ extension MeetingsViewModel {
             isInVault: meeting.lastObsidianExportAt != nil,
             isRunningLong: isRunningLong
         )
+    }
+
+    /// Memoized output kinds per meeting, keyed by `updatedAt` (bumped by every `MeetingService`
+    /// output add/delete) — same pattern as `HomeFeedViewModel.hasTranscript`. Reading `kind` faults
+    /// each `MeetingOutput` row, and badges are evaluated per row on every timeline render; SwiftData
+    /// re-faults objects after each save + refetch, so the cache lives outside the model objects.
+    private static var outputKindsCache: [UUID: (updatedAt: Date, kinds: Set<MeetingOutputKind>)] = [:]
+
+    private static func homeOutputKinds(for meeting: Meeting) -> Set<MeetingOutputKind> {
+        if let cached = outputKindsCache[meeting.id], cached.updatedAt == meeting.updatedAt {
+            return cached.kinds
+        }
+        let kinds = Set(meeting.outputs.lazy.filter { !$0.isDeletedFromStore }.map(\.kind))
+        outputKindsCache[meeting.id] = (meeting.updatedAt, kinds)
+        return kinds
     }
 }
