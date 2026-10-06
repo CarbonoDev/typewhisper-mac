@@ -99,4 +99,25 @@ final class SpaceTreeModelTests: XCTestCase {
     func testEmptySnapshotYieldsEmptyTree() {
         XCTAssertTrue(SpaceTreeModel.build(from: [], root: "Meetings").isEmpty)
     }
+
+    // MARK: - Per-refresh index (perf plan Phase 2)
+
+    /// The index built once answers every folder lookup with that folder's sorted subtree, independent
+    /// of snapshot order (`build` is a thin lookup over it, so the expected trees above cover its
+    /// shape); a note path or an unknown folder has no children.
+    func testIndexLookupsAreOrderIndependent() {
+        let entries = sampleEntries()
+        let index = SpaceTreeIndex(entries: entries)
+        XCTAssertEqual(SpaceTreeIndex(entries: entries.reversed()), index)
+        XCTAssertEqual(SpaceTreeIndex(entries: entries.shuffled()), index)
+        XCTAssertEqual(index.children(of: "").map(\.name), ["Meetings", "Personal"])
+        XCTAssertEqual(index.children(of: "Meetings/Clients").map(\.name), ["Acme", "Acme2"])
+        XCTAssertEqual(index.children(of: "Meetings/Clients/Acme").map(\.relativePath),
+                       ["Meetings/Clients/Acme/Roadmap.md"])
+        XCTAssertEqual(index.children(of: " /Meetings/ "), index.children(of: "Meetings"))
+        XCTAssertEqual(index.children(of: "Meetings").map(\.name), ["Alpha", "Clients", "Zeta"])
+        XCTAssertTrue(index.children(of: "Meetings/Zeta.md").isEmpty)
+        XCTAssertTrue(index.children(of: "Nope").isEmpty)
+        XCTAssertTrue(SpaceTreeIndex.empty.children(of: "").isEmpty)
+    }
 }

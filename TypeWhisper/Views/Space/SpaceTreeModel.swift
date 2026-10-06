@@ -46,44 +46,74 @@ enum SpaceTreeModel {
     /// Build the Space tree rooted at `root`: the returned top-level nodes are the **immediate
     /// children** of `root` (or the vault roots when `root` is empty). Folders carry their nested
     /// subtree; notes are leaves. Every level is ordered **folders-first, then case-insensitively by
-    /// name** — mirroring `ObsidianVaultService.enumerateEntries`' deterministic sort.
+    /// name** — mirroring `ObsidianVaultService.enumerateEntries`' deterministic sort. A one-off
+    /// lookup; callers that ask repeatedly build a `SpaceTreeIndex` once instead.
     static func build(from entries: [VaultEntry], root: String = "") -> [SpaceNode] {
-        let trimmed = normalize(root)
-        let inScope = scoped(entries, under: trimmed)
-        var meta: [String: (name: String, isDirectory: Bool)] = [:]
-        for entry in inScope {
-            meta[entry.relativePath] = (entry.displayName, entry.isDirectory)
-        }
-        let rootDepth = trimmed.isEmpty ? 0 : components(trimmed).count
-        return buildNodes(parentPath: trimmed, parentDepth: rootDepth, meta: meta)
+        SpaceTreeIndex(entries: entries).children(of: root)
     }
 
-    /// Immediate children of `parentPath` (`""` = vault roots) as `SpaceNode`s, recursively.
-    private static func buildNodes(
-        parentPath: String,
-        parentDepth: Int,
-        meta: [String: (name: String, isDirectory: Bool)]
-    ) -> [SpaceNode] {
-        let children = meta.keys.filter { path in
-            let comps = components(path)
-            guard comps.count == parentDepth + 1 else { return false }
-            return comps.dropLast().joined(separator: "/") == parentPath
+    /// The normalized parent folder of a vault-relative path (`""` for a vault-root entry).
+    fileprivate static func parentKey(of path: String) -> String? {
+        let comps = components(path)
+        guard !comps.isEmpty else { return nil }
+        return comps.dropLast().joined(separator: "/")
+    }
+
+    /// The normalized lookup key of a folder path.
+    fileprivate static func key(of path: String) -> String {
+        components(path).joined(separator: "/")
+    }
+}
+
+/// The Space tree indexed **once per snapshot** (perf plan Phase 2): every folder path maps to its
+/// immediate children, each carrying its full subtree. Built in one O(N log N) pass (group by parent,
+/// then sort each level), so `children(of:)` is a dictionary lookup instead of a recursive rebuild
+/// over the whole snapshot per call. Pure and `Sendable`, so it can be built off the main actor.
+struct SpaceTreeIndex: Sendable, Equatable {
+    static let empty = SpaceTreeIndex(entries: [])
+
+    private let childrenByParent: [String: [SpaceNode]]
+
+    init(entries: [VaultEntry]) {
+        var meta: [String: (name: String, isDirectory: Bool)] = [:]
+        for entry in entries {
+            meta[entry.relativePath] = (entry.displayName, entry.isDirectory)
         }
-        return children
-            .map { path -> SpaceNode in
-                let info = meta[path] ?? ((path as NSString).lastPathComponent, false)
-                return SpaceNode(
-                    relativePath: path,
-                    name: info.name,
-                    isDirectory: info.isDirectory,
-                    children: info.isDirectory
-                        ? buildNodes(parentPath: path, parentDepth: parentDepth + 1, meta: meta)
-                        : []
-                )
-            }
-            .sorted { lhs, rhs in
-                if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
+        var pathsByParent: [String: [String]] = [:]
+        for path in meta.keys {
+            guard let parent = SpaceTreeModel.parentKey(of: path) else { continue }
+            pathsByParent[parent, default: []].append(path)
+        }
+
+        var built: [String: [SpaceNode]] = [:]
+        func nodes(under parent: String) -> [SpaceNode] {
+            if let done = built[parent] { return done }
+            let level = (pathsByParent[parent] ?? [])
+                .map { path -> SpaceNode in
+                    let info = meta[path] ?? ((path as NSString).lastPathComponent, false)
+                    return SpaceNode(
+                        relativePath: path,
+                        name: info.name,
+                        isDirectory: info.isDirectory,
+                        children: info.isDirectory ? nodes(under: SpaceTreeModel.key(of: path)) : []
+                    )
+                }
+                .sorted { lhs, rhs in
+                    if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+            built[parent] = level
+            return level
+        }
+        for parent in pathsByParent.keys {
+            _ = nodes(under: parent)
+        }
+        childrenByParent = built
+    }
+
+    /// The immediate children of `folderPath` (`""` = the vault roots), each with its subtree. Empty
+    /// for a note path or a folder not in the snapshot.
+    func children(of folderPath: String) -> [SpaceNode] {
+        childrenByParent[SpaceTreeModel.key(of: folderPath)] ?? []
     }
 }
