@@ -2,7 +2,7 @@ import SwiftUI
 
 /// [Track D] Automatic pre-meeting brief settings (plan AD9). Toggle plus lead time, minimum
 /// attendees, and brief freshness. Backed directly by the `meetings.brief.auto.*` UserDefaults keys
-/// the `MeetingBriefScheduler` reads, so changes take effect on the next calendar poll.
+/// the `MeetingBriefScheduler` reads; enabling it or changing the lead re-plans the calendar wake.
 struct AutoBriefSettingsView: View {
     @AppStorage(UserDefaultsKeys.meetingsAutoBriefEnabled) private var enabled = true
     @AppStorage(UserDefaultsKeys.meetingsAutoBriefLeadMinutes) private var leadMinutes = 20
@@ -54,5 +54,10 @@ struct AutoBriefSettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The calendar coordinator wakes for the auto-brief only when its lead window opens; a new
+        // window (turned on, or a longer lead) must re-plan that wake rather than wait for an
+        // unrelated one.
+        .onChange(of: enabled) { MeetingsViewModel.shared.calendarRefresh.reschedule() }
+        .onChange(of: leadMinutes) { MeetingsViewModel.shared.calendarRefresh.reschedule() }
     }
 }
