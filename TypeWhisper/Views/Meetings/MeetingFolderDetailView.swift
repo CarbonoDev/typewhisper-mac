@@ -16,8 +16,21 @@ struct MeetingFolderDetailView: View {
     /// (mirrors how the sidebar observes `MeetingOrganizationIndex.shared`).
     @ObservedObject private var metadataStore = MeetingFolderMetadataStore.shared
 
-    @State private var descriptionText = ""
+    /// The description being edited; committed to the store only at commit points (see
+    /// `FolderDescriptionDraft`), never per keystroke.
+    @State private var descriptionDraft: FolderDescriptionDraft
+    @FocusState private var isDescriptionFocused: Bool
+    /// Safety-net commit after a pause in typing, so an edit survives even a quit mid-field.
+    @State private var descriptionIdleCommit: Task<Void, Never>?
     @State private var isPresentingContext = false
+
+    init(folderPath: String) {
+        self.folderPath = folderPath
+        _descriptionDraft = State(initialValue: FolderDescriptionDraft(
+            folderPath: folderPath,
+            savedText: MeetingFolderMetadataStore.shared.config(for: folderPath).description
+        ))
+    }
 
     private var config: FolderContextConfig {
         metadataStore.config(for: folderPath)
@@ -58,8 +71,16 @@ struct MeetingFolderDetailView: View {
                 }
             }
         }
-        .onAppear { descriptionText = config.description }
-        .onChange(of: folderPath) { _, _ in descriptionText = config.description }
+        .onAppear {
+            descriptionDraft = FolderDescriptionDraft(folderPath: folderPath, savedText: config.description)
+        }
+        .onDisappear { commitDescription() }
+        .onChange(of: folderPath) { _, newPath in
+            descriptionIdleCommit?.cancel()
+            write(descriptionDraft.switchFolder(
+                to: newPath, savedText: metadataStore.config(for: newPath).description
+            ))
+        }
         .sheet(isPresented: $isPresentingContext) {
             FolderContextSheet(folderPath: folderPath)
         }
@@ -83,16 +104,19 @@ struct MeetingFolderDetailView: View {
             // empty — matches the Granola reference.
             TextField(
                 String(localized: "meetingfolder.detail.description.placeholder"),
-                text: $descriptionText,
+                text: $descriptionDraft.text,
                 axis: .vertical
             )
             .textFieldStyle(.plain)
             .lineLimit(1...5)
             .font(MeetingTheme.meta)
             .foregroundStyle(.secondary)
-            .onChange(of: descriptionText) { _, newValue in
-                viewModel.setFolderDescription(newValue, for: folderPath)
+            .focused($isDescriptionFocused)
+            .onSubmit { commitDescription() }
+            .onChange(of: isDescriptionFocused) { _, focused in
+                if !focused { commitDescription() }
             }
+            .onChange(of: descriptionDraft.text) { _, _ in scheduleDescriptionIdleCommit() }
 
             MeetingQuietRow(
                 icon: "text.book.closed",
@@ -106,6 +130,27 @@ struct MeetingFolderDetailView: View {
                 activeTagChip(tag)
             }
         }
+    }
+
+    private func commitDescription() {
+        descriptionIdleCommit?.cancel()
+        descriptionIdleCommit = nil
+        write(descriptionDraft.takeCommit())
+    }
+
+    private func scheduleDescriptionIdleCommit() {
+        guard descriptionDraft.isDirty else { return }
+        descriptionIdleCommit?.cancel()
+        descriptionIdleCommit = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            commitDescription()
+        }
+    }
+
+    private func write(_ commit: FolderDescriptionDraft.Commit?) {
+        guard let commit else { return }
+        viewModel.setFolderDescription(commit.text, for: commit.folderPath)
     }
 
     /// A one-line summary of the folder's context configuration for the primary page (pure over the

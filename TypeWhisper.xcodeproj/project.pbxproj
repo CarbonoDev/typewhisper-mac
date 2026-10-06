@@ -347,6 +347,7 @@
 		AA00000000000000000403 /* MeetingBriefService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000403 /* MeetingBriefService.swift */; };
 		M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */; };
 		M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000002 /* MeetingFolderDetailView.swift */; };
+		PF1B00000000000000000009 /* FolderDescriptionDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000008 /* FolderDescriptionDraft.swift */; };
 		TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000001 /* SpaceTreeModel.swift */; };
 		TEB0000000000000000002 /* SpaceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000002 /* SpaceSelection.swift */; };
 		TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEF0000000000000000003 /* SpaceSidebarSection.swift */; };
@@ -360,6 +361,7 @@
 		M7B0000000000000000010 /* MeetingRowContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000010 /* MeetingRowContextMenu.swift */; };
 		M7B0000000000000000004 /* MeetingsViewModel+FolderContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */; };
 		M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M7F0000000000000000005 /* MeetingFolderContextTests.swift */; };
+		PF1B00000000000000000011 /* FolderDescriptionDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000010 /* FolderDescriptionDraftTests.swift */; };
 		M8B0000000000000000001 /* MeetingRelatedDocsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000001 /* MeetingRelatedDocsService.swift */; };
 		M8B0000000000000000002 /* MeetingRelatedDocsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */; };
 		M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */; };
@@ -1106,6 +1108,7 @@
 		BB00000000000000000403 /* MeetingBriefService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBriefService.swift; sourceTree = "<group>"; };
 		M7F0000000000000000001 /* MeetingFolderMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderMetadataStore.swift; sourceTree = "<group>"; };
 		M7F0000000000000000002 /* MeetingFolderDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFolderDetailView.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000008 /* FolderDescriptionDraft.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolderDescriptionDraft.swift; sourceTree = "<group>"; };
 		TEF0000000000000000001 /* SpaceTreeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceTreeModel.swift; sourceTree = "<group>"; };
 		TEF0000000000000000002 /* SpaceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSelection.swift; sourceTree = "<group>"; };
 		TEF0000000000000000003 /* SpaceSidebarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceSidebarSection.swift; sourceTree = "<group>"; };
@@ -1119,6 +1122,7 @@
 		M7F0000000000000000010 /* MeetingRowContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRowContextMenu.swift; sourceTree = "<group>"; };
 		M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+FolderContext.swift"; sourceTree = "<group>"; };
 		M7F0000000000000000005 /* MeetingFolderContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingFolderContextTests.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000010 /* FolderDescriptionDraftTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FolderDescriptionDraftTests.swift; sourceTree = "<group>"; };
 		M8F0000000000000000001 /* MeetingRelatedDocsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsService.swift; sourceTree = "<group>"; };
 		M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsSection.swift; sourceTree = "<group>"; };
 		M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+RelatedDocs.swift"; sourceTree = "<group>"; };
@@ -2473,6 +2477,7 @@
 				MCF000000000000000000008 /* MeetCallControlView.swift */,
 				MCF000000000000000000004 /* MeetCallControlPanel.swift */,
 				M7F0000000000000000002 /* MeetingFolderDetailView.swift */,
+				PF1B00000000000000000008 /* FolderDescriptionDraft.swift */,
 				M7F0000000000000000003 /* VaultContextPickerView.swift */,
 				M7F0000000000000000010 /* MeetingRowContextMenu.swift */,
 				M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */,
@@ -3227,6 +3232,7 @@
 				MEF0000000000000000704 /* MeetingRowContextMenuTests.swift */,
 				MEF0000000000000000602 /* MeetingFolderTests.swift */,
 				M7F0000000000000000005 /* MeetingFolderContextTests.swift */,
+				PF1B00000000000000000010 /* FolderDescriptionDraftTests.swift */,
 				M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */,
 				M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */,
 				MEF0000000000000000502 /* MeetingLanguageDetectionTests.swift */,
@@ -4835,6 +4841,7 @@
 				MEB0000000000000000704 /* MeetingRowContextMenuTests.swift in Sources */,
 				MEB0000000000000000602 /* MeetingFolderTests.swift in Sources */,
 				M7B0000000000000000005 /* MeetingFolderContextTests.swift in Sources */,
+				PF1B00000000000000000011 /* FolderDescriptionDraftTests.swift in Sources */,
 				M8B0000000000000000004 /* MeetingRelatedDocsServiceTests.swift in Sources */,
 				M8B0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift in Sources */,
 				MEB0000000000000000502 /* MeetingLanguageDetectionTests.swift in Sources */,
@@ -5094,6 +5101,7 @@
 				AA00000000000000000403 /* MeetingBriefService.swift in Sources */,
 				M7B0000000000000000001 /* MeetingFolderMetadataStore.swift in Sources */,
 				M7B0000000000000000002 /* MeetingFolderDetailView.swift in Sources */,
+				PF1B00000000000000000009 /* FolderDescriptionDraft.swift in Sources */,
 				TEB0000000000000000001 /* SpaceTreeModel.swift in Sources */,
 				TEB0000000000000000002 /* SpaceSelection.swift in Sources */,
 				TEB0000000000000000003 /* SpaceSidebarSection.swift in Sources */,
