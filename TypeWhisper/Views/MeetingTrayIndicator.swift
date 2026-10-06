@@ -315,6 +315,12 @@ final class MeetingTrayState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in self?.recomputeUpcoming(events) }
             .store(in: &cancellables)
+        // The idle tray has no ticker, and the list does not republish when an event merely comes
+        // within the title window or starts: the calendar clock ticks at exactly those instants.
+        viewModel.calendarClock.$now
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshUpcoming() }
+            .store(in: &cancellables)
     }
 
     private func recomputeUpcoming(_ events: [CalendarEventDTO]) {

@@ -16,13 +16,17 @@ extension MeetingsViewModel {
         calendarRefresh.stop()
     }
 
+    /// The clock time-driven calendar displays observe (see `CalendarClock`).
+    var calendarClock: CalendarClock { calendarRefresh.clock }
+
     func makeCalendarRefreshCoordinator() -> CalendarRefreshCoordinator {
         CalendarRefreshCoordinator(
             calendarService: calendarService,
             hooks: .init(
                 existingCalendarEventIDs: { [weak self] in self?.existingCalendarEventIDs ?? [] },
                 consumerWindows: { [weak self] in self?.calendarConsumerWindows ?? [] },
-                runConsumers: { [weak self] events, now in self?.runCalendarConsumers(events, now: now) }
+                runConsumers: { [weak self] events, now in self?.runCalendarConsumers(events, now: now) },
+                displayLeads: { [MeetingTrayIndicator.trayTitleWindow] }
             )
         )
     }

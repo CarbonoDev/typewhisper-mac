@@ -10,6 +10,9 @@ struct HomeNextSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
+    /// Re-renders at event start / end so the hero's status, the Open button and the drop-off of
+    /// ended events follow the clock (the list itself does not republish then).
+    @ObservedObject private var calendarClock = MeetingsViewModel.shared.calendarClock
 
     var body: some View {
         VStack(alignment: .leading, spacing: MeetingTheme.s2) {

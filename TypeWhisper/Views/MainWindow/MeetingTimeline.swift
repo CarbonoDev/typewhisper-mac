@@ -53,6 +53,7 @@ struct MeetingTimelineList: View {
     // Observed at list level (not per row) so checking items off in a document updates the rows'
     // open-action counts live.
     @ObservedObject private var checklistStore = MeetingChecklistStore.shared
+    @ObservedObject private var calendarClock = MeetingsViewModel.shared.calendarClock  // day headers
     /// The one set of row-menu dialogs for this list (rows only record the pending action).
     @StateObject private var rowActions = MeetingRowActions()
     /// The last replace/toggle target — the origin a ⇧-click range extends from.

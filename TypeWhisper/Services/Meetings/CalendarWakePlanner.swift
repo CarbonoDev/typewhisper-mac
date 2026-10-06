@@ -10,6 +10,8 @@ import Foundation
 ///   entering its window. While an event is *inside* a window the consumer is re-ticked every
 ///   `retickInterval`, exactly the cadence the poll gave it (delivery retries, failure suppression and
 ///   placeholder re-creation all assume a periodic tick inside the window).
+/// - **Display edges** — an event comes within `displayLeads` of its start (the tray's 60-minute
+///   title window): nothing in the lists changes, but a time-driven display does (`CalendarClock`).
 /// - **Refetch** — the retained query no longer covers the window (`CalendarService.nextRefetchDate`).
 enum CalendarWakePlanner {
     /// A time-gated consumer's active window around an event's start: `[start − lead, start + trail]`.
@@ -43,6 +45,7 @@ enum CalendarWakePlanner {
         lookAhead: TimeInterval,
         grace: TimeInterval,
         consumerWindows: [ConsumerWindow],
+        displayLeads: [TimeInterval] = [],
         refetchAt: Date?
     ) -> Wake? {
         var earliest: Date?
@@ -56,6 +59,9 @@ enum CalendarWakePlanner {
             consider(event.startDate)
             consider(event.endDate)
             consider(event.endDate.addingTimeInterval(grace))
+            for lead in displayLeads {
+                consider(event.startDate.addingTimeInterval(-lead))
+            }
         }
         for event in consumerEvents where !event.isAllDay {
             for window in consumerWindows {

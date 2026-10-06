@@ -33,6 +33,8 @@ final class CalendarRefreshCoordinator {
         var consumerWindows: @MainActor () -> [CalendarWakePlanner.ConsumerWindow]
         /// Run the time-gated consumers over the published Upcoming list.
         var runConsumers: @MainActor (_ events: [CalendarEventDTO], _ now: Date) -> Void
+        /// Leads before an event's start at which a time-driven display changes (`CalendarClock`).
+        var displayLeads: @MainActor () -> [TimeInterval] = { [] }
     }
 
     private let calendarService: CalendarService
@@ -53,6 +55,10 @@ final class CalendarRefreshCoordinator {
 
     /// The armed wake, for tests and diagnostics.
     private(set) var nextWake: CalendarWakePlanner.Wake?
+
+    /// Ticked after every wake and every refetch, so time-driven displays re-render at the instants
+    /// they can change (see `CalendarClock`).
+    let clock = CalendarClock()
 
     init(
         calendarService: CalendarService,
@@ -123,6 +129,7 @@ final class CalendarRefreshCoordinator {
                 self.hooks.runConsumers(self.calendarService.upcomingEvents, at)
             }
             self.refetchTask = nil
+            self.clock.tick(at)
             self.reschedule()
             if self.refetchPending {
                 let followUpRunsConsumers = self.pendingRunsConsumers
@@ -147,6 +154,7 @@ final class CalendarRefreshCoordinator {
             lookAhead: calendarService.lookAhead,
             grace: calendarService.grace,
             consumerWindows: hooks.consumerWindows(),
+            displayLeads: hooks.displayLeads(),
             refetchAt: calendarService.nextRefetchDate()
         )
         guard wake != nextWake || wakeTimer == nil else { return }
@@ -172,6 +180,7 @@ final class CalendarRefreshCoordinator {
         if !changed {
             hooks.runConsumers(calendarService.upcomingEvents, at)
         }
+        clock.tick(at)
         reschedule()
     }
 
