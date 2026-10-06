@@ -147,9 +147,12 @@
 - [x] Perf: vault work off the main actor @vault-offmain
   Impact high when used / risk medium. `ObsidianVaultService` enumerate/parse/rank as a `nonisolated` core run detached, cache parsed notes by mtime; `VaultContextPickerView` filters a cached snapshot instead of walking the vault in `body`; lazy async `SpaceViewModel.refresh` (no scan in init); Space tree indexed once per refresh; draft text local `@State`.
   > 2026-10-06 diamond: reviewed + merged to main as 98c7a799 (SpaceTreeIndex once per snapshot), 67f40604 (VaultIndexer actor: walk/parse/rank off main, parse cache keyed on mtime+size+inode; picker filters a snapshot; Space lazy async refresh, no scan in init), 3445e0b5 (draft text view-local). Worker: 24 classes / 252 tests green. Not yet verified in a dev build (Space, context picker, brief/Q&A vault retrieval).
-- [~] Perf: prune SwiftData persistent history; defer non-critical startup past the first frame @vault-offmain
+- [x] Perf: prune SwiftData persistent history; defer non-critical startup past the first frame @vault-offmain
   Impact low-med / risk low-med. `ACHANGE` has 74k rows and nothing prunes it; launch logged a 2.8 s slow-HID response with ~10 store opens, a vault scan and plugin loading all synchronous before the first frame.
-  > 2026-10-06 diamond: dispatched to vault-offmain after its first merge.
+  > 2026-10-06 diamond: reviewed + merged to main as 2f8b63e0 (LaunchMetrics: milestones + per-store open time, log category "Launch"), c4d01b98 (Google sync start + participant backfill after first frame), bf8222a7 (prune persistent history >24 h, off main, macOS 15+). Worker: 12 classes / 203 tests green. NOT measured: no launch timed, prune not run against the real store. Worker's finding: most launch cost is ~10 store opens + ~70 services built synchronously in ServiceContainer (upstream structure) — parked until the dev build's per-store timings exist. Parked follow-ups: lazy store opens, usage-statistics backfill + history retention purge after first frame, VACUUM, PromptActionService opens its store outside the factory.
+- [~] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes @vault-offmain
+  Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
+  > 2026-10-06 diamond: dispatched to vault-offmain after its second merge.
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
@@ -163,8 +166,6 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
 ## Backlog — Perf refactor Phase 2 (structural)
 - [ ] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive)
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
-- [ ] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes
-  Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
 - [ ] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
   Impact high / risk high (15–20 test files). Slices: Capture, Calendar, Library/Organization, Outputs, Vault/Export, Import, Related. Views take the slice they use; mirrors become computed forwards (or `@Observable`, macOS 14 floor). Removes the documented "authoritative vs mirrored" staleness workarounds.
 - [ ] Refactor: `MeetingService` into repositories under one writer (meetings / outputs / templates)
