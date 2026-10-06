@@ -306,6 +306,7 @@
 		JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = JQF0000000000000000007 /* MeetingJobPresentationTests.swift */; };
 		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
 		PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */; };
+		PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000016 /* MeetingRowModel.swift */; };
 		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
 		TCB0000000000000000001 /* ComingUpCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000001 /* ComingUpCard.swift */; };
 		TCB0000000000000000002 /* MeetingTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000002 /* MeetingTimeline.swift */; };
@@ -320,6 +321,7 @@
 		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
 		PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */; };
 		PF1B00000000000000000015 /* MeetingDuplicateIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */; };
+		PF1B00000000000000000019 /* MeetingRowModelStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */; };
 		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
 		MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MLE0000000000000000002 /* MeetingLinkEventView.swift */; };
 		MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000012 /* MeetingDocumentBody.swift */; };
@@ -1086,6 +1088,7 @@
 		JQF0000000000000000007 /* MeetingJobPresentationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingJobPresentationTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDuplicateIndex.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000016 /* MeetingRowModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowModel.swift; sourceTree = "<group>"; };
 		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
 		TCF0000000000000000001 /* ComingUpCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComingUpCard.swift; sourceTree = "<group>"; };
 		TCF0000000000000000002 /* MeetingTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTimeline.swift; sourceTree = "<group>"; };
@@ -1100,6 +1103,7 @@
 		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowSearchDebounceTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDuplicateIndexTests.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowModelStoreTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
 		MLE0000000000000000002 /* MeetingLinkEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkEventView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000012 /* MeetingDocumentBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentBody.swift; sourceTree = "<group>"; };
@@ -2383,6 +2387,7 @@
 				JQF0000000000000000006 /* MeetingActivityPopover.swift */,
 				MWF0000000000000000007 /* MeetingsListView.swift */,
 				PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */,
+				PF1B00000000000000000016 /* MeetingRowModel.swift */,
 				MWF0000000000000000008 /* HomeFeedView.swift */,
 				TCF0000000000000000001 /* ComingUpCard.swift */,
 				TCF0000000000000000002 /* MeetingTimeline.swift */,
@@ -3228,6 +3233,7 @@
 				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
 				PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */,
 				PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */,
+				PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */,
 				MWF0000000000000000017 /* MeetingDocumentTests.swift */,
 				TCF0000000000000000007 /* HomeFeedTests.swift */,
 				PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */,
@@ -4841,6 +4847,7 @@
 				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
 				PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */,
 				PF1B00000000000000000015 /* MeetingDuplicateIndexTests.swift in Sources */,
+				PF1B00000000000000000019 /* MeetingRowModelStoreTests.swift in Sources */,
 				MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */,
 				TCB0000000000000000007 /* HomeFeedTests.swift in Sources */,
 				PF1B00000000000000000005 /* HomeFeedActionFactsTests.swift in Sources */,
@@ -5053,6 +5060,7 @@
 				JQB0000000000000000006 /* MeetingActivityPopover.swift in Sources */,
 				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
 				PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */,
+				PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */,
 				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,
 				TCB0000000000000000001 /* ComingUpCard.swift in Sources */,
 				TCB0000000000000000002 /* MeetingTimeline.swift in Sources */,
