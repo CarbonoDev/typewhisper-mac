@@ -140,9 +140,11 @@
   Impact med-high / risk low-med. `MeetingOutputParser.parse` + `AttributedString(markdown:)` per block run on every document render (`MeetingDocumentBody.swift:121-136`, `MarkdownDocumentView.swift:21,302-307`).
 - [x] Perf: `relatedDocuments(for:)` once per input change, not a disk stat per body (1B follow-up) @render-cache
   > 2026-10-06 diamond: reviewed + merged to main as 060fa4dd (RenderedMarkdown pre-render, Space note once per load), e2280c11 (RenderedOutputCache LRU for body/brief/agenda), 946d98ed (RelatedDocumentsMemo). 71 scoped tests green per worker. Not yet verified in a dev build. Note: show-as-missing for a related note now lags a vault rename by up to 30 s.
-- [~] Perf: one calendar coordinator (EKEventStoreChanged instead of the 60 s poll, EventKit query off main, equality-gated publish) @render-cache
+- [x] Perf: one calendar coordinator (EKEventStoreChanged instead of the 60 s poll, EventKit query off main, equality-gated publish) @render-cache
   Impact medium / risk medium. Replaces the 60 s Timer, the brief-scheduler tick from the calendar sink, and the unconditional republish that re-runs twin collapse + start notifications.
-  > 2026-10-06 diamond: dispatched to render-cache after its first merge.
+  > 2026-10-06 diamond: reviewed + merged to main as 4c753cfb (EventKit query off main via its own store), 5e63d4ac (CalendarRefreshCoordinator: EKEventStoreChanged / wake / day-rollover / clock triggers + one wake timer from CalendarWakePlanner; equality-gated publish; provider query reaches 1 h past the look-ahead so a refetch is due hourly, not every minute). Worker: 17 classes / 158 tests green, 20 new. Not verified live: start notifications and auto-briefs firing at the right moment in a dev build.
+- [~] Perf: drop the main-queue hops in the MeetingsViewModel Combine mirrors + dead staleness workarounds (finding 12, narrow — not the VM split) @render-cache
+  > 2026-10-06 diamond: dispatched to render-cache after its second merge.
 
 ## vault-offmain (topaz)
 - [x] Perf: vault work off the main actor @vault-offmain
