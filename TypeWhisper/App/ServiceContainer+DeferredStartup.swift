@@ -41,6 +41,11 @@ extension ServiceContainer {
             await participantDirectoryService.backfill(from: existingMeetings)
         }
 
+        // [perf Phase 2] Backfill the denormalised meeting facts on rows written before the columns
+        // existed, and heal any drift against the store. Chunked and idempotent; readers fall back
+        // to the relationships until a row is filled, so nothing waits on it.
+        await meetingService.reconcileFacts()
+
         // Trim SwiftData persistent history nothing reads (off the main actor, one store at a time).
         await PersistentHistoryPruner.pruneRegisteredStores()
         LaunchMetrics.mark("deferred startup done")
