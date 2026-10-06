@@ -182,3 +182,20 @@ as `templates` readers.
 
 Note: `plannedSpeakerSource(for:)` may clear the diarization status while `SpeakerSection`'s body
 runs (pre-existing); that write now publishes on the outputs slice instead of the VM.
+
+## Where the split stops
+
+Left on `MeetingsViewModel` as `@Published`: `meetings`, `pendingFocusMeetingID`,
+`isVaultConnected`, `vaultName`, `isGmailConnected`. The last four change only on a menu focus
+request or a vault / Gmail connect or disconnect.
+
+`meetings` (Library) is not split. It no longer republishes on in-place writes or live appends
+(1C), only on insert / delete / sort-key change, so its churn is moderate, not high. It is also the
+input of most of the VM's derived helpers (~120 reads across the main file and eight extensions:
+Home grouping, organization, attendee suggestions, related docs, rules…), which nearly every
+remaining VM observer calls. A Library slice would therefore leave almost every view on
+"VM + library", buying little, while the per-helper audit that proves no view goes stale is the
+largest of the four. Worth doing only if a profile shows `meetings` republishes as a hotspot.
+
+What the remaining VM is: the orchestration glue (capture/calendar/output actions, bulk actions,
+merge, export queueing), the five low-churn properties above, and the forwards.
