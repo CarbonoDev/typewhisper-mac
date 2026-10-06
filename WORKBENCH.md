@@ -146,8 +146,9 @@
   > 2026-10-06 diamond: dispatched to titles-home after its second merge.
   > 2026-10-06 diamond: worker done on its branch (3f75a088 MeetingListPipeline + parity tests, 8720fb7e archive + folder detail use it; 96 tests green). NOT merged — it derives `hasTranscript` / output kinds for every meeting eagerly, and the row store merged earlier (27051dda) builds row models for the whole displayed array in the list body: first paint now faults `segments` + `outputs` for all ~280 meetings instead of the visible ~15. Sent back to make both lazy, pin it with a test, and add object identity to the memo key.
   > 2026-10-06 diamond: fix reviewed, merged to main as e8a155b7 + ad0c7a66 (MeetingListPipeline: cached search fields, memoized filter+sort shared by archive and folder detail, parity tests against the old predicate), 93a56db1 (transcript / output-kind facts derived only while a state facet needs them; memo keyed on object identity), ff576e83 (row models built per realized row via MeetingRowCell). Worker: 17 classes / 104 tests green. The first-paint regression from 27051dda is closed by ff576e83.
-- [~] Perf: swap the MeetingRelationshipFacts seam onto the denormalised fact columns @titles-home
+- [x] Perf: swap the MeetingRelationshipFacts seam onto the denormalised fact columns @titles-home
   > 2026-10-06 diamond: dispatched to titles-home after its third merge.
+  > 2026-10-06 diamond: reviewed + merged to main (list facts read `meeting.hasTranscript` / `meeting.outputKinds`). Worker caught that fact columns are healed in place without an `updatedAt` bump, so the row store, the pipeline's per-fact caches and its result memo now also key on a column stamp; drift/heal tests added. 11 classes / 72 tests green. Full suite on main before this merge: 2,621 tests, 0 failures.
 
 ## render-cache (onyx)
 - [x] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
