@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meeting Whisper</title>
+<meta name="description" content="A macOS menu bar app that records your meetings, names who said what, and writes the brief — on your Mac, into your own vault. Open source, GPLv3.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%235C6BBF'/%3E%3Crect x='9' y='9' width='14' height='13' rx='6.5' fill='%23FBFAF7'/%3E%3C/svg%3E">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Tokens. Values carried over from TypeWhisper/Views/Meetings/MeetingTheme.swift
+   so the page and the app read as one system.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* light — the app's paper ground */
+  --paper:      #FBFAF7;
+  --paper-2:    #F4F1E9;
+  --card:       #FFFFFF;
+  --ink:        #1A1814;
+  --ink-2:      #57503F;
+  --ink-3:      #8A8271;
+  --rule:       #E4DFD2;
+  --rule-soft:  #EFEBE0;
+  --accent:     #4F5EB4;
+  --accent-2:   #3D4A96;
+  --accent-wash:#5C6BBF14;
+  --on-accent:  #FFFFFF;
+  --live:       #B0603F;
+  --live-wash:  #B86B4D14;
+  --shadow:     0 1px 2px #1a181408, 0 12px 32px -12px #1a181426;
+  --shadow-lift:0 2px 4px #1a18140a, 0 24px 56px -16px #1a181433;
+
+  /* avatar hues, straight from MeetingTheme.avatarPalette */
+  --av-indigo:  #5C6BBF;
+  --av-sienna:  #B86B4D;
+  --av-teal:    #478C78;
+  --av-plum:    #9E6199;
+
+  --measure: 40rem;   /* MeetingTheme.contentMaxWidth = 640 */
+  --frame:   68rem;
+  --r-row:   8px;
+  --r-card:  12px;
+  --r-bar:   14px;
+
+  --serif: "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #14151A;
+    --paper-2:    #191B21;
+    --card:       #1C1E26;
+    --ink:        #ECE8DF;
+    --ink-2:      #A9A395;
+    --ink-3:      #7C7668;
+    --rule:       #2B2E38;
+    --rule-soft:  #23262E;
+    --accent:     #939DE4;
+    --accent-2:   #B0B7EE;
+    --accent-wash:#8B97DE1A;
+    --on-accent:  #14151A;
+    --live:       #D9855F;
+    --live-wash:  #D9855F1A;
+    --shadow:     0 1px 2px #00000040, 0 12px 32px -12px #00000073;
+    --shadow-lift:0 2px 4px #0000004d, 0 24px 56px -16px #00000080;
+    --av-indigo:  #7D8AD6;
+    --av-sienna:  #CC8163;
+    --av-teal:    #5FA995;
+    --av-plum:    #B77FB2;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #14151A;
+  --paper-2:    #191B21;
+  --card:       #1C1E26;
+  --ink:        #ECE8DF;
+  --ink-2:      #A9A395;
+  --ink-3:      #7C7668;
+  --rule:       #2B2E38;
+  --rule-soft:  #23262E;
+  --accent:     #939DE4;
+  --accent-2:   #B0B7EE;
+  --accent-wash:#8B97DE1A;
+  --on-accent:  #14151A;
+  --live:       #D9855F;
+  --live-wash:  #D9855F1A;
+  --shadow:     0 1px 2px #00000040, 0 12px 32px -12px #00000073;
+  --shadow-lift:0 2px 4px #0000004d, 0 24px 56px -16px #00000080;
+  --av-indigo:  #7D8AD6;
+  --av-sienna:  #CC8163;
+  --av-teal:    #5FA995;
+  --av-plum:    #B77FB2;
+}
+
+/* ── base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 50;
+  background: var(--card); color: var(--ink); padding: 10px 16px; border-radius: var(--r-row);
+}
+.skip:focus { left: 12px; top: 12px; }
+
+/* ── shared type roles ────────────────────────────────────── */
+.kicker {
+  font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0;
+}
+.label {
+  font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0;
+}
+.serif { font-family: var(--serif); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+h1, h2, h3 { font-family: var(--serif); text-wrap: balance; margin: 0; font-weight: 600; }
+h1 { font-size: clamp(2.25rem, 5.2vw, 3.35rem); line-height: 1.08; letter-spacing: -.018em; }
+h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); line-height: 1.18; letter-spacing: -.012em; }
+h3 { font-size: 1.0625rem; line-height: 1.35; }
+p { margin: 0; }
+
+.lede { font-size: 1.1875rem; line-height: 1.55; color: var(--ink-2); max-width: 34rem; }
+.prose { color: var(--ink-2); max-width: var(--measure); }
+
+/* ── layout scaffolding ───────────────────────────────────── */
+.wrap { width: 100%; max-width: var(--frame); margin-inline: auto; padding-inline: clamp(20px, 5vw, 40px); }
+.col  { width: 100%; max-width: var(--measure); }
+.section { padding-block: clamp(64px, 9vw, 116px); }
+.section-head { display: flex; flex-direction: column; gap: 14px; max-width: var(--measure); }
+
+/* ── topbar ───────────────────────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.topbar-in { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 58px; }
+.wordmark { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-size: 1.0625rem; font-weight: 600; text-decoration: none; letter-spacing: -.01em; }
+.glyph {
+  width: 21px; height: 21px; border-radius: 6px; flex: none;
+  background: var(--accent); position: relative;
+}
+.glyph::after {
+  content: ""; position: absolute; inset: 6px 6px auto 6px; height: 9px;
+  border-radius: 999px; background: var(--paper);
+}
+.topbar-links { display: flex; align-items: center; gap: 22px; font-size: .875rem; }
+.topbar-links a { color: var(--ink-2); text-decoration: none; }
+.topbar-links a:hover { color: var(--ink); }
+@media (max-width: 640px) { .topbar-links .hide-sm { display: none; } }
+
+/* ── hero ─────────────────────────────────────────────────── */
+.hero { position: relative; overflow: hidden; padding-block: clamp(56px, 8vw, 96px) clamp(48px, 7vw, 80px); }
+.hero::before {
+  content: ""; position: absolute; inset: -30% -10% auto 30%; height: 620px; pointer-events: none;
+  background: radial-gradient(48% 46% at 60% 30%, var(--accent-wash), transparent 72%);
+}
+.hero-grid {
+  position: relative; display: grid; gap: clamp(40px, 5vw, 60px);
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); align-items: start;
+}
+@media (max-width: 900px) { .hero-grid { grid-template-columns: minmax(0, 1fr); } }
+.hero-copy { display: flex; flex-direction: column; gap: 22px; padding-top: 8px; }
+.hero-copy h1 { max-width: 15ch; }
+
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 2px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 11px 19px; border-radius: 10px; font-size: .9375rem; font-weight: 550;
+  text-decoration: none; border: 1px solid transparent; transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.btn-primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 2px #1a181426; }
+.btn-primary:hover { background: var(--accent-2); transform: translateY(-1px); }
+.btn-ghost { border-color: var(--rule); color: var(--ink); background: var(--card); }
+.btn-ghost:hover { border-color: var(--ink-3); transform: translateY(-1px); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+
+.specs { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .8125rem; color: var(--ink-3); }
+.specs span { display: inline-flex; align-items: center; gap: 7px; }
+.specs span + span::before { content: ""; width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .6; }
+
+/* ── the document mock ────────────────────────────────────── */
+.doc {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-bar);
+  box-shadow: var(--shadow-lift); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.doc-chrome { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); background: var(--paper-2); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
+.doc-chrome .mono { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.doc-body { padding: 24px 26px 26px; display: flex; flex-direction: column; gap: 20px; }
+.doc-title { font-size: 1.5rem; letter-spacing: -.015em; }
+.doc-head { display: flex; flex-direction: column; gap: 7px; }
+.byline { font-size: .8125rem; color: var(--ink-3); }
+
+.faces { display: flex; }
+.face {
+  width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 10px; font-weight: 650; letter-spacing: .02em; color: #FFFFFF;
+  border: 2px solid var(--card); margin-left: -7px;
+}
+.face:first-child { margin-left: 0; }
+.face.i { background: var(--av-indigo); } .face.s { background: var(--av-sienna); }
+.face.t { background: var(--av-teal); }   .face.p { background: var(--av-plum); }
+
+.doc-block { display: flex; flex-direction: column; gap: 9px; }
+/* the app's generated-prose left rule */
+.quoted { border-left: 2px solid var(--accent); padding-left: 15px; font-family: var(--serif); font-size: .9375rem; line-height: 1.62; color: var(--ink); }
+.foot { font-size: 11px; color: var(--ink-3); }
+
+.checks { list-style: none; margin: 0; padding: 14px 15px; display: flex; flex-direction: column; gap: 10px; background: var(--accent-wash); border-radius: var(--r-card); }
+.checks li { display: flex; gap: 10px; font-size: .875rem; line-height: 1.45; }
+.box { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--accent); flex: none; margin-top: 3px; }
+.who { color: var(--ink-3); }
+
+.turns { display: flex; flex-direction: column; gap: 11px; }
+.turn { display: grid; grid-template-columns: 52px 1fr; gap: 12px; font-size: .875rem; line-height: 1.5; opacity: 0; animation: rise .6s ease forwards; }
+.turn:nth-child(1) { animation-delay: .25s; }
+.turn:nth-child(2) { animation-delay: .65s; }
+.turn:nth-child(3) { animation-delay: 1.05s; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .turn { opacity: 1; } }
+.stamp { font-family: var(--mono); font-size: 11px; color: var(--ink-3); padding-top: 3px; }
+.speaker { font-weight: 600; }
+.speaker.i { color: var(--av-indigo); } .speaker.s { color: var(--av-sienna); } .speaker.t { color: var(--av-teal); }
+
+/* ── live capture band ────────────────────────────────────── */
+.band-outer { border-block: 1px solid var(--rule-soft); background: var(--paper-2); }
+.band { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: center; padding-block: clamp(36px, 5vw, 52px); }
+@media (max-width: 760px) { .band { grid-template-columns: minmax(0, 1fr); } }
+.band-copy { display: flex; flex-direction: column; gap: 10px; }
+.rec { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--live); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--live); animation: pulse 1.9s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .28; } }
+.tracks { display: flex; flex-direction: column; gap: 14px; }
+.track { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: center; }
+.track .label { padding-top: 1px; }
+.wave { display: flex; align-items: center; gap: 3px; height: 34px; overflow: hidden; }
+.wave i { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--accent); opacity: .55; }
+.wave.sys i { background: var(--av-teal); }
+@media (max-width: 520px) { .track { grid-template-columns: minmax(0,1fr); gap: 6px; } }
+
+/* ── numbered pipeline ────────────────────────────────────── */
+.steps { display: flex; flex-direction: column; gap: 4px; margin-top: 44px; }
+.step {
+  display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: clamp(20px, 4vw, 48px);
+  padding-block: 30px; border-top: 1px solid var(--rule-soft);
+}
+.step:first-child { border-top: 0; }
+.step-mark { display: flex; flex-direction: column; gap: 4px; }
+.step-num { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; }
+.step-when { font-size: .8125rem; color: var(--ink-3); }
+.step-body { display: flex; flex-direction: column; gap: 18px; }
+.step-lead { font-family: var(--serif); font-size: 1.25rem; line-height: 1.35; max-width: 30ch; }
+.bullets { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.bullets li { display: flex; flex-direction: column; gap: 4px; }
+.bullets b { font-size: .9375rem; font-weight: 600; }
+.bullets span { font-size: .875rem; color: var(--ink-2); line-height: 1.5; }
+@media (max-width: 640px) { .step { grid-template-columns: minmax(0,1fr); gap: 16px; } }
+
+/* ── speaker ladder ───────────────────────────────────────── */
+.ladder { margin-top: 40px; display: flex; flex-direction: column; gap: 0; max-width: 46rem; }
+.rung {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 18px; align-items: start;
+  padding: 20px 22px 20px 18px; background: var(--card);
+  border: 1px solid var(--rule); border-radius: var(--r-card); box-shadow: var(--shadow);
+}
+.rung + .rung { margin-top: 10px; }
+.rung-n {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  background: var(--accent); color: var(--card); border: 1.5px solid var(--accent);
+}
+.rung.soft .rung-n { background: transparent; color: var(--accent); }
+.rung-b { display: flex; flex-direction: column; gap: 5px; }
+.rung-b p { font-size: .875rem; color: var(--ink-2); line-height: 1.5; }
+.chip {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase;
+  padding: 5px 9px; border-radius: 999px; background: var(--paper-2); color: var(--ink-3); white-space: nowrap;
+}
+.chip.hard { background: var(--accent-wash); color: var(--accent); }
+.fall { display: flex; align-items: center; gap: 10px; padding: 9px 0 9px 21px; font-size: .8125rem; color: var(--ink-3); }
+.fall::before { content: ""; width: 1px; height: 16px; background: var(--rule); }
+@media (max-width: 620px) { .rung { grid-template-columns: 34px minmax(0,1fr); } .rung .chip { grid-column: 2; justify-self: start; } }
+
+/* ── cards grid ───────────────────────────────────────────── */
+.cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 208px), 1fr)); margin-top: 40px; }
+.card {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-card);
+  padding: 22px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow);
+}
+.card h3 { font-family: var(--sans); font-weight: 600; font-size: .9375rem; }
+.card p { font-size: .875rem; color: var(--ink-2); line-height: 1.55; }
+.card .label { margin-bottom: 4px; }
+
+/* ── inherited / quiet list ───────────────────────────────── */
+.quiet-wrap { border-block: 1px solid var(--rule-soft); background: var(--paper-2); }
+.quiet { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 26px 34px; margin-top: 34px; }
+.quiet div { display: flex; flex-direction: column; gap: 5px; }
+.quiet b { font-size: .9375rem; font-weight: 600; }
+.quiet span { font-size: .8438rem; color: var(--ink-2); line-height: 1.5; }
+
+/* ── build ────────────────────────────────────────────────── */
+.build-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(28px, 5vw, 56px); align-items: start; }
+@media (max-width: 860px) { .build-grid { grid-template-columns: minmax(0, 1fr); } }
+.term {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-card);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--rule-soft); background: var(--paper-2); }
+.term-bar .mono { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; color: var(--ink); }
+.c-dim { color: var(--ink-3); }
+.c-cmd { color: var(--accent); }
+.reqs { list-style: none; margin: 22px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.reqs li { display: flex; gap: 10px; font-size: .875rem; color: var(--ink-2); line-height: 1.5; }
+.reqs li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; margin-top: 9px; }
+
+/* ── footer ───────────────────────────────────────────────── */
+.foot-wrap { border-top: 1px solid var(--rule); }
+.foot-in { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 34px; padding-block: 46px 54px; }
+@media (max-width: 720px) { .foot-in { grid-template-columns: minmax(0, 1fr); } }
+.foot-note { font-size: .8125rem; color: var(--ink-2); line-height: 1.65; max-width: 38rem; }
+.foot-note a { color: var(--ink); }
+.foot-links { display: flex; flex-direction: column; gap: 9px; font-size: .875rem; }
+.foot-links a { color: var(--ink-2); text-decoration: none; width: fit-content; }
+.foot-links a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="wordmark" href="#top"><span class="glyph" aria-hidden="true"></span>Meeting Whisper</a>
+    <nav class="topbar-links">
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#speakers">Speakers</a>
+      <a class="hide-sm" href="#private">Privacy</a>
+      <a href="#build">Build it</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── hero ─────────────────────────────────────────────── -->
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">macOS menu bar app · Open source</p>
+        <h1>Every meeting leaves a document behind.</h1>
+        <p class="lede">Meeting Whisper records the call, works out who said what, and writes the brief — on your Mac, into your own Obsidian vault. No meeting bot joins your call.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/CarbonoDev/typewhisper-mac">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            View on GitHub
+          </a>
+          <a class="btn btn-ghost" href="#build">Build from source</a>
+        </div>
+        <div class="specs">
+          <span>macOS 14+</span><span>Apple Silicon &amp; Intel</span><span>Swift 6</span><span>GPLv3</span>
+        </div>
+      </div>
+
+      <!-- a meeting, as the app renders it -->
+      <article class="doc" aria-label="Example meeting document">
+        <div class="doc-chrome">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="mono">Weekly product sync</span>
+        </div>
+        <div class="doc-body">
+          <div class="doc-head">
+            <p class="kicker">Meeting · Tue 11 Aug · 09:30</p>
+            <h2 class="doc-title">Weekly product sync</h2>
+            <p class="byline">4 attendees · 47 min · from your calendar</p>
+            <div class="faces" aria-hidden="true">
+              <span class="face i">MR</span><span class="face s">AL</span><span class="face t">JS</span><span class="face p">KP</span>
+            </div>
+          </div>
+
+          <div class="doc-block">
+            <p class="label">Brief</p>
+            <p class="quoted">Last week this group agreed to ship the caption bridge behind a flag. Ana still owes the revised pricing model, and Jonas flagged the Drive quota ceiling. Two action items carried over unfinished.</p>
+            <p class="foot">Drafted from 3 prior meetings and 2 vault notes.</p>
+          </div>
+
+          <div class="doc-block">
+            <p class="label">Action items</p>
+            <ul class="checks">
+              <li><span class="box" aria-hidden="true"></span><span><span class="who">Ana</span> — send the revised pricing model <span class="who">(carried over)</span></span></li>
+              <li><span class="box" aria-hidden="true"></span><span><span class="who">Marco</span> — enable the caption bridge for the beta cohort</span></li>
+            </ul>
+          </div>
+
+          <div class="doc-block">
+            <p class="label">Transcript</p>
+            <div class="turns">
+              <div class="turn"><span class="stamp">12:04</span><span><span class="speaker i">Marco</span> — Quota is the blocker, not the parser. We hit the ceiling at about four hundred imports.</span></div>
+              <div class="turn"><span class="stamp">12:19</span><span><span class="speaker t">Jonas</span> — Then we batch them nightly and ask for a raise before the beta.</span></div>
+              <div class="turn"><span class="stamp">12:31</span><span><span class="speaker s">Ana</span> — I'll have pricing to you Thursday either way.</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ── live band ────────────────────────────────────────── -->
+  <div class="band-outer">
+    <div class="wrap band">
+      <div class="band-copy">
+        <p class="rec"><span class="pulse" aria-hidden="true"></span>REC 12:47</p>
+        <h3 class="serif" style="font-size:1.1875rem;">Two tracks, kept apart.</h3>
+        <p style="font-size:.875rem;color:var(--ink-2);line-height:1.55;">Your microphone and the system audio are recorded separately. That separation is what makes speaker labels trustworthy later.</p>
+      </div>
+      <div class="tracks">
+        <div class="track"><p class="label">Microphone</p><div class="wave mic" data-bars="56" aria-hidden="true"></div></div>
+        <div class="track"><p class="label">System audio</p><div class="wave sys" data-bars="56" aria-hidden="true"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── pipeline ─────────────────────────────────────────── -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">How it works</p>
+        <h2>Before the call, during it, and long after.</h2>
+        <p class="prose">Meeting Whisper reads your calendar, so it knows a meeting is coming and what happened last time you met these people.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-mark"><span class="step-num">01</span><span class="step-when">Before</span></div>
+          <div class="step-body">
+            <p class="step-lead">Walk in already briefed.</p>
+            <ul class="bullets">
+              <li><b>Pre-meeting brief</b><span>Summaries of prior meetings with the same people or series, plus relevant passages from your vault, drafted into one page.</span></li>
+              <li><b>On a schedule or on demand</b><span>Briefs can be generated automatically ahead of time, or the moment you ask for one.</span></li>
+              <li><b>Degrades gracefully</b><span>No vault? It uses prior meetings. No prior meetings? It uses your notes.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-mark"><span class="step-num">02</span><span class="step-when">During</span></div>
+          <div class="step-body">
+            <p class="step-lead">Record from the menu bar, keep working.</p>
+            <ul class="bullets">
+              <li><b>Nothing gets lost</b><span>Stabilized transcript text is written to disk as the meeting runs, so an interruption costs you nothing.</span></li>
+              <li><b>Ask mid-call</b><span>Question the transcript so far. If your own material doesn't answer it, the model may consult your vault once — and says so.</span></li>
+              <li><b>Scheduled or ad-hoc</b><span>Let an upcoming calendar event prompt you, or hit record for a call nobody booked.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-mark"><span class="step-num">03</span><span class="step-when">After</span></div>
+          <div class="step-body">
+            <p class="step-lead">The recording becomes a document you keep.</p>
+            <ul class="bullets">
+              <li><b>Clean final transcript</b><span>On stop, the full audio is re-transcribed into timestamped segments — better than the live pass.</span></li>
+              <li><b>Summary and analysis</b><span>Structured outputs from editable templates. Summary and Extended Analysis ship ready to use.</span></li>
+              <li><b>Into your vault</b><span>Export as Markdown with frontmatter and a backlink, in a layout that never overwrites an existing note.</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── speaker ladder ───────────────────────────────────── -->
+  <section class="section" id="speakers" style="padding-top:0;">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">Speaker labeling</p>
+        <h2>Guessing is the last resort, not the first.</h2>
+        <p class="prose">Who said what is decided after the call, by whichever source is most trustworthy. The first rung that applies wins — a detection model only runs when nothing more certain is available.</p>
+      </div>
+
+      <div class="ladder">
+        <div class="rung">
+          <span class="rung-n">1</span>
+          <div class="rung-b">
+            <h3>Labels from the transcription engine</h3>
+            <p>If your engine already diarized the audio on its own timeline, those labels are adopted as-is.</p>
+          </div>
+          <span class="chip hard">No guessing</span>
+        </div>
+        <p class="fall">otherwise</p>
+        <div class="rung">
+          <span class="rung-n">2</span>
+          <div class="rung-b">
+            <h3>Split by channel</h3>
+            <p>A two-person call recorded as genuinely separate mic and system tracks is labeled by which track the audio came from. No model involved at all.</p>
+          </div>
+          <span class="chip hard">Deterministic</span>
+        </div>
+        <p class="fall">otherwise</p>
+        <div class="rung soft">
+          <span class="rung-n">3</span>
+          <div class="rung-b">
+            <h3>Local diarization</h3>
+            <p>A bundled <span class="mono" style="font-size:12.5px;">pyannote.audio</span> sidecar runs on your machine, hinted with the participant count from the calendar invite when there is one.</p>
+          </div>
+          <span class="chip">On device</span>
+        </div>
+      </div>
+
+      <p class="prose" style="margin-top:24px;font-size:.875rem;">Detected speakers map to real people from the meeting's roster, and the participants directory remembers them across every meeting you've had.</p>
+    </div>
+  </section>
+
+  <!-- ── privacy ──────────────────────────────────────────── -->
+  <section class="section" id="private" style="padding-top:0;">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="label">Where your meetings live</p>
+        <h2>On your Mac, in your files, under your license.</h2>
+        <p class="prose">Every part of the pipeline has an on-device path. Use a cloud API when you want the speed — that is a setting, not an architecture.</p>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <p class="label">Transcription</p>
+          <h3>Local engines, no account</h3>
+          <p>WhisperKit, Parakeet TDT v3, Apple SpeechAnalyzer, and MLX-based Voxtral, Qwen3 and Granite all run on your machine. Groq, OpenAI, xAI and others are there if you prefer them.</p>
+        </div>
+        <div class="card">
+          <p class="label">Language models</p>
+          <h3>Per-purpose routing</h3>
+          <p>Briefs, summaries, Q&amp;A and language detection each pick their own provider and model. Point the sensitive ones at local Gemma 4 and the rest at whatever is fastest.</p>
+        </div>
+        <div class="card">
+          <p class="label">Storage</p>
+          <h3>Plain files you own</h3>
+          <p>Audio and meeting data sit in Application Support on your disk. Exports are ordinary Markdown in the Obsidian vault you already keep.</p>
+        </div>
+        <div class="card">
+          <p class="label">Automation</p>
+          <h3>Localhost only, off by default</h3>
+          <p>The REST API binds to 127.0.0.1 and stays disabled until you turn it on. The CLI is a thin client of it — good for bulk-importing years of old transcripts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── inherited ────────────────────────────────────────── -->
+  <div class="quiet-wrap">
+    <section class="section wrap" style="padding-block:clamp(56px,7vw,84px);">
+      <div class="section-head">
+        <p class="label">Also in the box</p>
+        <h2>It is still a very good dictation app.</h2>
+        <p class="prose">Meeting Whisper is a fork of TypeWhisper, and the whole original app is intact underneath — with every previously paid feature unlocked.</p>
+      </div>
+      <div class="quiet">
+        <div><b>System-wide dictation</b><span>Push-to-talk, toggle or hybrid on a global hotkey. Auto-pastes into whatever app you're in.</span></div>
+        <div><b>Workflows</b><span>Reusable text transformations that fire by app, by website, on their own hotkey, or from a palette.</span></div>
+        <div><b>Dictionary &amp; snippets</b><span>Teach it your jargon, fix recurring mistakes automatically, expand shortcuts with placeholders.</span></div>
+        <div><b>File transcription</b><span>Drag in audio or video in bulk. Export subtitles as SRT or WebVTT.</span></div>
+        <div><b>Searchable history</b><span>Every transcription, with inline editing, app context, filters and retention rules.</span></div>
+        <div><b>Plugin SDK</b><span>Engines, LLM providers, TTS, post-processors and actions are all plugins. The bundled ones are the reference implementation.</span></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── build ────────────────────────────────────────────── -->
+  <section class="section" id="build">
+    <div class="wrap build-grid">
+      <div>
+        <div class="section-head">
+          <p class="label">Get it running</p>
+          <h2>Clone it, open it, hit build.</h2>
+          <p class="prose">There is no signed release yet — you build it yourself. Swift package dependencies resolve on their own and signing is ad-hoc, so nothing needs configuring first.</p>
+        </div>
+        <ul class="reqs">
+          <li>macOS 14 Sonoma or later, Xcode 16+</li>
+          <li>Apple Silicon recommended; 16 GB RAM for the larger local models</li>
+          <li>Grant microphone, calendar and accessibility access on first launch</li>
+          <li>Local pyannote diarization additionally wants Python 3 with <span class="mono" style="font-size:12.5px;">pyannote.audio</span></li>
+        </ul>
+      </div>
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="mono">zsh</span>
+        </div>
+<pre><code><span class="c-dim"># clone the fork</span>
+<span class="c-cmd">git</span> clone https://github.com/CarbonoDev/typewhisper-mac.git
+<span class="c-cmd">cd</span> typewhisper-mac
+
+<span class="c-dim"># open in Xcode 16+ and build the TypeWhisper scheme</span>
+<span class="c-cmd">open</span> TypeWhisper.xcodeproj
+
+<span class="c-dim"># or get a local dev build installed and launched</span>
+<span class="c-cmd">scripts/build-dev-local.sh</span>
+
+<span class="c-dim"># run the checks before you ship anything</span>
+<span class="c-cmd">swift</span> test --package-path TypeWhisperPluginSDK
+</code></pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot-wrap">
+  <div class="wrap foot-in">
+    <div>
+      <a class="wordmark" href="#top" style="margin-bottom:14px;"><span class="glyph" aria-hidden="true"></span>Meeting Whisper</a>
+      <p class="foot-note">
+        A fork of <a href="https://github.com/TypeWhisper/typewhisper-mac">TypeWhisper</a>, whose authors built the dictation pipeline, the plugin architecture, the transcription engines, the workflow system and the CLI. The meetings layer is this fork's addition; everything else is their work.
+      </p>
+      <p class="foot-note" style="margin-top:12px;">
+        Released under <a href="https://www.gnu.org/licenses/gpl-3.0">GPLv3</a>. “TypeWhisper” and its icon are trademarks of the upstream project and are not used here. <em>Meeting Whisper</em> is a working title pending a naming decision.
+      </p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="https://github.com/CarbonoDev/typewhisper-mac">Source on GitHub</a>
+      <a href="https://github.com/CarbonoDev/typewhisper-mac#readme">Documentation</a>
+      <a href="https://github.com/CarbonoDev/typewhisper-mac/issues">Report an issue</a>
+      <a href="https://github.com/TypeWhisper/typewhisper-mac">Upstream TypeWhisper</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+// Waveform bars — deterministic, so both tracks stay stable across reloads.
+(function () {
+  document.querySelectorAll('.wave').forEach(function (wave, w) {
+    var n = parseInt(wave.dataset.bars, 10) || 48;
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < n; i++) {
+      var t = i / n;
+      // layered sines: speech-like envelope, different phase per track
+      var env = Math.abs(Math.sin(t * 9.4 + w * 2.1)) * 0.6
+              + Math.abs(Math.sin(t * 31.7 + w * 4.3)) * 0.28
+              + Math.abs(Math.sin(t * 61.3 + w)) * 0.12;
+      var bar = document.createElement('i');
+      bar.style.height = Math.max(3, Math.round(env * 32)) + 'px';
+      frag.appendChild(bar);
+    }
+    wave.appendChild(frag);
+  });
+})();
+</script>
+</body>
+</html>
