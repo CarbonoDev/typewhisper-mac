@@ -96,9 +96,9 @@ struct MeetingDocumentBody: View {
             // The brief's talking points ride along into the meeting as a tick-off agenda —
             // unchecked items are what's left to cover.
             if let brief = viewModel.latestOutput(ofKind: .brief, for: meeting) {
-                let agenda = MeetingOutputParser.parseAgenda(markdown: brief.content)
-                if !agenda.items.isEmpty {
-                    MeetingAgendaSection(meetingID: meeting.id, items: agenda.items)
+                let agenda = RenderedOutputCache.shared.rendered(for: brief, mode: .agenda)
+                if !agenda.agendaItems.isEmpty {
+                    MeetingAgendaSection(meetingID: meeting.id, items: agenda.agendaItems)
                 }
             }
             MeetingNotesPane(meeting: meeting)
@@ -119,9 +119,11 @@ struct MeetingDocumentBody: View {
 
     private var renderedOutputBody: some View {
         let latest = viewModel.latestOutput(ofKind: model.selectedOutputKind, for: meeting)
-        let outcomes: MeetingOutputParser.ExtractedOutcomes? = (latest != nil && slicesOutcomes)
-            ? MeetingOutputParser.parse(markdown: latest!.content)
-            : nil
+        // [Perf Phase 2] Parsed + pre-rendered once per output content, not per body pass.
+        let rendered = latest.map {
+            RenderedOutputCache.shared.rendered(for: $0, mode: slicesOutcomes ? .outcomes : .verbatim)
+        }
+        let outcomes = rendered?.outcomes
 
         return VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
             if let outcomes, !outcomes.actions.isEmpty {
@@ -130,13 +132,13 @@ struct MeetingDocumentBody: View {
             if let outcomes, !outcomes.decisions.isEmpty {
                 DecisionsSection(decisions: outcomes.decisions)
             }
-            outputArticle(latest: latest, outcomes: outcomes)
+            outputArticle(latest: latest, rendered: rendered)
             appendix
         }
     }
 
     @ViewBuilder
-    private func outputArticle(latest: MeetingOutput?, outcomes: MeetingOutputParser.ExtractedOutcomes?) -> some View {
+    private func outputArticle(latest: MeetingOutput?, rendered: RenderedOutput?) -> some View {
         VStack(alignment: .leading, spacing: MeetingTheme.s4) {
             MeetingOutputTabs(tabs: outputTabs, selection: $model.selectedOutputKind)
 
@@ -155,8 +157,8 @@ struct MeetingDocumentBody: View {
                 }
             }
 
-            if let latest {
-                MeetingProse(markdown: outcomes?.strippedMarkdown ?? latest.content) {
+            if let latest, let rendered {
+                MeetingProse(rendered: rendered.article) {
                     if let provenance = Self.provenance(for: latest) {
                         Text(provenance)
                             .font(MeetingTheme.footnote)

@@ -109,17 +109,18 @@ struct MeetingMetaLink: View {
 /// Generated prose (brief / summary) rendered as an article: a thin accent rule in the left margin
 /// marks it as model-written, and the provenance sits under the last paragraph as a footnote.
 struct MeetingProse<Footer: View>: View {
-    let markdown: String
+    /// Pre-rendered by `RenderedOutputCache` — never parsed per body pass.
+    let rendered: RenderedMarkdown
     @ViewBuilder var footer: Footer
 
-    init(markdown: String, @ViewBuilder footer: () -> Footer = { EmptyView() }) {
-        self.markdown = markdown
+    init(rendered: RenderedMarkdown, @ViewBuilder footer: () -> Footer = { EmptyView() }) {
+        self.rendered = rendered
         self.footer = footer()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MeetingTheme.s3) {
-            MarkdownDocumentView(markdown: markdown, style: .article)
+            MarkdownDocumentView(rendered: rendered, style: .article)
             HStack {
                 Spacer()
                 footer

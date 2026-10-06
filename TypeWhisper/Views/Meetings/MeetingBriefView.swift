@@ -43,13 +43,13 @@ struct MeetingBriefView: View {
             if let latest = viewModel.latestOutput(ofKind: .brief, for: meeting) {
                 // Talking points lift out of the prose as a checkable agenda; checks persist and
                 // carry into the live view.
-                let agenda = MeetingOutputParser.parseAgenda(markdown: latest.content)
+                let agenda = RenderedOutputCache.shared.rendered(for: latest, mode: .agenda)
                 VStack(alignment: .leading, spacing: MeetingTheme.sectionGap) {
                     VStack(alignment: .leading, spacing: MeetingTheme.s2) {
                         MeetingSectionLabel(String(localized: "meetings.brief.sectionTitle")) {
                             generateMenu(prominent: false)
                         }
-                        MeetingProse(markdown: agenda.strippedMarkdown) {
+                        MeetingProse(rendered: agenda.article) {
                             if let provenance = provenance(for: latest) {
                                 Text(provenance)
                                     .font(MeetingTheme.footnote)
@@ -57,8 +57,8 @@ struct MeetingBriefView: View {
                             }
                         }
                     }
-                    if !agenda.items.isEmpty {
-                        MeetingAgendaSection(meetingID: meeting.id, items: agenda.items)
+                    if !agenda.agendaItems.isEmpty {
+                        MeetingAgendaSection(meetingID: meeting.id, items: agenda.agendaItems)
                     }
                 }
             } else {
