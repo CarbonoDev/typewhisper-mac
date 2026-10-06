@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// [Sprint 3] Normalizer for imported meeting titles that arrive as export filenames — most
 /// notably Google Meet's Gemini notes ("Llamada semanal - 2026_07_07 11_00 CST - Notas de Gemini
@@ -6,7 +7,7 @@ import Foundation
 /// the human title. Pure and strict-match-or-passthrough: a title with no recognized export
 /// pattern comes back untouched, so hand-written titles are never mangled.
 enum ImportedMeetingTitle {
-    struct Parsed: Equatable {
+    struct Parsed: Equatable, Sendable {
         var cleanTitle: String
         /// The timestamp embedded in the filename, resolved in its stated time zone when the
         /// abbreviation is known (else the current zone).
@@ -52,9 +53,39 @@ enum ImportedMeetingTitle {
     ]
 
     /// Every recognized export marker: what `parse` strips and what `containsExportMarker` counts.
-    static var exportSuffixes: [String] { notesSuffixes + transcriptSuffixes }
+    static let exportSuffixes: [String] = notesSuffixes + transcriptSuffixes
+
+    /// [Perf 1C] `parse` runs several times per meeting row per render (display title, sort
+    /// date, header), so results are memoized per raw title. The key carries the current time
+    /// zone because a stamp without a zone token resolves in it. Lock-guarded rather than
+    /// actor-isolated: the enum is called from the main actor and from nonisolated code alike.
+    private struct MemoKey: Hashable {
+        let raw: String
+        let timeZone: String
+    }
+
+    private static let memoLimit = 4096
+    private static let memo = OSAllocatedUnfairLock(initialState: [MemoKey: Parsed]())
 
     static func parse(_ raw: String) -> Parsed {
+        parse(raw, fallbackTimeZone: .current)
+    }
+
+    /// `parse` with the zone a token-less stamp resolves in made explicit (a test seam:
+    /// `TimeZone.current` follows the system zone only).
+    static func parse(_ raw: String, fallbackTimeZone: TimeZone) -> Parsed {
+        let key = MemoKey(raw: raw, timeZone: fallbackTimeZone.identifier)
+        if let cached = memo.withLock({ $0[key] }) { return cached }
+        let parsed = uncachedParse(raw, fallbackTimeZone: fallbackTimeZone)
+        memo.withLock { cache in
+            // Titles are a bounded set in practice; the cap only guards pathological input.
+            if cache.count >= memoLimit { cache.removeAll(keepingCapacity: true) }
+            cache[key] = parsed
+        }
+        return parsed
+    }
+
+    private static func uncachedParse(_ raw: String, fallbackTimeZone: TimeZone) -> Parsed {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return Parsed(cleanTitle: trimmed, date: nil, isImported: false)
@@ -77,11 +108,8 @@ enum ImportedMeetingTitle {
 
         // 3. Trailing date segment "… - 2026_07_07 11_00 CST" (time-zone token optional).
         var date: Date?
-        if let range = working.range(
-            of: #"\s*[-–—]\s*\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}(\s+[A-Za-z]{2,5})?\s*$"#,
-            options: .regularExpression
-        ) {
-            date = parseDate(from: String(working[range]))
+        if let range = Patterns.trailingDate.firstRange(in: working) {
+            date = parseDate(from: String(working[range]), fallbackTimeZone: fallbackTimeZone)
             working = String(working[..<range.lowerBound])
             matched = true
         }
@@ -89,10 +117,7 @@ enum ImportedMeetingTitle {
         let clean = working.trimmingCharacters(in: .whitespacesAndNewlines)
         // A title that was nothing but the export pattern would strip down to a bare date stamp (or
         // nothing) — pass it through instead of presenting a timestamp as a "title".
-        let isBareStamp = clean.range(
-            of: #"^\d{4}_\d{2}_\d{2}([ _]\d{2}_\d{2})?(\s+[A-Za-z]{2,5})?$"#,
-            options: .regularExpression
-        ) != nil
+        let isBareStamp = Patterns.bareStamp.firstRange(in: clean) != nil
         guard matched, !clean.isEmpty, !isBareStamp else {
             return Parsed(cleanTitle: trimmed, date: nil, isImported: false)
         }
@@ -121,7 +146,7 @@ enum ImportedMeetingTitle {
     }
 
     private static func copyCounterRange(in text: String) -> Range<String.Index>? {
-        guard let range = text.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression),
+        guard let range = Patterns.copyCounter.firstRange(in: text),
               containsExportMarker(String(text[..<range.lowerBound]))
         else { return nil }
         return range
@@ -148,19 +173,17 @@ enum ImportedMeetingTitle {
         if let range = copyCounterRange(in: working) {
             working = String(working[..<range.lowerBound])
         }
-        return suffixRange(in: working, suffixes: transcriptSuffixes) != nil
+        return suffixRange(in: working, patterns: Patterns.transcriptSuffixes) != nil
     }
 
     private static func notesSuffixRange(in text: String) -> Range<String.Index>? {
-        suffixRange(in: text, suffixes: exportSuffixes)
+        suffixRange(in: text, patterns: Patterns.exportSuffixes)
     }
 
-    private static func suffixRange(in text: String, suffixes: [String]) -> Range<String.Index>? {
-        for suffix in suffixes {
-            let pattern = #"\s*[-–—]\s*"# + NSRegularExpression.escapedPattern(for: suffix) + #"\s*$"#
-            if let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
-                return range
-            }
+    /// First match in list order — the same precedence the per-suffix loop always had.
+    private static func suffixRange(in text: String, patterns: [CompiledPattern]) -> Range<String.Index>? {
+        for pattern in patterns {
+            if let range = pattern.firstRange(in: text) { return range }
         }
         return nil
     }
@@ -169,13 +192,11 @@ enum ImportedMeetingTitle {
         let lowered = text.lowercased()
         if lowered.contains("gemini") { return true }
         if transcriptSuffixes.contains(where: { lowered.contains($0) }) { return true }
-        return text.range(of: #"\d{4}_\d{2}_\d{2}"#, options: .regularExpression) != nil
+        return Patterns.dateStamp.firstRange(in: text) != nil
     }
 
-    private static func parseDate(from segment: String) -> Date? {
-        guard let stampRange = segment.range(
-            of: #"\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}"#, options: .regularExpression
-        ) else { return nil }
+    private static func parseDate(from segment: String, fallbackTimeZone: TimeZone) -> Date? {
+        guard let stampRange = Patterns.stamp.firstRange(in: segment) else { return nil }
         var stamp = String(segment[stampRange])
         // Normalize the date/time joiner (space or underscore) to a space for the fixed formatter.
         let joinerIndex = stamp.index(stamp.startIndex, offsetBy: 10)
@@ -184,7 +205,7 @@ enum ImportedMeetingTitle {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy_MM_dd HH_mm"
-        formatter.timeZone = timeZone(in: segment) ?? .current
+        formatter.timeZone = timeZone(in: segment) ?? fallbackTimeZone
         return formatter.date(from: stamp)
     }
 
@@ -200,12 +221,57 @@ enum ImportedMeetingTitle {
     ]
 
     private static func timeZone(in segment: String) -> TimeZone? {
-        guard let abbreviationRange = segment.range(of: #"[A-Za-z]{2,5}\s*$"#, options: .regularExpression)
-        else { return nil }
+        guard let abbreviationRange = Patterns.zoneAbbreviation.firstRange(in: segment) else { return nil }
         let abbreviation = String(segment[abbreviationRange]).trimmingCharacters(in: .whitespaces).uppercased()
         if let hours = fixedOffsetHours[abbreviation] {
             return TimeZone(secondsFromGMT: hours * 3600)
         }
         return TimeZone(abbreviation: abbreviation)
+    }
+
+    // MARK: - Precompiled patterns
+
+    /// [Perf 1C] Each pattern is compiled once instead of per call (per suffix, per row, per
+    /// render). Same ICU engine and options `String.range(of:options: .regularExpression)` uses,
+    /// so matches are identical. `NSRegularExpression` is immutable and documented thread-safe.
+    struct CompiledPattern: @unchecked Sendable {
+        let pattern: String
+        let caseInsensitive: Bool
+        private let regex: NSRegularExpression
+
+        init(_ pattern: String, caseInsensitive: Bool = false) {
+            self.pattern = pattern
+            self.caseInsensitive = caseInsensitive
+            // Force-try: every pattern is a literal (or an escaped literal) checked by the tests.
+            regex = try! NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : [])
+        }
+
+        func firstRange(in text: String) -> Range<String.Index>? {
+            guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))
+            else { return nil }
+            return Range(match.range, in: text)
+        }
+    }
+
+    enum Patterns {
+        static let trailingDate = CompiledPattern(#"\s*[-–—]\s*\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}(\s+[A-Za-z]{2,5})?\s*$"#)
+        static let bareStamp = CompiledPattern(#"^\d{4}_\d{2}_\d{2}([ _]\d{2}_\d{2})?(\s+[A-Za-z]{2,5})?$"#)
+        static let copyCounter = CompiledPattern(#"\s*\(\d+\)\s*$"#)
+        static let dateStamp = CompiledPattern(#"\d{4}_\d{2}_\d{2}"#)
+        static let stamp = CompiledPattern(#"\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}"#)
+        static let zoneAbbreviation = CompiledPattern(#"[A-Za-z]{2,5}\s*$"#)
+        static let exportSuffixes = ImportedMeetingTitle.exportSuffixes.map(suffixPattern)
+        static let transcriptSuffixes = ImportedMeetingTitle.transcriptSuffixes.map(suffixPattern)
+        static var all: [CompiledPattern] {
+            [trailingDate, bareStamp, copyCounter, dateStamp, stamp, zoneAbbreviation]
+                + exportSuffixes + transcriptSuffixes
+        }
+
+        private static func suffixPattern(_ suffix: String) -> CompiledPattern {
+            CompiledPattern(
+                #"\s*[-–—]\s*"# + NSRegularExpression.escapedPattern(for: suffix) + #"\s*$"#,
+                caseInsensitive: true
+            )
+        }
     }
 }
