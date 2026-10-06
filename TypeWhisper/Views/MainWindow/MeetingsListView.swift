@@ -197,7 +197,7 @@ struct MeetingsListView: View {
                 TextField(
                     String(localized: "meetings.filter.search.placeholder"),
                     text: Binding(
-                        get: { coordinator.searchText },
+                        get: { coordinator.searchFieldText },
                         set: { coordinator.setSearchText($0) }
                     )
                 )

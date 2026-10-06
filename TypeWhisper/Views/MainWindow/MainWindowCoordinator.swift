@@ -38,7 +38,22 @@ final class MainWindowCoordinator: ObservableObject {
     // unfiltered feed (owner-veto 5).
 
     /// Free-text search over title + attendees. Empty = no search facet.
+    ///
+    /// [Perf 1C] This is the **debounced** value every observer filters by: `setSearchText` lands
+    /// here `searchDebounce` after the last keystroke (immediately when the text is cleared), so a
+    /// burst of typing republishes the coordinator once instead of per keystroke to every observer
+    /// (the list, the sidebar, each row's context menu). The search field itself binds to
+    /// `searchFieldText`, which is updated synchronously.
     @Published private(set) var searchText: String = ""
+
+    /// The search field's instant text (not published — typing must not fan out). Equals
+    /// `searchText` whenever no debounced commit is pending.
+    private(set) var searchFieldText: String = ""
+
+    /// How long typing must pause before `searchText` publishes. Internal for tests.
+    var searchDebounce: Duration = .milliseconds(250)
+
+    private var pendingSearchCommit: Task<Void, Never>?
 
     /// Active date-range preset (`.all` = no date facet).
     @Published private(set) var dateRange: MeetingDateRange = .all
@@ -95,7 +110,22 @@ final class MainWindowCoordinator: ObservableObject {
 
     /// Set the search text (does not change the route — narrows the current Meetings/folder/tag surface).
     func setSearchText(_ text: String) {
-        searchText = text
+        searchFieldText = text
+        pendingSearchCommit?.cancel()
+        pendingSearchCommit = nil
+        // Clearing applies at once (the facet chip's ×, select-all + delete): there is nothing to
+        // coalesce and the full list should come back without a lag.
+        guard !text.isEmpty else {
+            if searchText != text { searchText = text }
+            return
+        }
+        let delay = searchDebounce
+        pendingSearchCommit = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.pendingSearchCommit = nil
+            if self.searchText != self.searchFieldText { self.searchText = self.searchFieldText }
+        }
     }
 
     /// Set the active date-range preset.
@@ -139,6 +169,9 @@ final class MainWindowCoordinator: ObservableObject {
     /// Reset every filter-bar facet to its no-op default (used by the `show(_:)` default branch and the
     /// combined Clear). Leaves the folder/tag/unfiled filters and the route untouched.
     func clearFacetState() {
+        pendingSearchCommit?.cancel()
+        pendingSearchCommit = nil
+        searchFieldText = ""
         searchText = ""
         dateRange = .all
         stateFacets = []

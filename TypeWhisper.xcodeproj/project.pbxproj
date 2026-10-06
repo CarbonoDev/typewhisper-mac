@@ -303,6 +303,7 @@
 		PF1B00000000000000000005 /* HomeFeedActionFactsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */; };
 		MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000009 /* MeetingDocumentView.swift */; };
 		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
+		PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */; };
 		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
 		MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MLE0000000000000000002 /* MeetingLinkEventView.swift */; };
 		MWB0000000000000000012 /* MeetingDocumentBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000012 /* MeetingDocumentBody.swift */; };
@@ -1062,6 +1063,7 @@
 		PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFeedActionFactsTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000009 /* MeetingDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowSearchDebounceTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
 		MLE0000000000000000002 /* MeetingLinkEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkEventView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000012 /* MeetingDocumentBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentBody.swift; sourceTree = "<group>"; };
@@ -3165,6 +3167,7 @@
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
 				CA11F00000000000000004 /* CalendarSelectionTests.swift */,
 				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
+				PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */,
 				MWF0000000000000000017 /* MeetingDocumentTests.swift */,
 				TCF0000000000000000007 /* HomeFeedTests.swift */,
 				PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */,
@@ -4772,6 +4775,7 @@
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
 				CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */,
 				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
+				PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */,
 				MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */,
 				TCB0000000000000000007 /* HomeFeedTests.swift in Sources */,
 				PF1B00000000000000000005 /* HomeFeedActionFactsTests.swift in Sources */,
