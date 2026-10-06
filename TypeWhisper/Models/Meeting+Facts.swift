@@ -18,12 +18,15 @@ struct MeetingTranscriptFacts: Equatable, Sendable {
     /// The facts after appending `segments` (the live-append path keeps them incrementally).
     func appending<S: Sequence>(_ segments: S) -> MeetingTranscriptFacts where S.Element == MeetingSegment {
         var next = self
-        for segment in segments {
-            next.segmentCount += 1
-            next.transcriptEnd = max(next.transcriptEnd, segment.end)
-            if let label = Self.normalizedLabel(segment.speakerLabel) { next.speakerLabels.insert(label) }
-        }
+        for segment in segments { next.add(end: segment.end, speakerLabel: segment.speakerLabel) }
         return next
+    }
+
+    /// Fold one segment in.
+    mutating func add(end: Double, speakerLabel: String?) {
+        segmentCount += 1
+        transcriptEnd = max(transcriptEnd, end)
+        if let label = Self.normalizedLabel(speakerLabel) { speakerLabels.insert(label) }
     }
 
     static func normalizedLabel(_ label: String?) -> String? {

@@ -11,9 +11,9 @@ private let factsLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Typ
 /// - every other child write goes through a choke point (`insertSegment`, `deleteSegment`,
 ///   `renumber`, `childrenChanged(of:)`) that marks the meeting stale, and `commitWrite` recomputes
 ///   stale meetings from their relationships right after it saves;
-/// - `reconcileFacts()` backfills rows written before the columns existed and heals any drift
-///   against the store. It runs once per launch after the first frame (`runDeferredStartup`) in
-///   small chunks, is idempotent, and is safe to interrupt: it only fills or corrects columns.
+/// - `reconcileFacts()` (`MeetingService+FactsBackfill.swift`) backfills rows written before the
+///   columns existed and heals any drift against the store, once per launch after the first frame,
+///   in turns budgeted by rows read; it is idempotent and safe to interrupt.
 ///
 /// Fact writes never bump `updatedAt`: they describe the children, they are not an edit.
 extension MeetingService {
@@ -61,35 +61,12 @@ extension MeetingService {
         return before != after
     }
 
-    // MARK: - Backfill + self-heal
+    // MARK: - Self-heal (one meeting)
 
-    /// Fill unset columns and heal drift for every meeting, `chunkSize` meetings per main-actor
-    /// turn so the UI keeps running. A meeting with unset columns is computed from its
-    /// relationships (once — that is the backfill); one with columns set is checked against cheap
-    /// store queries (a segment `COUNT` and the output kinds) and recomputed only on disagreement:
-    /// the relationship always wins.
-    func reconcileFacts(chunkSize: Int = 20) async {
-        let snapshot = meetings
-        var healed = 0
-        var start = 0
-        while start < snapshot.count {
-            let chunk = snapshot[start..<min(start + chunkSize, snapshot.count)]
-            var changed = false
-            for meeting in chunk where meeting.modelContext != nil && !meeting.isDeleted {
-                if reconcileFacts(for: meeting) {
-                    changed = true
-                    healed += 1
-                }
-            }
-            if changed { save() }
-            start += chunkSize
-            await Task.yield()
-        }
-        if healed > 0 { factsLogger.info("Reconciled denormalised facts on \(healed) meeting(s)") }
-    }
-
-    /// Reconcile one meeting (see `reconcileFacts(chunkSize:)`). Does not save. Returns whether a
-    /// column changed.
+    /// Reconcile one meeting synchronously: unset columns are computed from the relationships, set
+    /// ones are checked against the store and recomputed on disagreement (the relationship wins).
+    /// Does not save. Returns whether a column changed. The launch pass
+    /// (`MeetingService+FactsBackfill.swift`) does the same work in budgeted, paged turns.
     @discardableResult
     func reconcileFacts(for meeting: Meeting) -> Bool {
         guard meeting.hasStoredFacts,

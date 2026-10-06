@@ -179,7 +179,7 @@ final class MeetingFactsTests: XCTestCase {
         XCTAssertEqual(meeting.outputKinds, [.summary])
 
         // Heal: the reconcile pass rewrites the columns from the store.
-        await service.reconcileFacts()
+        await service.reconcileFacts(pause: {})
         XCTAssertEqual(meeting.factSegmentCount, 2)
         assertFactsMatch(meeting)
     }
@@ -218,13 +218,13 @@ final class MeetingFactsTests: XCTestCase {
         XCTAssertFalse(meeting.hasStoredFacts, "rows from before the columns start unset")
         XCTAssertEqual(meeting.transcriptFacts.segmentCount, 4, "and read through the relationship")
 
-        await service.reconcileFacts(chunkSize: 1)
+        await service.reconcileFacts(budget: MeetingFactsBackfillBudget(rowsPerTurn: 1), pause: {})
         assertFactsMatch(meeting)
         XCTAssertEqual(meeting.transcriptFacts.transcriptDuration, 5)
         XCTAssertEqual(meeting.transcriptFacts.speakerCount, 2)
 
         let updatedAt = meeting.updatedAt
-        await service.reconcileFacts()
+        await service.reconcileFacts(pause: {})
         XCTAssertEqual(meeting.updatedAt, updatedAt, "fact writes are not edits")
 
         // Durable: a fresh service sees the backfilled columns.

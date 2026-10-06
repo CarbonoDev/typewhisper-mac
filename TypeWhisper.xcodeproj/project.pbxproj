@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		PF1A0000000000000000B00C /* MeetingFactsBackfillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */; };
+		PF1A0000000000000000B00B /* MeetingService+FactsBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00B /* MeetingService+FactsBackfill.swift */; };
 		PF1A0000000000000000B00A /* MeetingService+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00A /* MeetingService+Language.swift */; };
 		PF1A0000000000000000B009 /* MeetingFactsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F009 /* MeetingFactsTests.swift */; };
 		PF1A0000000000000000B008 /* Meeting+Facts.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F008 /* Meeting+Facts.swift */; };
@@ -893,6 +895,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFactsBackfillTests.swift; sourceTree = "<group>"; };
+		PF1A0000000000000000F00B /* MeetingService+FactsBackfill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+FactsBackfill.swift"; sourceTree = "<group>"; };
 		PF1A0000000000000000F00A /* MeetingService+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+Language.swift"; sourceTree = "<group>"; };
 		PF1A0000000000000000F009 /* MeetingFactsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFactsTests.swift; sourceTree = "<group>"; };
 		PF1A0000000000000000F008 /* Meeting+Facts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Meeting+Facts.swift"; sourceTree = "<group>"; };
@@ -2504,6 +2508,7 @@
 				MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */,
 				PF1A0000000000000000F004 /* MeetingService+Publishing.swift */,
 				PF1A0000000000000000F007 /* MeetingService+Facts.swift */,
+				PF1A0000000000000000F00B /* MeetingService+FactsBackfill.swift */,
 				PF1A0000000000000000F00A /* MeetingService+Language.swift */,
 				PF1A0000000000000000F003 /* MeetingService+RelatedNotes.swift */,
 				PF1A0000000000000000F002 /* MeetingService+Organization.swift */,
@@ -3294,6 +3299,7 @@
 				MEF0000000000000000001 /* MeetingServiceTests.swift */,
 				PF1A0000000000000000F001 /* MeetingServicePublishingTests.swift */,
 				PF1A0000000000000000F009 /* MeetingFactsTests.swift */,
+				PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */,
 				PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
@@ -4917,6 +4923,7 @@
 				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
 				PF1A0000000000000000B001 /* MeetingServicePublishingTests.swift in Sources */,
 				PF1A0000000000000000B009 /* MeetingFactsTests.swift in Sources */,
+				PF1A0000000000000000B00C /* MeetingFactsBackfillTests.swift in Sources */,
 				PF1A0000000000000000B005 /* MeetingsStoreMigrationTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
@@ -5223,6 +5230,7 @@
 				MCB000000000000000000006 /* MeetingService+CaptionSessions.swift in Sources */,
 				PF1A0000000000000000B004 /* MeetingService+Publishing.swift in Sources */,
 				PF1A0000000000000000B007 /* MeetingService+Facts.swift in Sources */,
+				PF1A0000000000000000B00B /* MeetingService+FactsBackfill.swift in Sources */,
 				PF1A0000000000000000B00A /* MeetingService+Language.swift in Sources */,
 				PF1A0000000000000000B003 /* MeetingService+RelatedNotes.swift in Sources */,
 				PF1A0000000000000000B002 /* MeetingService+Organization.swift in Sources */,
