@@ -17,6 +17,10 @@ struct SpaceNoteView: View {
     /// The raw note text (frontmatter included), loaded off the disk read. `nil` after a load means
     /// the file is missing / unreadable / out of the vault (the empty-state case).
     @State private var rawContent: String?
+    /// [Perf Phase 2] The frontmatter-stripped body, rendered and title-scanned once per load so
+    /// `body` never re-parses the note's markdown.
+    @State private var renderedBody: RenderedMarkdown = .empty
+    @State private var bodyHeading: String?
     /// The resolved backlink meeting id, or `nil` when the note carries no valid `typewhisper-meeting`
     /// field or it points at a meeting that no longer exists (tolerant — no bridge row, no error).
     @State private var linkedMeetingID: UUID?
@@ -24,7 +28,7 @@ struct SpaceNoteView: View {
     @State private var didLoad = false
 
     private var noteTitle: String {
-        if let rawContent, let heading = Self.headingTitle(in: Self.strippedBody(rawContent)) {
+        if rawContent != nil, let heading = bodyHeading {
             return heading
         }
         let name = (path as NSString).lastPathComponent
@@ -78,7 +82,7 @@ struct SpaceNoteView: View {
     private var connectedBody: some View {
         masthead
 
-        if let rawContent {
+        if rawContent != nil {
             // Under the masthead, quiet rows only (the redesign demotes secondary affordances).
             if let id = linkedMeetingID {
                 MeetingQuietRow(
@@ -97,7 +101,7 @@ struct SpaceNoteView: View {
                 viewModel.openInObsidian(path)
             }
 
-            MarkdownDocumentView(markdown: Self.strippedBody(rawContent), style: .standard)
+            MarkdownDocumentView(rendered: renderedBody, style: .standard)
         } else if didLoad {
             missingState
         }
@@ -145,6 +149,9 @@ struct SpaceNoteView: View {
         // One disk read yields both the body and the backlink (ME-3 — folds the ME-2 two-read load).
         let read = viewModel.loadNote(at: path)
         rawContent = read?.body
+        let stripped = read.map { Self.strippedBody($0.body) }
+        renderedBody = stripped.map { RenderedMarkdown(markdown: $0) } ?? .empty
+        bodyHeading = stripped.flatMap(Self.headingTitle(in:))
         // The "Open meeting" row appears only when the backlink resolves to a meeting that still
         // exists (unknown-uuid → no row, per the tolerant-parsing rule); resolution is the pure
         // `SpaceReveal.linkedMeeting` seam over the current meeting set.

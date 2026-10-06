@@ -15,10 +15,20 @@ struct MarkdownDocumentView: View {
         case article
     }
 
-    let markdown: String
+    /// [Perf Phase 2] Pre-rendered blocks: callers on a hot body path pass a cached value
+    /// (`RenderedOutputCache`, Space's load-time render) so no markdown is parsed per body pass.
+    let rendered: RenderedMarkdown
     var style: Style = .standard
 
-    private var blocks: [MarkdownBlock] { MarkdownBlock.parse(markdown) }
+    init(rendered: RenderedMarkdown, style: Style = .standard) {
+        self.rendered = rendered
+        self.style = style
+    }
+
+    /// Convenience for cold paths: parses at init, i.e. once per parent body pass.
+    init(markdown: String, style: Style = .standard) {
+        self.init(rendered: RenderedMarkdown(markdown: markdown), style: style)
+    }
 
     private var bodyFont: Font {
         style == .article ? MeetingTheme.articleBody : .body
@@ -30,7 +40,7 @@ struct MarkdownDocumentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: style == .article ? 12 : 10) {
-            ForEach(blocks) { block in
+            ForEach(Array(rendered.blocks.enumerated()), id: \.offset) { _, block in
                 render(block)
             }
         }
@@ -39,16 +49,16 @@ struct MarkdownDocumentView: View {
     }
 
     @ViewBuilder
-    private func render(_ block: MarkdownBlock) -> some View {
+    private func render(_ block: RenderedMarkdown.Block) -> some View {
         switch block {
         case let .heading(level, text):
-            Text(MarkdownBlock.inlineAttributed(text))
+            Text(text)
                 .font(headingFont(level: level))
                 .bold()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, style == .article ? 6 : 0)
         case let .paragraph(text):
-            Text(MarkdownBlock.inlineAttributed(text))
+            Text(text)
                 .font(bodyFont)
                 .lineSpacing(bodyLineSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,12 +82,12 @@ struct MarkdownDocumentView: View {
     /// A lightweight table: header row (when present) in semibold secondary over a hairline, body
     /// rows as leading-aligned wrapped text. Generated summaries frequently use tables for action
     /// items and metrics; before this they rendered as raw `|` pipe paragraphs.
-    private func tableView(header: [String], rows: [[String]]) -> some View {
+    private func tableView(header: [AttributedString], rows: [[AttributedString]]) -> some View {
         Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
             if !header.isEmpty {
                 GridRow {
                     ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                        Text(MarkdownBlock.inlineAttributed(cell))
+                        Text(cell)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -89,7 +99,7 @@ struct MarkdownDocumentView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(MarkdownBlock.inlineAttributed(cell))
+                        Text(cell)
                             .font(style == .article ? .system(size: 13) : .callout)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -99,12 +109,12 @@ struct MarkdownDocumentView: View {
         .padding(.vertical, 4)
     }
 
-    private func listRow(marker: String, text: String) -> some View {
+    private func listRow(marker: String, text: AttributedString) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(marker)
                 .font(.body.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Text(MarkdownBlock.inlineAttributed(text))
+            Text(text)
                 .font(bodyFont)
                 .lineSpacing(bodyLineSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,8 +134,8 @@ struct MarkdownDocumentView: View {
     }
 }
 
-/// A parsed markdown block. Block classification is pure and testable; inline emphasis is deferred
-/// to `AttributedString(markdown:)` at render time.
+/// A parsed markdown block. Block classification is pure and testable; inline emphasis is rendered
+/// with `AttributedString(markdown:)` when `RenderedMarkdown` is built.
 enum MarkdownBlock: Equatable, Identifiable {
     case heading(level: Int, text: String)
     case paragraph(String)
