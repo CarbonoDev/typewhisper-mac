@@ -29355,6 +29355,38 @@
         }
       }
     },
+    "meetings.menu.openInChrome": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting in Chrome öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Meeting in Chrome"
+          }
+        }
+      }
+    },
+    "meetings.menu.openInChrome.help": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Anruflink im Chrome-Profil des Google-Kontos dieses Meetings öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the call link in the Chrome profile for this meeting's Google account"
+          }
+        }
+      }
+    },
     "meetings.menu.recording": {
       "localizations": {
         "de": {

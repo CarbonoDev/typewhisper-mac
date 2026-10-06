@@ -319,6 +319,9 @@ struct MenuBarView: View {
                     )
                 }
                 .help(String(localized: "meetings.menu.openAndJoin"))
+                openInChromeButton(
+                    urlString: active.conferencingURL, calendarEventID: active.calendarEventID
+                )
                 Divider()
             }
         case let .event(event, isOngoing):
@@ -335,9 +338,36 @@ struct MenuBarView: View {
                 )
             }
             .help(String(localized: "meetings.menu.openAndJoin"))
+            openInChromeButton(urlString: event.conferencingURL, calendarEventID: event.id)
             Divider()
         case .none:
             EmptyView()
+        }
+    }
+
+    /// The explicit "just take me to the call" entry, a sibling of the combined open-and-join item
+    /// above. Same destination resolution as every other join affordance
+    /// (`MeetingJoinLauncher` → the owning Google account's Chrome profile), but deliberately
+    /// *without* the document half: no meeting document is opened, no main window is raised, and for
+    /// a calendar event no meeting row is created — so it stays usable when all the user wants is the
+    /// call.
+    ///
+    /// Hidden entirely when there is no conference URL, since there would be nothing to open. The
+    /// item says "Chrome" because that is the intent, but the launcher's fallbacks still apply: an
+    /// event with no Google account behind it, a `.system` preference, or a missing profile opens in
+    /// the default browser rather than failing.
+    @ViewBuilder
+    private func openInChromeButton(urlString: String?, calendarEventID: String?) -> some View {
+        if let urlString, let url = URL(string: urlString), MeetingJoinLauncher.isLaunchableJoinURL(url) {
+            Button {
+                MeetingJoinLauncher.open(
+                    url: url,
+                    accountSub: calendarEventID.flatMap(GoogleCalendarID.accountSub(fromNamespacedID:))
+                )
+            } label: {
+                Label(String(localized: "meetings.menu.openInChrome"), systemImage: "safari")
+            }
+            .help(String(localized: "meetings.menu.openInChrome.help"))
         }
     }
 
