@@ -127,8 +127,9 @@
 - [x] Perf: first-launch facts backfill budgeted by work, not meeting count @live-writes
 - [x] Perf: one save per write (stale-facts recompute + autosave vs explicit saves, finding 17b) @live-writes
   > 2026-10-06 diamond: reviewed + merged to main: Home readers on the fact columns with their caches deleted (HomeFeedViewModel.hasTranscript, homeBadgeFacts, HomeFeedView attention rows); backfill budgeted at 400 rows / 4 ms per main-actor turn using paged fetches of `end` + `speakerLabel` only, with a live-append interleave pinned by test; stale-facts recompute folded into the write's own save (one transaction per write; autosave kept — nothing relies on it and it adds no transaction). Worker: 826 scoped tests green. Depends on SwiftData flagging pending deletes `isDeleted` and reflecting pending inserts in the relationship before save — pinned by MeetingServiceTransactionTests / MeetingFactsTests on this OS. Not verified live: the first-launch backfill over the real store.
-- [~] Perf: actionFacts asks the output-kinds column before faulting `outputs` (the unmoved 214 ms Home first-paint phase) @live-writes
+- [x] Perf: actionFacts asks the output-kinds column before faulting `outputs` (the unmoved 214 ms Home first-paint phase) @live-writes
   > 2026-10-06 diamond: dispatched to live-writes from the benchmark result.
+  > 2026-10-06 diamond: merged to main as b6d666a3 (actionItems checks outputKinds first), a90a0749 (archive state facets on the facts), 4db4b02c (speaker-plan inputs on the stored label set). The phase did NOT move (200 → 199 ms): the worker's probe shows it is `MeetingOutputParser.parse` over the 100 summaries (170 ms, ~1.7 ms each in Debug), not relationship faults (15 ms) — my hypothesis was wrong. In the app only realized rows pay it (20-row window first paint: 17 ms).
 
 ## titles-home (amber)
 - [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
@@ -190,6 +191,16 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
 - [x] Perf 1B: cache per-render document/home facts, lazy Home timeline, leaf-local drafts @diamond
   Impact high / risk low. Duration / speaker count / has-content cached per (id, updatedAt) in `MeetingDocumentModel`; `documentPresentation` bound once; ask draft + transcript search as leaf `@State`, delete dead `noteDraft`; memoized transcript bubbles; `LazyVStack` timeline; memoized `homeBadgeFacts`; static formatters; `displayedMeetings` evaluated once per body.
   > 2026-10-02 diamond: landed on main as 355a177f. Not yet verified visually (lazy timeline look, row virtualization) nor re-profiled — needs a dev rebuild after the current live meeting ends. Follow-ups seen: `renderedOutputBody` re-parses markdown per body (Phase 2 RenderedOutput task), `duplicateMeetingIDs` parses every title per body, `relatedDocuments(for:)` still stats disk per note.
+
+## Backlog — found during the refactor
+- [ ] Perf: store parsed action-item counts per output (optional column on MeetingOutput or a cache keyed by output id) so first paint of a row with a summary does not parse its markdown
+  Impact low-med / risk low-med. ~1.7 ms per summary in a Debug build, paid once per realized row per launch. Outputs are immutable after write.
+- [ ] Perf: live append cost grows with meeting length (save 12.4 ms + `segment.meeting = meeting` 8.8 ms on a 1,726-segment meeting, Debug)
+  Impact low / risk unknown. 23 ms every ~4 s; both are SwiftData internals.
+- [ ] Fix: tray recording label keeps the old title after renaming the active meeting (pre-existing)
+- [ ] Fix: related emails are not refetched when a meeting's participants change or an event is linked (pre-existing)
+- [ ] Fix: `MeetingRelatedEmailsSection` reads `hasGoogleAccounts` without observing the account store (pre-existing)
+- [ ] Verify in a dev build: everything merged on 2026-10-06 (see each worker section's "not verified" notes) — live caption session, list rows + context-menu dialogs, calendar clock at event start/end, first-launch facts backfill and history prune on the real store, launch log (`category == "Launch"`)
 
 ## Backlog — Perf refactor Phase 2 (structural)
 - [ ] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
