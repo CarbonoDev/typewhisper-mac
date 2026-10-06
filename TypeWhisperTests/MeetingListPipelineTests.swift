@@ -178,7 +178,52 @@ final class MeetingListPipelineTests: XCTestCase {
         _ = pipeline.meetings(meetings, query: MeetingListQuery(searchText: "a"), now: now, calendar: calendar)
         _ = pipeline.meetings(meetings, query: MeetingListQuery(searchText: "ab"), now: now, calendar: calendar)
         _ = pipeline.meetings(meetings, query: MeetingListQuery(searchText: "abc"), now: now, calendar: calendar)
-        XCTAssertEqual(pipeline.derivationCount, meetings.count, "typing re-filters cached facts only")
+        XCTAssertEqual(pipeline.derivations.scalar, meetings.count, "typing re-filters cached facts only")
+    }
+
+    // MARK: - Laziness of relationship facts
+
+    func testUnfilteredAndSearchQueriesDeriveNoRelationshipFacts() {
+        let pipeline = MeetingListPipeline()
+        let archive = fixtures
+        _ = pipeline.meetings(archive, query: MeetingListQuery(sortNewestFirst: true), now: now, calendar: calendar)
+        _ = pipeline.meetings(archive, query: MeetingListQuery(searchText: "q3"), now: now, calendar: calendar)
+        _ = pipeline.meetings(
+            archive,
+            query: MeetingListQuery(folder: "Clients/Acme", tag: "hiring", dateRange: .thisMonth, sourceFacet: .captured),
+            now: now, calendar: calendar
+        )
+        XCTAssertEqual(pipeline.derivations, .init(scalar: archive.count, transcript: 0, outputKinds: 0))
+    }
+
+    func testStateFacetsDeriveOnlyTheFactTheyNeedForSurvivingMeetings() {
+        let pipeline = MeetingListPipeline()
+        let archive = fixtures
+        _ = pipeline.meetings(archive, query: MeetingListQuery(stateFacets: [.hasTranscript]), now: now, calendar: calendar)
+        XCTAssertEqual(pipeline.derivations.transcript, archive.count)
+        XCTAssertEqual(pipeline.derivations.outputKinds, 0)
+
+        // Only meetings that survive the earlier facets (here: the search) reach the state check.
+        let survivors = reference(archive, MeetingListQuery(searchText: "budget")).count
+        _ = pipeline.meetings(
+            archive, query: MeetingListQuery(searchText: "budget", stateFacets: [.hasSummary]), now: now, calendar: calendar
+        )
+        XCTAssertEqual(pipeline.derivations.outputKinds, survivors)
+        XCTAssertLessThan(survivors, archive.count)
+    }
+
+    // MARK: - Memo identity
+
+    func testAMeetingRecreatedWithTheSameIDAndTimestampIsReturnedFresh() {
+        let pipeline = MeetingListPipeline()
+        let id = UUID()
+        let stamp = Date(timeIntervalSince1970: 100)
+        let original = Meeting(id: id, title: "Restored", updatedAt: stamp)
+        XCTAssertTrue(pipeline.meetings([original], query: MeetingListQuery(), now: now, calendar: calendar).first === original)
+
+        // What a backup restore does: delete, then insert a new object with the same id + stamp.
+        let restored = Meeting(id: id, title: "Restored", updatedAt: stamp)
+        XCTAssertTrue(pipeline.meetings([restored], query: MeetingListQuery(), now: now, calendar: calendar).first === restored)
     }
 
     func testAnInPlaceWriteIsSeenThroughUpdatedAt() {

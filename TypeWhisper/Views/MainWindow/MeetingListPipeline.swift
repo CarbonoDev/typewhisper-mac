@@ -1,8 +1,10 @@
 import Foundation
 
-/// [Perf Phase 2] Everything `MeetingsViewModel.filteredMeetings` and the archive sort read from a
-/// meeting, derived once per `(id, updatedAt)` (every `MeetingService` write bumps `updatedAt`).
-/// Searching then tests cached strings: no attendees-JSON decode, no `segments` / `outputs` fault.
+/// [Perf Phase 2] The scalar facts `MeetingsViewModel.filteredMeetings` and the archive sort read from
+/// a meeting, derived once per `(id, updatedAt)` (every `MeetingService` write bumps `updatedAt`).
+/// Searching then tests cached strings with no attendees-JSON decode. Deliberately no relationship
+/// reads: transcript / output facts are derived lazily by `MeetingListPipeline`, only while a state
+/// facet needs them.
 struct MeetingFilterFacts: Equatable {
     var updatedAt: Date
     /// What the search facet matches today, no more and no less: the raw title, then each
@@ -17,9 +19,6 @@ struct MeetingFilterFacts: Equatable {
     var sortDate: Date
     var source: MeetingSource
     var languageCode: String?
-    var hasTranscript: Bool
-    /// `outputs` kinds exactly as `matchesStateFacets` reads them.
-    var outputKinds: Set<MeetingOutputKind>
 
     @MainActor
     init(_ meeting: Meeting) {
@@ -36,8 +35,6 @@ struct MeetingFilterFacts: Equatable {
         sortDate = MeetingsListView.effectiveDate(meeting)
         source = meeting.source
         languageCode = meeting.languageCode
-        hasTranscript = !meeting.segments.isEmpty
-        outputKinds = Set(meeting.outputs.map(\.kind))
     }
 }
 
@@ -70,24 +67,49 @@ final class MeetingListPipeline {
     static let shared = MeetingListPipeline()
 
     private var facts: [UUID: MeetingFilterFacts] = [:]
-    /// Number of fact derivations (cache misses) — a test probe for the invalidation key.
-    private(set) var derivationCount = 0
+    private var transcriptFacts: [UUID: (updatedAt: Date, value: Bool)] = [:]
+    private var outputKindFacts: [UUID: (updatedAt: Date, value: Set<MeetingOutputKind>)] = [:]
+
+    /// Derivation counts (cache misses) by kind — test probes for the invalidation key and for
+    /// laziness: an unfiltered or search-only query must not derive any relationship fact.
+    struct DerivationCounts: Equatable {
+        var scalar = 0
+        var transcript = 0
+        var outputKinds = 0
+    }
+    private(set) var derivations = DerivationCounts()
 
     private struct MemoKey: Equatable {
-        var entries: [Entry]
         var query: MeetingListQuery
         var calendar: Calendar
         /// Only the relative date ranges depend on the clock, and only by day.
         var day: Date?
     }
 
-    private struct Entry: Equatable {
-        var id: UUID
-        var updatedAt: Date
+    /// A cached result. It keeps its input meetings so the hit test compares object identity as well
+    /// as `(id, updatedAt)`: a meeting deleted and re-created with the same id and timestamp (backup
+    /// restore) is a different object and misses. Holding the inputs also keeps their identities
+    /// from being reused while the entry lives.
+    private struct MemoEntry {
+        var key: MemoKey
+        var inputs: [Meeting]
+        var updatedAts: [Date]
+        var result: [Meeting]
+
+        func matches(_ meetings: [Meeting], key other: MemoKey) -> Bool {
+            guard key == other, inputs.count == meetings.count else { return false }
+            for index in meetings.indices {
+                let meeting = meetings[index]
+                // Reading `updatedAt` of every input on a hit is also what keeps the calling view
+                // observing each meeting (see the type comment).
+                guard meeting === inputs[index], meeting.updatedAt == updatedAts[index] else { return false }
+            }
+            return true
+        }
     }
 
     /// A few recent results: the archive and the folder detail each keep theirs.
-    private var memo: [(key: MemoKey, result: [Meeting])] = []
+    private var memo: [MemoEntry] = []
     private let memoLimit = 4
 
     func meetings(
@@ -101,36 +123,51 @@ final class MeetingListPipeline {
         case .today, .thisWeek, .thisMonth: relative = true
         case .all, .custom: relative = false
         }
-        let key = MemoKey(
-            entries: meetings.map { Entry(id: $0.id, updatedAt: $0.updatedAt) },
-            query: query,
-            calendar: calendar,
-            day: relative ? calendar.startOfDay(for: now) : nil
-        )
-        if let hit = memo.firstIndex(where: { $0.key == key }) {
+        let key = MemoKey(query: query, calendar: calendar, day: relative ? calendar.startOfDay(for: now) : nil)
+        if let hit = memo.firstIndex(where: { $0.matches(meetings, key: key) }) {
             let entry = memo.remove(at: hit)
             memo.append(entry)
             return entry.result
         }
-        let result = Self.apply(
+        let result = apply(
             meetings.map { ($0, filterFacts(for: $0)) }, query: query, now: now, calendar: calendar
         )
-        memo.append((key, result))
+        memo.append(MemoEntry(key: key, inputs: meetings, updatedAts: meetings.map(\.updatedAt), result: result))
         if memo.count > memoLimit { memo.removeFirst() }
         return result
     }
 
     func filterFacts(for meeting: Meeting) -> MeetingFilterFacts {
         if let cached = facts[meeting.id], cached.updatedAt == meeting.updatedAt { return cached }
-        derivationCount += 1
+        derivations.scalar += 1
         let derived = MeetingFilterFacts(meeting)
         facts[meeting.id] = derived
         return derived
     }
 
+    /// Lazily derived, cached per `(id, updatedAt)`; reads `segments` through the seam.
+    private func hasTranscript(_ meeting: Meeting) -> Bool {
+        if let cached = transcriptFacts[meeting.id], cached.updatedAt == meeting.updatedAt { return cached.value }
+        derivations.transcript += 1
+        let value = MeetingRelationshipFacts.hasTranscript(meeting)
+        transcriptFacts[meeting.id] = (meeting.updatedAt, value)
+        return value
+    }
+
+    /// Lazily derived, cached per `(id, updatedAt)`; reads `outputs` through the seam.
+    private func outputKinds(_ meeting: Meeting) -> Set<MeetingOutputKind> {
+        if let cached = outputKindFacts[meeting.id], cached.updatedAt == meeting.updatedAt { return cached.value }
+        derivations.outputKinds += 1
+        let value = MeetingRelationshipFacts.outputKinds(meeting)
+        outputKindFacts[meeting.id] = (meeting.updatedAt, value)
+        return value
+    }
+
     /// The filter + sort over cached facts. Mirrors `MeetingsViewModel.filteredMeetings` step for
-    /// step (vertical filter, folder facet, tag, then the AND-composed facets), then sorts.
-    static func apply(
+    /// step (vertical filter, folder facet, tag, then the AND-composed facets, short-circuiting in
+    /// the same order — so relationship facts are only derived for meetings that reach the state
+    /// facet check), then sorts.
+    private func apply(
         _ rows: [(meeting: Meeting, facts: MeetingFilterFacts)],
         query: MeetingListQuery,
         now: Date,
@@ -142,13 +179,13 @@ final class MeetingListPipeline {
         } else if let folder = query.folder {
             let prefix = MeetingService.folderComponents(folder)
             if !prefix.isEmpty {
-                result = result.filter { hasPrefix($0.facts.folderComponents, prefix) }
+                result = result.filter { Self.hasPrefix($0.facts.folderComponents, prefix) }
             }
         }
         if !query.folderFacets.isEmpty {
             let prefixes = query.folderFacets.map { MeetingService.folderComponents($0) }
             result = result.filter { row in
-                prefixes.contains { !$0.isEmpty && hasPrefix(row.facts.folderComponents, $0) }
+                prefixes.contains { !$0.isEmpty && Self.hasPrefix(row.facts.folderComponents, $0) }
             }
         }
         if let tag = query.tag, !tag.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -158,13 +195,13 @@ final class MeetingListPipeline {
         let search = query.searchText.trimmingCharacters(in: .whitespaces)
         result = result.filter { row in
             let facts = row.facts
-            return matchesSearch(facts, trimmedQuery: search)
+            return Self.matchesSearch(facts, trimmedQuery: search)
                 && MeetingsViewModel.withinDateRange(
                     date: facts.rangeDate, range: query.dateRange, now: now, calendar: calendar
                 )
-                && matchesStateFacets(facts, query.stateFacets)
-                && matchesSource(facts.source, query.sourceFacet)
-                && matchesLanguage(facts.languageCode, query.languageFilter)
+                && matchesStateFacets(row.meeting, query.stateFacets)
+                && Self.matchesSource(facts.source, query.sourceFacet)
+                && Self.matchesLanguage(facts.languageCode, query.languageFilter)
         }
         if let newestFirst = query.sortNewestFirst {
             result.sort { newestFirst ? $0.facts.sortDate > $1.facts.sortDate : $0.facts.sortDate < $1.facts.sortDate }
@@ -181,13 +218,14 @@ final class MeetingListPipeline {
         return facts.searchFields.contains { $0.localizedCaseInsensitiveContains(trimmedQuery) }
     }
 
-    private static func matchesStateFacets(_ facts: MeetingFilterFacts, _ facets: Set<MeetingStateFacet>) -> Bool {
+    /// Each relationship fact is derived only when a selected facet needs it (no facets: none).
+    private func matchesStateFacets(_ meeting: Meeting, _ facets: Set<MeetingStateFacet>) -> Bool {
         facets.allSatisfy { facet in
             switch facet {
-            case .hasTranscript: return facts.hasTranscript
-            case .hasSummary: return facts.outputKinds.contains(.summary)
-            case .hasBrief: return facts.outputKinds.contains(.brief)
-            case .hasExtended: return facts.outputKinds.contains(.extended)
+            case .hasTranscript: return hasTranscript(meeting)
+            case .hasSummary: return outputKinds(meeting).contains(.summary)
+            case .hasBrief: return outputKinds(meeting).contains(.brief)
+            case .hasExtended: return outputKinds(meeting).contains(.extended)
             }
         }
     }
