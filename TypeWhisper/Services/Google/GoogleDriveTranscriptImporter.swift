@@ -446,6 +446,8 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 summary.failed += 1
             }
         }
+        // The batch's ledger writes were coalesced; land them before reporting the batch done.
+        ledger.flush()
         return summary
     }
 

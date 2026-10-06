@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os.log
 
@@ -17,6 +18,22 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// file is never enqueued twice concurrently; its `modifiedTime` values feed the engine's
 /// crash-safe watermark rule (D-D6 — hold the watermark below the earliest
 /// enqueued-but-not-yet-ledgered file).
+///
+/// **Coalesced writes (perf plan Phase 2).** Mutations update memory at once and mark the ledger
+/// dirty; the file is rewritten at most once per `saveDelay` (a backfill used to encode and write
+/// the whole file once per imported doc), plus on `flush()` — which the backfill batch and the
+/// engine's cycle end call — and on app termination. In-process reads always see memory, and the
+/// file is only read at `init`, so no read can observe a stale file.
+///
+/// Why a lost write is safe: every write serializes the **whole** in-memory state at one instant,
+/// so after a crash the file holds the state of some earlier instant — one the write-through
+/// ledger could equally have left behind. Coalescing only removes intermediate snapshots; it never
+/// adds a state. Losing the tail therefore costs only what a crash between "meeting written" and
+/// "ledger written" always cost (D-D5): the file is re-discovered (the watermark lives in the same
+/// snapshot, so it never runs ahead of the entries) and the replay merges as a deduped no-op into
+/// the meeting it already landed in. The two writes whose loss would *not* self-heal go to disk
+/// immediately: an account's **first** watermark seed (lost, the next launch would re-seed later
+/// and treat the gap as history) and `forgetCycleState` (lost, a re-enable could import history).
 @MainActor
 final class GoogleDriveImportLedger {
     /// One successfully imported Drive file (D-D5).
@@ -136,9 +153,29 @@ final class GoogleDriveImportLedger {
 
     private let fileURL: URL
 
-    init(fileURL: URL = GoogleDriveImportLedger.defaultFileURL) {
+    /// Default coalescing window for file writes.
+    static let defaultSaveDelay: Duration = .seconds(2)
+    private let saveDelay: Duration
+    /// Unwritten mutations exist; the scheduled write (or a `flush()`) persists them.
+    private(set) var hasUnsavedChanges = false
+    private var scheduledSave: Task<Void, Never>?
+    nonisolated(unsafe) private var terminationObserver: (any NSObjectProtocol)?
+
+    init(fileURL: URL = GoogleDriveImportLedger.defaultFileURL, saveDelay: Duration = GoogleDriveImportLedger.defaultSaveDelay) {
         self.fileURL = fileURL
+        self.saveDelay = saveDelay
         load()
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flush() }
+        }
+    }
+
+    deinit {
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
     }
 
     // MARK: - Decisions (D-D5)
@@ -291,8 +328,11 @@ final class GoogleDriveImportLedger {
     }
 
     func setWatermark(_ date: Date, forSub sub: String) {
+        let isFirstSeed = watermarks[sub] == nil
         watermarks[sub] = date
         save()
+        // A lost first seed would re-seed later on relaunch and silently treat the gap as history.
+        if isFirstSeed { flush() }
     }
 
     /// Drop every **cycle-scoped** trace of the given accounts — watermarks and in-flight pending
@@ -314,6 +354,8 @@ final class GoogleDriveImportLedger {
         guard changed else { return }
         logger.info("Cleared Drive cycle state for account \(sub, privacy: .private)")
         save()
+        // A lost forget would leave the old watermark behind for a later re-enable to import from.
+        flush()
     }
 
     /// The sweep the engine runs each cycle: forget every account that is no longer polled
@@ -393,7 +435,29 @@ final class GoogleDriveImportLedger {
         failures = snapshot.failures
     }
 
+    /// Mark the in-memory state dirty and make sure a coalesced write is scheduled.
     private func save() {
+        hasUnsavedChanges = true
+        guard scheduledSave == nil else { return }
+        let delay = saveDelay
+        scheduledSave = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.flush()
+        }
+    }
+
+    /// Write any unsaved changes now. Called on backfill end, at the engine's cycle end, on app
+    /// termination, and by the scheduled write. A no-op when nothing changed.
+    func flush() {
+        scheduledSave?.cancel()
+        scheduledSave = nil
+        guard hasUnsavedChanges else { return }
+        hasUnsavedChanges = false
+        write()
+    }
+
+    private func write() {
         let fm = FileManager.default
         let dir = fileURL.deletingLastPathComponent()
         if !fm.fileExists(atPath: dir.path) {

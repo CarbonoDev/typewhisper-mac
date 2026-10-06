@@ -175,6 +175,10 @@ final class GoogleDriveSyncEngine: ObservableObject {
             }
         }
 
+        // One ledger write per cycle (its writes are coalesced): the advanced watermarks reach
+        // disk now rather than a debounce later.
+        ledger.flush()
+
         lastSyncError = firstError
         if attemptedAnyAccount {
             lastSyncAt = now()
