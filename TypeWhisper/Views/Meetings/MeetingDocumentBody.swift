@@ -279,20 +279,8 @@ struct MeetingDocumentBody: View {
 
             // [Google Phase 3 · M5] Related emails appendix row (D-M6), gated like the docs row
             // on connected-or-nonempty.
-            if viewModel.isGmailConnected || !viewModel.relatedEmails(for: meeting).isEmpty {
-                MeetingAppendixRow(
-                    title: String(localized: "meetingdoc.emails.title"),
-                    summary: relatedEmailsSummary
-                ) {
-                    MeetingRelatedEmailsSection(meeting: meeting)
-                }
-            }
+            RelatedEmailsAppendixRow(meeting: meeting)
         }
-    }
-
-    private var relatedEmailsSummary: String? {
-        let count = viewModel.relatedEmails(for: meeting).count
-        return count > 0 ? "\(count)" : nil
     }
 
     private var speakerSummary: String? {
@@ -346,6 +334,29 @@ struct MeetingDocumentBody: View {
         let timestamp = output.createdAt.formatted(date: .abbreviated, time: .shortened)
         if source.isEmpty { return timestamp }
         return "\(source) — \(timestamp)"
+    }
+}
+
+// MARK: - Related emails appendix row
+
+/// The appendix row for related emails. A leaf view so it can observe `RelatedEmailsModel`: the
+/// count badge and the connected-or-nonempty gate change when a fetch lands or Gmail is toggled, and
+/// nothing else re-renders the document body then.
+private struct RelatedEmailsAppendixRow: View {
+    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    @ObservedObject private var relatedEmails = MeetingsViewModel.shared.relatedEmailsModel
+    let meeting: Meeting
+
+    var body: some View {
+        let count = viewModel.relatedEmails(for: meeting).count
+        if viewModel.isGmailConnected || count > 0 {
+            MeetingAppendixRow(
+                title: String(localized: "meetingdoc.emails.title"),
+                summary: count > 0 ? "\(count)" : nil
+            ) {
+                MeetingRelatedEmailsSection(meeting: meeting)
+            }
+        }
     }
 }
 
