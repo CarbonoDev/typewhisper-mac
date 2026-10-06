@@ -172,9 +172,12 @@
 - [x] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes @vault-offmain
   Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
   > 2026-10-06 diamond: reviewed + merged to main (Google calendar page decode + mapping off main, equality-gated lastSyncError; Drive export decode + summary-gate parse off main; ledger writes coalesced to one per 2 s with flush on backfill end / cycle end / terminate, first watermark seed and forget written through). Worker: 13 classes / 195 tests green. Trade accepted: a crash inside the 2 s window re-discovers the file and re-imports it as a deduped merge into the meeting it already created — same exposure the write-through ledger had, wider window.
-- [~] Perf: Drive import parses the export once, off main (segments handed to MeetingImportService) @vault-offmain
-- [~] Perf: before/after benchmark suite over a synthetic store, run at 772f3535 and at main @vault-offmain
-  > 2026-10-06 diamond: dispatched to vault-offmain after its third merge. This is the measurement we can get without replacing the installed dev app.
+- [x] Perf: Drive import parses the export once, off main (segments handed to MeetingImportService) @vault-offmain
+- [x] Perf: before/after benchmark suite over a synthetic store, run at 772f3535 and at main @vault-offmain
+  > 2026-10-06 diamond: reviewed + merged to main as da5471fd (Drive export parsed once off main; segment-taking overloads on MeetingImportService) and 4921b770 (PerfBenchmarkTests + scripts/perf/run-before-after.sh; results table in scripts/perf/README.md). Measured 772f3535 vs the branch point ad632918+2, Debug build, synthetic 300-meeting / 50k-segment store and 2,000-note vault, 3 interleaved runs: live append 264 → 21.5 ms and 1 → 0 list republishes per append; imported titles repeat render 98 → 0.4 ms; Home rows repeat 127 → 9 ms, after a write 147 → 10 ms, FIRST PAINT only 539 → 409 ms; markdown repeat 3.7 → 0.004 ms (first render unmoved, 5.2 ms); vault retrieve main stall 600 → 0 ms (wall time unchanged); Space init 290 → 0.4 ms, folder visits 247 → 0.06 ms; calendar refresh unchanged-list 0.27 → 0.56 ms but 2 → 0 publishes; list search unmoved (0.99×) because the pipeline had not merged yet. Not a measurement of the real app.
+- [~] Perf: benchmark follows the current code paths (pipeline, row cells, facts); live-append breakdown @vault-offmain
+- [ ] Perf: full before/after re-run once the in-flight changes have merged @vault-offmain
+  > 2026-10-06 diamond: dispatched to vault-offmain after its fourth merge; full re-run deliberately held.
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
