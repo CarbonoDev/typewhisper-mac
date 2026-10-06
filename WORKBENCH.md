@@ -132,10 +132,13 @@
   > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
 
 ## render-cache (onyx)
-- [~] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
+- [x] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
   Impact med-high / risk low-med. `MeetingOutputParser.parse` + `AttributedString(markdown:)` per block run on every document render (`MeetingDocumentBody.swift:121-136`, `MarkdownDocumentView.swift:21,302-307`).
-- [~] Perf: `relatedDocuments(for:)` once per input change, not a disk stat per body (1B follow-up) @render-cache
-  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+- [x] Perf: `relatedDocuments(for:)` once per input change, not a disk stat per body (1B follow-up) @render-cache
+  > 2026-10-06 diamond: reviewed + merged to main as 060fa4dd (RenderedMarkdown pre-render, Space note once per load), e2280c11 (RenderedOutputCache LRU for body/brief/agenda), 946d98ed (RelatedDocumentsMemo). 71 scoped tests green per worker. Not yet verified in a dev build. Note: show-as-missing for a related note now lags a vault rename by up to 30 s.
+- [~] Perf: one calendar coordinator (EKEventStoreChanged instead of the 60 s poll, EventKit query off main, equality-gated publish) @render-cache
+  Impact medium / risk medium. Replaces the 60 s Timer, the brief-scheduler tick from the calendar sink, and the unconditional republish that re-runs twin collapse + start notifications.
+  > 2026-10-06 diamond: dispatched to render-cache after its first merge.
 
 ## vault-offmain (topaz)
 - [~] Perf: vault work off the main actor @vault-offmain
@@ -158,8 +161,6 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
 - [ ] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes
   Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
-- [ ] Perf: one calendar coordinator (EKEventStoreChanged instead of the 60 s poll, EventKit query off main, equality-gated publish)
-  Impact medium / risk medium. Replaces the 60 s Timer, the brief-scheduler tick from the calendar sink, and the unconditional republish that re-runs twin collapse + start notifications.
 - [ ] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
   Impact high / risk high (15–20 test files). Slices: Capture, Calendar, Library/Organization, Outputs, Vault/Export, Import, Related. Views take the slice they use; mirrors become computed forwards (or `@Observable`, macOS 14 floor). Removes the documented "authoritative vs mirrored" staleness workarounds.
 - [ ] Refactor: `MeetingService` into repositories under one writer (meetings / outputs / templates)
