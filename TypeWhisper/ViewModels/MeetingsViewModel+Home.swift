@@ -200,7 +200,8 @@ extension MeetingsViewModel {
                 isRunningLong: isRunningLong
             )
         }
-        let kinds = homeOutputKinds(for: meeting)
+        // Denormalised output kinds (perf plan Phase 2): no `MeetingOutput` row is faulted.
+        let kinds = meeting.outputKinds
         return MeetingBadgeFacts(
             hasSummary: kinds.contains(.summary),
             hasExtended: kinds.contains(.extended),
@@ -210,20 +211,5 @@ extension MeetingsViewModel {
             isInVault: meeting.lastObsidianExportAt != nil,
             isRunningLong: isRunningLong
         )
-    }
-
-    /// Memoized output kinds per meeting, keyed by `updatedAt` (bumped by every `MeetingService`
-    /// output add/delete) — same pattern as `HomeFeedViewModel.hasTranscript`. Reading `kind` faults
-    /// each `MeetingOutput` row, and badges are evaluated per row on every timeline render; SwiftData
-    /// re-faults objects after each save + refetch, so the cache lives outside the model objects.
-    private static var outputKindsCache: [UUID: (updatedAt: Date, kinds: Set<MeetingOutputKind>)] = [:]
-
-    private static func homeOutputKinds(for meeting: Meeting) -> Set<MeetingOutputKind> {
-        if let cached = outputKindsCache[meeting.id], cached.updatedAt == meeting.updatedAt {
-            return cached.kinds
-        }
-        let kinds = Set(meeting.outputs.lazy.filter { !$0.isDeletedFromStore }.map(\.kind))
-        outputKindsCache[meeting.id] = (meeting.updatedAt, kinds)
-        return kinds
     }
 }

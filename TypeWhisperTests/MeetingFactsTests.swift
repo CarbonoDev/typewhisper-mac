@@ -288,4 +288,22 @@ final class MeetingFactsTests: XCTestCase {
         service.deleteMeeting(meeting)
         XCTAssertFalse(home.hasTranscript(for: meeting))
     }
+
+    func testHomeBadgeFactsReadTheOutputKindColumn() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Badges", state: .completed)
+        service.addOutput(to: meeting, kind: .summary, content: "s")
+        XCTAssertTrue(MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false).hasSummary)
+
+        // A distinctive column value proves the badges come from the column, not the outputs.
+        meeting.factOutputKindsRaw = "extended"
+        let facts = MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false)
+        XCTAssertTrue(facts.hasExtended)
+        XCTAssertFalse(facts.hasSummary)
+
+        // A new output shows up immediately (no updatedAt-keyed memo to go stale).
+        meeting.factOutputKindsRaw = nil
+        service.addOutput(to: meeting, kind: .brief, content: "b")
+        XCTAssertTrue(MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false).hasBrief)
+    }
 }
