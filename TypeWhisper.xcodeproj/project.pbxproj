@@ -145,6 +145,7 @@
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
 		PF2D00000000000000000022 /* LaunchMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000023 /* LaunchMetrics.swift */; };
+		PF2D00000000000000000020 /* ServiceContainer+DeferredStartup.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000021 /* ServiceContainer+DeferredStartup.swift */; };
 		AA00000000000000000005 /* TranscriptionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000005 /* TranscriptionResult.swift */; };
 		AA00000000000000000009 /* ModelManagerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000009 /* ModelManagerService.swift */; };
 		AA00000000000000000010 /* AudioFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000010 /* AudioFileService.swift */; };
@@ -880,6 +881,7 @@
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		PF2D00000000000000000023 /* LaunchMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LaunchMetrics.swift"; sourceTree = "<group>"; };
+		PF2D00000000000000000021 /* ServiceContainer+DeferredStartup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ServiceContainer+DeferredStartup.swift"; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
 		BB00000000000000000330 /* DictationPunctuationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfile.swift; sourceTree = "<group>"; };
 		BB00000000000000000331 /* PunctuationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRules.swift; sourceTree = "<group>"; };
@@ -2074,6 +2076,7 @@
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
 				PF2D00000000000000000023 /* LaunchMetrics.swift */,
+				PF2D00000000000000000021 /* ServiceContainer+DeferredStartup.swift */,
 				BB00000000000000000070 /* UpdateChecker.swift */,
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
@@ -5019,6 +5022,7 @@
 				MWB0000000000000000016 /* MeetingsViewModel+Document.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				PF2D00000000000000000022 /* LaunchMetrics.swift in Sources */,
+				PF2D00000000000000000020 /* ServiceContainer+DeferredStartup.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
 				AA00000000000000000331 /* PunctuationRules.swift in Sources */,

@@ -648,32 +648,8 @@ final class ServiceContainer: ObservableObject {
         // while keeping its persisted transcript segments visible (plan D2).
         meetingService.recoverInterruptedMeetings()
 
-        // [Google Phase 1 · M3] App-lifetime calendar sync cadence (D-G7 — deliberately not the
-        // UI-visibility-scoped poll). Immediate first sync, then every 5 minutes, plus an
-        // immediate re-sync on account connect/disconnect. Guarded out of tests above.
-        googleCalendarSyncEngine.start()
-
-        // [Google Phase 2 · M2] Drive discovery cadence (D-D6 — 15 min, app-lifetime). Polls only
-        // `.connected` + Drive-enabled accounts; with every toggle off (the default until M3's
-        // UI) it issues zero Drive requests. Guarded out of tests above.
-        googleDriveSyncEngine.start()
-
-        // [M2-Participants] One-time, idempotent backfill of the participant directory over every
-        // existing meeting's roster (plan D7). Runs inline for a normally-sized archive; a large archive
-        // (e.g. a bulk email import) is offloaded to the `io` lane so launch never blocks. Re-running is
-        // a no-op because `ingest` is idempotent.
-        let existingMeetings = meetingService.meetings
-        if existingMeetings.count > ParticipantDirectoryService.largeArchiveThreshold {
-            meetingJobQueue.enqueue(
-                kind: .participantBackfill,
-                meetingID: nil,
-                priority: .background
-            ) { [weak participantDirectoryService, weak meetingService] in
-                await participantDirectoryService?.backfill(from: meetingService?.meetings ?? [])
-            }
-        } else {
-            await participantDirectoryService.backfill(from: existingMeetings)
-        }
+        // [perf Phase 3] The Google sync engines' start and the participant backfill moved to
+        // `runDeferredStartup()` (end of this method), behind the first frame.
 
         // [Track B] Migrate legacy `MeetingTemplate` rows into unified `.meeting` PromptAction rows
         // and seed the curated presets (plan AD6). One-time + idempotent; preserves template UUIDs.
@@ -721,5 +697,7 @@ final class ServiceContainer: ObservableObject {
             }
         }
 
+        // [perf Phase 3] Non-critical fork startup, after the first frame (ServiceContainer+DeferredStartup).
+        await runDeferredStartup()
     }
 }
