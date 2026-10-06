@@ -5,6 +5,9 @@ import SwiftUI
 /// Embedded in `MeetingLiveCaptureView` (during capture) and `MeetingDetailView` (after).
 struct MeetingQAView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     let meeting: Meeting
     @State private var draft: String = ""
 

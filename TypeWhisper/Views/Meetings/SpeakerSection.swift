@@ -11,6 +11,9 @@ import SwiftUI
 /// - None (`.none`): only the two-person toggle (when eligible) is offered.
 struct SpeakerSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     @ObservedObject private var jobQueue = JobQueueService.shared
     let meeting: Meeting
 

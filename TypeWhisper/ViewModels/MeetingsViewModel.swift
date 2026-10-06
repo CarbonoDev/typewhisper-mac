@@ -17,12 +17,57 @@ final class MeetingsViewModel: ObservableObject {
     // Multi-select (plan LX-1, D3) lives on `MeetingSelectionModel` [Perf Phase 2]: held here, every
     // ⌘/⇧-click republished this view model to all of its observers.
 
-    // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
-    @Published private(set) var templates: [PromptAction] = []
-    @Published var outputErrorMessage: String?
-    /// Set alongside `outputErrorMessage` when the failure is specifically "no LLM provider
-    /// configured", so the document body can offer a deep link into Settings › Library › Prompts.
-    @Published var outputErrorNeedsProvider = false
+    // Outputs / templates (M4), brief / Q&A / export / import / diarization messages — [Perf Phase 2 ·
+    // VM split] on the `outputs` slice, so a Q&A answer or an operation error no longer invalidates
+    // every observer of this view model. Computed forwards (never `@Published`): a view that reads
+    // them — or `isAnswering(for:)` — must observe `outputs`.
+    let outputs: MeetingsOutputsModel
+    var templates: [PromptAction] { outputs.templates }
+    var outputErrorMessage: String? {
+        get { outputs.outputErrorMessage }
+        set { outputs.outputErrorMessage = newValue }
+    }
+    var outputErrorNeedsProvider: Bool {
+        get { outputs.outputErrorNeedsProvider }
+        set { outputs.outputErrorNeedsProvider = newValue }
+    }
+    var briefErrorMessage: String? {
+        get { outputs.briefErrorMessage }
+        set { outputs.briefErrorMessage = newValue }
+    }
+    var briefErrorNeedsProvider: Bool {
+        get { outputs.briefErrorNeedsProvider }
+        set { outputs.briefErrorNeedsProvider = newValue }
+    }
+    var answeringMeetingIDs: Set<UUID> { outputs.answeringMeetingIDs }
+    var qaErrorMessage: String? {
+        get { outputs.qaErrorMessage }
+        set { outputs.qaErrorMessage = newValue }
+    }
+    var qaErrorNeedsProvider: Bool {
+        get { outputs.qaErrorNeedsProvider }
+        set { outputs.qaErrorNeedsProvider = newValue }
+    }
+    var exportErrorMessage: String? {
+        get { outputs.exportErrorMessage }
+        set { outputs.exportErrorMessage = newValue }
+    }
+    var importErrorMessage: String? {
+        get { outputs.importErrorMessage }
+        set { outputs.importErrorMessage = newValue }
+    }
+    var diarizationErrorMessage: String? {
+        get { outputs.diarizationErrorMessage }
+        set { outputs.diarizationErrorMessage = newValue }
+    }
+    var diarizationStatusMessage: String? {
+        get { outputs.diarizationStatusMessage }
+        set { outputs.diarizationStatusMessage = newValue }
+    }
+    var diarizationStatusOutcome: MeetingDiarizationEnricher.Outcome? {
+        get { outputs.diarizationStatusOutcome }
+        set { outputs.diarizationStatusOutcome = newValue }
+    }
 
     // Calendar (M2) — [Perf Phase 2 · VM split] the calendar mirrors, the derived source flags and
     // the twin prompts live on the `calendar` slice, so a calendar refetch no longer invalidates
@@ -64,42 +109,8 @@ final class MeetingsViewModel: ObservableObject {
     // Knowledge base + brief (M5)
     @Published private(set) var isVaultConnected = false
     @Published private(set) var vaultName: String?
-    // [Track J] `isGeneratingBrief` is no longer a VM mirror — brief generation runs on the `.brief`
-    // job (llm lane) and is surfaced meeting-scoped via `isGeneratingBrief(for:)`.
-    @Published var briefErrorMessage: String?
-    @Published var briefErrorNeedsProvider = false
-
-    // In-meeting Q&A (M6)
-    /// [Track J] Meeting-scoped Q&A activity (plan J2): mirrored from `MeetingLLMService`. Asking a
-    /// question in meeting A must not disable meeting B's Ask field, so this is a set, not a bool.
-    @Published private(set) var answeringMeetingIDs: Set<UUID> = []
-    @Published var qaErrorMessage: String?
-    @Published var qaErrorNeedsProvider = false
-
-    // Obsidian export (M7)
-    @Published var exportErrorMessage: String?
-
-    // Import / merge (M8)
-    // [Track J] `isImporting` is no longer a VM mirror — audio import runs on the `.audioImport` job
-    // (transcription lane) and is surfaced via `isImporting()` (global: a new-meeting import has no
-    // meeting id, and the import UI is a modal sheet).
-    @Published var importErrorMessage: String?
-
-    // Speaker diarization & mapping (M9)
-    // [Track J] `isEnriching` is no longer a VM mirror — diarization runs on the `.diarization` job
-    // (transcription lane) and is surfaced meeting-scoped via `isEnriching(for:)`.
-    @Published var diarizationErrorMessage: String?
-    /// A localized status shown after enrichment finishes without labeling (e.g. "no speakers
-    /// detected"). Cleared when a new enrichment starts.
-    @Published var diarizationStatusMessage: String?
-    /// [M1/D2] The enrichment outcome that produced `diarizationStatusMessage`, tracked alongside the
-    /// localized string so suppression under a resolved `.channel`/`.cloud` plan can distinguish a
-    /// "no path" outcome (`.unavailable`/`.noAudio` — genuinely mutually exclusive with a resolved path,
-    /// suppress it) from an outcome that is still meaningful under a channel/cloud plan (a Redo that
-    /// returns `.timelineMismatch`/`.noSpeakersDetected` — keep it visible; the earlier blanket
-    /// suppression silently swallowed those, leaving the user with zero feedback). Set and cleared in
-    /// lockstep with `diarizationStatusMessage`.
-    @Published private(set) var diarizationStatusOutcome: MeetingDiarizationEnricher.Outcome?
+    // [Track J] Brief generation, audio import and diarization run as queue jobs and are surfaced via
+    // `isGeneratingBrief(for:)` / `isImporting()` / `isEnriching(for:)`; their messages are on `outputs`.
 
     // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can persist the
     // per-meeting final re-transcription override through it.
@@ -235,7 +246,7 @@ final class MeetingsViewModel: ObservableObject {
         self.diarizationEnricher = diarizationEnricher
         self.briefScheduler = briefScheduler // [Track D]
         self.meetings = meetingService.meetings
-        self.templates = promptActionService.meetingActions
+        self.outputs = MeetingsOutputsModel(promptActionService: promptActionService, llmService: llmService)
         self.calendar = MeetingsCalendarModel(calendarService: calendarService, googleAccountStore: googleAccountStore)
         self.isVaultConnected = vaultService.isConnected
         self.vaultName = vaultService.vaultName
@@ -276,19 +287,12 @@ final class MeetingsViewModel: ObservableObject {
         // why a hop is load-bearing: `@Published` emits in `willSet`, so a synchronous sink sees the
         // new value but must not re-read the source's other state.
         //
-        // Assigned unconditionally: `PromptAction` rows compare by identity, so an in-place edit
-        // (rename, prompt change) republishes the same array and must still reach the views.
-        promptActionService.$meetingActions
-            .sink { [weak self] templates in
-                self?.templates = templates
-            }
-            .store(in: &cancellables)
+        // Templates + Q&A activity mirrors: owned by `outputs` (`MeetingsOutputsModel`).
 
         // [Track J] `isGeneratingOutput` is no longer a VM mirror of `llmService.$isGenerating` — the
         // Generate spinner is now meeting-scoped, derived from the job queue via
         // `isGeneratingOutput(for:)`, so it stays on the originating meeting across navigation (J1).
-        // Q&A activity IS mirrored (Q&A stays out of the queue) but is now a per-meeting set (J2).
-        llmService.$answeringMeetingIDs.mirror(to: self, \.answeringMeetingIDs).store(in: &cancellables)
+        // Q&A activity IS mirrored (Q&A stays out of the queue), on `outputs`, as a per-meeting set (J2).
 
         // Calendar status/accounts mirrors and their follow-ups: owned by `calendar` (`MeetingsCalendarModel`).
         // [Google Phase 1 · M4] Snapshot changes refetch the calendar (off-main, equality-gated), so
@@ -349,16 +353,7 @@ final class MeetingsViewModel: ObservableObject {
     /// Called from the window when the selected meeting changes.
     /// Each write is guarded so a navigation with nothing to clear publishes nothing.
     func clearTransientMessages() {
-        if outputErrorMessage != nil { outputErrorMessage = nil }
-        if outputErrorNeedsProvider { outputErrorNeedsProvider = false }
-        if briefErrorMessage != nil { briefErrorMessage = nil }
-        if briefErrorNeedsProvider { briefErrorNeedsProvider = false }
-        if qaErrorMessage != nil { qaErrorMessage = nil }
-        if qaErrorNeedsProvider { qaErrorNeedsProvider = false }
-        if exportErrorMessage != nil { exportErrorMessage = nil }
-        if diarizationErrorMessage != nil { diarizationErrorMessage = nil }
-        if diarizationStatusMessage != nil { diarizationStatusMessage = nil }
-        if diarizationStatusOutcome != nil { diarizationStatusOutcome = nil }
+        outputs.clearTransientMessages()
     }
 
     /// True when a caught generation error is specifically "no LLM provider configured", so the

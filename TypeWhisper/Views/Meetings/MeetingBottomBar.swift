@@ -9,6 +9,9 @@ struct MeetingBottomBar: View {
     // [VM split] Capture state (read via the forwards or VM helpers derived from it) lives on the
     // capture slice; observing it keeps this view re-rendering on capture changes.
     @ObservedObject private var capture = MeetingsViewModel.shared.capture
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     // [Track J] Observe the queue directly so the meeting-scoped Generate spinner reacts to job
     // state changes (the VM does not republish on queue mutations — plan J1 §CC7).
     @ObservedObject private var jobQueue = JobQueueService.shared

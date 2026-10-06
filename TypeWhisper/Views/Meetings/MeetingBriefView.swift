@@ -7,6 +7,9 @@ import SwiftUI
 /// model-override submenus (M5/D10).
 struct MeetingBriefView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     // [Track J] Observe the queue directly so the meeting-scoped brief spinner reacts to job state
     // (the VM does not republish on queue mutations — plan J2 §CC7).
     @ObservedObject private var jobQueue = JobQueueService.shared

@@ -12,6 +12,9 @@ import UniformTypeIdentifiers
 /// in the pure, unit-tested `MeetingsViewModel.importSheetMode(mergeTargetTitle:)`.
 struct MeetingImportView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     // [Track J] Observe the queue directly so the import spinner reacts to `.audioImport` job state
     // (the VM no longer mirrors `isImporting` — plan J2 §CC7).
     @ObservedObject private var jobQueue = JobQueueService.shared

@@ -5,7 +5,10 @@ import SwiftUI
 /// them through the shared `PromptTemplateEditor`. Used as the Meeting section of
 /// `PromptLibraryView` and embeddable on its own.
 struct MeetingTemplateEditorView: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    /// [VM split] Reads only `templates` (plus actions): observes the outputs slice, not the whole
+    /// view model.
+    private var viewModel: MeetingsViewModel { .shared }
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     @State private var editingDraft: MeetingTemplateDraft?
 
     var body: some View {

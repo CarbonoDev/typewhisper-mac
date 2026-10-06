@@ -152,3 +152,33 @@ slice's revision through `noteSelectionChanged()`; `resolveTwinPrompt` marks the
 on the store, then drops the prompt from the slice). The pure statics
 `hasAnyCalendarSource(authorization:accounts:)` / `showsSystemCalendarProblem(...)` stay on the VM
 (tests call them there); the slice calls them.
+
+## Slice 3 — Outputs (`MeetingsOutputsModel`, `viewModel.outputs`)
+
+`templates`, `answeringMeetingIDs` and the per-operation messages (`outputError*`, `briefError*`,
+`qaError*`, `exportErrorMessage`, `importErrorMessage`, `diarizationErrorMessage`,
+`diarizationStatusMessage`, `diarizationStatusOutcome`). Messages keep their VM setters (forwards
+are get/set), so every VM action that sets or clears one is unchanged; `clearTransientMessages()`
+delegates to the slice with the same equality guards.
+
+Grep used: `\.(templates|outputErrorMessage|…|diarizationStatusOutcome)\b` and
+`\.(isAnswering|defaultTemplate|templates)\(` across `TypeWhisper/`, attributed to the enclosing
+struct. VM helpers derived from slice state: `isAnswering(for:)` (← `answeringMeetingIDs`).
+`defaultTemplate(ofKind:for:)` and `templates(ofKind:)` read `MeetingService`, not the mirror, but
+relied on the `templates` republish to refresh after a template edit, so their readers are treated
+as `templates` readers.
+
+| Reader (struct) | Reads | Observes now |
+|---|---|---|
+| `MeetingTemplateEditorView` | `templates` | outputs only; VM held as a plain computed `.shared` (actions) |
+| `MeetingBottomBar` | `templates`, `templates(ofKind:)`, `defaultTemplate`, `isAnswering(for:)` | VM + capture + outputs |
+| `MeetingBriefView` | `templates`, `templates(ofKind:)`, `briefErrorMessage`, `briefErrorNeedsProvider` | VM + outputs |
+| `MeetingContextRuleEditorView` | `templates` | VM + outputs |
+| `MeetingDocumentBody` | `outputErrorMessage`, `outputErrorNeedsProvider`, `defaultTemplate` | VM + outputs |
+| `MeetingQAView` | `qaErrorMessage`, `qaErrorNeedsProvider`, `isAnswering(for:)` | VM + outputs (kept on the VM too: its turn list is fed by the meeting, and the answer's settle used to arrive with a VM republish) |
+| `MeetingExportView` | `exportErrorMessage` | VM + outputs |
+| `MeetingImportView` | `importErrorMessage` | VM + outputs |
+| `SpeakerSection` | `diarizationErrorMessage`, `diarizationStatusMessage`, `diarizationStatusOutcome` | VM + outputs |
+
+Note: `plannedSpeakerSource(for:)` may clear the diarization status while `SpeakerSection`'s body
+runs (pre-existing); that write now publishes on the outputs slice instead of the VM.

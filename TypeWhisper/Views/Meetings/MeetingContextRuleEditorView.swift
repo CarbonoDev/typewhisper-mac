@@ -4,6 +4,9 @@ import SwiftUI
 /// commits on Done. Array trigger dimensions are entered as comma-separated text.
 struct MeetingContextRuleEditorView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Output templates / Q&A activity / operation messages (read via the forwards or
+    // `isAnswering(for:)`) live on the outputs slice; observing it keeps this view current.
+    @ObservedObject private var outputs = MeetingsViewModel.shared.outputs
     @Environment(\.dismiss) private var dismiss
 
     let rule: MeetingContextRule
