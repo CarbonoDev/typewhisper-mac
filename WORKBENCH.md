@@ -118,6 +118,7 @@
 - [~] Perf 1C: stop refetching all meetings on live append (`appendStableSegments`) @live-writes
   Impact high / risk low-med. Keep `nextOrder` per live meeting instead of `segments.map(\.order).max()`; `save()` without `fetchMeetings()`; refetch only on insert / delete / sort-key change; `performBatch` deferral for Drive import and calendar sync.
   > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+  > 2026-10-06 diamond: worker done on its branch (f4e80c91 move tags/folders + related notes into extensions, 952ac5e2 in-place writes save without refetch + nextOrder cache, 43907520 performBatch; 586 + 194 tests green). NOT merged — review found `mergeImport` renumbers segments without invalidating the nextOrder cache (append → Drive merge → append yields duplicate orders). Sent back for a structural fix + regression tests.
 
 ## titles-home (amber)
 - [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
