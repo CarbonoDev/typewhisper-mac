@@ -298,8 +298,9 @@ final class MeetingTrayState: ObservableObject {
             .sink { [weak self] value in
                 self?.isRecording = value
                 // Recording takes precedence over the upcoming title, so the countdown ticker is
-                // pointless (and its wakeups wasteful) while capturing.
-                self?.updateCountdownTicker()
+                // pointless (and its wakeups wasteful) while capturing. Re-pick the candidate on the
+                // flip: one computed before recording started may have started or ended since.
+                self?.refreshUpcoming()
             }
             .store(in: &cancellables)
         viewModel.$activeMeeting
