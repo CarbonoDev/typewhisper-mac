@@ -135,9 +135,11 @@
   Impact low / risk none. Analyzers currently live only in the session scratchpad.
 - [x] Perf: compute `duplicateMeetingIDs` once per input change (1B follow-up) @titles-home
   > 2026-10-06 diamond: reviewed + merged to main as 3d6be5ff (scripts/perf), 0d08abaf (ImportedMeetingTitle precompiled regexes + lock-guarded memo), 560953db (Home header formatters + actionFacts keyed on updatedAt), c6565d9b (250 ms search debounce; field binds to the instant `searchFieldText`), 408ff669 (folder description commits on blur/submit/1 s pause/disappear), 5136e7cc (MeetingDuplicateIndex). Worker: 18 classes / 125 tests green. Not profiled live. Before/after baseline still to record once a dev build is allowed.
-- [~] Perf: value-type `MeetingRowModel` + one `MeetingRowView`, list-local selection @titles-home
+- [x] Perf: value-type `MeetingRowModel` + one `MeetingRowView`, list-local selection @titles-home
   Impact high / risk medium. One list model recomputes rows only on input change; rows are Equatable and take a value + isSelected/isLive; replaces the duplicated `ArchiveRow` / `TimelineRowContent`; lifts selection off the singleton VM. Also collapse the per-row context-menu presenter stack into one list-level pending action.
-  > 2026-10-06 diamond: dispatched to titles-home after its first merge.
+  > 2026-10-06 diamond: reviewed + merged to main as 27051dda (MeetingRowModel + updatedAt-keyed store), 0b5e662c (one MeetingRowView for archive + timeline), 54357374 (selection on MeetingSelectionModel, off the VM), 4c62fc00 (row dialogs presented once per list from a pending action). Worker: 20 classes / 139 tests green. NOT verified in the app — needs eyes in a dev build: pixel parity of both row styles, right-click menu single vs bulk, rename / delete / merge / new-folder / link-event dialogs actually firing, selection surviving open-and-back.
+- [~] Perf: list filter/search/sort pipeline — cached search haystack per (id, updatedAt), memoized filter+sort shared by list and folder detail (finding 5 remainder) @titles-home
+  > 2026-10-06 diamond: dispatched to titles-home after its second merge.
 
 ## render-cache (onyx)
 - [x] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
