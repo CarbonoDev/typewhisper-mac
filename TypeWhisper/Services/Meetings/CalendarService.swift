@@ -10,7 +10,7 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// `CalendarEventProviding`, surfaces the current/upcoming events in a rolling window, and
 /// projects a chosen event into the parameters for a `.calendar`-sourced `Meeting`.
 ///
-/// Detection is poll + prompt: EventKit reports that a meeting is *scheduled*, never that it
+/// Detection is event-driven + prompt (`CalendarRefreshCoordinator`): EventKit reports that a meeting is *scheduled*, never that it
 /// *started*, so the app only ever prompts the user to create/capture a meeting — it never
 /// silently records.
 @MainActor
@@ -217,8 +217,8 @@ final class CalendarService: ObservableObject {
         lastFetchedAt = now
         lastExcludedEventIDs = []
         let changed = !upcomingEvents.isEmpty || !earlierEvents.isEmpty
-        upcomingEvents = []
-        earlierEvents = []
+        if !upcomingEvents.isEmpty { upcomingEvents = [] }
+        if !earlierEvents.isEmpty { earlierEvents = [] }
         return changed
     }
 
@@ -237,7 +237,10 @@ final class CalendarService: ObservableObject {
 
     /// Recompute both published sections from the retained last query (used by `refresh` and by
     /// `dismiss(eventID:)`), so dismissing an overrunning row updates the UI without a provider hit.
-    /// Returns whether either section changed.
+    ///
+    /// [Perf Phase 2] Equality-gated: a section is assigned only when its value changed, so an
+    /// unchanged re-query publishes nothing and wakes no downstream consumer. Returns whether
+    /// either section changed.
     @discardableResult
     private func republish() -> Bool {
         guard let now = lastNow else { return false }
@@ -262,9 +265,15 @@ final class CalendarService: ObservableObject {
             grace: grace,
             excludingEventIDs: dismissedEventIDs
         )
-        let changed = upcoming != upcomingEvents || earlier != earlierEvents
-        upcomingEvents = upcoming
-        earlierEvents = earlier
+        var changed = false
+        if upcoming != upcomingEvents {
+            upcomingEvents = upcoming
+            changed = true
+        }
+        if earlier != earlierEvents {
+            earlierEvents = earlier
+            changed = true
+        }
         return changed
     }
 

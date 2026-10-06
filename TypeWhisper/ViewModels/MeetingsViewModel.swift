@@ -137,12 +137,12 @@ final class MeetingsViewModel: ObservableObject {
     // [Track B] Unified prompt/template library — meeting output templates are `.meeting`-surface
     // PromptAction rows owned by PromptActionService (plan AD6).
     private let promptActionService: PromptActionService
-    private let calendarService: CalendarService
+    let calendarService: CalendarService
     // [Track C] `internal` (not `private`) so `MeetingsViewModel+Rules.swift` can read
     // `captureService.activeMeetingDefaultTemplateID` to pre-select the rule-selected default output
     // template in the generate flow (`defaultTemplate(ofKind:for:)`, addendum AD7).
     let captureService: MeetingCaptureService
-    private let startNotificationService: MeetingStartNotificationService
+    let startNotificationService: MeetingStartNotificationService
     /// Owner request 2: one-shot "meeting time ended, still recording" reminder. Driven off the
     /// capture elapsed tick (which runs only while recording).
     private let endReminderService: MeetingEndReminderService
@@ -212,7 +212,8 @@ final class MeetingsViewModel: ObservableObject {
     }
     // ── end [Google Phase 3 · M5] block ─────────────────────────────────────────────────────────
     private var cancellables = Set<AnyCancellable>()
-    private var pollingCancellable: AnyCancellable?
+    /// [Perf Phase 2] Replaces the 60 s calendar poll (`MeetingsViewModel+CalendarRefresh`).
+    private(set) lazy var calendarRefresh = makeCalendarRefreshCoordinator()
 
     init(
         meetingService: MeetingService,
@@ -355,34 +356,27 @@ final class MeetingsViewModel: ObservableObject {
                 self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
-        // [Google Phase 1 · M4] Snapshot changes re-run the same refresh as the 60 s tick, so new
-        // Google events appear without waiting for the next poll (D-G7) — and re-evaluate the
+        // [Google Phase 1 · M4] Snapshot changes refetch the calendar (off-main, equality-gated), so
+        // new Google events appear without waiting for anything else (D-G7) — and re-evaluate the
         // pending twin prompts (D-G6: the first snapshot after connect can race the calendarList
         // fetch, so unhandled accounts are re-checked on every change).
         NotificationCenter.default.publisher(for: .googleCalendarSnapshotDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.loadUpcoming()
+                self.calendarRefresh.refetch()
                 self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
-        // No `removeDuplicates` here: the time-driven side effects below must see every poll tick.
+        // [Perf Phase 2] `CalendarService` publishes only on change, so this sink runs the
+        // time-gated consumers once per real change; time passing reaches them through the
+        // coordinator's wake instead of a poll tick.
         calendarService.$upcomingEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in
                 guard let self else { return }
                 if self.upcomingEvents != events { self.upcomingEvents = events }
-                // [Google Phase 1 · M4 / PR #7 review finding 4] Collapse cross-provider CalDAV
-                // twins for the *automatic* consumers only: the published list above (and the
-                // Calendars selection UI) keeps both copies — D-G6 owns the visible half — but
-                // auto-created meetings, brief jobs on the cap-1 `llm` lane and start
-                // notifications must fire once per real event, not once per provider copy.
-                let deduplicated = CalendarEventTwinCollapser.collapse(events)
-                // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
-                self.startNotificationService.notifyStartingMeetings(deduplicated)
-                // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
-                self.briefScheduler.tick(events: deduplicated, now: Date())
+                self.calendarUpcomingDidChange(events)
             }
             .store(in: &cancellables)
         calendarService.$earlierEvents
@@ -584,12 +578,11 @@ final class MeetingsViewModel: ObservableObject {
         loadUpcoming()
     }
 
-    /// Re-query upcoming/current events, excluding any that already back a stored meeting.
+    /// Re-window upcoming/current events, excluding any that already back a stored meeting. [Perf
+    /// Phase 2] No provider query: callers change the exclusion set or the selection, both applied to
+    /// the retained query; store changes arrive via `calendarRefresh`.
     func loadUpcoming(now: Date = Date()) {
-        calendarService.refresh(
-            now: now,
-            existingCalendarEventIDs: existingCalendarEventIDs
-        )
+        calendarService.rewindow(now: now, existingCalendarEventIDs: existingCalendarEventIDs)
     }
 
     /// Whether an upcoming event is happening right now (for the "in progress" badge).
@@ -1939,22 +1932,6 @@ final class MeetingsViewModel: ObservableObject {
         promptActionService.promptActions
     }
 
-    /// Poll the calendar roughly once a minute while the meetings UI is visible (plan D10).
-    func startCalendarPolling() {
-        loadUpcoming()
-        guard pollingCancellable == nil else { return }
-        pollingCancellable = Timer.publish(every: 60, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.loadUpcoming()
-            }
-    }
-
-    func stopCalendarPolling() {
-        pollingCancellable?.cancel()
-        pollingCancellable = nil
-    }
-
     /// Derived from the service's synchronously-updated `meetings` (not the Combine-mirrored
     /// `self.meetings`) so `loadUpcoming()` called right after `createMeeting` sees the newly
     /// created event and excludes it immediately.
@@ -1964,7 +1941,7 @@ final class MeetingsViewModel: ObservableObject {
     /// event from the Upcoming section ~lead-minutes before it starts, taking the "Brief ready"
     /// affordance and the start-notification prompt with it (AD9/finding 1). Once the user engages
     /// such a meeting (capture starts → state leaves `.scheduled`), it is excluded like any other.
-    private var existingCalendarEventIDs: Set<String> {
+    var existingCalendarEventIDs: Set<String> {
         Self.engagedCalendarEventIDs(
             meetings: meetingService.meetings,
             autoBriefPlaceholders: briefScheduler.placeholderEventIDs

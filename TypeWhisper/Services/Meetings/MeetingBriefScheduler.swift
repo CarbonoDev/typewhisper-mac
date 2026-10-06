@@ -140,6 +140,14 @@ final class MeetingBriefScheduler: ObservableObject {
         return Swift.min(upper, Swift.max(lower, raw))
     }
 
+    /// [Perf Phase 2] The lead window `tick` gates on (`[start − lead, start]`), for the calendar wake
+    /// planner; `nil` when auto-briefs are off.
+    var consumerWindow: CalendarWakePlanner.ConsumerWindow? {
+        let config = loadConfig()
+        guard config.enabled else { return nil }
+        return CalendarWakePlanner.ConsumerWindow(lead: TimeInterval(config.leadMinutes * 60), trail: 0)
+    }
+
     // MARK: - Poll hook
 
     /// Called from the calendar poll (plan AD9). Synchronously resolves eligible events, pre-creates

@@ -6,12 +6,15 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 
 /// Posts a local user notification when a scheduled calendar meeting is about to start, prompting
 /// the user to open Meetings and start capture (plan D10: the app never silently records — at
-/// event start it prompts). Detection is driven by the calendar poll in `MeetingsViewModel`.
+/// event start it prompts). Detection is driven by `CalendarRefreshCoordinator` via `MeetingsViewModel`.
 @MainActor
 final class MeetingStartNotificationService: ObservableObject {
     /// Fire once per event when `now` is within [start − lead, start + grace].
     private static let leadWindow: TimeInterval = 60
     private static let graceWindow: TimeInterval = 120
+
+    /// [Perf Phase 2] The window `shouldNotify` gates on, for the calendar wake planner.
+    static let consumerWindow = CalendarWakePlanner.ConsumerWindow(lead: leadWindow, trail: graceWindow)
 
     private let center: UNUserNotificationCenter?
     private var notifiedEventIDs = Set<String>()
