@@ -27,6 +27,7 @@
 		C4290000000000000MIR001 /* MeetingTranscriptMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000MIR01 /* MeetingTranscriptMirror.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		PF2C00000000000000000B30 /* CalendarRefreshTestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F30 /* CalendarRefreshTestDoubles.swift */; };
+		PF2C00000000000000000B41 /* MeetingsViewModelHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F41 /* MeetingsViewModelHarness.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */; };
@@ -73,6 +74,8 @@
 		PF2C00000000000000000B31 /* CalendarWakePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */; };
 		PF2C00000000000000000B32 /* CalendarRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */; };
 		PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */; };
+		PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F42 /* PublisherMirrorTests.swift */; };
+		PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */; };
 		PF2C00000000000000000B13 /* RelatedDocumentsMemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */; };
 		5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */; };
 		PF1B00000000000000000003 /* ImportedMeetingTitleMemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */; };
@@ -394,6 +397,7 @@
 		M8B0000000000000000002 /* MeetingRelatedDocsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */; };
 		M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */; };
 		PF2C00000000000000000B23 /* MeetingsViewModel+CalendarRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F23 /* MeetingsViewModel+CalendarRefresh.swift */; };
+		PF2C00000000000000000B40 /* PublisherMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F40 /* PublisherMirror.swift */; };
 		PF2C00000000000000000B03 /* RelatedDocumentsMemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F03 /* RelatedDocumentsMemo.swift */; };
 		M8B0000000000000000004 /* MeetingRelatedDocsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */; };
 		M8B0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */; };
@@ -916,6 +920,8 @@
 		PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWakePlannerTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRefreshCoordinatorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConsumerWindowTests.swift; sourceTree = "<group>"; };
+		PF2C00000000000000000F42 /* PublisherMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublisherMirrorTests.swift; sourceTree = "<group>"; };
+		PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModelMirrorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelatedDocumentsMemoTests.swift; sourceTree = "<group>"; };
 		5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitleTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitleMemoTests.swift; sourceTree = "<group>"; };
@@ -1186,6 +1192,7 @@
 		M8F0000000000000000002 /* MeetingRelatedDocsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsSection.swift; sourceTree = "<group>"; };
 		M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+RelatedDocs.swift"; sourceTree = "<group>"; };
 		PF2C00000000000000000F23 /* MeetingsViewModel+CalendarRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+CalendarRefresh.swift"; sourceTree = "<group>"; };
+		PF2C00000000000000000F40 /* PublisherMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublisherMirror.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F03 /* RelatedDocumentsMemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelatedDocumentsMemo.swift; sourceTree = "<group>"; };
 		M8F0000000000000000004 /* MeetingRelatedDocsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsServiceTests.swift; sourceTree = "<group>"; };
 		M8F0000000000000000005 /* MeetingRelatedDocsPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRelatedDocsPersistenceTests.swift; sourceTree = "<group>"; };
@@ -1573,6 +1580,7 @@
 		E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F30 /* CalendarRefreshTestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRefreshTestDoubles.swift; sourceTree = "<group>"; };
+		PF2C00000000000000000F41 /* MeetingsViewModelHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModelHarness.swift; sourceTree = "<group>"; };
 		F18A00000000000000000010 /* FillerWordsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordsPlugin.swift; sourceTree = "<group>"; };
 		F18A00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		F18A00000000000000000012 /* FillerWordsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FillerWordsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2050,6 +2058,7 @@
 				E808D246301E36546EEB811F /* TestSupport.swift */,
 				PF1A0000000000000000F006 /* MeetingsSchemaV1.swift */,
 				PF2C00000000000000000F30 /* CalendarRefreshTestDoubles.swift */,
+				PF2C00000000000000000F41 /* MeetingsViewModelHarness.swift */,
 			);
 			name = Support;
 			path = Support;
@@ -2321,6 +2330,7 @@
 				M7F0000000000000000004 /* MeetingsViewModel+FolderContext.swift */,
 				M8F0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift */,
 				PF2C00000000000000000F23 /* MeetingsViewModel+CalendarRefresh.swift */,
+				PF2C00000000000000000F40 /* PublisherMirror.swift */,
 				PF2C00000000000000000F03 /* RelatedDocumentsMemo.swift */,
 				GGF0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift */,
 				TEF0000000000000000006 /* SpaceViewModel.swift */,
@@ -3242,6 +3252,8 @@
 				PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */,
 				PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */,
 				PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */,
+				PF2C00000000000000000F42 /* PublisherMirrorTests.swift */,
+				PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */,
 				PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */,
 				5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */,
 				PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */,
@@ -5034,6 +5046,8 @@
 				PF2C00000000000000000B31 /* CalendarWakePlannerTests.swift in Sources */,
 				PF2C00000000000000000B32 /* CalendarRefreshCoordinatorTests.swift in Sources */,
 				PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */,
+				PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */,
+				PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */,
 				PF2C00000000000000000B13 /* RelatedDocumentsMemoTests.swift in Sources */,
 				5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */,
 				PF1B00000000000000000003 /* ImportedMeetingTitleMemoTests.swift in Sources */,
@@ -5047,6 +5061,7 @@
 				204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */,
 				PF1A0000000000000000B006 /* MeetingsSchemaV1.swift in Sources */,
 				PF2C00000000000000000B30 /* CalendarRefreshTestDoubles.swift in Sources */,
+				PF2C00000000000000000B41 /* MeetingsViewModelHarness.swift in Sources */,
 				76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */,
 				4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */,
 				E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */,
@@ -5247,6 +5262,7 @@
 				GGB0000000000000000115 /* MeetingsViewModel+RelatedEmails.swift in Sources */,
 				M8B0000000000000000003 /* MeetingsViewModel+RelatedDocs.swift in Sources */,
 				PF2C00000000000000000B23 /* MeetingsViewModel+CalendarRefresh.swift in Sources */,
+				PF2C00000000000000000B40 /* PublisherMirror.swift in Sources */,
 				PF2C00000000000000000B03 /* RelatedDocumentsMemo.swift in Sources */,
 				DDB0000000000000000001 /* MeetingBriefScheduler.swift in Sources */,
 				DDB0000000000000000002 /* MeetingsViewModel+AutoBrief.swift in Sources */,

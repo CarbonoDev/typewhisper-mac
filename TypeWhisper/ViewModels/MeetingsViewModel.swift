@@ -273,8 +273,9 @@ final class MeetingsViewModel: ObservableObject {
         self.isVaultConnected = vaultService.isConnected
         self.vaultName = vaultService.vaultName
         // [Google Phase 3 · M5] Seed + recompute the D-M6 Gmail mirror on store `objectWillChange`
-        // (main-queue hop — the vaultPath re-check pattern below; `$accounts` alone would miss
-        // Gmail-toggle flips, D-M7).
+        // (`$accounts` alone would miss Gmail-toggle flips, D-M7). The main-queue hop is
+        // load-bearing: `objectWillChange` fires *before* the store mutates, and the sink re-reads
+        // `isConnected`, which only reflects the change one turn later.
         self.isGmailConnected = gmailContextService?.isConnected ?? false
         if let store = googleAccountStore {
             store.objectWillChange
@@ -283,7 +284,7 @@ final class MeetingsViewModel: ObservableObject {
                     guard let self else { return }
                     let wasConnected = self.isGmailConnected
                     let nowConnected = self.gmailContextService?.isConnected ?? false
-                    self.isGmailConnected = nowConnected
+                    if wasConnected != nowConnected { self.isGmailConnected = nowConnected }
                     // The flip is the single hook both related-emails corrections hang off: on
                     // connect, refetch the meetings whose load early-returned while Gmail was off
                     // (an already-open document never re-runs its `.task(id:)`); on disconnect,
@@ -304,8 +305,13 @@ final class MeetingsViewModel: ObservableObject {
             .sink { [weak self] meetings in self?.meetings = meetings }
             .store(in: &cancellables)
 
+        // [Perf · finding 12] Mirrors below are synchronous (`mirror(to:)`) unless a comment says
+        // why a hop is load-bearing: `@Published` emits in `willSet`, so a synchronous sink sees the
+        // new value but must not re-read the source's other state.
+        //
+        // Assigned unconditionally: `PromptAction` rows compare by identity, so an in-place edit
+        // (rename, prompt change) republishes the same array and must still reach the views.
         promptActionService.$meetingActions
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] templates in
                 self?.templates = templates
             }
@@ -315,16 +321,14 @@ final class MeetingsViewModel: ObservableObject {
         // Generate spinner is now meeting-scoped, derived from the job queue via
         // `isGeneratingOutput(for:)`, so it stays on the originating meeting across navigation (J1).
         // Q&A activity IS mirrored (Q&A stays out of the queue) but is now a per-meeting set (J2).
-        llmService.$answeringMeetingIDs
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.answeringMeetingIDs = value }
-            .store(in: &cancellables)
+        llmService.$answeringMeetingIDs.mirror(to: self, \.answeringMeetingIDs).store(in: &cancellables)
 
+        // Synchronous: the follow-ups read the mirror just set, the account store, and EventKit's
+        // live status (`availableCalendars`) — none of them the service's not-yet-set property.
         calendarService.$authorizationStatus
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 guard let self else { return }
-                self.calendarAuthorizationStatus = status
+                if self.calendarAuthorizationStatus != status { self.calendarAuthorizationStatus = status }
                 // [Google Phase 1 · M4] Both inputs of the availability flag flow through here
                 // or the `$accounts` sink below, so it can never go stale (D-G4). EventKit
                 // authorization also gates twin detection (no EventKit calendars ⇒ no twins).
@@ -334,6 +338,8 @@ final class MeetingsViewModel: ObservableObject {
             .store(in: &cancellables)
         // [Google Phase 1 · M4] Google connect state is the second leg of `hasAnyCalendarSource`
         // (D-G4) — the store publishes every index change (connect, disconnect, status flip).
+        // Hop load-bearing: both follow-ups re-read `googleAccountStore.accounts` (directly and via
+        // the Google provider's `calendars()`), which `$accounts`' willSet emission precedes.
         googleAccountStore?.$accounts
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -349,82 +355,62 @@ final class MeetingsViewModel: ObservableObject {
         // new Google events appear without waiting for anything else (D-G7) — and re-evaluate the
         // pending twin prompts (D-G6: the first snapshot after connect can race the calendarList
         // fetch, so unhandled accounts are re-checked on every change).
+        // Synchronous: posted on the main actor by the sync engine after `snapshot` is assigned.
         NotificationCenter.default.publisher(for: .googleCalendarSnapshotDidChange)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.calendarRefresh.refetch()
                 self.evaluateTwinPrompts()
             }
             .store(in: &cancellables)
+        calendarService.$upcomingEvents.mirror(to: self, \.upcomingEvents).store(in: &cancellables)
         // [Perf Phase 2] `CalendarService` publishes only on change, so this sink runs the
         // time-gated consumers once per real change; time passing reaches them through the
-        // coordinator's wake instead of a poll tick.
+        // coordinator's wake instead of a poll tick. Hop load-bearing: it re-plans from the
+        // service's lists (not yet assigned in willSet), and the consumers write other stores
+        // (auto-brief placeholders), which must not run inside `CalendarService.republish`.
         calendarService.$upcomingEvents
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] events in
-                guard let self else { return }
-                if self.upcomingEvents != events { self.upcomingEvents = events }
-                self.calendarUpcomingDidChange(events)
-            }
+            .sink { [weak self] events in self?.calendarUpcomingDidChange(events) }
             .store(in: &cancellables)
-        calendarService.$earlierEvents
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] events in
-                self?.earlierEvents = events
-            }
-            .store(in: &cancellables)
-        calendarService.$errorMessage
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] message in
-                self?.calendarErrorMessage = message
-            }
-            .store(in: &cancellables)
+        calendarService.$earlierEvents.mirror(to: self, \.earlierEvents).store(in: &cancellables)
+        calendarService.$errorMessage.mirror(to: self, \.calendarErrorMessage).store(in: &cancellables)
 
+        // Capture state mirrors are synchronous, so they equal the service's flags at every await
+        // point. `activeMeeting` compares by object identity: `Meeting` equality is by persistent
+        // id, and a refetched instance must still replace the old one.
         captureService.$activeMeeting
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] meeting in self?.activeMeeting = meeting }
+            .sink { [weak self] meeting in
+                guard let self, self.activeMeeting !== meeting else { return }
+                self.activeMeeting = meeting
+            }
             .store(in: &cancellables)
-        captureService.$isCapturing
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isCapturing = value }
-            .store(in: &cancellables)
-        captureService.$isFinalizing
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isFinalizing = value }
-            .store(in: &cancellables)
+        captureService.$isCapturing.mirror(to: self, \.isCapturing).store(in: &cancellables)
+        captureService.$isFinalizing.mirror(to: self, \.isFinalizing).store(in: &cancellables)
         // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs only while
         // recording, so there are no idle wakeups. The reminder self-gates (linked calendar event
         // required, past-end, once per meeting). Writes no `@Published` state (the tick is `captureClock`'s).
         captureService.$elapsedSeconds
             .removeDuplicates()
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.evaluateMeetingEndReminder() }
             .store(in: &cancellables)
-        captureService.$isDegradedLiveMode
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.isDegradedLiveMode = value }
-            .store(in: &cancellables)
+        captureService.$isDegradedLiveMode.mirror(to: self, \.isDegradedLiveMode).store(in: &cancellables)
         captureService.$finalRetranscriptionDegraded
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.finalRetranscriptionDegraded = value }
-            .store(in: &cancellables)
+            .mirror(to: self, \.finalRetranscriptionDegraded).store(in: &cancellables)
         captureService.$finalRetranscriptionDegradedMeetingID
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.finalRetranscriptionDegradedMeetingID = value }
-            .store(in: &cancellables)
-        captureService.$errorMessage
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] value in self?.captureErrorMessage = value }
-            .store(in: &cancellables)
+            .mirror(to: self, \.finalRetranscriptionDegradedMeetingID).store(in: &cancellables)
+        captureService.$errorMessage.mirror(to: self, \.captureErrorMessage).store(in: &cancellables)
 
+        // Hop load-bearing: the sink re-reads `isConnected` / `vaultName`, derived from `vaultPath`,
+        // which `$vaultPath`'s willSet emission precedes.
         vaultService.$vaultPath
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.isVaultConnected = self.vaultService.isConnected
-                self.vaultName = self.vaultService.vaultName
+                let connected = self.vaultService.isConnected
+                let name = self.vaultService.vaultName
+                if self.isVaultConnected != connected { self.isVaultConnected = connected }
+                if self.vaultName != name { self.vaultName = name }
             }
             .store(in: &cancellables)
         // [Track J] `isGeneratingBrief`, `isImporting`, `isEnriching`, and the auto-brief scheduler
@@ -509,15 +495,17 @@ final class MeetingsViewModel: ObservableObject {
 
     private func recomputeHasAnyCalendarSource() {
         let accounts = googleAccountStore?.accounts ?? []
-        hasAnyCalendarSource = Self.hasAnyCalendarSource(
+        let hasSource = Self.hasAnyCalendarSource(
             authorization: calendarAuthorizationStatus,
             accounts: accounts
         )
-        showsSystemCalendarProblem = Self.showsSystemCalendarProblem(
+        let showsProblem = Self.showsSystemCalendarProblem(
             authorization: calendarAuthorizationStatus,
             accounts: accounts,
             dismissed: systemCalendarProblemDismissed
         )
+        if hasAnyCalendarSource != hasSource { hasAnyCalendarSource = hasSource }
+        if showsSystemCalendarProblem != showsProblem { showsSystemCalendarProblem = showsProblem }
     }
 
     /// [PR #7 review finding 5] Hide the per-source problem row for this launch.
@@ -530,16 +518,15 @@ final class MeetingsViewModel: ObservableObject {
     /// Google account. Called on every snapshot change and on EventKit status changes; pure logic
     /// lives in `TwinCalendarDetector.prompts`.
     private func evaluateTwinPrompts() {
-        guard let googleAccountStore else {
-            twinCalendarPrompts = []
-            return
-        }
-        twinCalendarPrompts = TwinCalendarDetector.prompts(
-            accounts: googleAccountStore.accounts,
-            eventKitAuthorized: calendarAuthorizationStatus == .authorized,
-            calendars: calendarService.availableCalendars(),
-            isHandled: googleAccountStore.isTwinPromptHandled
-        )
+        let prompts = googleAccountStore.map { store in
+            TwinCalendarDetector.prompts(
+                accounts: store.accounts,
+                eventKitAuthorized: calendarAuthorizationStatus == .authorized,
+                calendars: calendarService.availableCalendars(),
+                isHandled: store.isTwinPromptHandled
+            )
+        } ?? []
+        if twinCalendarPrompts != prompts { twinCalendarPrompts = prompts }
     }
 
     /// Resolve a pending twin prompt (D-G6): **Hide duplicates** deselects the twin EventKit
