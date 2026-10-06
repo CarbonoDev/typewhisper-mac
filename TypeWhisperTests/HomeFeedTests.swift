@@ -212,11 +212,24 @@ final class MeetingStateBadgeTests: XCTestCase {
             id: "e1", title: "Ended",
             startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(-60)
         )
-        // Ended, no linked meeting → running long.
-        XCTAssertTrue(hfvm.isRunningLong(event: ended, existingMeeting: nil, now: now))
-        // Ended, but a completed meeting is linked → not running long.
+        // Ended and still capturing → the call genuinely overran its slot.
+        let live = Meeting(title: "Live", state: .live)
+        XCTAssertTrue(hfvm.isRunningLong(event: ended, existingMeeting: live, now: now))
+        // Ended with no linked meeting → never joined (the regression: this showed "Running long"
+        // for two hours while the user sat in their next meeting).
+        XCTAssertFalse(hfvm.isRunningLong(event: ended, existingMeeting: nil, now: now))
+        // Ended with a document opened but never recorded → also not in it.
+        let scheduled = Meeting(title: "Prepped", state: .scheduled)
+        XCTAssertFalse(hfvm.isRunningLong(event: ended, existingMeeting: scheduled, now: now))
+        // Ended, completed meeting linked → over.
         let done = Meeting(title: "Done", state: .completed)
         XCTAssertFalse(hfvm.isRunningLong(event: ended, existingMeeting: done, now: now))
+        // Upcoming but a live capture already started early → not "running long" yet.
+        let early = CalendarEventDTO(
+            id: "e3", title: "Early",
+            startDate: now.addingTimeInterval(300), endDate: now.addingTimeInterval(2100)
+        )
+        XCTAssertFalse(hfvm.isRunningLong(event: early, existingMeeting: live, now: now))
         // Still upcoming → not running long.
         let upcoming = CalendarEventDTO(
             id: "e2", title: "Up",

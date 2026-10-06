@@ -56,17 +56,22 @@ final class HomeFeedViewModel: ObservableObject {
 
     // MARK: - Running-long seam (M10 remainder)
 
-    /// Whether an upcoming/current event is "running long": it has passed its end time but no
-    /// completed meeting is linked to it yet, so it may still be recording. Default implementation
-    /// per D6; swaps to M10's in-flight running-long API when it merges, with no structural change.
+    /// Whether a calendar event is "running long": its scheduled end has passed **and there is
+    /// evidence the user is still in it** — the meeting linked to the event is actively capturing
+    /// (`.live`, whether from the local recorder or the Meet caption bridge).
+    ///
+    /// The original rule inferred it from the *absence* of a completed meeting ("no linked meeting ⇒
+    /// may still be recording"), which is backwards: an event the user never joined has no meeting
+    /// either, so it sat on Home as "Running long" for the whole two-hour grace window — while the
+    /// user was already in their next meeting. Being past the end time only says the slot is over;
+    /// only an active capture says the call is not.
     func isRunningLong(
         event: CalendarEventDTO,
         existingMeeting: Meeting?,
         now: Date = Date()
     ) -> Bool {
         guard event.endDate < now else { return false }
-        guard let existingMeeting else { return true }
-        return existingMeeting.state != .completed
+        return existingMeeting?.state == .live
     }
 
     /// Whether a stored meeting is running long: still marked live while its scheduled end has
