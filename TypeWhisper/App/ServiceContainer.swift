@@ -259,6 +259,12 @@ final class ServiceContainer: ObservableObject {
         meetingService.makePersonIDResolver = { [weak participantDirectoryService] in
             participantDirectoryService?.makePersonIDResolver() ?? { _ in [] }
         }
+        // Self-exclusion for `priorMeetings(matching:)`: the user appears on every one of their own
+        // rosters, so matching on the raw roster made every meeting "related". Same source as the
+        // D-M2 Gmail exclusion set, so the two cannot diverge.
+        meetingService.connectedAccountEmails = { [weak googleAccountStore] in
+            Set(googleAccountStore?.accounts.map(\.email) ?? [])
+        }
         // [M7] Per-folder context config store (Amendment 1, DA4). UserDefaults-backed; attaches to
         // M4's folder-mutator seams so a folder's config follows a rename and dies with the folder,
         // and feeds the organization index's union point so configured-but-empty folders appear in the

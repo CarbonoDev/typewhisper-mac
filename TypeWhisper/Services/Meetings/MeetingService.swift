@@ -52,6 +52,14 @@ final class MeetingService: ObservableObject {
     /// email/series-only path are unaffected). `ServiceContainer` attaches it to
     /// `ParticipantDirectoryService.makePersonIDResolver()`.
     var makePersonIDResolver: (() -> ([Attendee]) -> Set<UUID>)?
+    /// Self-identity seam: the emails of every connected account, used by `priorMeetings(matching:)`
+    /// to subtract the user from a roster before matching. Mirrors the D-M2 self-exclusion set in
+    /// `GmailContextService.excludedEmails(for:)`, and for the same reason: `Attendee.isSelf` is only
+    /// ever stored when *true* (EventKit/Google map "indeterminate" to `nil`), so a flag-only check
+    /// misses a manually added roster or a meeting the user attends under a second account. `nil`
+    /// until `ServiceContainer` attaches it; the `isSelf`-flag path (and every existing test) works
+    /// without it.
+    var connectedAccountEmails: (() -> Set<String>)?
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -1462,8 +1470,15 @@ final class MeetingService: ObservableObject {
     /// directory seam is unwired (`resolvePersonIDs == nil`, e.g. in a unit test that does not build the
     /// directory) behavior is exactly the prior email-OR-series rule.
     func priorMeetings(matching meeting: Meeting) -> [Meeting] {
+        // Self-exclusion (bugfix): the user is an attendee of their own meetings — `CalendarService`
+        // stores them with `isSelf: true` — and they are also an attendee of every *other* meeting
+        // they hold. Matching on the raw roster therefore intersected on the user's own address and
+        // made EVERY past meeting "related", drowning briefs (and `MeetingRelatedDocsService`
+        // discovery, which shares this query) in unrelated history. Only the *other* people in the
+        // room can relate two meetings, so the user is subtracted before matching.
+        let otherAttendees = nonSelfAttendees(of: meeting)
         let emails = Set(
-            meeting.attendees.compactMap { $0.email?.lowercased() }.filter { !$0.isEmpty }
+            otherAttendees.compactMap { $0.email?.lowercased() }.filter { !$0.isEmpty }
         )
         let seriesID = meeting.seriesID
         // M4 (M3 review minor): build the directory resolution index ONCE per query via the factory
@@ -1471,7 +1486,14 @@ final class MeetingService: ObservableObject {
         // per-call seam (or nil) when the factory is unwired, so the email/series-only path and existing
         // tests are unchanged.
         let resolver = makePersonIDResolver?() ?? resolvePersonIDs
-        let targetPersonIDs = resolver?(meeting.attendees) ?? []
+        // Resolved-identity matching gets the same subtraction: the user resolves to a directory
+        // `Person` too, so an unfiltered roster matched on self here even where the email path did not
+        // (the owner's largely email-less archive is exactly where this path carries the weight).
+        let targetPersonIDs = resolver?(otherAttendees) ?? []
+
+        // Subtracting only the *target* roster is sufficient: a match needs a shared element, and once
+        // the user is absent from the target's sets they cannot supply one — whatever a candidate's own
+        // roster contains. Candidates stay unfiltered, so this adds no per-candidate work.
 
         return meetings.filter { candidate in
             guard candidate.id != meeting.id else { return false }
@@ -1487,6 +1509,23 @@ final class MeetingService: ObservableObject {
             guard !targetPersonIDs.isEmpty else { return false }
             let candidatePersonIDs = resolver?(candidate.attendees) ?? []
             return !targetPersonIDs.isDisjoint(with: candidatePersonIDs)
+        }
+    }
+
+    /// A meeting's roster minus the user themselves, for relatedness matching. Self is identified the
+    /// same two ways `GmailContextService` uses (D-M2): the `isSelf == true` flag, plus membership in
+    /// the connected-account email set — the flag alone is not enough, because it is stored only when
+    /// definitively true. With the seam unwired the flag check still applies, so a calendar-sourced
+    /// meeting is handled correctly with no Google account connected.
+    ///
+    /// A meeting whose roster is *only* the user yields an empty array, which correctly matches
+    /// nothing on the attendee axis: `seriesID` remains the sole relatedness signal for a solo event.
+    private func nonSelfAttendees(of meeting: Meeting) -> [Attendee] {
+        let selfEmails = Set((connectedAccountEmails?() ?? []).map { $0.lowercased() })
+        return meeting.attendees.filter { attendee in
+            if attendee.isSelf == true { return false }
+            guard let email = attendee.email?.lowercased(), !email.isEmpty else { return true }
+            return !selfEmails.contains(email)
         }
     }
 

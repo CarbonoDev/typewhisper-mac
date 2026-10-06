@@ -94,6 +94,121 @@ final class ParticipantDirectoryMatchingTests: XCTestCase {
         _ = a
     }
 
+    // MARK: - Self-exclusion (bugfix)
+
+    /// The regression this guards: the user is an attendee of every meeting they hold, so matching on
+    /// the raw roster intersected on their own address and made EVERY past meeting "related" — which
+    /// flooded pre-meeting briefs with unrelated history.
+    func testPriorMeetingsDoesNotMatchOnSelfAlone() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+
+        let me = Attendee(name: "Owner", email: "owner@example.com", isSelf: true)
+        _ = meetingService.createMeeting(
+            title: "Budget review",
+            attendees: [me, Attendee(name: "Alex", email: "alex@example.com")]
+        )
+        let fresh = meetingService.createMeeting(
+            title: "Intro call",
+            attendees: [me, Attendee(name: "Dana", email: "dana@newco.com")]
+        )
+
+        XCTAssertTrue(
+            meetingService.priorMeetings(matching: fresh).isEmpty,
+            "two meetings sharing only the user are unrelated"
+        )
+    }
+
+    /// The other half of the contract: subtracting self must not cost a genuine match.
+    func testPriorMeetingsStillMatchesSharedOtherAttendeeDespiteSelf() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+
+        let me = Attendee(name: "Owner", email: "owner@example.com", isSelf: true)
+        let alex = Attendee(name: "Alex", email: "alex@example.com")
+        let older = meetingService.createMeeting(title: "Kickoff", attendees: [me, alex])
+        let newer = meetingService.createMeeting(title: "Follow-up", attendees: [me, alex])
+
+        XCTAssertTrue(
+            meetingService.priorMeetings(matching: newer).contains { $0.id == older.id },
+            "a shared non-self attendee still relates two meetings"
+        )
+    }
+
+    /// `isSelf` is stored only when definitively true, so the flag alone misses a manually added
+    /// roster or a second account. The connected-account seam covers that gap (the D-M2 pattern).
+    func testPriorMeetingsExcludesSelfViaConnectedAccountEmailWithoutFlag() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+        meetingService.connectedAccountEmails = { ["Owner@Example.com"] }
+
+        // No `isSelf` flag anywhere — self is recognizable only by the connected-account address,
+        // and the comparison must be case-insensitive.
+        let me = Attendee(name: "Owner", email: "owner@example.com")
+        _ = meetingService.createMeeting(
+            title: "Budget review",
+            attendees: [me, Attendee(name: "Alex", email: "alex@example.com")]
+        )
+        let fresh = meetingService.createMeeting(
+            title: "Intro call",
+            attendees: [me, Attendee(name: "Dana", email: "dana@newco.com")]
+        )
+
+        XCTAssertTrue(
+            meetingService.priorMeetings(matching: fresh).isEmpty,
+            "the connected-account address identifies self even with no isSelf flag"
+        )
+    }
+
+    /// The resolved-identity path (plan D8) needs the same subtraction: the user resolves to a
+    /// directory `Person` too, so an unfiltered roster matched on self here even where the
+    /// email path did not — the email-less archive is exactly where this path carries the weight.
+    func testPriorMeetingsDoesNotUnionOnSelfIdentity() throws {
+        let (meetingService, directory, dir) = try makeWired()
+        defer { TestSupport.remove(dir) }
+
+        let me = Attendee(name: "Owner", isSelf: true)
+        _ = meetingService.createMeeting(
+            title: "Budget review (imported)",
+            source: .importedTranscript,
+            attendees: [me, Attendee(name: "Alex")]
+        )
+        let fresh = meetingService.createMeeting(
+            title: "Intro call (imported)",
+            source: .importedTranscript,
+            attendees: [me, Attendee(name: "Dana")]
+        )
+        XCTAssertFalse(directory.persons.isEmpty, "the directory resolved the email-less rosters")
+
+        XCTAssertTrue(
+            meetingService.priorMeetings(matching: fresh).isEmpty,
+            "a shared self identity does not relate two email-less meetings"
+        )
+    }
+
+    /// A solo event has no other attendee to match on; `seriesID` must remain its relatedness signal.
+    func testPriorMeetingsStillMatchesSeriesForSoloMeeting() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let meetingService = MeetingService(appSupportDirectory: dir)
+
+        let me = Attendee(name: "Owner", email: "owner@example.com", isSelf: true)
+        let older = meetingService.createMeeting(
+            title: "Focus block", seriesID: "series-1", attendees: [me]
+        )
+        let newer = meetingService.createMeeting(
+            title: "Focus block", seriesID: "series-1", attendees: [me]
+        )
+
+        XCTAssertTrue(
+            meetingService.priorMeetings(matching: newer).contains { $0.id == older.id },
+            "recurrence still relates a solo event once self is subtracted"
+        )
+    }
+
     // MARK: - Rename felt at display time, no JSON rewrite (plan D6)
 
     func testRenameFeltAtDisplayTimeWithoutJSONRewrite() throws {
