@@ -17,6 +17,8 @@ struct MeetingsListView: View {
     // open-action counts live.
     @ObservedObject private var checklistStore = MeetingChecklistStore.shared
     @ObservedObject private var selection = MeetingSelectionModel.shared
+    /// The one set of row-menu dialogs for this list (rows only record the pending action).
+    @StateObject private var rowActions = MeetingRowActions()
     @State private var isPresentingImport = false
     @State private var customStart = Calendar.current.startOfDay(for: Date())
     // Day-aligned (start of today) so the Custom range's end bound is not pinned to the current
@@ -104,7 +106,6 @@ struct MeetingsListView: View {
             for: displayedMeetings,
             context: .init(actionFacts: HomeFeedViewModel.shared.actionFacts(for:), duplicateIDs: duplicates)
         )
-        let meetingsByID = Dictionary(displayedMeetings.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let liveID = viewModel.isCapturing ? viewModel.activeMeeting?.id : nil
         return List(selection: $selection.ids) {
             if let error = viewModel.captureErrorMessage {
@@ -152,12 +153,13 @@ struct MeetingsListView: View {
                         }
                         // Shared row right-click menu (plan LX-2, D4): single-vs-multi branch on the
                         // native `List(selection:)` set, identical to the folder-detail rows.
-                        .meetingRowContextMenu(for: meetingsByID[row.id]!) // rows ⊆ displayedMeetings
+                        .meetingRowContextMenu(for: row.id, actions: rowActions)
                 }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .meetingRowActionPresenters(rowActions)
         // Normalize the selection to the still-visible set whenever the filtered list changes (plan
         // LX-1 D3: keep visible picks, drop hidden ones — History's "normalize, don't nuke").
         .onChange(of: displayedMeetings.map(\.id)) { _, ids in

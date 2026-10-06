@@ -53,6 +53,8 @@ struct MeetingTimelineList: View {
     // Observed at list level (not per row) so checking items off in a document updates the rows'
     // open-action counts live.
     @ObservedObject private var checklistStore = MeetingChecklistStore.shared
+    /// The one set of row-menu dialogs for this list (rows only record the pending action).
+    @StateObject private var rowActions = MeetingRowActions()
     /// The last replace/toggle target — the origin a ⇧-click range extends from.
     @State private var selectionAnchor: UUID?
     /// Whether the list region holds keyboard focus. The ⌘-A key equivalent is installed ONLY while this
@@ -92,6 +94,7 @@ struct MeetingTimelineList: View {
         // Make the selectable list a focus target so ⌘-A can be scoped to it (Home passes nil → not
         // focusable, no selection, no ⌘-A). `focusEffectDisabled` keeps the container from drawing a
         // focus ring around the whole list.
+        .meetingRowActionPresenters(rowActions)
         .focusable(selection != nil)
         .focusEffectDisabled()
         .focused($isListFocused)
@@ -130,7 +133,7 @@ struct MeetingTimelineList: View {
                 )
                 // Shared row right-click menu (plan LX-2, D4) — selectable surfaces only (folder
                 // detail). Home (nil binding) stays a pure nav row with no context menu.
-                .meetingRowContextMenu(for: meeting)
+                .meetingRowContextMenu(for: meeting.id, actions: rowActions)
         } else {
             Button {
                 coordinator.openMeeting(id: meeting.id)

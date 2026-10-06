@@ -12,81 +12,37 @@ import SwiftUI
 /// submenus are built from `MeetingOrganizationIndex`; "Link to calendar event…" reuses the identity
 /// milestone's `MeetingLinkEventView` picker. Long-running actions (generate / export) enqueue jobs;
 /// instant mutations (folder / tag) are synchronous single-saves.
-struct MeetingRowContextMenu: ViewModifier {
-    let meeting: Meeting
+///
+/// [Perf Phase 2] Only the menu *content* lives on the row. Actions that need a dialog (rename,
+/// delete, merge, new folder, link event) record a `MeetingRowPendingAction` on the list's
+/// `MeetingRowActions`, and the list presents that one dialog — rows no longer mount their own
+/// presenters, `@State`s, or observe `MeetingsViewModel` / `MainWindowCoordinator`.
+struct MeetingRowContextMenu: View {
+    let meetingID: UUID
+    let actions: MeetingRowActions
 
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
-    @ObservedObject private var coordinator = MainWindowCoordinator.shared
-    @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
+    // Observed so the menu content tracks the selection (single vs bulk) and the folder / tag
+    // index while it is mounted; the row it is attached to observes neither.
     @ObservedObject private var selection = MeetingSelectionModel.shared
+    @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
 
-    @State private var isRenaming = false
-    @State private var renameText = ""
-    @State private var isConfirmingDelete = false
-    @State private var isConfirmingMerge = false
-    @State private var isPresentingNewFolder = false
-    @State private var newFolderText = ""
-    @State private var isPresentingLinkEvent = false
+    private var viewModel: MeetingsViewModel { MeetingsViewModel.shared }
 
     private var mode: MeetingsViewModel.RowContextMenuMode {
-        MeetingsViewModel.contextMenuMode(rightClicked: meeting.id, selection: selection.ids)
+        MeetingsViewModel.contextMenuMode(rightClicked: meetingID, selection: selection.ids)
     }
 
-    /// The meetings a menu action targets: the whole selection in bulk mode, else the right-clicked
-    /// row. Using the `[Meeting]` service overloads for both keeps single + bulk one code path.
-    private var targets: [Meeting] {
-        if case .bulk = mode { return selection.selectedMeetings(in: viewModel.meetings) }
-        return [meeting]
+    /// The ids a menu action targets: the whole selection in bulk mode (in list order), else the
+    /// right-clicked row.
+    private var targetIDs: [UUID] {
+        if case .bulk = mode { return selection.selectedMeetings(in: viewModel.meetings).map(\.id) }
+        return [meetingID]
     }
 
-    func body(content: Content) -> some View {
-        content
-            .contextMenu { menu }
-            .alert(String(localized: "meetings.menu.rename.title"), isPresented: $isRenaming) {
-                TextField(String(localized: "meetings.menu.rename.placeholder"), text: $renameText)
-                Button(String(localized: "meetings.menu.rename.confirm")) {
-                    viewModel.renameMeeting(meeting, to: renameText)
-                }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            }
-            .confirmationDialog(deleteTitle, isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-                Button(deleteConfirmLabel, role: .destructive) {
-                    viewModel.deleteMeetings(targets)
-                }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            } message: {
-                Text(deleteMessage)
-            }
-            .confirmationDialog(
-                String(localized: "meetings.merge.confirm.title"),
-                isPresented: $isConfirmingMerge,
-                titleVisibility: .visible
-            ) {
-                Button(String(localized: "meetings.merge.confirm.action")) {
-                    viewModel.mergeMeetings(targets)
-                }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            } message: {
-                Text(String(format: String(localized: "meetings.merge.confirm.message"), targets.count))
-            }
-            .alert(String(localized: "meetings.menu.newFolder.title"), isPresented: $isPresentingNewFolder) {
-                TextField(String(localized: "meetings.menu.newFolder.placeholder"), text: $newFolderText)
-                Button(String(localized: "meetings.menu.newFolder.confirm")) {
-                    let trimmed = newFolderText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty { viewModel.setMeetingFolder(trimmed, for: targets) }
-                    newFolderText = ""
-                }
-                Button(String(localized: "Cancel"), role: .cancel) { newFolderText = "" }
-            }
-            .sheet(isPresented: $isPresentingLinkEvent) {
-                MeetingLinkEventView(meeting: meeting, isPresented: $isPresentingLinkEvent)
-            }
-    }
+    /// The live target meetings, resolved when an action runs.
+    private var targets: [Meeting] { actions.meetings(for: targetIDs) }
 
-    // MARK: - Menu content
-
-    @ViewBuilder
-    private var menu: some View {
+    var body: some View {
         switch mode {
         case .single:
             singleMenu
@@ -98,11 +54,10 @@ struct MeetingRowContextMenu: ViewModifier {
     @ViewBuilder
     private var singleMenu: some View {
         Button(String(localized: "meetings.menu.open")) {
-            coordinator.openMeeting(id: meeting.id)
+            MainWindowCoordinator.shared.openMeeting(id: meetingID)
         }
         Button(String(localized: "meetings.menu.rename")) {
-            renameText = meeting.title
-            isRenaming = true
+            actions.beginRename(meetingID)
         }
         Divider()
         setFolderMenu(title: String(localized: "meetings.menu.setFolder"))
@@ -120,11 +75,11 @@ struct MeetingRowContextMenu: ViewModifier {
         }
         Divider()
         Button(String(localized: "meetings.menu.linkEvent")) {
-            isPresentingLinkEvent = true
+            actions.pending = .linkEvent(meetingID)
         }
         Divider()
         Button(String(localized: "meetings.menu.delete"), role: .destructive) {
-            isConfirmingDelete = true
+            actions.pending = .delete(targetIDs)
         }
     }
 
@@ -147,12 +102,12 @@ struct MeetingRowContextMenu: ViewModifier {
         // Merge duplicates (a caption-bridge meeting + its calendar twin, re-joins, overlapping
         // imports) into one. Disabled while any target is live/processing — stop the capture first.
         Button(String(format: String(localized: "meetings.menu.mergeCount"), count)) {
-            isConfirmingMerge = true
+            actions.pending = .merge(targetIDs)
         }
         .disabled(!MeetingMergeService.canMerge(targets))
         Divider()
         Button(String(format: String(localized: "meetings.menu.deleteCount"), count), role: .destructive) {
-            isConfirmingDelete = true
+            actions.pending = .delete(targetIDs)
         }
     }
 
@@ -169,8 +124,7 @@ struct MeetingRowContextMenu: ViewModifier {
             }
             Divider()
             Button(String(localized: "meetings.menu.newFolder")) {
-                newFolderText = ""
-                isPresentingNewFolder = true
+                actions.beginNewFolder(targetIDs)
             }
         }
     }
@@ -216,37 +170,13 @@ struct MeetingRowContextMenu: ViewModifier {
         }
         return result.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
-
-    // MARK: - Delete confirmation copy (count-aware)
-
-    private var deleteTitle: String {
-        if case .bulk = mode { return String(localized: "meetings.menu.delete.title.count") }
-        return String(localized: "meetings.menu.delete.title")
-    }
-
-    private var deleteConfirmLabel: String {
-        switch mode {
-        case .single:
-            return String(localized: "meetings.menu.delete")
-        case let .bulk(count):
-            return String(format: String(localized: "meetings.menu.deleteCount"), count)
-        }
-    }
-
-    private var deleteMessage: String {
-        switch mode {
-        case .single:
-            return String(format: String(localized: "meetings.menu.delete.message"), meeting.title)
-        case let .bulk(count):
-            return String(format: String(localized: "meetings.menu.delete.message.count"), count)
-        }
-    }
 }
 
 extension View {
-    /// Attach the shared meeting-row right-click menu (plan LX-2, D4) for `meeting`.
-    func meetingRowContextMenu(for meeting: Meeting) -> some View {
-        modifier(MeetingRowContextMenu(meeting: meeting))
+    /// Attach the shared meeting-row right-click menu (plan LX-2, D4) for `meetingID`. Its dialogs are
+    /// presented by the list that owns `actions` (`meetingRowActionPresenters`).
+    func meetingRowContextMenu(for meetingID: UUID, actions: MeetingRowActions) -> some View {
+        contextMenu { MeetingRowContextMenu(meetingID: meetingID, actions: actions) }
     }
 }
 
