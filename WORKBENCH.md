@@ -114,7 +114,35 @@
   [edit] detail os:marco ⧗2026-09-30T00:13:40-06:00 #1622bbe0
   [edit] state os:marco in_progress ⧗2026-10-02T12:20:29-06:00 #aba9060e
 
-## Perf refactor — Phase 1 (stop the bleeding)
+## live-writes (jade)
+- [~] Perf 1C: stop refetching all meetings on live append (`appendStableSegments`) @live-writes
+  Impact high / risk low-med. Keep `nextOrder` per live meeting instead of `segments.map(\.order).max()`; `save()` without `fetchMeetings()`; refetch only on insert / delete / sort-key change; `performBatch` deferral for Drive import and calendar sync.
+  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+
+## titles-home (amber)
+- [~] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
+  Impact medium / risk low. 160 of 281 meetings are imported; parse runs 2–3× per row per render with a fresh regex per suffix.
+- [~] Perf 1C: static DateFormatters + memoized `actionFacts` in `HomeFeedViewModel` @titles-home
+  Impact medium / risk low. `setLocalizedDateFormatFromTemplate` per day group per render is 5 % of Home samples.
+- [~] Perf: debounce search in `MainWindowCoordinator`; commit folder description on blur @titles-home
+  Impact medium / risk low. Search fans out per keystroke to every coordinator observer incl. per-row context menus; folder description JSON-encodes the whole UserDefaults map per keystroke (`MeetingFolderDetailView.swift:93-95`).
+- [~] Perf: move Phase 0 profiler scripts under scripts/perf/ and record a before/after `top`/`sample` baseline @titles-home
+  Impact low / risk none. Analyzers currently live only in the session scratchpad.
+- [~] Perf: compute `duplicateMeetingIDs` once per input change (1B follow-up) @titles-home
+  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+
+## render-cache (onyx)
+- [~] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
+  Impact med-high / risk low-med. `MeetingOutputParser.parse` + `AttributedString(markdown:)` per block run on every document render (`MeetingDocumentBody.swift:121-136`, `MarkdownDocumentView.swift:21,302-307`).
+- [~] Perf: `relatedDocuments(for:)` once per input change, not a disk stat per body (1B follow-up) @render-cache
+  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+
+## vault-offmain (topaz)
+- [~] Perf: vault work off the main actor @vault-offmain
+  Impact high when used / risk medium. `ObsidianVaultService` enumerate/parse/rank as a `nonisolated` core run detached, cache parsed notes by mtime; `VaultContextPickerView` filters a cached snapshot instead of walking the vault in `body`; lazy async `SpaceViewModel.refresh` (no scan in init); Space tree indexed once per refresh; draft text local `@State`.
+  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+
+## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
 - [x] Perf 1A: narrow MeetingsViewModel observation @diamond
   Impact high / risk low. Delete the unread `liveTranscript` mirror; move the 1 Hz elapsed tick into a tiny `CaptureClock` observed only by live band, banner, bottom bar, tray; equality-guard `clearTransientMessages` and the calendar mirrors; compare-before-assign + fingerprint gating in `MeetingOrganizationIndex`; `let` instead of `@ObservedObject` in method-only views.
@@ -122,26 +150,12 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
 - [x] Perf 1B: cache per-render document/home facts, lazy Home timeline, leaf-local drafts @diamond
   Impact high / risk low. Duration / speaker count / has-content cached per (id, updatedAt) in `MeetingDocumentModel`; `documentPresentation` bound once; ask draft + transcript search as leaf `@State`, delete dead `noteDraft`; memoized transcript bubbles; `LazyVStack` timeline; memoized `homeBadgeFacts`; static formatters; `displayedMeetings` evaluated once per body.
   > 2026-10-02 diamond: landed on main as 355a177f. Not yet verified visually (lazy timeline look, row virtualization) nor re-profiled — needs a dev rebuild after the current live meeting ends. Follow-ups seen: `renderedOutputBody` re-parses markdown per body (Phase 2 RenderedOutput task), `duplicateMeetingIDs` parses every title per body, `relatedDocuments(for:)` still stats disk per note.
-- [ ] Perf 1C: stop refetching all meetings on live append (`appendStableSegments`)
-  Impact high / risk low-med. Keep `nextOrder` per live meeting instead of `segments.map(\.order).max()`; `save()` without `fetchMeetings()`; refetch only on insert / delete / sort-key change; `performBatch` deferral for Drive import and calendar sync. BLOCKED until the Google Phase 2 edits to `MeetingService.swift` are committed (same file).
-- [ ] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle`
-  Impact medium / risk low. 160 of 281 meetings are imported; parse runs 2–3× per row per render with a fresh regex per suffix. BLOCKED on the same uncommitted `ImportedMeetingTitle.swift` edits.
-- [ ] Perf 1C: static DateFormatters + memoized `actionFacts` in `HomeFeedViewModel`
-  Impact medium / risk low. `setLocalizedDateFormatFromTemplate` per day group per render is 5 % of Home samples. BLOCKED on the uncommitted `HomeFeedViewModel.swift` edits.
-- [ ] Perf: debounce search in `MainWindowCoordinator`; commit folder description on blur
-  Impact medium / risk low. Search fans out per keystroke to every coordinator observer incl. per-row context menus; folder description JSON-encodes the whole UserDefaults map per keystroke (`MeetingFolderDetailView.swift:93-95`).
-- [ ] Perf: move Phase 0 profiler scripts under scripts/perf/ and record a before/after `top`/`sample` baseline
-  Impact low / risk none. Analyzers currently live only in the session scratchpad.
 
-## Perf refactor — Phase 2 (structural)
-- [ ] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt)
-  Impact med-high / risk low-med. `MeetingOutputParser.parse` + `AttributedString(markdown:)` per block run on every document render (`MeetingDocumentBody.swift:121-136`, `MarkdownDocumentView.swift:21,302-307`).
+## Backlog — Perf refactor Phase 2 (structural)
 - [ ] Perf: value-type `MeetingRowModel` + one `MeetingRowView`, list-local selection
   Impact high / risk medium. One list model recomputes rows only on input change; rows are Equatable and take a value + isSelected/isLive; replaces the duplicated `ArchiveRow` / `TimelineRowContent`; lifts selection off the singleton VM. Also collapse the per-row context-menu presenter stack into one list-level pending action.
 - [ ] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive)
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
-- [ ] Perf: vault work off the main actor
-  Impact high when used / risk medium. `ObsidianVaultService` enumerate/parse/rank as a `nonisolated` core run detached, cache parsed notes by mtime; `VaultContextPickerView` filters a cached snapshot instead of walking the vault in `body`; lazy async `SpaceViewModel.refresh` (no scan in init); Space tree indexed once per refresh; draft text local `@State`.
 - [ ] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes
   Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
 - [ ] Perf: one calendar coordinator (EKEventStoreChanged instead of the 60 s poll, EventKit query off main, equality-gated publish)
@@ -151,7 +165,7 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
 - [ ] Refactor: `MeetingService` into repositories under one writer (meetings / outputs / templates)
   Impact medium / risk medium. 1,661 lines, six entity families; shrinks the republish blast radius. Mechanical split, own commit, no behaviour change.
 
-## Perf refactor — Phase 3 (tidy)
+## Backlog — Perf refactor Phase 3 (tidy)
 - [ ] Refactor: store clean title + effective date at import instead of parsing on every render
   Impact medium / risk low-med. The "Clean up imported title" action already proves the normalisation can be persisted; additive optional columns.
 - [ ] Refactor: collapse trivial single-conformer protocols to closures
