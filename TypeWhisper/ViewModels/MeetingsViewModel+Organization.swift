@@ -278,16 +278,16 @@ extension MeetingsViewModel {
         }
     }
 
-    /// AND-composed state facets: every selected facet must hold. Empty set is a no-op. Transcript is
-    /// `!segments.isEmpty`; summary/brief/extended read the meeting's `outputs` kinds (same facts as
-    /// `homeBadgeFacts`).
+    /// AND-composed state facets: every selected facet must hold. Empty set is a no-op. Read from the
+    /// denormalised facts (`meeting.hasTranscript`, `meeting.outputKinds`, the same facts as
+    /// `homeBadgeFacts`), so filtering the archive never faults `segments` or `outputs`.
     static func matchesStateFacets(_ meeting: Meeting, facets: Set<MeetingStateFacet>) -> Bool {
         guard !facets.isEmpty else { return true }
-        let kinds = Set(meeting.outputs.map(\.kind))
+        let kinds = meeting.outputKinds
         for facet in facets {
             switch facet {
             case .hasTranscript:
-                if meeting.segments.isEmpty { return false }
+                if !meeting.hasTranscript { return false }
             case .hasSummary:
                 if !kinds.contains(.summary) { return false }
             case .hasBrief:

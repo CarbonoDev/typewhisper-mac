@@ -306,4 +306,21 @@ final class MeetingFactsTests: XCTestCase {
         service.addOutput(to: meeting, kind: .brief, content: "b")
         XCTAssertTrue(MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false).hasBrief)
     }
+
+    func testArchiveStateFacetsReadTheColumns() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Filtered", state: .completed)
+        let match = { (facets: Set<MeetingStateFacet>) in MeetingsViewModel.matchesStateFacets(meeting, facets: facets) }
+        XCTAssertFalse(match([.hasTranscript]))
+
+        service.appendStableSegments([segment("a", 0)], to: meeting)
+        service.addOutput(to: meeting, kind: .summary, content: "s")
+        XCTAssertTrue(match([.hasTranscript, .hasSummary]))
+        XCTAssertFalse(match([.hasBrief]))
+
+        // Distinctive column values prove the facets come from the columns, not the relationships.
+        meeting.factOutputKindsRaw = "brief"
+        XCTAssertTrue(match([.hasBrief]))
+        XCTAssertFalse(match([.hasSummary]))
+    }
 }
