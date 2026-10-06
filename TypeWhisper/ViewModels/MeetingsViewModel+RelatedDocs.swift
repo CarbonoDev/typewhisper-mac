@@ -3,7 +3,7 @@ import Foundation
 /// First-party related-documents surface (Amendment 2, DB6/DB8, M8). Thin MainActor pass-throughs that
 /// enqueue discovery on the job queue and route manual add/remove through the single-writer
 /// `MeetingService` setters, plus the resolved-union rows the meeting document's Related Documents
-/// section renders. Extension-file discipline: no stored state is added here.
+/// section renders. Extension-file discipline: no instance state is added here.
 @MainActor
 extension MeetingsViewModel {
     /// How a related-document row entered the resolved union (drives its provenance caption, DB8).
@@ -14,7 +14,7 @@ extension MeetingsViewModel {
     }
 
     /// One row in the meeting document's Related Documents list (DB8).
-    struct RelatedDocRow: Identifiable {
+    struct RelatedDocRow: Identifiable, Equatable {
         let path: String
         let displayName: String
         let folderCaption: String
@@ -120,9 +120,41 @@ extension MeetingsViewModel {
     /// The resolved related-documents union for a meeting (DB5 minus excluded, DB8): folder-attached
     /// scope ("From folder"), discovered suggestions ("Suggested"), and manual picks ("Added by you"),
     /// deduped by path. Note rows resolve against the vault for show-as-missing.
+    ///
+    /// [Perf Phase 2] Read from every body pass of the document and its related-docs section, so the
+    /// union (and its per-note disk stat) is memoized per input change in `RelatedDocumentsMemo`.
     func relatedDocuments(for meeting: Meeting) -> [RelatedDocRow] {
         let config = folderMetadataStore.config(for: meeting.folderPath ?? "")
-        let excluded = Set(meeting.excludedNotePaths)
+        let input = RelatedDocumentsMemo.Input(
+            meetingID: meeting.id,
+            vaultPath: vaultService.vaultPath,
+            attachedFolderPaths: config.attachedFolderPaths,
+            attachedNotePaths: config.attachedNotePaths,
+            relatedNotePathsJSON: meeting.relatedNotePathsJSON,
+            excludedNotePathsJSON: meeting.excludedNotePathsJSON
+        )
+        return Self.relatedDocumentsMemo.rows(for: input) {
+            Self.resolveRelatedDocuments(
+                config: config,
+                relatedNotes: meeting.relatedNotePaths,
+                excludedPaths: meeting.excludedNotePaths,
+                noteExists: { [vaultService] in vaultService.noteExists($0) }
+            )
+        }
+    }
+
+    /// Shared memo for `relatedDocuments(for:)` (a static so this extension adds no stored state).
+    static let relatedDocumentsMemo = RelatedDocumentsMemo()
+
+    /// Pure: the related-documents union from its inputs (DB5 minus excluded, DB8). `noteExists` is the
+    /// vault stat used for show-as-missing; it is called once per note row.
+    static func resolveRelatedDocuments(
+        config: FolderContextConfig,
+        relatedNotes: [RelatedNote],
+        excludedPaths: [String],
+        noteExists: (String) -> Bool
+    ) -> [RelatedDocRow] {
+        let excluded = Set(excludedPaths)
 
         var rows: [RelatedDocRow] = []
         var seen = Set<String>()
@@ -130,7 +162,7 @@ extension MeetingsViewModel {
         func add(_ path: String, provenance: RelatedDocProvenance, isDirectory: Bool) {
             let rel = MeetingService.normalizeVaultRelPath(path)
             guard !rel.isEmpty, !excluded.contains(rel), seen.insert(rel).inserted else { return }
-            let missing = isDirectory ? false : !vaultService.noteExists(rel)
+            let missing = isDirectory ? false : !noteExists(rel)
             let ns = rel as NSString
             // Match the established `VaultEntry` display convention (ObsidianVaultService.listEntries):
             // a note's title is its filename minus the `.md` extension; a folder's is its last component.
@@ -151,10 +183,10 @@ extension MeetingsViewModel {
 
         for path in config.attachedFolderPaths { add(path, provenance: .folder, isDirectory: true) }
         for path in config.attachedNotePaths { add(path, provenance: .folder, isDirectory: false) }
-        for note in meeting.relatedNotePaths where note.provenance == .discovered {
+        for note in relatedNotes where note.provenance == .discovered {
             add(note.path, provenance: .suggested, isDirectory: false)
         }
-        for note in meeting.relatedNotePaths where note.provenance == .manual {
+        for note in relatedNotes where note.provenance == .manual {
             add(note.path, provenance: .manual, isDirectory: false)
         }
         return rows

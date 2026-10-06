@@ -223,7 +223,7 @@ struct MeetingDocumentBody: View {
     @ViewBuilder
     private var appendix: some View {
         let facts = model.facts(for: meeting)
-        // One lookup per body pass (it stats every related note on disk).
+        // Memoized per input change (`RelatedDocumentsMemo`); one lookup per body pass.
         let relatedDocuments = viewModel.relatedDocuments(for: meeting)
         VStack(alignment: .leading, spacing: MeetingTheme.s2) {
             MeetingSectionLabel(String(localized: "meetingdoc.appendix"))
