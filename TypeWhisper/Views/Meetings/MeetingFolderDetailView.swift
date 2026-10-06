@@ -45,10 +45,10 @@ struct MeetingFolderDetailView: View {
     /// the tag row highlighted while this view is open, so the rendered list composes the same
     /// folder + tag AND filter (plan D8) rather than ignoring the active tag.
     private var folderMeetings: [Meeting] {
-        MeetingsViewModel.filteredMeetings(
+        // [Perf Phase 2] Memoized on its inputs (`MeetingListPipeline`, shared with the archive).
+        MeetingListPipeline.shared.meetings(
             viewModel.meetings,
-            folder: folderPath,
-            tag: coordinator.activeTag
+            query: MeetingListQuery(folder: folderPath, tag: coordinator.activeTag)
         )
     }
 

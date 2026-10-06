@@ -35,8 +35,8 @@ struct MeetingsListView: View {
     /// filter-bar facets, which all compose (AND) through the one pure choke point (plan D8/LX-1),
     /// then sorted by effective date per the archive's sort control. No active filters = the full list.
     private var displayedMeetings: [Meeting] {
-        let filtered = MeetingsViewModel.filteredMeetings(
-            viewModel.meetings,
+        // [Perf Phase 2] Memoized on its inputs over cached per-meeting facts (`MeetingListPipeline`).
+        MeetingListPipeline.shared.meetings(viewModel.meetings, query: MeetingListQuery(
             folder: coordinator.activeFolder,
             tag: coordinator.activeTag,
             unfiledOnly: coordinator.unfiledOnly,
@@ -45,14 +45,9 @@ struct MeetingsListView: View {
             stateFacets: coordinator.stateFacets,
             sourceFacet: coordinator.sourceFacet,
             languageFilter: coordinator.languageFilter,
-            folderFacets: coordinator.folderFacets
-        )
-        let newestFirst = coordinator.meetingsSortNewestFirst
-        return filtered.sorted {
-            let a = Self.effectiveDate($0)
-            let b = Self.effectiveDate($1)
-            return newestFirst ? a > b : a < b
-        }
+            folderFacets: coordinator.folderFacets,
+            sortNewestFirst: coordinator.meetingsSortNewestFirst
+        ))
     }
 
     /// The date a row sorts (and shows) by: the stored start, else the one embedded in an imported
