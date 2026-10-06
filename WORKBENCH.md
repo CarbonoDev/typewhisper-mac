@@ -123,10 +123,10 @@
 - [x] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive) @live-writes
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
   > 2026-10-06 diamond: reviewed + merged to main (17907303 frozen-V1 schema additivity test, 66b04ce0 four optional fact columns on Meeting + maintenance on the choke points + reconcile, 1bfc7417 deferred post-launch backfill, 961471d3 document readers, 07eaa677 HTTP meeting list, 16514919 language setters moved out; MeetingService.swift now 1,287 lines). Worker: 800 scoped tests green. Schema change is additive (4 optional columns). Not verified live: the backfill over the real 281-meeting store.
-- [~] Perf: Home-side readers onto the fact columns (HomeFeedViewModel.hasTranscript, homeBadgeFacts, HomeFeedView) @live-writes
-- [~] Perf: first-launch facts backfill budgeted by work, not meeting count @live-writes
-- [~] Perf: one save per write (stale-facts recompute + autosave vs explicit saves, finding 17b) @live-writes
-  > 2026-10-06 diamond: dispatched to live-writes after its second merge.
+- [x] Perf: Home-side readers onto the fact columns (HomeFeedViewModel.hasTranscript, homeBadgeFacts, HomeFeedView) @live-writes
+- [x] Perf: first-launch facts backfill budgeted by work, not meeting count @live-writes
+- [x] Perf: one save per write (stale-facts recompute + autosave vs explicit saves, finding 17b) @live-writes
+  > 2026-10-06 diamond: reviewed + merged to main: Home readers on the fact columns with their caches deleted (HomeFeedViewModel.hasTranscript, homeBadgeFacts, HomeFeedView attention rows); backfill budgeted at 400 rows / 4 ms per main-actor turn using paged fetches of `end` + `speakerLabel` only, with a live-append interleave pinned by test; stale-facts recompute folded into the write's own save (one transaction per write; autosave kept — nothing relies on it and it adds no transaction). Worker: 826 scoped tests green. Depends on SwiftData flagging pending deletes `isDeleted` and reflecting pending inserts in the relationship before save — pinned by MeetingServiceTransactionTests / MeetingFactsTests on this OS. Not verified live: the first-launch backfill over the real store.
 
 ## titles-home (amber)
 - [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
