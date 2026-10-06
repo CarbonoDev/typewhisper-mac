@@ -120,9 +120,13 @@
   > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
   > 2026-10-06 diamond: worker done on its branch (f4e80c91 move tags/folders + related notes into extensions, 952ac5e2 in-place writes save without refetch + nextOrder cache, 43907520 performBatch; 586 + 194 tests green). NOT merged — review found `mergeImport` renumbers segments without invalidating the nextOrder cache (append → Drive merge → append yields duplicate orders). Sent back for a structural fix + regression tests.
   > 2026-10-06 diamond: fix reviewed, merged to main as 622219d4 (move), 5500f687 (in-place writes save without refetch/republish; nextOrder cache), eb4cc058 (performBatch; Drive create path uses it), ca0b4748 (order cache invalidated structurally in insertSegment/deleteSegment/renumber; 4 sequence tests). Worker: 49 classes / 588 tests green. Not verified live: that every view still updates on in-place writes now that the list no longer republishes (relies on SwiftData observation) — the first thing to check in a dev build during a live caption session.
-- [~] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive) @live-writes
+- [x] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive) @live-writes
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
-  > 2026-10-06 diamond: dispatched to live-writes after its first merge.
+  > 2026-10-06 diamond: reviewed + merged to main (17907303 frozen-V1 schema additivity test, 66b04ce0 four optional fact columns on Meeting + maintenance on the choke points + reconcile, 1bfc7417 deferred post-launch backfill, 961471d3 document readers, 07eaa677 HTTP meeting list, 16514919 language setters moved out; MeetingService.swift now 1,287 lines). Worker: 800 scoped tests green. Schema change is additive (4 optional columns). Not verified live: the backfill over the real 281-meeting store.
+- [~] Perf: Home-side readers onto the fact columns (HomeFeedViewModel.hasTranscript, homeBadgeFacts, HomeFeedView) @live-writes
+- [~] Perf: first-launch facts backfill budgeted by work, not meeting count @live-writes
+- [~] Perf: one save per write (stale-facts recompute + autosave vs explicit saves, finding 17b) @live-writes
+  > 2026-10-06 diamond: dispatched to live-writes after its second merge.
 
 ## titles-home (amber)
 - [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
