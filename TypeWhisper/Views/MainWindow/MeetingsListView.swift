@@ -95,7 +95,7 @@ struct MeetingsListView: View {
     // MARK: - List
 
     private func list(_ displayedMeetings: [Meeting]) -> some View {
-        let duplicates = Self.duplicateMeetingIDs(in: displayedMeetings)
+        let duplicates = MeetingDuplicateIndex.duplicateIDs(in: displayedMeetings)
         return List(selection: $viewModel.selectedMeetingIDs) {
             if let error = viewModel.captureErrorMessage {
                 Text(error)
