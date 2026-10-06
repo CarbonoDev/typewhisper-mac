@@ -106,7 +106,7 @@ struct MeetingTranscriptPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .help(String(localized: "meetingdoc.transcript.copyAll"))
-                .disabled(meeting.segments.isEmpty)
+                .disabled(!meeting.hasTranscript)
             }
 
             Button {
@@ -144,7 +144,7 @@ struct MeetingTranscriptPanel: View {
     private var content: some View {
         // Bound once per body pass (the filter runs over every bubble).
         let bubbles = self.bubbles
-        if meeting.segments.isEmpty {
+        if !meeting.hasTranscript {
             emptyState
         } else if bubbles.isEmpty {
             noMatches

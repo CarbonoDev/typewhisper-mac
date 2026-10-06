@@ -241,7 +241,7 @@ struct MeetingBottomBar: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .disabled(meeting.segments.isEmpty)
+            .disabled(!meeting.hasTranscript)
         }
     }
 

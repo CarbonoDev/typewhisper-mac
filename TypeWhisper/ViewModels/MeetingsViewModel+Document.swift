@@ -103,7 +103,7 @@ extension MeetingsViewModel {
     /// pre-meeting briefing page, and a scheduled meeting whose only artifact is its brief must
     /// not flip into the rendered-output layout and lead with an empty summary.
     nonisolated static func documentHasContent(_ meeting: Meeting) -> Bool {
-        !meeting.segments.isEmpty || meeting.outputs.contains { $0.kind != .brief }
+        meeting.hasContent
     }
 
     // MARK: - Import / merge affordance (merge-import default fix)
@@ -144,7 +144,7 @@ extension MeetingsViewModel {
         Self.showsImportMergeAction(
             state: meeting.state,
             isCapturingThisMeeting: isCapturing && activeMeeting?.id == meeting.id,
-            hasTranscript: !meeting.segments.isEmpty
+            hasTranscript: meeting.hasTranscript
         )
     }
 

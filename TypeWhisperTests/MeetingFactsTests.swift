@@ -233,4 +233,44 @@ final class MeetingFactsTests: XCTestCase {
         XCTAssertEqual(again.factSegmentCount, 4)
         XCTAssertEqual(again.storedOutputKinds, [.summary])
     }
+
+    // MARK: - Readers
+
+    func testDocumentFactsReadTheColumns() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Doc", state: .completed)
+        service.appendStableSegments([segment("a", 0, end: 3, speaker: "SPEAKER_00")], to: meeting)
+        // Distinctive column values prove the reader does not walk the segments.
+        meeting.factSegmentCount = 7
+        meeting.factTranscriptEnd = 42
+        meeting.factSpeakerLabelsRaw = "A\nB\nC"
+
+        let facts = MeetingDocumentModel.DocumentFacts(meeting: meeting)
+        XCTAssertEqual(facts.segmentCount, 7)
+        XCTAssertEqual(facts.transcriptDuration, 42)
+        XCTAssertEqual(facts.speakerCount, 3)
+        XCTAssertTrue(facts.hasContent)
+        XCTAssertTrue(MeetingsViewModel.documentHasContent(meeting))
+    }
+
+    func testDocumentFactsFallBackForAnUnfilledRow() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Doc", state: .completed)
+        service.appendStableSegments([segment("a", 0, end: 3, speaker: "SPEAKER_00")], to: meeting)
+        clearFacts(meeting)
+
+        let facts = MeetingDocumentModel.DocumentFacts(meeting: meeting)
+        XCTAssertEqual(facts.segmentCount, 1)
+        XCTAssertEqual(facts.transcriptDuration, 3)
+        XCTAssertEqual(facts.speakerCount, 1)
+        XCTAssertTrue(MeetingsViewModel.documentHasContent(meeting))
+    }
+
+    func testDocumentHasContentIgnoresABriefOnlyMeeting() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Upcoming")
+        service.addOutput(to: meeting, kind: .brief, content: "b")
+        XCTAssertFalse(MeetingsViewModel.documentHasContent(meeting))
+        XCTAssertFalse(MeetingDocumentModel.DocumentFacts(meeting: meeting).hasContent)
+    }
 }
