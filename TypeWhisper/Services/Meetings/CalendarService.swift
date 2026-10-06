@@ -25,6 +25,12 @@ final class CalendarService: ObservableObject {
     /// visible (badged "ended") until this grace elapses or the user creates/starts/dismisses it.
     static let defaultGrace: TimeInterval = 2 * 60 * 60
 
+    /// [Perf Phase 2] How far past the look-ahead edge a provider query reaches. The published
+    /// sections still cut at `lookAhead`; the slack lets the windowing roll forward from the retained
+    /// query for this long before a refetch is due (`nextRefetchDate`), instead of re-querying
+    /// every provider once a minute.
+    static let defaultFetchSlack: TimeInterval = 60 * 60
+
     @Published private(set) var authorizationStatus: CalendarAuthorizationStatus
     /// Current + upcoming + overrunning (recently-ended, within `grace`) events. This is the primary
     /// Upcoming section and the *only* list the start-notification and auto-brief paths consume; both
@@ -44,8 +50,9 @@ final class CalendarService: ObservableObject {
     /// stays the single provider-agnostic filtering choke point (IDs are namespaced per D-G3).
     private let secondaryProviders: [CalendarEventProviding]
     private let selectionStore: CalendarSelectionStoring
-    private let lookAhead: TimeInterval
-    private let grace: TimeInterval
+    let lookAhead: TimeInterval
+    let grace: TimeInterval
+    private let fetchSlack: TimeInterval
 
     /// Every provider, primary first — the fan-in query order (D-G4).
     private var allProviders: [CalendarEventProviding] { [provider] + secondaryProviders }
@@ -62,6 +69,10 @@ final class CalendarService: ObservableObject {
     private var lastRawEvents: [CalendarEventDTO] = []
     private var lastNow: Date?
     private var lastExcludedEventIDs: Set<String> = []
+    /// [Perf Phase 2] When the retained query was taken — drives `nextRefetchDate`.
+    private var lastFetchedAt: Date?
+    /// Bumped by every query; a background query whose generation is stale is dropped on arrival.
+    private var fetchGeneration = 0
     /// Overrunning events the user explicitly dismissed this session (M10). In-memory only —
     /// dismissal is a transient "hide it now" affordance, not persisted state.
     private var dismissedEventIDs: Set<String> = []
@@ -71,13 +82,15 @@ final class CalendarService: ObservableObject {
         secondaryProviders: [CalendarEventProviding] = [],
         selectionStore: CalendarSelectionStoring = CalendarSelectionStore(),
         lookAhead: TimeInterval = CalendarService.defaultLookAhead,
-        grace: TimeInterval = CalendarService.defaultGrace
+        grace: TimeInterval = CalendarService.defaultGrace,
+        fetchSlack: TimeInterval = CalendarService.defaultFetchSlack
     ) {
         self.provider = provider
         self.secondaryProviders = secondaryProviders
         self.selectionStore = selectionStore
         self.lookAhead = lookAhead
         self.grace = grace
+        self.fetchSlack = max(0, fetchSlack)
         self.authorizationStatus = provider.authorizationStatus
         updateErrorMessage(for: provider.authorizationStatus)
     }
@@ -125,58 +138,134 @@ final class CalendarService: ObservableObject {
     /// that already back an existing meeting (`existingCalendarEventIDs`); the `earlierEvents`
     /// lookback list does not, so a past event whose meeting exists can still be opened (M10). The
     /// query window is widened back to the start of `now`'s day so the lookback list has data.
+    ///
+    /// Synchronous: the query runs on the calling (main) actor. The event-driven refresh path uses
+    /// `refreshInBackground`, which takes the EventKit query off the main actor.
     func refresh(now: Date = Date(), existingCalendarEventIDs: Set<String> = []) {
+        fetchGeneration += 1
+        guard prepareQuery() else {
+            clearSections(now: now)
+            return
+        }
+        let window = queryWindow(now: now)
+        let raw = allProviders.flatMap { $0.events(from: window.from, to: window.to) }
+        adoptQuery(raw, now: now, existingCalendarEventIDs: existingCalendarEventIDs)
+    }
+
+    /// [Perf Phase 2] `refresh` with every provider queried through its async seam (EventKit off the
+    /// main actor); the result hops back here for publication. A query overtaken by a newer one is
+    /// dropped. Returns whether either published section changed.
+    @discardableResult
+    func refreshInBackground(now: Date = Date(), existingCalendarEventIDs: Set<String> = []) async -> Bool {
+        fetchGeneration += 1
+        let generation = fetchGeneration
+        guard prepareQuery() else { return clearSections(now: now) }
+        let window = queryWindow(now: now)
+        var raw: [CalendarEventDTO] = []
+        for provider in allProviders {
+            raw += await provider.fetchEvents(from: window.from, to: window.to)
+        }
+        guard generation == fetchGeneration else { return false }
+        return adoptQuery(raw, now: now, existingCalendarEventIDs: existingCalendarEventIDs)
+    }
+
+    /// [Perf Phase 2] Re-window the retained query at `now` with a new exclusion set — no provider
+    /// round-trip. For time passing (events starting / ending / leaving grace) and for exclusion
+    /// changes (a meeting created from / linked to an event). Returns whether a section changed.
+    @discardableResult
+    func rewindow(now: Date = Date(), existingCalendarEventIDs: Set<String> = []) -> Bool {
+        guard lastNow != nil else { return false }
+        lastNow = now
+        lastExcludedEventIDs = existingCalendarEventIDs
+        return republish()
+    }
+
+    /// [Perf Phase 2] When the retained query stops covering the published window: the look-ahead
+    /// edge has rolled past the fetch slack, or `now`'s day (the Earlier lookback) has ended. `nil`
+    /// before the first query.
+    func nextRefetchDate(calendar: Calendar = .current) -> Date? {
+        guard let lastFetchedAt else { return nil }
+        let slackEdge = lastFetchedAt.addingTimeInterval(max(fetchSlack, 60))
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: Self.lookbackStart(for: lastFetchedAt, calendar: calendar))
+        return nextDay.map { min(slackEdge, $0) } ?? slackEdge
+    }
+
+    /// [Perf Phase 2] The retained query after the calendar-selection filter — every event the
+    /// windowing can surface as time passes (the wake planner's input).
+    var selectedSourceEvents: [CalendarEventDTO] {
+        lastRawEvents.filter { event in
+            guard let id = event.calendarID else { return true }
+            return selectionStore.isSelected(id)
+        }
+    }
+
+    /// Shared query prologue. Returns false when no provider is authorized (the caller clears).
+    private func prepareQuery() -> Bool {
         // [Google Phase 1 · M4] Re-evaluate the error message every refresh (D-G4): `init` and
         // `requestAccess()` alone would leave a stale "access denied" banner (or a missing one)
         // when a Google account connects/disconnects between permission events.
         updateErrorMessage(for: authorizationStatus)
         // D-G4 any-provider guard: a user who denied macOS calendar access but connected Google
         // still gets events. Each unauthorized provider already returns `[]` from its query.
-        guard isAnyProviderAuthorized else {
-            lastRawEvents = []
-            lastNow = now
-            lastExcludedEventIDs = []
-            upcomingEvents = []
-            earlierEvents = []
-            return
-        }
-        let from = CalendarService.lookbackStart(for: now)
-        let to = now.addingTimeInterval(lookAhead)
-        let raw = allProviders.flatMap { $0.events(from: from, to: to) }
+        return isAnyProviderAuthorized
+    }
+
+    @discardableResult
+    private func clearSections(now: Date) -> Bool {
+        lastRawEvents = []
+        lastNow = now
+        lastFetchedAt = now
+        lastExcludedEventIDs = []
+        let changed = !upcomingEvents.isEmpty || !earlierEvents.isEmpty
+        upcomingEvents = []
+        earlierEvents = []
+        return changed
+    }
+
+    private func queryWindow(now: Date) -> (from: Date, to: Date) {
+        (CalendarService.lookbackStart(for: now), now.addingTimeInterval(lookAhead + fetchSlack))
+    }
+
+    @discardableResult
+    private func adoptQuery(_ raw: [CalendarEventDTO], now: Date, existingCalendarEventIDs: Set<String>) -> Bool {
         lastRawEvents = raw
         lastNow = now
+        lastFetchedAt = now
         lastExcludedEventIDs = existingCalendarEventIDs
-        republish()
+        return republish()
     }
 
     /// Recompute both published sections from the retained last query (used by `refresh` and by
     /// `dismiss(eventID:)`), so dismissing an overrunning row updates the UI without a provider hit.
-    private func republish() {
-        guard let now = lastNow else { return }
+    /// Returns whether either section changed.
+    @discardableResult
+    private func republish() -> Bool {
+        guard let now = lastNow else { return false }
         // [M11] Single filtering choke point: drop events from calendars the user has deselected
         // BEFORE any windowing, so every downstream consumer (Upcoming, Earlier, the auto-brief
         // scheduler, start notifications, and capture-context rules) sees a consistent list and a
         // deselected calendar can never generate a brief or notification. Events with no known
         // `calendarID` are kept (treated as selected) so nothing is ever silently lost.
-        let selected = lastRawEvents.filter { event in
-            guard let id = event.calendarID else { return true }
-            return selectionStore.isSelected(id)
-        }
+        let selected = selectedSourceEvents
         let excludedFromPrimary = lastExcludedEventIDs.union(dismissedEventIDs)
-        upcomingEvents = CalendarService.currentUpcomingAndOverrunning(
+        let upcoming = CalendarService.currentUpcomingAndOverrunning(
             from: selected,
             now: now,
             lookAhead: lookAhead,
             grace: grace,
             excludingEventIDs: excludedFromPrimary
         )
-        earlierEvents = CalendarService.earlierEvents(
+        let earlier = CalendarService.earlierEvents(
             from: selected,
             now: now,
             since: CalendarService.lookbackStart(for: now),
             grace: grace,
             excludingEventIDs: dismissedEventIDs
         )
+        let changed = upcoming != upcomingEvents || earlier != earlierEvents
+        upcomingEvents = upcoming
+        earlierEvents = earlier
+        return changed
     }
 
     /// Hide an overrunning (recently-ended) event from the Upcoming section for this session — the
@@ -494,6 +583,8 @@ final class CalendarService: ObservableObject {
 @MainActor
 final class EventKitCalendarProvider: CalendarEventProviding {
     private let store = EKEventStore()
+    /// [Perf Phase 2] Off-main query path with its own store (`refreshInBackground`).
+    private let backgroundQuery = EventKitEventQuery()
 
     var authorizationStatus: CalendarAuthorizationStatus {
         Self.map(EKEventStore.authorizationStatus(for: .event))
@@ -512,6 +603,12 @@ final class EventKitCalendarProvider: CalendarEventProviding {
         guard authorizationStatus == .authorized else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         return store.events(matching: predicate).map(Self.dto(from:))
+    }
+
+    /// [Perf Phase 2] The same query as `events(from:to:)`, run off the main actor.
+    func fetchEvents(from start: Date, to end: Date) async -> [CalendarEventDTO] {
+        guard authorizationStatus == .authorized else { return [] }
+        return await backgroundQuery.events(from: start, to: end)
     }
 
     func calendars() -> [CalendarInfo] {
@@ -539,7 +636,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
         }
     }
 
-    private static func dto(from event: EKEvent) -> CalendarEventDTO {
+    nonisolated static func dto(from event: EKEvent) -> CalendarEventDTO {
         CalendarEventDTO(
             id: occurrenceID(for: event),
             title: event.title ?? "",
@@ -560,7 +657,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
     }
 
     /// Event notes normalized like the Google mapper's: whitespace-trimmed, blank ⇒ `nil`.
-    private static func normalizedNotes(_ notes: String?) -> String? {
+    nonisolated private static func normalizedNotes(_ notes: String?) -> String? {
         let trimmed = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
@@ -573,13 +670,13 @@ final class EventKitCalendarProvider: CalendarEventProviding {
     /// `createMeeting(from:)` return a stale prior-occurrence meeting. Composing the identifier
     /// with the occurrence start keeps each occurrence distinct, while `seriesID`
     /// (`calendarItemExternalIdentifier`) still groups the series for `priorMeetings(matching:)`.
-    private static func occurrenceID(for event: EKEvent) -> String {
+    nonisolated private static func occurrenceID(for event: EKEvent) -> String {
         let base = event.eventIdentifier ?? UUID().uuidString
         // `event.startDate` is the occurrence start for recurring events.
         return "\(base)#\(event.startDate.timeIntervalSince1970)"
     }
 
-    private static func attendees(from event: EKEvent) -> [Attendee] {
+    nonisolated private static func attendees(from event: EKEvent) -> [Attendee] {
         guard let participants = event.attendees else { return [] }
         let organizerURL = event.organizer?.url
         return participants.map { participant in
@@ -605,7 +702,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
 
     /// EventKit RSVP → the shared `AttendeeResponseStatus` vocabulary ([Google Phase 1 · M5]).
     /// Statuses outside the four-value vocabulary (delegated, completed, …) degrade to `nil`.
-    private static func responseStatusRaw(from status: EKParticipantStatus) -> String? {
+    nonisolated private static func responseStatusRaw(from status: EKParticipantStatus) -> String? {
         switch status {
         case .accepted: return AttendeeResponseStatus.accepted.rawValue
         case .declined: return AttendeeResponseStatus.declined.rawValue
@@ -615,7 +712,7 @@ final class EventKitCalendarProvider: CalendarEventProviding {
         }
     }
 
-    private static func email(from participant: EKParticipant) -> String? {
+    nonisolated private static func email(from participant: EKParticipant) -> String? {
         // EventKit exposes an attendee's address only via a `mailto:` URL.
         let string = participant.url.absoluteString
         guard string.lowercased().hasPrefix("mailto:") else { return nil }

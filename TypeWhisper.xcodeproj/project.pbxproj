@@ -180,6 +180,7 @@
 		AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000386 /* MeetingsSettingsView.swift */; };
 		AA00000000000000000387 /* CalendarEventProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000387 /* CalendarEventProviding.swift */; };
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
+		PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F20 /* EventKitEventQuery.swift */; };
 		GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000001 /* GoogleOAuthFlow.swift */; };
 		GGB0000000000000000002 /* GoogleLoopbackServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000002 /* GoogleLoopbackServer.swift */; };
 		GGB0000000000000000003 /* GoogleHTTPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000003 /* GoogleHTTPTransport.swift */; };
@@ -948,6 +949,7 @@
 		BB00000000000000000386 /* MeetingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000387 /* CalendarEventProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventProviding.swift; sourceTree = "<group>"; };
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		PF2C00000000000000000F20 /* EventKitEventQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitEventQuery.swift; sourceTree = "<group>"; };
 		GGF0000000000000000001 /* GoogleOAuthFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthFlow.swift; sourceTree = "<group>"; };
 		GGF0000000000000000002 /* GoogleLoopbackServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleLoopbackServer.swift; sourceTree = "<group>"; };
 		GGF0000000000000000003 /* GoogleHTTPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleHTTPTransport.swift; sourceTree = "<group>"; };
@@ -2402,6 +2404,7 @@
 				BB00000000000000000384 /* MeetingSegmentMapper.swift */,
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
+				PF2C00000000000000000F20 /* EventKitEventQuery.swift */,
 				GGF0000000000000000008 /* ConferenceURLDetector.swift */,
 				PPF0000000000000000002 /* MeetingPresenceService.swift */,
 				PPF0000000000000000001 /* MeetingPresence.swift */,
@@ -5062,6 +5065,7 @@
 				AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */,
 				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
+				PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */,
 				GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */,
 				PPB0000000000000000003 /* APIHandlers+MeetingPresence.swift in Sources */,
 				MCB000000000000000000003 /* APIHandlers+MeetCallControl.swift in Sources */,

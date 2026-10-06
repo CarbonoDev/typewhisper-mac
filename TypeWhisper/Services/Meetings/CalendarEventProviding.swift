@@ -115,9 +115,18 @@ protocol CalendarEventProviding: AnyObject {
     /// Every `.event` calendar across the user's accounts, for the "Calendars" selection list
     /// (M11). Empty when access is not granted.
     func calendars() -> [CalendarInfo]
+    /// Async variant of `events(from:to:)` (default provided below).
+    func fetchEvents(from start: Date, to end: Date) async -> [CalendarEventDTO]
 }
 
 extension CalendarEventProviding {
+    /// [Perf Phase 2] The async query seam `CalendarService.refreshInBackground` fans in over.
+    /// Defaults to the synchronous query (in-memory providers — Google's snapshot, test fakes — are
+    /// already cheap); `EventKitCalendarProvider` overrides it to query off the main actor.
+    func fetchEvents(from start: Date, to end: Date) async -> [CalendarEventDTO] {
+        events(from: start, to: end)
+    }
+
     /// Historical/proximity query used by the "Link to calendar event…" picker (owner requirement
     /// 3): every event within `± window` of `date`. Defined as a default over the existing
     /// `events(from:to:)` seam so the whole feature stays fakeable — a test provider only has to
