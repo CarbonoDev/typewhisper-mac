@@ -2199,7 +2199,7 @@ final class APIHandlers: @unchecked Sendable {
 
     @MainActor
     private static func meetingRow(_ meeting: Meeting) -> MeetingRow {
-        let hasSummary = meeting.outputs.contains { $0.kind == .summary || $0.kind == .extended }
+        let hasSummary = !meeting.outputKinds.isDisjoint(with: [.summary, .extended])
         return MeetingRow(
             id: meeting.id.uuidString,
             title: meeting.title,
@@ -2207,7 +2207,7 @@ final class APIHandlers: @unchecked Sendable {
             folder: meeting.folderPath,
             tags: meeting.tags,
             language: meeting.languageCode,
-            has_transcript: !meeting.segments.isEmpty,
+            has_transcript: meeting.hasTranscript,
             has_summary: hasSummary,
             calendar_linked: meeting.calendarEventID != nil
         )
