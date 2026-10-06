@@ -41,6 +41,8 @@ extension ServiceContainer {
             await participantDirectoryService.backfill(from: existingMeetings)
         }
 
+        // Trim SwiftData persistent history nothing reads (off the main actor, one store at a time).
+        await PersistentHistoryPruner.pruneRegisteredStores()
         LaunchMetrics.mark("deferred startup done")
     }
 }

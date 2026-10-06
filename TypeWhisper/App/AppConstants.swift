@@ -188,6 +188,7 @@ struct SwiftDataStoreFactory {
         let context = ModelContext(container)
         context.autosaveEnabled = true
         LaunchMetrics.storeOpened(storeName, duration: ContinuousClock.now - openStart) // [perf Phase 3]
+        PersistentHistoryPruner.register(container, storeName: storeName) // [perf Phase 3]
         return (container, context)
     }
 }
