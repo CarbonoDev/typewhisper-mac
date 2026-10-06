@@ -19,6 +19,11 @@ struct SpaceFolderView: View {
     /// Confirm-before-discard for a **deliberate** Discard of a non-empty draft (navigate-away instead
     /// auto-commits — never-clobber makes that safe — so it needs no dialog).
     @State private var showDiscardConfirm = false
+    /// The draft's text while typing. Kept in view-local state so a keystroke re-renders only this
+    /// editor — not every observer of the shared view model (the sidebar tree included). It is pushed
+    /// into the model's draft at commit / discard, the model staying the seam the commit logic and its
+    /// tests run on.
+    @State private var draftText = ""
 
     private var folderName: String {
         SpaceTreeModel.normalize(path).split(separator: "/").last.map(String.init)
@@ -36,15 +41,6 @@ struct SpaceFolderView: View {
     /// a `design: .monospaced` font gives the intended code-like source surface.
     private var draftFont: Font {
         .system(size: 13, design: .monospaced)
-    }
-
-    /// The `TextEditor` binding into the view model's draft (the source of truth, so commit logic and
-    /// its tests live on the seam, not the view).
-    private var draftTextBinding: Binding<String> {
-        Binding(
-            get: { viewModel.draft?.text ?? "" },
-            set: { viewModel.updateDraftText($0) }
-        )
     }
 
     var body: some View {
@@ -143,6 +139,7 @@ struct SpaceFolderView: View {
                 title: String(localized: "space.newNote"),
                 detail: nil
             ) {
+                draftText = ""
                 viewModel.beginDraft(inFolder: path)
             }
 
@@ -194,7 +191,7 @@ struct SpaceFolderView: View {
                 ])
                 // The serif title tracks the emerging note name (first typed line), so the masthead
                 // reads like the meeting document's — a placeholder until the first line is typed.
-                Text(SpaceDraft.firstLineTitle(viewModel.draft?.text ?? "")
+                Text(SpaceDraft.firstLineTitle(draftText)
                     ?? String(localized: "space.draft.untitled"))
                     .font(MeetingTheme.pageTitle)
             }
@@ -202,7 +199,7 @@ struct SpaceFolderView: View {
             // A plain monospaced editor over raw markdown — source, not prose; the redesign has no
             // WYSIWYG editor idiom to imitate (plan D1 / design plan §1d).
             ZStack(alignment: .topLeading) {
-                if SpaceDraft.isEmpty(viewModel.draft?.text ?? "") {
+                if SpaceDraft.isEmpty(draftText) {
                     Text(String(localized: "space.draft.placeholder"))
                         .font(draftFont)
                         .foregroundStyle(.tertiary)
@@ -212,16 +209,22 @@ struct SpaceFolderView: View {
                         .padding(.leading, 5)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: draftTextBinding)
+                TextEditor(text: $draftText)
                     .font(draftFont)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 360)
             }
         }
+        // Re-seed the local buffer from the model when the editor (re)appears, so a draft kept after a
+        // failed write is shown again rather than an empty editor.
+        .onAppear { draftText = viewModel.draft?.text ?? "" }
         // Navigate-away (sidebar click, or commit's own route change) auto-commits a non-empty draft
         // and silently discards an empty one — no dialog (plan D1). Idempotent: after Done clears the
         // draft, this is a no-op.
-        .onDisappear { viewModel.commitDraft() }
+        .onDisappear {
+            viewModel.updateDraftText(draftText)
+            viewModel.commitDraft()
+        }
         .confirmationDialog(
             String(localized: "space.draft.discardConfirm.title"),
             isPresented: $showDiscardConfirm,
@@ -241,6 +244,7 @@ struct SpaceFolderView: View {
     /// Commit the draft as one never-clobber write and route to the created note in read mode. An empty
     /// draft commits to `nil` (silent discard) and simply returns to the index.
     private func commitAndOpen() {
+        viewModel.updateDraftText(draftText)
         if let created = viewModel.commitDraft() {
             coordinator.show(.spaceNote(created))
         }
@@ -248,7 +252,7 @@ struct SpaceFolderView: View {
 
     /// Deliberate Discard: confirm only when the draft has content worth losing (plan D1).
     private func requestDiscard() {
-        if SpaceDraft.shouldConfirmDiscard(viewModel.draft?.text ?? "") {
+        if SpaceDraft.shouldConfirmDiscard(draftText) {
             showDiscardConfirm = true
         } else {
             viewModel.discardDraft()
