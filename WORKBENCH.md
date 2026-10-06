@@ -141,9 +141,12 @@
   > 2026-10-06 diamond: dispatched to render-cache after its first merge.
 
 ## vault-offmain (topaz)
-- [~] Perf: vault work off the main actor @vault-offmain
+- [x] Perf: vault work off the main actor @vault-offmain
   Impact high when used / risk medium. `ObsidianVaultService` enumerate/parse/rank as a `nonisolated` core run detached, cache parsed notes by mtime; `VaultContextPickerView` filters a cached snapshot instead of walking the vault in `body`; lazy async `SpaceViewModel.refresh` (no scan in init); Space tree indexed once per refresh; draft text local `@State`.
-  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+  > 2026-10-06 diamond: reviewed + merged to main as 98c7a799 (SpaceTreeIndex once per snapshot), 67f40604 (VaultIndexer actor: walk/parse/rank off main, parse cache keyed on mtime+size+inode; picker filters a snapshot; Space lazy async refresh, no scan in init), 3445e0b5 (draft text view-local). Worker: 24 classes / 252 tests green. Not yet verified in a dev build (Space, context picker, brief/Q&A vault retrieval).
+- [~] Perf: prune SwiftData persistent history; defer non-critical startup past the first frame @vault-offmain
+  Impact low-med / risk low-med. `ACHANGE` has 74k rows and nothing prunes it; launch logged a 2.8 s slow-HID response with ~10 store opens, a vault scan and plugin loading all synchronous before the first frame.
+  > 2026-10-06 diamond: dispatched to vault-offmain after its first merge.
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
@@ -173,7 +176,5 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
   Impact low / risk low. `MeetingJobClock`, `MeetingBriefSchedulerStore`, `CalendarColorProviding`, `RelatedEmailsProviding`, the two `GoogleDriveTranscriptImporter` seams, `MeetingEventEmitting`; drop job-queue priority promotion (one caller). Keep seams with widely shared fakes.
 - [ ] Refactor: one `TextNormalizer` and one date-bucket helper
   Impact low-med / risk low. ~17 `normalize*` helpers and five hand-rolled day-bucketing sites; share only the trim/case-fold core (person-name vs tag semantics differ).
-- [ ] Perf: prune SwiftData persistent history; defer non-critical startup past the first frame
-  Impact low-med / risk low-med. `ACHANGE` has 74k rows and nothing prunes it; launch logged a 2.8 s slow-HID response with ~10 store opens, a vault scan and plugin loading all synchronous before the first frame.
 - [ ] Refactor: unify the organization/metadata stores behind one Library model
   Impact medium / risk med-high (user data migration from UserDefaults). `MeetingOrganizationIndex`, `MeetingFolderMetadataStore`, `MeetingChecklistStore`, `CalendarSelectionStore` + `SpaceTreeModel` mirror. Do last, after the VM split gives the slice a home.
