@@ -292,7 +292,7 @@ final class MeetingTrayState: ObservableObject {
         elapsedSeconds = viewModel.captureClock.elapsedSeconds
         recomputeUpcoming(viewModel.upcomingEvents)
 
-        viewModel.$isCapturing
+        viewModel.capture.$isCapturing
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in
@@ -303,7 +303,7 @@ final class MeetingTrayState: ObservableObject {
                 self?.refreshUpcoming()
             }
             .store(in: &cancellables)
-        viewModel.$activeMeeting
+        viewModel.capture.$activeMeeting
             .receive(on: DispatchQueue.main)
             .sink { [weak self] meeting in self?.meetingTitle = meeting?.title ?? "" }
             .store(in: &cancellables)

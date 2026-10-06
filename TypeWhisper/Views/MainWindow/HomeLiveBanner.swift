@@ -5,14 +5,15 @@ import SwiftUI
 /// `captureClock` tick; clicking it routes to the live meeting document via the
 /// shared coordinator. Renders nothing when no capture is active.
 struct HomeLiveBanner: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Reads only capture state: observes the capture slice, not the whole view model.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
 
     var body: some View {
         // Stay visible across both the live span and the post-Stop "finalizing" span (the off-main
         // teardown), so Home reflects that the meeting is still being wrapped up.
-        if viewModel.isCapturing || viewModel.isFinalizing, let active = viewModel.activeMeeting {
-            let finalizing = viewModel.isFinalizing
+        if capture.isCapturing || capture.isFinalizing, let active = capture.activeMeeting {
+            let finalizing = capture.isFinalizing
             Button {
                 coordinator.openMeeting(id: active.id)
             } label: {

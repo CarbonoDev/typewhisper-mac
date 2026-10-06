@@ -12,6 +12,9 @@ import SwiftUI
 /// alongside Start recording / Create empty, and there is a dedicated Import toolbar button.
 struct MeetingsListView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Capture state (read via the forwards or VM helpers derived from it) lives on the
+    // capture slice; observing it keeps this view re-rendering on capture changes.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     // Observed at list level (not per row) so checking items off in a document updates the rows'
     // open-action counts live.

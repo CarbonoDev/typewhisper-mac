@@ -9,7 +9,8 @@ import AppKit
 /// This type also owns the transcript display helpers `speakerName` / `timestamp` (moved here when
 /// the old `MeetingDetailView` was retired, per plan D4).
 struct MeetingTranscriptPanel: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Reads only capture state: observes the capture slice, not the whole view model.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @ObservedObject var model: MeetingDocumentModel
     let meeting: Meeting
 
@@ -23,7 +24,7 @@ struct MeetingTranscriptPanel: View {
         // Speaker-recognition amendment, Fix A: while THIS meeting is capturing, suppress all speaker
         // attribution at the render choke point so stale labels on preserved/restarted segments never
         // appear on the live transcript.
-        let suppressSpeakers = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
+        let suppressSpeakers = capture.isCapturing && capture.activeMeeting?.id == meeting.id
         let all = bubbleCache.bubbles(for: meeting, suppressSpeakers: suppressSpeakers)
         return MeetingsViewModel.filterTranscriptBubbles(all, query: transcriptSearch)
     }
@@ -164,7 +165,7 @@ struct MeetingTranscriptPanel: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            if viewModel.isCapturing, viewModel.activeMeeting?.id == meeting.id {
+            if capture.isCapturing, capture.activeMeeting?.id == meeting.id {
                 ProgressView().controlSize(.small)
                 Text(String(localized: "meetingdoc.transcript.listening"))
                     .foregroundStyle(.secondary)

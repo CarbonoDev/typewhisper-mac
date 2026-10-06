@@ -9,7 +9,10 @@ import SwiftUI
 /// Frozen contract (D4): `MeetingDocumentView(meeting:)`. All cross-navigation flows through
 /// `MainWindowCoordinator.shared`; there is no `onBack` closure.
 struct MeetingDocumentView: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    /// [VM split] Only `documentPresentation(for:)` is read, which derives from capture state:
+    /// observe the capture slice, not the whole view model.
+    private var viewModel: MeetingsViewModel { .shared }
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @StateObject private var model = MeetingDocumentModel()
     let meeting: Meeting
 

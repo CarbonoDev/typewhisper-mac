@@ -47,6 +47,9 @@ struct MeetingTimelineList: View {
     var selection: Binding<Set<UUID>>? = nil
 
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Capture state (read via the forwards or VM helpers derived from it) lives on the
+    // capture slice; observing it keeps this view re-rendering on capture changes.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
     @ObservedObject private var jobQueue = JobQueueService.shared

@@ -4,18 +4,19 @@ import SwiftUI
 /// `isCapturing` / `activeMeeting` state plus the `captureClock` tick; clicking it routes to
 /// the live meeting document. Renders nothing when no capture is active.
 struct LiveRecordingBand: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Reads only capture state: observes the capture slice, not the whole view model.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
 
     var body: some View {
         // Stay visible across both the live span and the post-Stop "finalizing" span (the off-main
         // teardown), so the sidebar reflects that the meeting is still being wrapped up.
-        if viewModel.isCapturing || viewModel.isFinalizing, let active = viewModel.activeMeeting {
+        if capture.isCapturing || capture.isFinalizing, let active = capture.activeMeeting {
             Button {
                 coordinator.openMeeting(id: active.id)
             } label: {
                 HStack(spacing: 8) {
-                    if viewModel.isFinalizing {
+                    if capture.isFinalizing {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "record.circle")
@@ -26,7 +27,7 @@ struct LiveRecordingBand: View {
                             .lineLimit(1)
                             .font(.callout)
                         CaptureElapsedText(
-                            overrideText: viewModel.isFinalizing ? String(localized: "meetingdoc.finalizing") : nil,
+                            overrideText: capture.isFinalizing ? String(localized: "meetingdoc.finalizing") : nil,
                             format: Self.elapsedString)
                             .font(.caption)
                             .monospacedDigit()
@@ -37,7 +38,7 @@ struct LiveRecordingBand: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background((viewModel.isFinalizing ? Color.secondary : Color.red).opacity(0.08))
+                .background((capture.isFinalizing ? Color.secondary : Color.red).opacity(0.08))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(String(localized: "mainwindow.liveBand.accessibility")))

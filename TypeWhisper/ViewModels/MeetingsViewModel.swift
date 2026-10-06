@@ -62,23 +62,23 @@ final class MeetingsViewModel: ObservableObject {
     /// observes this and clears it via `consumeFocusRequest()`.
     @Published var pendingFocusMeetingID: UUID?
 
-    // Capture (M3)
-    @Published private(set) var activeMeeting: Meeting?
-    @Published private(set) var isCapturing = false
-    /// True while `stop()`'s off-MainActor teardown is finalizing this meeting (recorder mixdown,
-    /// audio adopt). Mirrored from the capture service so the live band and the document bottom bar
-    /// show a "Finalizing…" posture the instant Stop is pressed, without the window freezing.
-    @Published private(set) var isFinalizing = false
+    // Capture (M3) — [Perf Phase 2 · VM split] the capture mirrors live on the `capture` slice, so a
+    // capture flag flipping no longer invalidates every observer of this view model. The forwards
+    // below are computed (never `@Published`): a view that reads them must observe `capture`.
+    let capture: MeetingsCaptureModel
+    var activeMeeting: Meeting? { capture.activeMeeting }
+    var isCapturing: Bool { capture.isCapturing }
+    var isFinalizing: Bool { capture.isFinalizing }
     /// The 1 Hz elapsed clock lives on its own small object so its tick doesn't invalidate every view
     /// observing this singleton; timer views observe `captureClock` directly.
     let captureClock: CaptureClock
-    @Published private(set) var isDegradedLiveMode = false
-    @Published private(set) var captureErrorMessage: String?
-    // [Track C] AD8 final re-transcription degradation, mirrored from the capture service so the
-    // detail view can surface a status (never an error dialog) when a meeting's final pass ran in a
-    // reduced mode. `finalRetranscriptionDegradedMeetingID` scopes the banner to the affected meeting.
-    @Published private(set) var finalRetranscriptionDegraded = false
-    @Published private(set) var finalRetranscriptionDegradedMeetingID: UUID?
+    var isDegradedLiveMode: Bool { capture.isDegradedLiveMode }
+    var captureErrorMessage: String? {
+        get { capture.captureErrorMessage }
+        set { capture.captureErrorMessage = newValue }
+    }
+    var finalRetranscriptionDegraded: Bool { capture.finalRetranscriptionDegraded }
+    var finalRetranscriptionDegradedMeetingID: UUID? { capture.finalRetranscriptionDegradedMeetingID }
 
     // Knowledge base + brief (M5)
     @Published private(set) var isVaultConnected = false
@@ -240,6 +240,7 @@ final class MeetingsViewModel: ObservableObject {
         self.calendarService = calendarService
         self.captureService = captureService
         self.captureClock = CaptureClock(captureService: captureService)
+        self.capture = MeetingsCaptureModel(captureService: captureService)
         self.startNotificationService = startNotificationService
         self.endReminderService = endReminderService
         self.llmService = llmService
@@ -376,17 +377,7 @@ final class MeetingsViewModel: ObservableObject {
         calendarService.$earlierEvents.mirror(to: self, \.earlierEvents).store(in: &cancellables)
         calendarService.$errorMessage.mirror(to: self, \.calendarErrorMessage).store(in: &cancellables)
 
-        // Capture state mirrors are synchronous, so they equal the service's flags at every await
-        // point. `activeMeeting` compares by object identity: `Meeting` equality is by persistent
-        // id, and a refetched instance must still replace the old one.
-        captureService.$activeMeeting
-            .sink { [weak self] meeting in
-                guard let self, self.activeMeeting !== meeting else { return }
-                self.activeMeeting = meeting
-            }
-            .store(in: &cancellables)
-        captureService.$isCapturing.mirror(to: self, \.isCapturing).store(in: &cancellables)
-        captureService.$isFinalizing.mirror(to: self, \.isFinalizing).store(in: &cancellables)
+        // Capture state mirrors: owned by `capture` (`MeetingsCaptureModel`), synchronous.
         // Owner request 2: the once-per-second capture tick is the reminder's clock — it runs only while
         // recording, so there are no idle wakeups. The reminder self-gates (linked calendar event
         // required, past-end, once per meeting). Writes no `@Published` state (the tick is `captureClock`'s).
@@ -394,12 +385,6 @@ final class MeetingsViewModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in self?.evaluateMeetingEndReminder() }
             .store(in: &cancellables)
-        captureService.$isDegradedLiveMode.mirror(to: self, \.isDegradedLiveMode).store(in: &cancellables)
-        captureService.$finalRetranscriptionDegraded
-            .mirror(to: self, \.finalRetranscriptionDegraded).store(in: &cancellables)
-        captureService.$finalRetranscriptionDegradedMeetingID
-            .mirror(to: self, \.finalRetranscriptionDegradedMeetingID).store(in: &cancellables)
-        captureService.$errorMessage.mirror(to: self, \.captureErrorMessage).store(in: &cancellables)
 
         // Hop load-bearing: the sink re-reads `isConnected` / `vaultName`, derived from `vaultPath`,
         // which `$vaultPath`'s willSet emission precedes.

@@ -93,3 +93,34 @@ churn worth removing.
    VM (it is orchestration, not slice state); the `$accounts` hop that feeds
    `hasAnyCalendarSource` / twin prompts moves to the Calendar slice, still hopped.
 3. `$vaultPath` → `isVaultConnected` / `vaultName` (stays on the VM).
+
+## Slice 1 — Capture (`MeetingsCaptureModel`, `viewModel.capture`)
+
+Every reader of a forwarded capture property, direct or through a VM helper derived from it, and
+what it observes after the split. "VM + capture" means both `@ObservedObject`s are held, so a
+change on either re-renders it. Grep used: `\.(activeMeeting|isCapturing|isFinalizing|
+captureErrorMessage|finalRetranscriptionDegraded…)`, `documentPresentation(`, `canStartCapture`,
+`showsImportMergeAction(for`, `$isCapturing` / `$activeMeeting`, across `TypeWhisper/`.
+
+| Reader (struct) | Reads | Observes now |
+|---|---|---|
+| `LiveRecordingBand` | `isCapturing`, `isFinalizing`, `activeMeeting` | capture only (read nothing else from the VM) |
+| `HomeLiveBanner` | `isCapturing`, `isFinalizing`, `activeMeeting` | capture only |
+| `MeetingTranscriptPanel` | `isCapturing`, `activeMeeting` (bubbles, empty state) | capture only (+ its `model`) |
+| `MeetingDocumentView` | `documentPresentation(for:hasContent:)` ← `isCapturing`, `isFinalizing`, `activeMeeting` | capture only; VM held as a plain computed `.shared` |
+| `MeetingDocumentHeader` | `showsImportMergeAction(for:)` ← `isCapturing`, `activeMeeting`; `captureErrorMessage`; `finalRetranscriptionDegradedMeetingID` | VM + capture |
+| `MeetingBottomBar` | `activeMeeting`, `isFinalizing`, `canStartCapture` ← `isCapturing` | VM + capture |
+| `MeetingsListView` | `isCapturing`, `activeMeeting` (live id), `captureErrorMessage`, `canStartCapture` | VM + capture |
+| `MeetingTimelineList` | `isCapturing`, `activeMeeting` (row `isLive`) | VM + capture |
+| `MainWindowView` | `activeMeeting?.id` (`onChange`) | VM + capture |
+| `MenuBarView` | `isCapturing`, `activeMeeting` | VM + capture (VM still needed for `upcomingEvents`) |
+| `MeetingTrayIndicator` (Combine, not a view) | `$isCapturing`, `$activeMeeting` | subscribes to `viewModel.capture.$…` |
+| `CaptureClock` / `CaptureElapsedText` | elapsed seconds | unchanged (own object) |
+
+Non-view readers (VM methods, extensions, tests) read the forwards, which are synchronous reads of
+the slice, so the double-start guards and `MeetingsViewModelMirrorTests` see the same values as
+before. `isDegradedLiveMode` and `finalRetranscriptionDegraded` have no view readers.
+
+Kept on the VM: the `$elapsedSeconds` sink that drives the end-of-meeting reminder (orchestration,
+writes no state; it reads the forwards). The capture mirrors keep their synchronous
+`mirror(to:)` form and identity gate for `activeMeeting`; none of them was a hop.

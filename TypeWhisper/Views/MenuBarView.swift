@@ -256,6 +256,9 @@ struct MenuBarView: View {
     // Owner requests 3 & 4: surface the recording / upcoming meeting as an actionable menu entry that
     // opens the main window focused on that meeting.
     @ObservedObject private var meetings = MeetingsViewModel.shared
+    // [VM split] Capture state (read via the forwards or VM helpers derived from it) lives on the
+    // capture slice; observing it keeps this view re-rendering on capture changes.
+    @ObservedObject private var capture = MeetingsViewModel.shared.capture
     /// `menuTarget` is time-dependent (the tray window opening, start, end).
     @ObservedObject private var calendarClock = MeetingsViewModel.shared.calendarClock
 
