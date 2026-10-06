@@ -637,6 +637,8 @@ final class ServiceContainer: ObservableObject {
         settingsViewModel.observePluginManager()
         audioRecorderViewModel.observePluginManager()
         watchFolderViewModel.observePluginManager()
+
+        LaunchMetrics.mark("services constructed") // [perf Phase 3]
     }
 
     func initialize() async {

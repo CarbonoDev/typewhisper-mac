@@ -165,6 +165,7 @@ struct SwiftDataStoreFactory {
 
         let storeURL = directory.appendingPathComponent("\(storeName).store")
         let config = ModelConfiguration(url: storeURL)
+        let openStart = ContinuousClock.now // [perf Phase 3] per-store open time
 
         var container: ModelContainer
         do {
@@ -186,6 +187,7 @@ struct SwiftDataStoreFactory {
 
         let context = ModelContext(container)
         context.autosaveEnabled = true
+        LaunchMetrics.storeOpened(storeName, duration: ContinuousClock.now - openStart) // [perf Phase 3]
         return (container, context)
     }
 }
