@@ -120,16 +120,19 @@
   > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
 
 ## titles-home (amber)
-- [~] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
+- [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
   Impact medium / risk low. 160 of 281 meetings are imported; parse runs 2–3× per row per render with a fresh regex per suffix.
-- [~] Perf 1C: static DateFormatters + memoized `actionFacts` in `HomeFeedViewModel` @titles-home
+- [x] Perf 1C: static DateFormatters + memoized `actionFacts` in `HomeFeedViewModel` @titles-home
   Impact medium / risk low. `setLocalizedDateFormatFromTemplate` per day group per render is 5 % of Home samples.
-- [~] Perf: debounce search in `MainWindowCoordinator`; commit folder description on blur @titles-home
+- [x] Perf: debounce search in `MainWindowCoordinator`; commit folder description on blur @titles-home
   Impact medium / risk low. Search fans out per keystroke to every coordinator observer incl. per-row context menus; folder description JSON-encodes the whole UserDefaults map per keystroke (`MeetingFolderDetailView.swift:93-95`).
-- [~] Perf: move Phase 0 profiler scripts under scripts/perf/ and record a before/after `top`/`sample` baseline @titles-home
+- [x] Perf: move Phase 0 profiler scripts under scripts/perf/ and record a before/after `top`/`sample` baseline @titles-home
   Impact low / risk none. Analyzers currently live only in the session scratchpad.
-- [~] Perf: compute `duplicateMeetingIDs` once per input change (1B follow-up) @titles-home
-  > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
+- [x] Perf: compute `duplicateMeetingIDs` once per input change (1B follow-up) @titles-home
+  > 2026-10-06 diamond: reviewed + merged to main as 3d6be5ff (scripts/perf), 0d08abaf (ImportedMeetingTitle precompiled regexes + lock-guarded memo), 560953db (Home header formatters + actionFacts keyed on updatedAt), c6565d9b (250 ms search debounce; field binds to the instant `searchFieldText`), 408ff669 (folder description commits on blur/submit/1 s pause/disappear), 5136e7cc (MeetingDuplicateIndex). Worker: 18 classes / 125 tests green. Not profiled live. Before/after baseline still to record once a dev build is allowed.
+- [~] Perf: value-type `MeetingRowModel` + one `MeetingRowView`, list-local selection @titles-home
+  Impact high / risk medium. One list model recomputes rows only on input change; rows are Equatable and take a value + isSelected/isLive; replaces the duplicated `ArchiveRow` / `TimelineRowContent`; lifts selection off the singleton VM. Also collapse the per-row context-menu presenter stack into one list-level pending action.
+  > 2026-10-06 diamond: dispatched to titles-home after its first merge.
 
 ## render-cache (onyx)
 - [x] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
@@ -158,8 +161,6 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
   > 2026-10-02 diamond: landed on main as 355a177f. Not yet verified visually (lazy timeline look, row virtualization) nor re-profiled — needs a dev rebuild after the current live meeting ends. Follow-ups seen: `renderedOutputBody` re-parses markdown per body (Phase 2 RenderedOutput task), `duplicateMeetingIDs` parses every title per body, `relatedDocuments(for:)` still stats disk per note.
 
 ## Backlog — Perf refactor Phase 2 (structural)
-- [ ] Perf: value-type `MeetingRowModel` + one `MeetingRowView`, list-local selection
-  Impact high / risk medium. One list model recomputes rows only on input change; rows are Equatable and take a value + isSelected/isLive; replaces the duplicated `ArchiveRow` / `TimelineRowContent`; lifts selection off the singleton VM. Also collapse the per-row context-menu presenter stack into one list-level pending action.
 - [ ] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive)
   Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
 - [ ] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes
