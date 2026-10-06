@@ -140,6 +140,7 @@
   > 2026-10-06 diamond: reviewed + merged to main as 27051dda (MeetingRowModel + updatedAt-keyed store), 0b5e662c (one MeetingRowView for archive + timeline), 54357374 (selection on MeetingSelectionModel, off the VM), 4c62fc00 (row dialogs presented once per list from a pending action). Worker: 20 classes / 139 tests green. NOT verified in the app — needs eyes in a dev build: pixel parity of both row styles, right-click menu single vs bulk, rename / delete / merge / new-folder / link-event dialogs actually firing, selection surviving open-and-back.
 - [~] Perf: list filter/search/sort pipeline — cached search haystack per (id, updatedAt), memoized filter+sort shared by list and folder detail (finding 5 remainder) @titles-home
   > 2026-10-06 diamond: dispatched to titles-home after its second merge.
+  > 2026-10-06 diamond: worker done on its branch (3f75a088 MeetingListPipeline + parity tests, 8720fb7e archive + folder detail use it; 96 tests green). NOT merged — it derives `hasTranscript` / output kinds for every meeting eagerly, and the row store merged earlier (27051dda) builds row models for the whole displayed array in the list body: first paint now faults `segments` + `outputs` for all ~280 meetings instead of the visible ~15. Sent back to make both lazy, pin it with a test, and add object identity to the memo key.
 
 ## render-cache (onyx)
 - [x] Perf: cached `RenderedOutput` for markdown (outcomes + pre-built AttributedStrings per output id/createdAt) @render-cache
