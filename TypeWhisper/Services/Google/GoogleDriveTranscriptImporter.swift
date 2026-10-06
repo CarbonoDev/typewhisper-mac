@@ -169,8 +169,8 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         //     Gemini often appends the transcript to the same doc minutes after the call, and that
         //     edit must still be allowed to import. Importing the summary instead is what filled
         //     meetings with untimed "Resumen"/"Decisiones" rows.
-        let parsed = TranscriptFileParser.parse(text)
-        if isMarkdownExport, !parsed.isEmpty, !MeetingImportService.carriesRecoverableTiming(parsed) {
+        //     The parse runs off the main actor; like the export, it finishes before the snapshot.
+        if await Self.isSummaryOnlyExport(text, isMarkdownExport: isMarkdownExport) {
             if ownsPendingEntry {
                 ledger.clearPending(fileID: fileID)
             }
@@ -285,6 +285,19 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             logger.info("Created meeting \(meeting.id) from Drive doc")
             return .created(meetingID: meeting.id)
         }
+    }
+
+    // MARK: - Content gate (1b)
+
+    /// The summary-vs-transcript gate, run off the main actor: a **markdown** export that parses to
+    /// something but carries no recoverable timing is Gemini's summary, not the transcript. The
+    /// `text/plain` fallback drops the timing markup by design, so it never trips the gate.
+    nonisolated static func isSummaryOnlyExport(_ text: String, isMarkdownExport: Bool) async -> Bool {
+        guard isMarkdownExport else { return false }
+        return await Task.detached(priority: .utility) {
+            let parsed = TranscriptFileParser.parse(text)
+            return !parsed.isEmpty && !MeetingImportService.carriesRecoverableTiming(parsed)
+        }.value
     }
 
     // MARK: - Live-meeting guard + candidate snapshot (D-D4 review fix)
@@ -469,6 +482,6 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         guard response.statusCode == 200 else {
             throw GoogleDriveAPI.RequestFailed(statusCode: response.statusCode)
         }
-        return String(decoding: data, as: UTF8.self)
+        return await Task.detached(priority: .utility) { String(decoding: data, as: UTF8.self) }.value
     }
 }

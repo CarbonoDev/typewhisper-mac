@@ -258,7 +258,7 @@ final class MeetingImportService: ObservableObject {
     /// Requiring timing is deliberately stricter than "parsed to something": importing a summary as a
     /// transcript is silent corruption that reads plausibly, which is far worse than importing
     /// nothing and leaving the doc for a later pass.
-    static func carriesRecoverableTiming(_ segments: [TranscriptionSegment]) -> Bool {
+    nonisolated static func carriesRecoverableTiming(_ segments: [TranscriptionSegment]) -> Bool {
         segments.contains { $0.start > 0 || $0.end > 0 }
     }
 
