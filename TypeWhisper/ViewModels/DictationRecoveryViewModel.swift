@@ -48,7 +48,20 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     @Published private(set) var recoveries: [RecoveryItem]
-    @Published var selectedRecoveryID: RecoveryItem.ID?
+    /// Preview playback for the selected recovery, so a recording can be listened to before spending a
+    /// transcription on it. The same service (and the same `AudioPlaybackBar`) the history detail uses.
+    let audioPlayback = AudioPlaybackService()
+    @Published var selectedRecoveryID: RecoveryItem.ID? {
+        didSet {
+            // Switching recordings must tear the player down rather than pause it: `togglePlayPause`
+            // resumes an existing player and ignores its `url` argument, so a live player left behind
+            // here would replay the *previous* recording under the new selection's name. Guarded on a
+            // real change so a no-op reassignment (`updateRecoveryURLs` re-pins the same id after a
+            // discard) does not interrupt playback.
+            guard oldValue != selectedRecoveryID else { return }
+            audioPlayback.stop()
+        }
+    }
     @Published private(set) var lastSavedRecoveryFileName: String?
     @Published private(set) var lastSavedHistoryRecordID: UUID?
     @Published var languageSelection: LanguageSelection = .auto {
@@ -260,6 +273,8 @@ final class DictationRecoveryViewModel: ObservableObject {
 
     func transcribe() {
         guard canTranscribe, let recovery = selectedRecovery else { return }
+        // Don't leave preview audio playing over a transcription the user just started.
+        audioPlayback.stop()
 
         let recoveryID = recovery.id
         let url = recovery.url
@@ -325,6 +340,12 @@ final class DictationRecoveryViewModel: ObservableObject {
         }
     }
 
+    /// Tear down preview playback — called when the recovery window goes away, so audio never keeps
+    /// playing against a window the user has closed.
+    func stopPlayback() {
+        audioPlayback.stop()
+    }
+
     func discardRecovery() {
         discardSelectedRecovery()
     }
@@ -335,6 +356,10 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     func discardRecovery(_ recovery: RecoveryItem) {
+        // The file is about to be deleted; a player still holding it must go first.
+        if recovery.id == selectedRecoveryID {
+            audioPlayback.stop()
+        }
         audioRecordingService.discardRecoveryRecording(at: recovery.url)
         updateRecoveryURLs(audioRecordingService.recoveryRecordingURLs)
     }

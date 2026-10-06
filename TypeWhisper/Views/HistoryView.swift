@@ -634,7 +634,9 @@ private struct RecordDetailView: View {
 
 // MARK: - Audio Playback Bar
 
-private struct AudioPlaybackBar: View {
+/// Shared between the history detail and the dictation recovery window (which previews a recovered
+/// recording before spending a transcription on it) — hence not `private`.
+struct AudioPlaybackBar: View {
     let audioURL: URL
     @ObservedObject var playbackService: AudioPlaybackService
 

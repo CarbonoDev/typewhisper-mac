@@ -8,6 +8,8 @@ struct DictationRecoveryView: View {
     var body: some View {
         recoveryForm
         .frame(minWidth: 500, minHeight: 400)
+        // Preview audio must not outlive the window it belongs to.
+        .onDisappear { viewModel.stopPlayback() }
     }
 
     private var recoveryForm: some View {
@@ -55,6 +57,10 @@ struct DictationRecoveryView: View {
 
                     if let recovery = viewModel.selectedRecovery {
                         recoveryRow(recovery)
+                        // Listen before transcribing: a recovered capture may be silent, truncated or
+                        // the wrong take, and transcription is the expensive, sometimes metered step.
+                        AudioPlaybackBar(audioURL: recovery.url, playbackService: viewModel.audioPlayback)
+                            .disabled(viewModel.isProcessing)
                     }
                 }
             } else if !viewModel.hasRecoveryContent {
