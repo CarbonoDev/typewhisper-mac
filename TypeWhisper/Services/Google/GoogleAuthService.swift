@@ -114,8 +114,10 @@ final class GoogleAuthService: ObservableObject {
     private let transport: GoogleHTTPTransport
     /// Injected clock so expiry-skew tests are time-deterministic (§7).
     private let now: () -> Date
-    /// Injected browser seam (`NSWorkspace.shared.open` in production).
-    private let openBrowser: (URL) -> Void
+    /// Injected browser seam. The second argument is the account the flow is repairing (`nil` when
+    /// connecting a brand-new account), so production can open the consent page in *that account's*
+    /// browser profile rather than whichever profile Chrome used last.
+    private let openBrowser: (URL, String?) -> Void
     /// Injected listener factory (real `GoogleLoopbackServer` in production). Receives the flow's
     /// `state` so the server only treats the matching redirect as the callback (SR review).
     private let makeServer: (String) -> any GoogleLoopbackServing
@@ -148,7 +150,11 @@ final class GoogleAuthService: ObservableObject {
         store: GoogleAccountStore,
         transport: GoogleHTTPTransport = URLSessionGoogleTransport(),
         now: @escaping () -> Date = Date.init,
-        openBrowser: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
+        openBrowser: @escaping (URL, String?) -> Void = { url, accountID in
+            GoogleAccountBrowserLauncher.open(
+                url: url, accountID: accountID, store: ServiceContainer.shared.googleAccountStore
+            )
+        },
         makeServer: @escaping (String) -> any GoogleLoopbackServing = { GoogleLoopbackServer(expectedState: $0) }
     ) {
         self.store = store
@@ -166,7 +172,10 @@ final class GoogleAuthService: ObservableObject {
     func connectAccount() async throws -> GoogleAccount {
         try await runAuthorizationFlow(
             scopes: Self.identityScopes + [Self.calendarScope],
-            loginHint: nil
+            loginHint: nil,
+            // A brand-new account has no stored profile preference yet, so the consent page opens in
+            // the system browser exactly as before.
+            accountID: nil
         )
     }
 
@@ -191,7 +200,10 @@ final class GoogleAuthService: ObservableObject {
         let knownAccountIDs = Set(store.accounts.map(\.id))
         let connected = try await runAuthorizationFlow(
             scopes: scopes,
-            loginHint: store.account(id: accountID)?.email
+            loginHint: store.account(id: accountID)?.email,
+            // Repairing a known account: open consent in the profile that account is bound to, so the
+            // right identity is already signed in and `prompt=select_account` lands on it.
+            accountID: accountID
         )
         guard connected.id != accountID else { return }
         logger.warning("Reauthorize finished as a different account than requested")
@@ -304,7 +316,11 @@ final class GoogleAuthService: ObservableObject {
 
     // MARK: - Flow orchestration
 
-    private func runAuthorizationFlow(scopes: [String], loginHint: String?) async throws -> GoogleAccount {
+    private func runAuthorizationFlow(
+        scopes: [String],
+        loginHint: String?,
+        accountID: String?
+    ) async throws -> GoogleAccount {
         guard let clientID = store.clientID, let clientSecret = store.clientSecret else {
             throw GoogleAuthError.notConfigured
         }
@@ -343,7 +359,7 @@ final class GoogleAuthService: ObservableObject {
             challenge: pkce.challenge,
             loginHint: loginHint
         )
-        openBrowser(authorizationURL)
+        openBrowser(authorizationURL, accountID)
 
         session.timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.connectTimeout * 1_000_000_000))

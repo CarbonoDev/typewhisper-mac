@@ -66,19 +66,33 @@ enum MeetingJoinLauncher {
     /// `GoogleCalendarID.accountSub(fromNamespacedID:)`; `nil` for EventKit events keeps today's
     /// system-browser behavior). Non-http(s) URLs open nothing (`isLaunchableJoinURL`).
     static func open(url: URL, accountSub: String?) {
-        guard isLaunchableJoinURL(url) else {
-            logger.warning("Refusing to open join URL with non-http(s) scheme: \(url.scheme ?? "nil", privacy: .public)")
-            return
-        }
-        let store = ServiceContainer.shared.googleAccountStore
+        // The scheme guard lives in `open(url:destination:)` — the single choke point every entry
+        // point funnels through — so it cannot be bypassed by adding another caller here.
+        open(url: url, destination: resolve(accountSub: accountSub, in: ServiceContainer.shared.googleAccountStore))
+    }
+
+    /// Resolve `accountSub` against `store` — the store lookup half of `open(url:accountSub:)`, split
+    /// out so callers that already hold a `GoogleAccountStore` (the OAuth flow, which must not reach
+    /// back into `ServiceContainer` while that container is still building itself) reuse the exact
+    /// same ladder instead of re-deriving it.
+    static func resolve(accountSub: String?, in store: GoogleAccountStore) -> MeetingJoinDestination {
         let account = accountSub.flatMap { store.account(id: $0) }
-        let resolved = destination(
+        return destination(
             accountSub: accountSub,
             accountEmail: account?.email,
             preference: account.map { store.linkOpeningPreference(for: $0.id) },
             profiles: ChromeProfileDetector.detectProfiles()
         )
-        switch resolved {
+    }
+
+    /// The launch half, against an already-resolved destination. The scheme guard is applied here
+    /// too, so no entry point can reach `NSWorkspace`/Chrome with a non-http(s) URL.
+    static func open(url: URL, destination: MeetingJoinDestination) {
+        guard isLaunchableJoinURL(url) else {
+            logger.warning("Refusing to open URL with non-http(s) scheme: \(url.scheme ?? "nil", privacy: .public)")
+            return
+        }
+        switch destination {
         case .systemBrowser:
             NSWorkspace.shared.open(url)
         case .chromeProfile(let directory):
@@ -111,5 +125,27 @@ enum MeetingJoinLauncher {
             logger.warning("Could not spawn /usr/bin/open: \(error.localizedDescription); falling back to system browser")
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+/// Opens a URL that belongs to a *Google account* rather than to a meeting — today the OAuth
+/// consent page — in the browser profile that account is already bound to.
+///
+/// Reconnecting a disconnected account is the motivating case: the consent page opened in whatever
+/// profile Chrome used last shows that profile's signed-in user, so the user either reconnects as
+/// the wrong identity (which `GoogleAuthService.reauthorize` then has to reject with
+/// `.wrongAccount`) or has to switch profiles by hand. Opening it in the account's own profile
+/// means the right identity is already signed in. Resolution and fallbacks are
+/// `MeetingJoinLauncher`'s — an unknown account, a `.system` preference, or a deleted profile all
+/// fall back to the system browser, so the no-Chrome case is unchanged.
+@MainActor
+enum GoogleAccountBrowserLauncher {
+    /// `accountID` is the account's `sub`; `nil` (connecting a brand-new account, whose profile is
+    /// not known yet) resolves to the system browser.
+    static func open(url: URL, accountID: String?, store: GoogleAccountStore) {
+        MeetingJoinLauncher.open(
+            url: url,
+            destination: MeetingJoinLauncher.resolve(accountSub: accountID, in: store)
+        )
     }
 }

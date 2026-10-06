@@ -100,6 +100,9 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
     private var currentDate = Date(timeIntervalSince1970: 1_700_000_000)
     /// Authorization URLs the service "opened in the browser" (flow tests read `state` from them).
     private var openedURLs: [URL] = []
+    /// The account each authorization flow asked the browser seam to open for — `nil` for a
+    /// brand-new connect, the repaired account's id for a reauthorize.
+    private var openedAccountIDs: [String?] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -107,6 +110,7 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         currentDate = Date(timeIntervalSince1970: 1_700_000_000)
         openedURLs = []
+        openedAccountIDs = []
     }
 
     override func tearDown() async throws {
@@ -143,9 +147,10 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
             store: store,
             transport: transport,
             now: { self.currentDate },
-            openBrowser: { url in
+            openBrowser: { url, accountID in
                 if flowExpected {
                     self.openedURLs.append(url)
+                    self.openedAccountIDs.append(accountID)
                 } else {
                     XCTFail("token tests must never open a browser")
                 }
@@ -376,6 +381,49 @@ final class GoogleAuthServiceTokenTests: XCTestCase {
         XCTAssertEqual(store.accounts.map(\.id), ["sub-1"], "no extra row")
         XCTAssertEqual(store.accounts.first?.status, .connected, "the repaired account is healthy again")
         XCTAssertEqual(store.refreshToken(for: "sub-1"), "rt-1b", "fresh refresh token stored")
+    }
+
+    /// Reconnecting a disconnected account must open consent in *that account's* browser profile, so
+    /// the right identity is already signed in. The service passes the account through the browser
+    /// seam; `GoogleAccountBrowserLauncher` turns it into the profile in production.
+    func testReauthorizeOpensConsentForTheAccountBeingRepaired() async throws {
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-1", email: "ada@example.com", name: "Ada", refreshToken: "rt-1b")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+        store.setStatus(.needsReauth, for: "sub-1")
+
+        let flow = Task { try await service.reauthorize(accountID: "sub-1", additionalScopes: []) }
+        try await deliverRedirect(to: server, attempt: 0)
+        try await flow.value
+
+        XCTAssertEqual(
+            openedAccountIDs, ["sub-1"],
+            "consent opens for the account being reconnected, not the last-used browser profile"
+        )
+    }
+
+    /// The other side of the contract: a brand-new account has no profile bound to it yet, so the
+    /// consent page must keep opening in the system browser.
+    func testConnectAccountOpensConsentWithNoAccountContext() async throws {
+        let server = FakeLoopbackServer()
+        let transport = FakeTransport(responses: [
+            .init(
+                statusCode: 200,
+                body: exchangeBody(sub: "sub-new", email: "grace@example.com", name: "Grace", refreshToken: "rt-new")
+            ),
+        ])
+        let service = try makeService(transport: transport, servers: [server])
+
+        let flow = Task { try await service.connectAccount() }
+        try await deliverRedirect(to: server, attempt: 0)
+        _ = try await flow.value
+
+        XCTAssertEqual(openedAccountIDs, [String?.none], "a new connect carries no account to bind a profile to")
     }
 
     func testReauthorizeAsADifferentAccountThrowsAndRollsBackTheNewRow() async throws {
