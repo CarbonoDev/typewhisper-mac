@@ -323,4 +323,32 @@ final class MeetingFactsTests: XCTestCase {
         XCTAssertTrue(match([.hasBrief]))
         XCTAssertFalse(match([.hasSummary]))
     }
+
+    func testSpeakerPlanInputsComeFromTheLabelFacts() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "Speakers", state: .completed)
+        service.appendStableSegments([segment("a", 0), segment("b", 1)], to: meeting)
+        XCTAssertEqual(meeting.transcriptFacts.speakerCount, 0)
+        XCTAssertFalse(meeting.transcriptFacts.hasProviderOriginatedLabels)
+        let unlabeled = meeting.transcriptFacts.speakerLabelsFingerprint
+
+        let ids = meeting.segments.sorted { $0.order < $1.order }.map(\.id)
+        service.applySpeakerLabels(
+            [MeetingSpeakerAssignment(segmentID: ids[0], label: "SPEAKER_00", confidence: nil)],
+            to: meeting
+        )
+        let local = meeting.transcriptFacts
+        XCTAssertFalse(local.hasProviderOriginatedLabels, "local pyannote labels are not provider labels")
+        XCTAssertNotEqual(local.speakerLabelsFingerprint, unlabeled)
+
+        // A cloud rerun swaps in the provider's own labels: the token changes, the cloud rung opens.
+        service.applySpeakerLabels(
+            [MeetingSpeakerAssignment(segmentID: ids[0], label: "Ana", confidence: 0.9),
+             MeetingSpeakerAssignment(segmentID: ids[1], label: "Ben", confidence: 0.9)],
+            to: meeting
+        )
+        XCTAssertTrue(meeting.transcriptFacts.hasProviderOriginatedLabels)
+        XCTAssertNotEqual(meeting.transcriptFacts.speakerLabelsFingerprint, local.speakerLabelsFingerprint)
+        XCTAssertEqual(meeting.transcriptFacts.speakerCount, 2)
+    }
 }

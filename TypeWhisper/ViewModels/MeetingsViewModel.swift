@@ -1480,7 +1480,7 @@ final class MeetingsViewModel: ObservableObject {
         // must NOT resolve `.cloud`, or it would lose its channel Undo/Redo affordance and hide the
         // pyannote Identify button (finding). The vocabulary test is shared with the finalization
         // adoption check so the two paths always agree.
-        let labeled = meeting.segments.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0.speakerLabel) }
+        let labeled = meeting.transcriptFacts.hasProviderOriginatedLabels
         let source = Self.plannedSpeakerSource(
             segmentsHaveProviderLabels: labeled,
             preferProviderLabels: preferProviderSpeakerLabels,

@@ -72,18 +72,18 @@ struct SpeakerSection: View {
         .task(id: meeting.attendeesJSON) { await refreshPlan() }
     }
 
+    /// Read from the denormalised speaker-label facts: no segment walk per render.
     private var hasSpeakerLabels: Bool {
-        meeting.segments.contains { ($0.speakerLabel?.isEmpty == false) }
+        meeting.transcriptFacts.speakerCount > 0
     }
 
-    /// A cheap change-token over the transcript's speaker labels (order-stable), so a plan re-resolution
-    /// fires whenever the *set* of labels changes — e.g. a cloud rerun swapping `SPEAKER_00…` for the
-    /// provider's own labels — even when no `speakerMapJSON`/`twoPersonCall`/`attendeesJSON` write occurs.
+    /// A cheap change-token over the transcript's speaker label *set* (the denormalised facts), so a
+    /// plan re-resolution fires whenever the set changes — e.g. a cloud rerun swapping `SPEAKER_00…`
+    /// for the provider's own labels — even when no `speakerMapJSON`/`twoPersonCall`/`attendeesJSON`
+    /// write occurs. The plan depends only on the set (any provider label, participant count, audio
+    /// tracks), so per-segment reassignments that keep the set do not need to re-fire it.
     private var speakerLabelFingerprint: String {
-        meeting.segments
-            .sorted { $0.order < $1.order }
-            .map { $0.speakerLabel ?? "" }
-            .joined(separator: "\u{1f}")
+        meeting.transcriptFacts.speakerLabelsFingerprint
     }
 
     private func refreshPlan() async {

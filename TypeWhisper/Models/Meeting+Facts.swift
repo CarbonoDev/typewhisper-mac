@@ -15,6 +15,16 @@ struct MeetingTranscriptFacts: Equatable, Sendable {
     var transcriptDuration: Double? { transcriptEnd > 0 ? transcriptEnd : nil }
     var speakerCount: Int { speakerLabels.count }
 
+    /// A change token over the distinct speaker labels (sorted), for views that re-resolve
+    /// something when the label set changes.
+    var speakerLabelsFingerprint: String { speakerLabels.sorted().joined(separator: "\u{1f}") }
+
+    /// Whether any label came from a cloud provider rather than the app's own diarization
+    /// (`SpeakerSourcePlan.isProviderOriginatedLabel`).
+    var hasProviderOriginatedLabels: Bool {
+        speakerLabels.contains { SpeakerSourcePlan.isProviderOriginatedLabel($0) }
+    }
+
     /// The facts after appending `segments` (the live-append path keeps them incrementally).
     func appending<S: Sequence>(_ segments: S) -> MeetingTranscriptFacts where S.Element == MeetingSegment {
         var next = self
