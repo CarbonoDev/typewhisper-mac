@@ -185,7 +185,7 @@ struct HomeAttentionSection: View {
                         meetingID: meeting.id
                     )))
                 }
-            } else if !meeting.segments.isEmpty,
+            } else if homeViewModel.hasTranscript(for: meeting),
                       now.timeIntervalSince(reference) < Self.summaryWindow {
                 noSummary.append(Row(
                     id: "nosummary-\(meeting.id)",
