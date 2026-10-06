@@ -307,6 +307,7 @@
 		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
 		PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */; };
 		PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000016 /* MeetingRowModel.swift */; };
+		PF1B00000000000000000021 /* MeetingRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000020 /* MeetingRowView.swift */; };
 		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
 		TCB0000000000000000001 /* ComingUpCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000001 /* ComingUpCard.swift */; };
 		TCB0000000000000000002 /* MeetingTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000002 /* MeetingTimeline.swift */; };
@@ -1089,6 +1090,7 @@
 		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDuplicateIndex.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000016 /* MeetingRowModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowModel.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000020 /* MeetingRowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
 		TCF0000000000000000001 /* ComingUpCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComingUpCard.swift; sourceTree = "<group>"; };
 		TCF0000000000000000002 /* MeetingTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTimeline.swift; sourceTree = "<group>"; };
@@ -2388,6 +2390,7 @@
 				MWF0000000000000000007 /* MeetingsListView.swift */,
 				PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */,
 				PF1B00000000000000000016 /* MeetingRowModel.swift */,
+				PF1B00000000000000000020 /* MeetingRowView.swift */,
 				MWF0000000000000000008 /* HomeFeedView.swift */,
 				TCF0000000000000000001 /* ComingUpCard.swift */,
 				TCF0000000000000000002 /* MeetingTimeline.swift */,
@@ -5061,6 +5064,7 @@
 				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
 				PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */,
 				PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */,
+				PF1B00000000000000000021 /* MeetingRowView.swift in Sources */,
 				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,
 				TCB0000000000000000001 /* ComingUpCard.swift in Sources */,
 				TCB0000000000000000002 /* MeetingTimeline.swift in Sources */,

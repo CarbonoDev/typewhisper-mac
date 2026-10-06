@@ -13,6 +13,9 @@ import SwiftUI
 struct MeetingsListView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
+    // Observed at list level (not per row) so checking items off in a document updates the rows'
+    // open-action counts live.
+    @ObservedObject private var checklistStore = MeetingChecklistStore.shared
     @State private var isPresentingImport = false
     @State private var customStart = Calendar.current.startOfDay(for: Date())
     // Day-aligned (start of today) so the Custom range's end bound is not pinned to the current
@@ -96,6 +99,12 @@ struct MeetingsListView: View {
 
     private func list(_ displayedMeetings: [Meeting]) -> some View {
         let duplicates = MeetingDuplicateIndex.duplicateIDs(in: displayedMeetings)
+        let rows = MeetingRowModelStore.shared.rows(
+            for: displayedMeetings,
+            context: .init(actionFacts: HomeFeedViewModel.shared.actionFacts(for:), duplicateIDs: duplicates)
+        )
+        let meetingsByID = Dictionary(displayedMeetings.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let liveID = viewModel.isCapturing ? viewModel.activeMeeting?.id : nil
         return List(selection: $viewModel.selectedMeetingIDs) {
             if let error = viewModel.captureErrorMessage {
                 Text(error)
@@ -115,17 +124,18 @@ struct MeetingsListView: View {
                         .listRowSeparator(.hidden)
                 }
             } else {
-                ForEach(displayedMeetings, id: \.id) { meeting in
+                ForEach(rows) { row in
                     // Non-Button row (HistoryView's idiom) so the List's NSTableView-backed selection
                     // receives ⌘/⇧-click and ⌘-A natively; a plain tap opens the meeting. A full-width
                     // Button here swallowed modified clicks and broke multi-select (LX-1 finding #1).
-                    ArchiveRow(
-                        meeting: meeting,
-                        isLive: meeting.id == viewModel.activeMeeting?.id && viewModel.isCapturing,
-                        isDuplicate: duplicates.contains(meeting.id),
-                        isSelected: viewModel.selectedMeetingIDs.contains(meeting.id)
+                    MeetingRowView(
+                        model: row,
+                        style: .archive,
+                        isLive: row.id == liveID,
+                        isSelected: viewModel.selectedMeetingIDs.contains(row.id)
                     )
-                        .tag(meeting.id)
+                        .equatable()
+                        .tag(row.id)
                         .listRowSeparator(.hidden)
                         // The row draws its own card fill + selection tint (from the bound selection
                         // set) — suppress the native table highlight so the two don't stack.
@@ -137,11 +147,11 @@ struct MeetingsListView: View {
                         // modifier is held so only an unmodified click opens the meeting.
                         .onTapGesture {
                             guard NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty else { return }
-                            coordinator.openMeeting(id: meeting.id)
+                            coordinator.openMeeting(id: row.id)
                         }
                         // Shared row right-click menu (plan LX-2, D4): single-vs-multi branch on the
                         // native `List(selection:)` set, identical to the folder-detail rows.
-                        .meetingRowContextMenu(for: meeting)
+                        .meetingRowContextMenu(for: meetingsByID[row.id]!) // rows ⊆ displayedMeetings
                 }
             }
         }
@@ -702,183 +712,4 @@ struct MeetingsListView: View {
         .padding(.vertical, MeetingTheme.s4)
     }
 
-}
-
-/// [Sprint 5] One archive row, sized to read: a mono date gutter, the normalized title (imported
-/// export filenames read as the meetings they are), a second line naming the folder and tags,
-/// state only when it needs saying, quiet imported/duplicate markers, and the open-action count.
-/// The row paints its own card fill and selection tint (native table highlight is suppressed).
-private struct ArchiveRow: View {
-    let meeting: Meeting
-    let isLive: Bool
-    let isDuplicate: Bool
-    let isSelected: Bool
-
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
-    @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
-    // Observed so checking items off in a document updates the trailing count live.
-    @ObservedObject private var checklistStore = MeetingChecklistStore.shared
-    @State private var isHovering = false
-
-    private var parsed: ImportedMeetingTitle.Parsed {
-        ImportedMeetingTitle.parse(meeting.title)
-    }
-
-    private var isImported: Bool {
-        meeting.source == .importedAudio || meeting.source == .importedTranscript || parsed.isImported
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: MeetingTheme.s3) {
-            Text(gutterText)
-                .font(MeetingTheme.mono)
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: MeetingTheme.s2) {
-                    if isLive {
-                        Image(systemName: "record.circle.fill")
-                            .foregroundStyle(.red)
-                    }
-                    Text(parsed.cleanTitle)
-                        .font(.system(size: 14, weight: .medium))
-                        .lineLimit(1)
-                    if isImported {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .help(String(localized: "meetings.row.imported"))
-                    }
-                    if isDuplicate {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .help(String(localized: "meetings.row.duplicate"))
-                    }
-                    stateWord
-                    Spacer(minLength: 8)
-                    trailingFacts
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .opacity(isHovering || isSelected ? 1 : 0)
-                }
-                organizationLine
-            }
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, MeetingTheme.s3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            isSelected
-                ? Color.accentColor.opacity(0.16)
-                : (isHovering ? Color.primary.opacity(0.06) : Color.primary.opacity(0.035)),
-            in: RoundedRectangle(cornerRadius: MeetingTheme.rowRadius)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
-    }
-
-    /// Line 2: where the meeting lives (folder) and how it's labeled (tags) — plus attendees.
-    @ViewBuilder
-    private var organizationLine: some View {
-        let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
-        let tags = meeting.tags
-        HStack(spacing: MeetingTheme.s2) {
-            if let folder, !folder.isEmpty {
-                Label(folder, systemImage: "folder")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            } else {
-                Label(String(localized: "mainwindow.folders.unfiled"), systemImage: "tray")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            if meeting.attendees.count > 1 {
-                Label("\(meeting.attendees.count)", systemImage: "person.2")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(Array(tags.prefix(3)), id: \.self) { tag in
-                Text("#\(tag)")
-                    .font(.caption)
-                    .lineLimit(1)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(MeetingTheme.chipFill, in: Capsule())
-                    .foregroundStyle(.secondary)
-            }
-            if tags.count > 3 {
-                Text("+\(tags.count - 3)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private var gutterText: String {
-        let date = MeetingsListView.effectiveDate(meeting)
-        let sameYear = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
-        return date.formatted(
-            sameYear
-                ? .dateTime.day(.twoDigits).month(.abbreviated)
-                : .dateTime.day(.twoDigits).month(.abbreviated).year(.twoDigits)
-        )
-    }
-
-    /// The state renders only when it needs saying: completed is the normal resting state.
-    @ViewBuilder
-    private var stateWord: some View {
-        switch meeting.state {
-        case .scheduled:
-            Text(meeting.state.displayName)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .interrupted, .processing:
-            Text(meeting.state.displayName)
-                .font(.caption)
-                .foregroundStyle(.orange)
-        case .failed:
-            Text(meeting.state.displayName)
-                .font(.caption)
-                .foregroundStyle(.red)
-        case .completed, .live:
-            EmptyView()
-        }
-    }
-
-    @ViewBuilder
-    private var trailingFacts: some View {
-        if meeting.state == .scheduled,
-           viewModel.latestOutput(ofKind: .brief, for: meeting) != nil {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(.green)
-                .help(String(localized: "home.badge.briefReady"))
-        }
-        // A quiet "there's a transcript here" marker. `hasTranscript` is memoized (keyed by
-        // `updatedAt`) so this doesn't fault the `segments` to-many relationship on every row render.
-        if homeViewModel.hasTranscript(for: meeting) {
-            Image(systemName: "text.quote")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .help(String(localized: "meetings.row.hasTranscript"))
-        }
-        if meeting.state == .completed,
-           let facts = homeViewModel.actionFacts(for: meeting),
-           facts.totalCount > 0 {
-            if facts.openCount > 0 {
-                Text(String(format: String(localized: "home.recent.open"), facts.openCount))
-                    .font(.caption)
-                    .foregroundStyle(.tint)
-            } else {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.green)
-                    .help(String(localized: "home.recent.allDone"))
-            }
-        }
-    }
 }
