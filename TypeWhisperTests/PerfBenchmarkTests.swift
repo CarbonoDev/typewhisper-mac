@@ -41,8 +41,9 @@ final class PerfBenchmarkTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 5_000_000)
     }
 
-    private func freshMeetingService() throws -> MeetingService {
-        MeetingService(appSupportDirectory: try PerfFixtures.meetingsStoreDirectory())
+    /// A new service (new `ModelContext`, nothing faulted yet) over the prepared store.
+    private func freshMeetingService() async throws -> MeetingService {
+        MeetingService(appSupportDirectory: try await PerfFixtures.preparedStoreDirectory())
     }
 
     private func longMeeting(in service: MeetingService) throws -> Meeting {
@@ -55,7 +56,7 @@ final class PerfBenchmarkTests: XCTestCase {
     // MARK: - Finding 2: one live append into a long meeting, and what it republishes
 
     func test01LiveAppendIntoLongMeeting() async throws {
-        let service = try freshMeetingService()
+        let service = try await freshMeetingService()
         let meeting = try longMeeting(in: service)
         var listPublishes = 0
         var willChanges = 0
@@ -92,8 +93,8 @@ final class PerfBenchmarkTests: XCTestCase {
 
     // MARK: - Finding 9: imported-title parsing across all rows, repeated as a render would
 
-    func test02ImportedTitleParsingPerRender() throws {
-        let titles = try freshMeetingService().meetings.map(\.title)
+    func test02ImportedTitleParsingPerRender() async throws {
+        let titles = try await freshMeetingService().meetings.map(\.title)
         func render() {
             for title in titles {
                 _ = ImportedMeetingTitle.parse(title)
@@ -108,8 +109,8 @@ final class PerfBenchmarkTests: XCTestCase {
 
     // MARK: - Findings 3-5: Home / list per-row facts, first paint and repeat
 
-    func test03HomeRowFactsFirstPaintAndRepeat() throws {
-        let service = try freshMeetingService()
+    func test03HomeRowFactsFirstPaintAndRepeat() async throws {
+        let service = try await freshMeetingService()
         let feed = HomeFeedViewModel()
         let now = Date(timeIntervalSince1970: 1_780_100_000)
         func pass() {
@@ -123,7 +124,41 @@ final class PerfBenchmarkTests: XCTestCase {
                 }
             }
         }
-        report("homeRows.firstPaint", single: PerfClock.milliseconds(pass), extra: "rows=\(service.meetings.count)")
+        // First paint, split by phase over a fresh context: the scalar work (grouping, headers,
+        // titles) versus the relationship reads — badges and action facts fault each row's
+        // `outputs`, the transcript fact faults its `segments`. SwiftData exposes no cheap fault
+        // counter, so the phases are timed; `relationshipReads` counts the to-many reads made.
+        var groups: [MeetingDayGroup] = []
+        var relationshipReads = 0
+        let scalarMs = PerfClock.milliseconds {
+            groups = feed.timelineGroups(from: service.meetings)
+            for group in groups {
+                _ = feed.groupTitle(for: group, now: now)
+                for meeting in group.meetings { _ = ImportedMeetingTitle.displayTitle(for: meeting.title) }
+            }
+        }
+        let outputsMs = PerfClock.milliseconds {
+            for group in groups {
+                for meeting in group.meetings {
+                    _ = feed.badges(for: meeting, now: now)
+                    _ = feed.actionFacts(for: meeting)
+                    relationshipReads += 1
+                }
+            }
+        }
+        let segmentsMs = PerfClock.milliseconds {
+            for group in groups {
+                for meeting in group.meetings {
+                    _ = feed.hasTranscript(for: meeting)
+                    relationshipReads += 1
+                }
+            }
+        }
+        let rows = service.meetings.count
+        report("homeRows.firstPaint", single: scalarMs + outputsMs + segmentsMs, extra: "rows=\(rows)")
+        report("homeRows.firstPaint.scalar", single: scalarMs, extra: "groups+headers+titles")
+        report("homeRows.firstPaint.outputs", single: outputsMs, extra: "badges+actionFacts relationshipReads=\(rows)")
+        report("homeRows.firstPaint.segments", single: segmentsMs, extra: "hasTranscript relationshipReads=\(relationshipReads - rows)")
 
         var repeats = PerfSamples()
         for _ in 0..<10 { repeats.add(PerfClock.milliseconds(pass)) }
@@ -143,25 +178,45 @@ final class PerfBenchmarkTests: XCTestCase {
         report("homeRows.afterWrite", afterWrite)
     }
 
-    func test04ListSearchKeystrokes() throws {
-        let meetings = try freshMeetingService().meetings
-        var samples = PerfSamples()
+    func test04ListSearchKeystrokes() async throws {
+        let meetings = try await freshMeetingService().meetings
+        let filter = PerfShim.makeListFilter()
+        _ = filter.body(meetings, "") // the list's first paint, before any typing
+        var changed = PerfSamples()
+        var unchanged = PerfSamples()
         for query in ["a", "ac", "acm", "acme", "acme.ex"] {
-            // The list body evaluated its filter + sort several times per pass (finding 5: 7×).
-            samples.add(PerfClock.milliseconds {
-                for _ in 0..<7 {
-                    _ = MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil, searchText: query)
-                        .sorted { ($0.startDate ?? $0.createdAt) > ($1.startDate ?? $1.createdAt) }
-                }
-            })
+            // A keystroke: the query changed, so the filter + sort must run.
+            changed.add(PerfClock.milliseconds { _ = filter.body(meetings, query) })
+            // Any other re-render of the list with the same query (selection, hover, a republish).
+            unchanged.add(PerfClock.milliseconds { _ = filter.body(meetings, query) })
         }
-        report("listSearch.perKeystroke", samples, extra: "rows=\(meetings.count) passes/keystroke=7")
+        report("listSearch.changedKeystroke", changed, extra: "rows=\(meetings.count)")
+        report("listSearch.unchangedRerender", unchanged, extra: "rows=\(meetings.count)")
+    }
+
+    // MARK: - Findings 4-5: archive row models, a visible window vs the whole list
+
+    func test09ArchiveRowsWindowAndWholeList() async throws {
+        func measure(_ name: String, rowCount: Int?) async throws {
+            // Fresh context, feed and row builder: nothing faulted or memoized yet.
+            let service = try await freshMeetingService()
+            let builder = PerfShim.makeRowBuilder(feed: HomeFeedViewModel())
+            let sorted = service.meetings.sorted { MeetingsListView.effectiveDate($0) > MeetingsListView.effectiveDate($1) }
+            let rows = rowCount.map { Array(sorted.prefix($0)) } ?? sorted
+            func paint() { for meeting in rows { _ = builder.row(meeting) } }
+            report("archiveRows.\(name).firstPaint", single: PerfClock.milliseconds(paint), extra: "rows=\(rows.count)")
+            var repeats = PerfSamples()
+            for _ in 0..<10 { repeats.add(PerfClock.milliseconds(paint)) }
+            report("archiveRows.\(name).repeat", repeats, extra: "rows=\(rows.count)")
+        }
+        try await measure("window20", rowCount: 20)
+        try await measure("wholeList", rowCount: nil)
     }
 
     // MARK: - Finding 6: a long summary output's markdown, first render and repeat
 
-    func test05SummaryMarkdownRender() throws {
-        let service = try freshMeetingService()
+    func test05SummaryMarkdownRender() async throws {
+        let service = try await freshMeetingService()
         let output = try XCTUnwrap(
             service.meetings.flatMap(\.outputs).filter { $0.kind == .summary }.max { $0.content.count < $1.content.count }
         )
@@ -192,7 +247,7 @@ final class PerfBenchmarkTests: XCTestCase {
         let firstProbe = MainStallProbe()
         firstProbe.start()
         var hits = 0
-        let first = await PerfClock.milliseconds { hits = await PerfShim.retrieve(service, query: "acme roadmap budget") }
+        let first = await PerfClock.millisecondsAsync { hits = await PerfShim.retrieve(service, query: "acme roadmap budget") }
         let firstStall = await firstProbe.stop()
         report("vault.retrieve.first", single: first, extra: String(format: "hits=%d maxMainStall=%.1fms", hits, firstStall))
 
@@ -200,7 +255,7 @@ final class PerfBenchmarkTests: XCTestCase {
         probe.start()
         var samples = PerfSamples()
         for query in ["hiring plan", "migration estimate", "globex budget", "follow up owner", "initech roadmap"] {
-            samples.add(await PerfClock.milliseconds { _ = await PerfShim.retrieve(service, query: query) })
+            samples.add(await PerfClock.millisecondsAsync { _ = await PerfShim.retrieve(service, query: query) })
             await Self.letMainBreathe()
         }
         let stall = await probe.stop()
@@ -224,7 +279,7 @@ final class PerfBenchmarkTests: XCTestCase {
         probe.start()
         var refresh = PerfSamples()
         for _ in 0..<5 {
-            refresh.add(await PerfClock.milliseconds { await PerfShim.refresh(vm) })
+            refresh.add(await PerfClock.millisecondsAsync { await PerfShim.refresh(vm) })
             await Self.letMainBreathe()
         }
         let stall = await probe.stop()
@@ -257,7 +312,7 @@ final class PerfBenchmarkTests: XCTestCase {
         var samples = PerfSamples()
         let refreshes = 20
         for _ in 0..<refreshes {
-            samples.add(await PerfClock.milliseconds { await PerfShim.calendarRefresh(calendar, now: now) })
+            samples.add(await PerfClock.millisecondsAsync { await PerfShim.calendarRefresh(calendar, now: now) })
             await Self.letMainBreathe()
         }
         let stall = await probe.stop()

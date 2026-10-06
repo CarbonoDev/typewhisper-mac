@@ -59,11 +59,19 @@ summary outputs, attendees on every meeting) and a synthetic 2,000-note vault in
 | `liveAppend.perAppend` | 2 | one 3-segment `appendStableSegments` into a 1,600-segment meeting; counts list republishes and `objectWillChange` per append |
 | `importedTitles.firstRender` / `.repeatRender` | 9 | `ImportedMeetingTitle.parse` + `displayTitle` over all 300 titles |
 | `homeRows.firstPaint` / `.repeat` / `.afterWrite` | 3–5 | Home timeline pass: day groups, group titles, badges, action facts, transcript fact, display title per row; `afterWrite` follows a live append |
-| `listSearch.perKeystroke` | 5 | 7 × (filter + sort) over the list for one search keystroke |
+| `homeRows.firstPaint.scalar` / `.outputs` / `.segments` | 3–5 | the first paint split by phase: grouping + headers + titles, then the reads that fault each row's `outputs` (badges, action facts), then its `segments` (transcript fact). SwiftData has no cheap fault counter, so the phases are timed |
+| `listSearch.changedKeystroke` / `.unchangedRerender` | 5 | one archive body's filter + sort when the query changed, and when the list re-renders with the same query (before: 7 × `filteredMeetings` + sort per body; after: one memoized `MeetingListPipeline` call) |
+| `archiveRows.window20.*` / `.wholeList.*` | 4–5 | the archive's per-row body work for the first 20 rows vs all 300, first paint (fresh context and caches) and repeat (before: what `ArchiveRow` read from the live `Meeting`; after: `MeetingRowModelStore`) |
 | `markdown.firstRender` / `.repeatRender` | 6 | one body pass of a ~4 KB summary: outcome extraction, block split, inline attributes |
 | `vault.retrieve.first` / `.repeat` | 10 | one `retrieve` over the 2,000-note vault |
 | `space.init` / `.refresh` / `.visitAllFolders` | 10 | Space view model construction, one snapshot refresh, then every folder index's children lookup |
 | `calendar.refreshUnchanged` | 11 | one calendar refresh with an unchanged 60-event list; counts section republishes |
+
+`PerfLiveAppendBreakdownTests` (current code only, not grafted onto the old commit) splits one live
+append into its parts: the whole `appendStableSegments`, the `isInFetchOrder` scan, and a replay of
+the same SwiftData steps on a second context over the same store — segment mapping, relationship
+assignment, insert, `updatedAt`, `save()` — into the 1,600-segment meeting and into a 150-segment
+one, which shows which steps grow with the meeting.
 
 Each result prints one line, `PERF|<before|after>|<name>|median_ms|min_ms|max_ms|n|<extra>`.
 `maxMainStall` in the extra column is the longest single main-thread block during the timed
@@ -82,7 +90,8 @@ forwards it). It takes about 25 s, most of it seeding the store.
 TEST_RUNNER_TYPEWHISPER_PERF=1 xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper \
   -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO \
   CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-  -only-testing:TypeWhisperTests/PerfBenchmarkTests | grep '^PERF|'
+  -only-testing:TypeWhisperTests/PerfBenchmarkTests \
+  -only-testing:TypeWhisperTests/PerfLiveAppendBreakdownTests | grep '^PERF|'
 ```
 
 ### Before / after
@@ -121,6 +130,9 @@ When a later change alters one of these APIs again, update the after shim; the b
 pinned to `772f3535`.
 
 ### Results, 2026-10-06
+
+These "after" numbers predate main's list pipeline, row models and fact columns; `listSearch` and
+the Home rows were re-measured on the current tree after that and need a fresh before/after run.
 
 `772f3535` vs main at `3a449793`, 3 interleaved runs per side, Debug build, Apple silicon. Median of per-run medians; spread is the min–max of the per-run medians.
 

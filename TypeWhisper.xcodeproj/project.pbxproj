@@ -458,6 +458,7 @@
 		P3B0000000000000000101 /* ParticipantsSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */; };
 		P3B0000000000000000102 /* ParticipantDirectoryMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */; };
 		MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */; };
+		PF2D00000000000000000038 /* PerfLiveAppendBreakdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000039 /* PerfLiveAppendBreakdownTests.swift */; };
 		PF2D00000000000000000036 /* PerfBenchmarkShim.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000037 /* PerfBenchmarkShim.swift */; };
 		PF2D00000000000000000034 /* PerfBenchmarkFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000035 /* PerfBenchmarkFixtures.swift */; };
 		PF2D00000000000000000032 /* PerfBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2D00000000000000000033 /* PerfBenchmarkTests.swift */; };
@@ -1266,6 +1267,7 @@
 		P3F0000000000000000101 /* ParticipantsSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantsSuggestionTests.swift; sourceTree = "<group>"; };
 		P3F0000000000000000102 /* ParticipantDirectoryMatchingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParticipantDirectoryMatchingTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ObsidianVaultServiceTests.swift; sourceTree = "<group>"; };
+		PF2D00000000000000000039 /* PerfLiveAppendBreakdownTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerfLiveAppendBreakdownTests.swift; sourceTree = "<group>"; };
 		PF2D00000000000000000037 /* PerfBenchmarkShim.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerfBenchmarkShim.swift; sourceTree = "<group>"; };
 		PF2D00000000000000000035 /* PerfBenchmarkFixtures.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerfBenchmarkFixtures.swift; sourceTree = "<group>"; };
 		PF2D00000000000000000033 /* PerfBenchmarkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PerfBenchmarkTests.swift; sourceTree = "<group>"; };
@@ -3396,6 +3398,7 @@
 				BBB0000000000000000B07 /* PromptTemplateEditorModelTests.swift */,
 				MEF0000000000000000007 /* MeetingTemplatePresetsTests.swift */,
 				MEF0000000000000000008 /* ObsidianVaultServiceTests.swift */,
+				PF2D00000000000000000039 /* PerfLiveAppendBreakdownTests.swift */,
 				PF2D00000000000000000037 /* PerfBenchmarkShim.swift */,
 				PF2D00000000000000000035 /* PerfBenchmarkFixtures.swift */,
 				PF2D00000000000000000033 /* PerfBenchmarkTests.swift */,
@@ -5021,6 +5024,7 @@
 				AAB0000000000000000B07 /* PromptTemplateEditorModelTests.swift in Sources */,
 				MEB0000000000000000007 /* MeetingTemplatePresetsTests.swift in Sources */,
 				MEB0000000000000000008 /* ObsidianVaultServiceTests.swift in Sources */,
+				PF2D00000000000000000038 /* PerfLiveAppendBreakdownTests.swift in Sources */,
 				PF2D00000000000000000036 /* PerfBenchmarkShim.swift in Sources */,
 				PF2D00000000000000000034 /* PerfBenchmarkFixtures.swift in Sources */,
 				PF2D00000000000000000032 /* PerfBenchmarkTests.swift in Sources */,

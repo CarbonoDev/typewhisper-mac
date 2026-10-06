@@ -74,6 +74,19 @@ enum PerfFixtures {
     }
 
     @MainActor private static var cachedStoreDirectory: URL?
+    @MainActor private static var storePrepared = false
+
+    /// The seeded store after one launch-equivalent preparation (`PerfShim.prepareStore` — today the
+    /// fact-column backfill a real launch runs once), so benchmarks read the store as the app would.
+    @MainActor
+    static func preparedStoreDirectory() async throws -> URL {
+        let dir = try meetingsStoreDirectory()
+        if !storePrepared {
+            await PerfShim.prepareStore(MeetingService(appSupportDirectory: dir))
+            storePrepared = true
+        }
+        return dir
+    }
 
     @MainActor
     private static func seedMeetingsStore(in dir: URL) throws {
@@ -210,7 +223,7 @@ enum PerfClock {
     }
 
     @MainActor
-    static func milliseconds(_ body: @MainActor () async throws -> Void) async rethrows -> Double {
+    static func millisecondsAsync(_ body: @MainActor () async throws -> Void) async rethrows -> Double {
         let start = DispatchTime.now().uptimeNanoseconds
         try await body()
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000

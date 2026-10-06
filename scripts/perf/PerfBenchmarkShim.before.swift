@@ -23,6 +23,42 @@ enum PerfShim {
         calendar.refresh(now: now)
     }
 
+    /// Nothing to prepare: the fact columns did not exist.
+    static func prepareStore(_ service: MeetingService) async {}
+
+    /// The archive body evaluated `filteredMeetings` + the effective-date sort about 7 times per
+    /// pass (finding 5), with no memo.
+    static func makeListFilter() -> PerfListFilter {
+        PerfListFilter { meetings, searchText in
+            var count = 0
+            for _ in 0..<7 {
+                count = MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil, searchText: searchText)
+                    .sorted { MeetingsListView.effectiveDate($0) > MeetingsListView.effectiveDate($1) }
+                    .count
+            }
+            return count
+        }
+    }
+
+    /// `ArchiveRow`'s body read the live `Meeting` directly on every evaluation: the title parse (via
+    /// `parsed`, `isImported` and the gutter's effective date), folder, tags, attendees (twice), the
+    /// memoized transcript fact and, for completed meetings, the memoized action facts.
+    static func makeRowBuilder(feed: HomeFeedViewModel) -> PerfRowBuilder {
+        PerfRowBuilder { meeting in
+            let parsed = ImportedMeetingTitle.parse(meeting.title)
+            let isImported = meeting.source == .importedAudio || meeting.source == .importedTranscript
+                || ImportedMeetingTitle.parse(meeting.title).isImported
+            let gutter = PerfRowBuilder.gutterText(MeetingsListView.effectiveDate(meeting))
+            let folder = meeting.folderPath?.trimmingCharacters(in: .whitespaces)
+            let tags = meeting.tags
+            let attendees = meeting.attendees.count > 1 ? meeting.attendees.count : 0
+            let hasTranscript = feed.hasTranscript(for: meeting)
+            let actions = meeting.state == .completed ? feed.actionFacts(for: meeting)?.totalCount ?? 0 : 0
+            return parsed.cleanTitle.count + gutter.count + (folder?.count ?? 0) + tags.count + attendees
+                + (isImported ? 1 : 0) + (hasTranscript ? 1 : 0) + actions
+        }
+    }
+
     /// The document body re-ran the outcome extraction, the block split and every inline
     /// `AttributedString(markdown:)` on each body pass (`MeetingDocumentBody` +
     /// `MarkdownDocumentView.blocks`); there was no memo, so first and repeat cost the same.
@@ -49,4 +85,23 @@ enum PerfShim {
 @MainActor
 struct PerfOutputRenderer {
     let render: @MainActor (MeetingOutput) -> Int
+}
+
+@MainActor
+struct PerfListFilter {
+    let body: @MainActor ([Meeting], String) -> Int
+}
+
+@MainActor
+struct PerfRowBuilder {
+    let row: @MainActor (Meeting) -> Int
+
+    static func gutterText(_ date: Date) -> String {
+        let sameYear = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
+        return date.formatted(
+            sameYear
+                ? .dateTime.day(.twoDigits).month(.abbreviated)
+                : .dateTime.day(.twoDigits).month(.abbreviated).year(.twoDigits)
+        )
+    }
 }
