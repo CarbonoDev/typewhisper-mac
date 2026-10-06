@@ -100,6 +100,30 @@ const LEAVE_CALL_LABELS = [
   'gesprek verlaten', // nl
 ];
 
+/**
+ * The user's own microphone and camera toggles in Meet's toolbar. Both carry a `data-is-muted`
+ * attribute ("true"/"false") — a machine-readable state that needs no translation table — so the
+ * ladder only has to tell the two apart:
+ *
+ *   1. `jsname`          — Meet's own handles for the two buttons.
+ *   2. localized label   — "Turn off microphone" / "Mikrofon ausschalten" / … on a `data-is-muted` button.
+ *   3. shortcut hint     — "(⌘ + d)" is the microphone and "(⌘ + e)" the camera in every locale.
+ *
+ * Substring-matched case-insensitively. 'micro' also covers the French short form.
+ */
+const CALL_CONTROLS = {
+  mic: {
+    jsnames: ['hw0c9'],
+    labels: ['microphone', 'mikrofon', 'micrófono', 'microfono', 'microfone', 'microfoon', 'micro'],
+    shortcutKey: 'd',
+  },
+  camera: {
+    jsnames: ['psRWwc'],
+    labels: ['camera', 'kamera', 'cámara', 'camara', 'caméra', 'câmera'],
+    shortcutKey: 'e',
+  },
+};
+
 function matchesAnyLabel(el, labels) {
   const label = (el.getAttribute('aria-label') || '').toLowerCase();
   if (!label) return false;
@@ -260,27 +284,69 @@ function findCaptionRoot() {
   return null;
 }
 
-/**
- * Split a caption root into `{ speaker, text, key }` blocks.
- *
- * Meet nests one element per speaker turn inside the root. Rather than naming those elements, we
- * take the root's direct children and read each one's first short line as the speaker and the rest
- * as speech — which is exactly how Meet lays a caption block out visually, and survives class
- * renames.
- */
-function readCaptionBlocks(root) {
+/** The direct children of `container` that parse as caption blocks. */
+function parseChildBlocks(container) {
   const blocks = [];
-  for (const child of root.children) {
+  for (const child of container.children || []) {
     const parsed = parseCaptionBlock(child);
     if (parsed) blocks.push({ element: child, ...parsed });
   }
-
-  // Some Meet builds put every turn one level deeper (the root is a scroll wrapper with a single
-  // child). Unwrap once when the direct-children read produced nothing usable.
-  if (blocks.length === 0 && root.children.length === 1) {
-    return readCaptionBlocks(root.children[0]);
-  }
   return blocks;
+}
+
+/** How many wrapper levels `findTurnBlocks` will look through before giving up. */
+const MAX_TURN_DESCENT = 4;
+
+/**
+ * Find the level of the caption tree whose children are the speaker turns, and read them.
+ * Returns `{ blocks, depth }` — `depth` is how many wrappers sat between `root` and the turns.
+ *
+ * Meet nests one element per speaker turn, but not always directly under the region a discovery
+ * rung lands on: the turns can sit inside a scroll wrapper (Meet keeps a long scrollback now).
+ * Read one level too high, that wrapper *looks* like a single valid turn — its first line is the
+ * oldest speaker's name and "the rest" is every turn in the buffer, later speakers' names
+ * included. The whole call is then attributed to whoever spoke first, and the stabilizer re-emits
+ * the buffer every time its front is trimmed. So a lone block is never trusted as a turn until we
+ * have looked inside it: when its own children read as turns (most of them carry a speaker line),
+ * those are the turns. A real lone turn does not pass that test — its children are a name and a
+ * body of speech, neither of which has a speaker line of its own.
+ */
+function findTurnBlocks(root) {
+  let container = root;
+  let blocks = parseChildBlocks(container);
+  let depth = 0;
+
+  while (depth < MAX_TURN_DESCENT) {
+    let wrapper = null;
+    if (blocks.length === 1) {
+      wrapper = blocks[0].element;
+    } else if (blocks.length === 0 && container.children && container.children.length === 1) {
+      // Nothing usable at this level and a single child: a bare scroll wrapper.
+      wrapper = container.children[0];
+    }
+    if (!wrapper || !wrapper.children || wrapper.children.length === 0) break;
+
+    const deeper = parseChildBlocks(wrapper);
+    if (blocks.length === 1) {
+      const named = deeper.filter((block) => block.speaker).length;
+      if (named === 0 || named * 2 < deeper.length) break; // a real turn, not a wrapper of turns
+    }
+    container = wrapper;
+    blocks = deeper;
+    depth += 1;
+  }
+  return { blocks, depth };
+}
+
+/**
+ * Split a caption root into `{ element, speaker, text }` blocks, one per speaker turn.
+ *
+ * Rather than naming Meet's turn elements, we find the level whose children are turns (see
+ * `findTurnBlocks`) and read each one's first short line as the speaker and the rest as speech —
+ * which is exactly how Meet lays a caption block out visually, and survives class renames.
+ */
+function readCaptionBlocks(root) {
+  return findTurnBlocks(root).blocks;
 }
 
 function parseCaptionBlock(element) {
@@ -344,6 +410,80 @@ function captionToggleState(toggle) {
   if (pressed === 'true' || pressed === 'mixed') return true;
   if (pressed === 'false') return false;
   return null;
+}
+
+/** Tri-state read of a mic/camera toggle: `true` = muted/off, `false` = live/on, `null` = unreadable. */
+function controlMutedState(el) {
+  const value = (el.getAttribute('data-is-muted') || '').toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
+/** Everything a control says about itself: its accessible name plus Meet's tooltip text. */
+function controlDescription(el) {
+  return `${el.getAttribute('aria-label') || ''} ${el.getAttribute('data-tooltip') || ''}`.toLowerCase();
+}
+
+/** "(⌘ + d)", "(Ctrl + D)" — the keyboard shortcut Meet prints after a control's name. */
+function mentionsShortcut(description, key) {
+  return new RegExp(`\\+\\s*${key}\\s*\\)`, 'i').test(description);
+}
+
+/**
+ * Find the user's own microphone (`'mic'`) or camera (`'camera'`) toggle. Returns
+ * `{ element, muted, disabled, via }` — `muted` is tri-state (see `controlMutedState`) — or `null`
+ * when no rung matched. Callers must treat `muted: null` as "unknown", never as either state.
+ */
+function findCallControl(kind) {
+  const spec = CALL_CONTROLS[kind];
+  if (!spec) return null;
+  const describe = (element, via) => ({
+    element,
+    muted: controlMutedState(element),
+    disabled:
+      element.getAttribute('disabled') !== null || element.getAttribute('aria-disabled') === 'true',
+    via,
+  });
+
+  for (const jsname of spec.jsnames) {
+    const el = document.querySelector(`[jsname="${jsname}"][data-is-muted]`);
+    if (el) return describe(el, `jsname:${jsname}`);
+  }
+
+  const toggles = Array.from(
+    document.querySelectorAll('button[data-is-muted], [role="button"][data-is-muted]')
+  );
+  for (const el of toggles) {
+    const description = controlDescription(el);
+    if (spec.labels.some((label) => description.includes(label))) return describe(el, 'aria-label');
+  }
+  for (const el of toggles) {
+    if (mentionsShortcut(controlDescription(el), spec.shortcutKey)) return describe(el, 'shortcut');
+  }
+  return null;
+}
+
+/**
+ * Diagnostic dump for when the mic toggle cannot be found or read — the call-control counterpart of
+ * `describeCandidates()`. Lists every toolbar-shaped control so `CALL_CONTROLS` can be repaired
+ * from one real call.
+ */
+function describeControlCandidates() {
+  const report = [];
+  for (const el of document.querySelectorAll(
+    '[data-is-muted], button[aria-label], [role="button"][aria-label]'
+  )) {
+    report.push({
+      tag: (el.tagName || '').toLowerCase(),
+      jsname: el.getAttribute('jsname'),
+      ariaLabel: el.getAttribute('aria-label'),
+      ariaPressed: el.getAttribute('aria-pressed'),
+      dataIsMuted: el.getAttribute('data-is-muted'),
+      dataTooltip: el.getAttribute('data-tooltip'),
+    });
+  }
+  return report.slice(0, 40);
 }
 
 /** The caption-settings entry point (door to the language picker), by the aria-label ladder. */
@@ -519,10 +659,13 @@ const TWSelectorsAPI = {
   findCaptionRoot,
   captionRegionsByLabel,
   readCaptionBlocks,
+  findTurnBlocks,
   parseCaptionBlock,
   captionsAppearActive,
   findCaptionToggle,
   captionToggleState,
+  findCallControl,
+  describeControlCandidates,
   findCaptionSettingsButton,
   collectLanguageOptions,
   matchLanguageOption,

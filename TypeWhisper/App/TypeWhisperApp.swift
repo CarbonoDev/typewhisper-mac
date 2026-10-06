@@ -743,6 +743,7 @@ final class ManagedAppWindowOpener {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
+    private var meetCallControlPanel: MeetCallControlPanelController?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
     private var dockIconBehaviorObserver: NSKeyValueObservation?
@@ -805,6 +806,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         let coordinator = IndicatorCoordinator()
         coordinator.startObserving()
         indicatorCoordinator = coordinator
+
+        let callControls = MeetCallControlPanelController(
+            service: ServiceContainer.shared.meetCallControlService,
+            isMeetingRunning: { ServiceContainer.shared.meetingPresenceService.now().in_meeting }
+        )
+        callControls.start()
+        meetCallControlPanel = callControls
 
         #if canImport(Translation)
         if #available(macOS 15, *), let ts = ServiceContainer.shared.translationService as? TranslationService {

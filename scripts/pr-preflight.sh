@@ -36,6 +36,25 @@ while IFS= read -r script_file; do
   bash -n "$script_file"
 done < <(git ls-files 'scripts/*.sh')
 
+log "checking the Meet Bridge extension version"
+if ! git diff --quiet "$base_ref"...HEAD -- chrome-extension/src chrome-extension/manifest.json; then
+  manifest_version() {
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])'
+  }
+  base_version="$(git show "$base_ref":chrome-extension/manifest.json 2>/dev/null | manifest_version 2>/dev/null || true)"
+  head_version="$(manifest_version < chrome-extension/manifest.json)"
+  if [[ -n "$base_version" && "$base_version" == "$head_version" ]]; then
+    log "error: chrome-extension/ changed but manifest.json is still at version $head_version"
+    log "hint: bump \"version\" in chrome-extension/manifest.json and MeetBridgeVersion.shipped together"
+    exit 1
+  fi
+  log "extension version $base_version -> $head_version"
+fi
+if command -v node >/dev/null 2>&1; then
+  log "running Meet Bridge extension tests"
+  node --test chrome-extension/test/*.test.js >/dev/null
+fi
+
 log "running Python script tests"
 python3 scripts/test_assemble_community_plugin_registry.py
 python3 scripts/test_plugin_registry_metadata.py

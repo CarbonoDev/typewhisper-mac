@@ -6,6 +6,9 @@
  * worker mid-call), plus two pieces of tightly bounded UI automation: the captions auto-enable
  * click and the one-shot caption-language steering. Both fail soft — a miss is logged and capture
  * carries on untouched.
+ *
+ * With `allowCallControl` on it also reports the user's own mic/camera state and clicks those two
+ * toggles when the app asks (the floating call controls). Nothing else in the call is ever clicked.
  */
 
 (() => {
@@ -27,6 +30,11 @@
   const LANG_ENTRY_SEARCH_TICKS = 20;
   const LANG_DIALOG_WAIT_TICKS = 5;
 
+  // Call controls: how long the mic toggle may stay unreadable before the diagnostic dump, and how
+  // long Meet gets to flip `data-is-muted` after a click before the new state is read back.
+  const CONTROLS_WARN_AFTER_TICKS = 15;
+  const CONTROL_SETTLE_MS = 150;
+
   // Messages that failed to reach the worker wait here until the next successful connect. Capped
   // for the same reason as the worker's MAX_BUFFER, and dropping from the *front* for the same
   // reason too: if the worker stays unreachable long enough to overflow this, the newest captions
@@ -41,6 +49,8 @@
   let observer = null;
   let stabilizer = null;
   let captionRoot = null;
+  /** How many wrappers sit between the caption root and the speaker turns; logged when it changes. */
+  let turnDepth = null;
   let pendingHeuristic = null; // { root, text } — heuristic roots must mutate before adoption
   let sessionKey = null;
   let sessionStartedAt = null;
@@ -51,6 +61,11 @@
   let autoEnableCaptions = true;
   let preferredCaptionLanguage = '';
   let hideCaptionOverlay = true;
+  let allowCallControl = true;
+  /** The last mic/camera state the worker was told, as a comparable string; `null` = tell it again. */
+  let lastControlsKey = null;
+  let controlMissTicks = 0;
+  let warnedAboutControls = false;
   let ccAttempts = 0;
   let lastCcAttemptAt = 0;
   // One-shot state machine for caption-language steering: idle → opened → selected → done, with
@@ -58,6 +73,8 @@
   let langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
 
   const log = (...args) => console.log('[tw-meet]', ...args);
+  // First line in the console: which build is actually running in this tab.
+  log(`Meet Bridge v${chrome.runtime.getManifest().version} loaded`);
 
   function connect() {
     try {
@@ -71,6 +88,7 @@
         log('meeting id', message.meetingId);
         adoptSessionStart(message.startedAt);
       }
+      if (message.type === 'command') runCommand(message.command);
       if (message.type === 'error') log('worker error:', message.message);
     });
     port.onDisconnect.addListener(() => {
@@ -90,6 +108,8 @@
       // outbox so the next connect still sends it first.
       if (!sendNow(start)) outbox.unshift(start);
     }
+    // A fresh port may mean a fresh worker, which has forgotten the mic/camera state.
+    lastControlsKey = null;
     drainOutbox();
   }
 
@@ -187,6 +207,9 @@
     ccAttempts = 0;
     lastCcAttemptAt = 0;
     langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
+    lastControlsKey = null;
+    controlMissTicks = 0;
+    warnedAboutControls = false;
     log('session started for call', sessionKey);
     connect();
     post({
@@ -229,6 +252,63 @@
     sendNow({ type: 'heartbeat', sessionKey, participants });
   }
 
+  /**
+   * Tell the worker (and through it the app) whether the user's mic and camera are on. Sent on
+   * change only; `force` re-reads right after one of our own clicks. Never queued for retry — a
+   * stale mute state is worse than none, and the next tick re-sends whatever is current.
+   */
+  function reportControls(force = false) {
+    if (!allowCallControl || !sessionKey) return;
+    const mic = TWSelectors.findCallControl('mic');
+    if (!mic || mic.muted === null) {
+      controlMissTicks += 1;
+      if (!warnedAboutControls && controlMissTicks >= CONTROLS_WARN_AFTER_TICKS) {
+        warnedAboutControls = true;
+        log(
+          'call controls: could not read the microphone toggle; the floating mute button stays hidden.',
+          'Candidate controls (repair CALL_CONTROLS in selectors.js from this):',
+          TWSelectors.describeControlCandidates()
+        );
+      }
+      return;
+    }
+    controlMissTicks = 0;
+    const camera = TWSelectors.findCallControl('camera');
+    const state = { micMuted: mic.muted, cameraOff: camera ? camera.muted : null };
+    const key = JSON.stringify(state);
+    if (!force && key === lastControlsKey) return;
+    if (!port) connect();
+    lastControlsKey = sendNow({ type: 'controls', sessionKey, ...state }) ? key : null;
+  }
+
+  /**
+   * Run a command from the app's floating call controls. Mic and camera commands name a target
+   * state, so the toggle is clicked only when Meet is not already there — a command that arrives
+   * twice, or after the user clicked in Meet themselves, does nothing.
+   */
+  function runCommand(command) {
+    if (!allowCallControl || !sessionKey || !command) return;
+    const kind = { set_mic: 'mic', set_camera: 'camera' }[command.action];
+    if (!kind) return;
+
+    const control = TWSelectors.findCallControl(kind);
+    if (!control || control.muted === null) {
+      log(`call controls: no readable ${kind} toggle for "${command.action}"; ignoring`);
+      return;
+    }
+    if (control.disabled) {
+      log(`call controls: the ${kind} toggle is disabled in Meet; ignoring "${command.action}"`);
+      return;
+    }
+    if (typeof command.muted !== 'boolean' || control.muted === command.muted) {
+      reportControls(true);
+      return;
+    }
+    log(`call controls: ${command.muted ? 'turning off' : 'turning on'} the ${kind}`);
+    control.element.click();
+    setTimeout(() => reportControls(true), CONTROL_SETTLE_MS);
+  }
+
   function attachObserver() {
     const found = TWSelectors.findCaptionRoot();
     if (!found) {
@@ -252,6 +332,7 @@
 
     observer?.disconnect();
     captionRoot = found.root;
+    turnDepth = null;
     observer = new MutationObserver(() => tick());
     observer.observe(captionRoot, { childList: true, subtree: true, characterData: true });
     log('attached to caption region via', found.via);
@@ -295,7 +376,11 @@
     // whenever it has been wiped (adoption of a rotated root re-applies it in attachObserver).
     if (hideCaptionOverlay && captionRoot.style.opacity !== '0') hideOverlay(captionRoot);
 
-    const blocks = TWSelectors.readCaptionBlocks(captionRoot);
+    const { blocks, depth } = TWSelectors.findTurnBlocks(captionRoot);
+    if (depth !== turnDepth) {
+      turnDepth = depth;
+      log(`reading ${blocks.length} caption turn(s), ${depth} level(s) below the caption region`);
+    }
     const segments = stabilizer.observe(blocks, Date.now());
     if (segments.length) {
       log(`+${segments.length} segment(s)`, segments.map((s) => `${s.speaker ?? '?'}: ${s.text}`));
@@ -452,6 +537,7 @@
       maybeAutoEnableCaptions();
       stepLanguageSteering();
       tick();
+      reportControls();
       maybeHeartbeat();
     } else if (sessionKey) {
       // Leaving must stick for a few ticks before we end the session: the leave-button probe can
@@ -473,12 +559,14 @@
       autoEnableCaptions: true,
       preferredCaptionLanguage: '',
       hideCaptionOverlay: true,
+      allowCallControl: true,
     })
     .then((settings) => {
       enabled = settings.enabled !== false;
       autoEnableCaptions = settings.autoEnableCaptions !== false;
       preferredCaptionLanguage = settings.preferredCaptionLanguage || '';
       hideCaptionOverlay = settings.hideCaptionOverlay !== false;
+      allowCallControl = settings.allowCallControl !== false;
       if (!enabled) {
         log('disabled in options; not observing');
         return;
@@ -510,6 +598,12 @@
       if (preferredCaptionLanguage) {
         log(`caption language preference changed to "${preferredCaptionLanguage}"`);
       }
+    }
+    if (changes.allowCallControl) {
+      allowCallControl = changes.allowCallControl.newValue !== false;
+      lastControlsKey = null;
+      // Turning it off mid-call tells the app at once, so the floating button goes away.
+      if (!allowCallControl && sessionKey) sendNow({ type: 'controls-off', sessionKey });
     }
     if (changes.hideCaptionOverlay) {
       hideCaptionOverlay = changes.hideCaptionOverlay.newValue !== false;

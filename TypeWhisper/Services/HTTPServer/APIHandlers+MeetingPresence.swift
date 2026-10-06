@@ -10,6 +10,7 @@ extension APIHandlers {
         router.register("GET", "/v1/meetings/now", requiresToken: true, handler: handleMeetingNow)
         router.register("GET", "/v1/meetings/sessions", requiresToken: true, handler: handleMeetingSessions)
         router.register("POST", "/v1/meetings/live/{id}/heartbeat", handler: handleLiveHeartbeat)
+        registerMeetCallControl(on: router)
     }
 
     private static var presenceUnavailable: HTTPResponse {

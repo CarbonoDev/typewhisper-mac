@@ -103,6 +103,32 @@ final class MeetingPresenceTests: XCTestCase {
         XCTAssertNil(result.seconds_since_spoke)
     }
 
+    func testNowCarriesTheBridgesMicAndCameraStateOnlyWhileInAMeeting() throws {
+        let id = UUID()
+        let controls = MeetCallControlState(micMuted: true, cameraOff: nil)
+        func project(active: Set<UUID>) -> MeetingPresenceNow {
+            MeetingPresenceProjector.now(
+                meetings: [facts(id: id, captions: true)],
+                live: MeetingPresenceLiveState(),
+                calendarEventNow: false,
+                isCaptionSessionActive: { active.contains($0) },
+                reportedParticipants: { _ in nil },
+                callControls: { $0 == id ? controls : nil }
+            )
+        }
+
+        let inCall = project(active: [id])
+        XCTAssertEqual(inCall.mic_muted, true)
+        XCTAssertNil(inCall.camera_off)
+        let encoder = JSONEncoder()
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(inCall)) as? [String: Any])
+        XCTAssertEqual(object["mic_muted"] as? Bool, true)
+        XCTAssertNil(object["camera_off"])
+
+        // Not in a meeting (the session went quiet): nothing about the microphone leaks out.
+        XCTAssertNil(project(active: []).mic_muted)
+    }
+
     func testCaptionSessionStillMarkedLiveButSilentIsNotInMeeting() {
         let result = now([facts(captions: true)], active: [])
         XCTAssertFalse(result.in_meeting)

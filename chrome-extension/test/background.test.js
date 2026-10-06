@@ -37,7 +37,7 @@ globalThis.chrome = {
     },
   },
   alarms: { create() {}, onAlarm: { addListener() {} } },
-  runtime: { onConnect: { addListener() {} } },
+  runtime: { onConnect: { addListener() {} }, getManifest: () => ({ version: '9.9.9' }) },
   action: { async setBadgeText() {}, async setBadgeBackgroundColor() {} },
 };
 
@@ -178,4 +178,88 @@ test('a failed heartbeat leaves the flush backoff and the meeting link alone', a
   assert.equal(bg.sessions.get(key).failures, 0);
   assert.equal(bg.sessions.get(key).nextAttemptAt, 0);
   assert.equal(bg.sessions.get(key).meetingId, 'meeting-1');
+});
+
+test('mic and camera state is reported in the wire shape, and withdrawn with an empty body', async () => {
+  const key = 'mic-ctrl-one';
+  await bg.enqueue(key, [segment('hello')]);
+  await bg.flush(key); // links the meeting
+  apiCalls = [];
+
+  await bg.reportControls(key, { micMuted: true, cameraOff: null });
+  assert.equal(apiCalls.length, 1);
+  assert.ok(apiCalls[0].url.endsWith('/v1/meetings/live/meeting-1/controls'));
+  // An unreadable camera is omitted rather than sent as a guess.
+  assert.deepEqual(apiCalls[0].body, { mic_muted: true });
+
+  await bg.reportControls(key, { micMuted: false, cameraOff: true });
+  assert.deepEqual(apiCalls[1].body, { mic_muted: false, camera_off: true });
+
+  // Call control switched off in the options: the app is told there is nothing to control.
+  await bg.reportControls(key, null);
+  assert.deepEqual(apiCalls[2].body, {});
+  assert.equal(bg.sessions.get(key).controls, null);
+
+  // The state is never persisted — the page re-announces it on every connect.
+  await bg.reportControls(key, { micMuted: true, cameraOff: false });
+  assert.equal(persisted(key).controls, undefined);
+});
+
+test('the command poll carries the current state and only runs for a linked, live, controllable call', async () => {
+  const key = 'mic-ctrl-two';
+  // Not linked to a meeting yet, and no state reported: nothing to poll for.
+  await bg.enqueue(key, []);
+  assert.equal(await bg.pollCommands(key), null);
+  await bg.reportControls(key, { micMuted: false, cameraOff: false });
+  assert.equal(await bg.pollCommands(key), null);
+  assert.equal(apiCalls.length, 0);
+
+  await bg.enqueue(key, [segment('hello')]);
+  await bg.flush(key);
+  apiCalls = [];
+
+  const commands = await bg.pollCommands(key);
+  assert.deepEqual(commands, []); // the stubbed app answers without a `commands` array
+  assert.ok(apiCalls[0].url.endsWith('/v1/meetings/live/meeting-1/commands/poll'));
+  assert.equal(apiCalls[0].body.mic_muted, false);
+  assert.equal(apiCalls[0].body.camera_off, false);
+  assert.ok(apiCalls[0].body.wait_seconds > 0 && apiCalls[0].body.wait_seconds < 30);
+
+  // Once the user has hung up, nothing keeps a request open against the finished call.
+  apiCalls = [];
+  bg.sessions.get(key).pendingEnd = { endedAt: '2026-08-12T10:00:00.000Z' };
+  assert.equal(await bg.pollCommands(key), null);
+  assert.equal(apiCalls.length, 0);
+});
+
+test('an unreachable app fails the command poll loudly so the loop can back off', async () => {
+  const key = 'mic-ctrl-thr';
+  await bg.enqueue(key, [segment('hello')]);
+  await bg.flush(key);
+  await bg.reportControls(key, { micMuted: true, cameraOff: null });
+
+  apiUp = false;
+  await assert.rejects(() => bg.pollCommands(key));
+});
+
+test('hello reports this build and remembers which one the app ships with', async () => {
+  await bg.hello();
+  assert.equal(apiCalls.length, 1);
+  assert.ok(apiCalls[0].url.endsWith('/v1/bridge/hello'));
+  assert.deepEqual(apiCalls[0].body, { version: '9.9.9' });
+  // The stubbed app names no version of its own.
+  assert.equal(storage.tw_app_status.expectedVersion, null);
+
+  // An unreachable (or too old) app must never break the session start that triggered it.
+  apiUp = false;
+  await bg.hello();
+});
+
+test('version comparison is numeric, so only an extension that is behind the app is told to reload', async () => {
+  const { isOlderVersion } = await import('../src/config.js');
+  assert.ok(isOlderVersion('0.9.1', '0.10.0'));
+  assert.ok(isOlderVersion('0.3', '0.3.1'));
+  assert.ok(!isOlderVersion('0.4.0', '0.4.0'));
+  // The app being behind this extension is not this extension's problem.
+  assert.ok(!isOlderVersion('0.4.0', '0.3.0'));
 });

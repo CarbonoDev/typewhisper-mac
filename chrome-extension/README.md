@@ -1,7 +1,8 @@
 # TypeWhisper Meet Bridge
 
 A Chrome MV3 extension that reads Google Meet's live captions and streams them into the TypeWhisper
-meetings app as **speaker-attributed transcript segments**.
+meetings app as **speaker-attributed transcript segments**. It also lets the app show a **floating
+mute button** for the call on your Mac (see [Call controls](#call-controls)).
 
 ## Why captions
 
@@ -38,6 +39,23 @@ either wrong shows up as `403`/`401` in the extension's console.
 
 The extension only ever talks to a loopback address; `config.js` hard-rejects any other host.
 
+## Which version is running
+
+Chrome runs the extension from whatever folder it was loaded from, and **Reload** re-reads that
+folder — so reloading after a change made in another checkout or worktree runs the old code again.
+To make that visible, the bridge carries a version and says it everywhere:
+
+- the popup and the options page show `Meet Bridge v<version>`;
+- the first `[tw-meet]` line in a Meet tab's console names the build running in that tab;
+- the app shows the connected version under Settings → Advanced → API Server, and flags a bridge
+  that is older than the one the app was built with (or one so old it does not report a version).
+
+`chrome://extensions` → **Details** shows the folder the extension is loaded from ("Source").
+
+**Every change to the extension bumps `version` in `manifest.json`**, together with
+`MeetBridgeVersion.shipped` in the app (a unit test fails when the two differ, and
+`scripts/pr-preflight.sh` fails when `chrome-extension/` changed without a bump).
+
 ## Options
 
 - **Capture captions on Google Meet** — master switch; off means nothing is observed or sent.
@@ -58,6 +76,27 @@ The extension only ever talks to a loopback address; `config.js` hard-rejects an
   designed to be repaired in `selectors.js` from one real call's console output — and gives up
   without touching capture.
 
+- **Let TypeWhisper mute and unmute me** (default on) — reports whether your own microphone and
+  camera are on and lets the app click those two toggles. Off means no state leaves the page and no
+  command is honored; the floating button disappears.
+
+## Call controls
+
+While you are in a call that the app counts as a meeting (someone else is there — the same rule as
+its presence API), the app shows a small floating button on your Mac — red when your
+microphone is muted, green when it is live — above every app and every Space, not just inside the
+browser. Click it to toggle the microphone; hover for the camera toggle and a "return to call"
+button that brings the Meet tab back to the front; drag it anywhere (the position is remembered).
+Turn it off in the app under Settings → Advanced → API Server → **Floating call controls for Google
+Meet**, or here with the option above.
+
+Meet has no API for this, so the extension reads the state from Meet's own mic/camera buttons
+(their `data-is-muted` attribute) and clicks those same buttons. The app cannot push to an
+extension, so commands travel as the answer to a **long-poll**: the worker keeps one request to the
+app open for the life of the call, the app answers it the moment you click, and the worker asks
+again. Commands name a target state ("microphone: muted") rather than "toggle", so one that arrives
+late or twice never flips the wrong way.
+
 ## How it works
 
 ```
@@ -69,14 +108,18 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   legacy class names → a structural heuristic. Meet's class names rotate, so no single rung is
   load-bearing. When every rung fails, `describeCandidates()` dumps the caption-shaped subtrees to
   the console so the ladder can be repaired from one real call. **This is the file that needs
-  editing when Meet changes.**
+  editing when Meet changes.** Once a region is found, `findTurnBlocks()` locates the level whose
+  children are the speaker turns: Meet can nest them inside a scroll wrapper, and a wrapper read
+  as a turn attributes the whole call to whoever spoke first. The console line
+  `reading N caption turn(s), D level(s) below the caption region` says what it settled on.
 - **`stabilizer.js`** — Meet captions are a rolling revision buffer, not finished lines: text grows,
   the tail gets rewritten, blocks get evicted. The stabilizer exploits the fact that revisions only
   touch the tail — it emits a settled *prefix* once enough text accumulates (never cutting inside a
   ~90-character guard, preferring sentence boundaries), and finalizes a block when it goes idle or
   leaves the DOM. Covered by `test/stabilizer.test.js`.
-- **`content.js`** — observation, port lifetime, and two bounded pieces of UI automation (the
-  captions auto-enable click and the one-shot language steering, both fail-soft). It does no
+- **`content.js`** — observation, port lifetime, two bounded pieces of UI automation (the
+  captions auto-enable click and the one-shot language steering, both fail-soft), and the call
+  controls: it reports mic/camera state on change and clicks those toggles on command. It does no
   fetching: a content script runs in the page's origin and would be CORS-blocked, and it would also
   expose the API token to the page.
 - **Noise filtering** — the lobby ("Ready to join?") shares the call's URL path, so capture waits for
@@ -87,7 +130,8 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   speaker slot, and tiles that echo a participant's name. Covered by `test/selectors.test.js`.
 - **`background.js`** — all networking. The meeting id and unsent buffer are mirrored to
   `chrome.storage.local` on every change, because MV3 evicts the worker aggressively. On wake it
-  re-posts the same `session_key` and the app returns the same meeting.
+  re-posts the same `session_key` and the app returns the same meeting. It also runs the call's
+  command long-poll (one loop per call, in memory only) and hands each command to the page.
 
 ## API surface it uses
 
@@ -97,6 +141,9 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
 | `POST /v1/meetings/live/{id}/segments` | Append a batch of caption turns. |
 | `POST /v1/meetings/live/{id}/end` | Close the session. Deliberately does **not** trigger summarization. |
 | `POST /v1/meetings/live/{id}/heartbeat` | Keep-alive, once a minute while someone else is in the call. Body: `{"participants": 3}` (omitted when the head count cannot be read). |
+| `POST /v1/meetings/live/{id}/controls` | Your mic/camera state changed. Body: `{"mic_muted": true, "camera_off": false}` (`camera_off` omitted when unreadable; an empty body withdraws the call from control). |
+| `POST /v1/meetings/live/{id}/commands/poll` | Long-poll for the floating controls' commands. Body: `{"wait_seconds": 20, "mic_muted": …, "camera_off": …}`; answers `{"commands": [{"id": "…", "action": "set_mic", "muted": true}]}` — actions `set_mic`, `set_camera`, `focus` — or an empty list when the wait runs out. |
+| `POST /v1/bridge/hello` | Says which build this is, on every connect and from **Test connection**. Body: `{"version": "0.3.0"}`; answers `{"expected_version": "…"}`, the version the app ships with. |
 
 The heartbeat exists for the app's presence API (`GET /v1/meetings/now`): a caption session only
 counts as "in a meeting" while the app has heard from it in the last five minutes — a caption batch
@@ -122,8 +169,9 @@ node --test chrome-extension/test/*.test.js
 ```
 
 Covered: the stabilizer's revision/reset rules, the DOM-discovery ladder (over a small fake
-`document` installed by the test), the language matcher, and the service worker's queueing rules —
-buffering, retry backoff, and the retried `/end` — over a fake `chrome.storage`.
+`document` installed by the test) including the mic/camera toggles, the language matcher, and the
+service worker's queueing rules — buffering, retry backoff, the retried `/end`, and the call-control
+report and poll — over a fake `chrome.storage`.
 
 ## Known limits
 
@@ -136,6 +184,11 @@ buffering, retry backoff, and the retried `/end` — over a fake `chrome.storage
 - **Overlapping speech collapses** to a single speaker — pyannote is genuinely better at crosstalk.
 - **Display name only.** Captions carry no email. Matching names to `PersonIdentity` via the calendar
   event's attendees is not wired up yet.
+- **Call controls depend on Meet's toolbar.** The mic/camera toggles are found by `jsname`, then by
+  localized label, then by their keyboard-shortcut hint, and their state is read from
+  `data-is-muted`. When none of that matches, the floating button simply never appears and the
+  console gets a `[tw-meet]` dump of the candidate controls to repair `CALL_CONTROLS` from. With
+  two calls open, the button follows the one joined last.
 - **Timestamps are estimates.** Captions trail speech by ~1–2s (`captionLagMs`, default 1200). This
   is fine because downstream speaker transfer is text-anchored, not time-anchored.
 

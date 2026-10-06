@@ -37,7 +37,10 @@
   </head>
   <body>
     <h1>TypeWhisper Meet Bridge</h1>
-    <p class="sub">Streams speaker-attributed Google Meet captions into the TypeWhisper meetings app.</p>
+    <p class="sub">
+      Streams speaker-attributed Google Meet captions into the TypeWhisper meetings app.
+      <span id="version"></span>
+    </p>
 
     <div class="row">
       <input type="checkbox" id="enabled" />
@@ -55,6 +58,15 @@
       <label for="hideCaptionOverlay" style="margin: 0">Hide Meet's caption overlay</label>
     </div>
     <div class="hint">Captions are still read for the transcript; they just stop covering the screen.</div>
+
+    <div class="row">
+      <input type="checkbox" id="allowCallControl" />
+      <label for="allowCallControl" style="margin: 0">Let TypeWhisper mute and unmute me</label>
+    </div>
+    <div class="hint">
+      Shows a floating mute button on your Mac during a call. The app sees whether your microphone
+      and camera are on, and can click those two buttons &mdash; nothing else in the call.
+    </div>
 
     <label for="preferredCaptionLanguage">Caption language</label>
     <select id="preferredCaptionLanguage">

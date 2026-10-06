@@ -51,6 +51,10 @@ struct MeetingPresenceNow: Encodable, Equatable, Sendable {
     var recurring: Bool?
     var speaking: Bool?
     var seconds_since_spoke: Int?
+    /// The user's own microphone and camera in the call, as the Meet bridge reads them off Meet's
+    /// toolbar. Only known for a Meet call the bridge is attached to.
+    var mic_muted: Bool?
+    var camera_off: Bool?
     /// A calendar event with a join link is running right now. A weak hint that stands apart from
     /// `in_meeting`: it says a meeting is *scheduled*, not that the user is in it.
     var calendar_event_now: Bool
@@ -172,7 +176,8 @@ enum MeetingPresenceProjector {
         live: MeetingPresenceLiveState,
         calendarEventNow: Bool,
         isCaptionSessionActive: (UUID) -> Bool,
-        reportedParticipants: (UUID) -> Int?
+        reportedParticipants: (UUID) -> Int?,
+        callControls: (UUID) -> MeetCallControlState? = { _ in nil }
     ) -> MeetingPresenceNow {
         guard let (facts, detection) = current(
             meetings: meetings,
@@ -182,6 +187,7 @@ enum MeetingPresenceProjector {
             return MeetingPresenceNow(in_meeting: false, calendar_event_now: calendarEventNow)
         }
         let isCapture = detection == .capture
+        let controls = callControls(facts.id)
         return MeetingPresenceNow(
             in_meeting: true,
             meeting_id: facts.id.uuidString,
@@ -195,6 +201,8 @@ enum MeetingPresenceProjector {
             // no live notion of who is talking.
             speaking: isCapture ? live.speaking : nil,
             seconds_since_spoke: isCapture ? live.secondsSinceSpoke : nil,
+            mic_muted: controls?.micMuted,
+            camera_off: controls?.cameraOff,
             calendar_event_now: calendarEventNow
         )
     }

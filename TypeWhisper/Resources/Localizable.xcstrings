@@ -7001,6 +7001,16 @@
         }
       }
     },
+    "Floating call controls for Google Meet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schwebende Anrufsteuerung für Google Meet"
+          }
+        }
+      }
+    },
     "Fn will be set automatically when you continue.": {
       "localizations": {
         "ja": {
@@ -9551,6 +9561,46 @@
         }
       }
     },
+    "Meet Bridge extension: an older version is connected that does not report its version. This build ships %@ — reload the extension on chrome://extensions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet-Bridge-Erweiterung: Eine ältere Version ist verbunden, die ihre Version nicht meldet. Dieser Build enthält %@ – lade die Erweiterung unter chrome://extensions neu."
+          }
+        }
+      }
+    },
+    "Meet Bridge extension: not connected since the app started.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet-Bridge-Erweiterung: seit dem App-Start nicht verbunden."
+          }
+        }
+      }
+    },
+    "Meet Bridge extension: version %1$@ is connected, but this build ships %2$@ — reload the extension on chrome://extensions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet-Bridge-Erweiterung: Version %1$@ ist verbunden, dieser Build enthält aber %2$@ – lade die Erweiterung unter chrome://extensions neu."
+          }
+        }
+      }
+    },
+    "Meet Bridge extension: version %@ is connected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meet-Bridge-Erweiterung: Version %@ ist verbunden."
+          }
+        }
+      }
+    },
     "Meeting Notes": {
       "localizations": {
         "ja": {
@@ -10076,6 +10126,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "多言語"
+          }
+        }
+      }
+    },
+    "Mute microphone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon stummschalten"
           }
         }
       }
@@ -14552,6 +14612,16 @@
         }
       }
     },
+    "Return to call": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Anruf"
+          }
+        }
+      }
+    },
     "Review": {
       "localizations": {
         "ja": {
@@ -16532,6 +16602,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "TTS"
+          }
+        }
+      }
+    },
+    "Turn camera off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera ausschalten"
+          }
+        }
+      }
+    },
+    "Turn camera on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera einschalten"
           }
         }
       }
@@ -18753,6 +18843,16 @@
         }
       }
     },
+    "Unmute microphone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stummschaltung des Mikrofons aufheben"
+          }
+        }
+      }
+    },
     "URL Patterns": {
       "extractionState": "stale",
       "localizations": {
@@ -19851,6 +19951,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "翻訳後に出力される言語。"
+          }
+        }
+      }
+    },
+    "While the Meet Bridge extension is in a call, a small floating button shows whether your microphone is muted and toggles it from any app. Hover over it for the camera and a shortcut back to the call; drag it wherever you like.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Während die Meet-Bridge-Erweiterung in einem Anruf ist, zeigt eine kleine schwebende Schaltfläche, ob dein Mikrofon stummgeschaltet ist, und schaltet es aus jeder App um. Bewege den Mauszeiger darüber, um die Kamera und einen Schnellzugriff zurück zum Anruf zu sehen; ziehe sie an eine beliebige Stelle."
           }
         }
       }

@@ -208,6 +208,51 @@ final class MeetingCaptureServiceTests: XCTestCase {
         XCTAssertTrue(reopened.recoverInterruptedMeetings().isEmpty)
     }
 
+    /// A caption session is captured by the bridge in the browser, not by the app: relaunching the
+    /// app mid-call must leave it `.live`, or presence (and the floating call controls) would
+    /// count the user as out of the meeting until they hang up.
+    func testRecoverInterruptedMeetingsLeavesALiveCaptionSessionAlone() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        do {
+            let service = MeetingService(appSupportDirectory: dir)
+            let call = service.createMeeting(title: "Meet call", source: .adHoc, state: .live)
+            service.setExternalSessionKey("abc-defg-hij", for: call)
+            service.createMeeting(title: "Crashed recording", source: .adHoc, state: .live)
+        }
+
+        let reopened = MeetingService(appSupportDirectory: dir)
+        let recovered = reopened.recoverInterruptedMeetings()
+        XCTAssertEqual(recovered.map(\.title), ["Crashed recording"])
+
+        let call = try XCTUnwrap(reopened.meetings.first { $0.externalSessionKey == "abc-defg-hij" })
+        XCTAssertEqual(call.state, .live)
+        let recording = try XCTUnwrap(reopened.meetings.first { $0.title == "Crashed recording" })
+        XCTAssertEqual(recording.state, .interrupted)
+    }
+
+    func testAnInterruptedCaptionSessionIsLiveAgainOnceItsBridgeIsHeardFrom() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let service = MeetingService(appSupportDirectory: dir)
+
+        let call = service.createMeeting(title: "Meet call", source: .adHoc, state: .interrupted)
+        service.setExternalSessionKey("abc-defg-hij", for: call)
+        let recording = service.createMeeting(title: "Crashed recording", source: .adHoc, state: .interrupted)
+        let finished = service.createMeeting(title: "Finished call", source: .adHoc, state: .completed)
+        service.setExternalSessionKey("xyz-abcd-efg", for: finished)
+
+        XCTAssertTrue(service.resumeInterruptedCaptionSession(id: call.id))
+        XCTAssertEqual(call.state, .live)
+        // Only a caption session comes back, and never one that already ended.
+        XCTAssertFalse(service.resumeInterruptedCaptionSession(id: recording.id))
+        XCTAssertEqual(recording.state, .interrupted)
+        XCTAssertFalse(service.resumeInterruptedCaptionSession(id: finished.id))
+        XCTAssertEqual(finished.state, .completed)
+        XCTAssertFalse(service.resumeInterruptedCaptionSession(id: UUID()))
+    }
+
     // MARK: - Mutual exclusion (captureOwner) in both directions
 
     func testMeetingCaptureRefusesWhenRecorderOwnsCaptureStack() async throws {

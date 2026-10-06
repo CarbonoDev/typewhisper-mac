@@ -14,6 +14,9 @@ final class MeetingPresenceService {
     private let meetingService: MeetingService
     private let captureService: MeetingCaptureService
     private let calendarService: CalendarService?
+    /// The Meet call controls. Held here because presence already hears about every sign of life
+    /// from a caption session, so the live routes reach both through one reference.
+    let callControl: MeetCallControlService?
     private let clock: () -> Date
 
     private var liveSessions = LiveSessionActivityRegistry()
@@ -26,11 +29,13 @@ final class MeetingPresenceService {
         captureService: MeetingCaptureService,
         audioRecorderService: AudioRecorderService,
         calendarService: CalendarService?,
+        callControl: MeetCallControlService? = nil,
         clock: @escaping () -> Date = Date.init
     ) {
         self.meetingService = meetingService
         self.captureService = captureService
         self.calendarService = calendarService
+        self.callControl = callControl
         self.clock = clock
 
         // The recorder is shared with the standalone Recorder, so its levels only mean "the user is
@@ -64,10 +69,14 @@ final class MeetingPresenceService {
     /// bridge sent a heartbeat. `participants` is the bridge's head count when it could read one.
     func noteLiveSessionActivity(meetingID: UUID, participants: Int? = nil) {
         liveSessions.touch(meetingID, at: clock(), participants: participants)
+        callControl?.noteBridgeActivity()
+        // The store write itself stays with the meeting service, the aggregate's single writer.
+        meetingService.resumeInterruptedCaptionSession(id: meetingID)
     }
 
     func endLiveSession(meetingID: UUID) {
         liveSessions.remove(meetingID)
+        callControl?.end(meetingID: meetingID)
     }
 
     // MARK: - Queries
@@ -90,7 +99,8 @@ final class MeetingPresenceService {
             live: live,
             calendarEventNow: calendarEventNow(at: date),
             isCaptionSessionActive: { [liveSessions] in liveSessions.isActive($0, at: date) },
-            reportedParticipants: { [liveSessions] in liveSessions.participants(for: $0, at: date) }
+            reportedParticipants: { [liveSessions] in liveSessions.participants(for: $0, at: date) },
+            callControls: { [callControl] in callControl?.state(preferring: $0) }
         )
     }
 

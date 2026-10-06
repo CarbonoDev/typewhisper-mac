@@ -10,6 +10,9 @@ const {
   inActiveCall,
   readCallCode,
   readParticipantCount,
+  findCallControl,
+  readCaptionBlocks,
+  findTurnBlocks,
 } = require('../src/selectors.js');
 
 /** parseCaptionBlock only reads `innerText`, so a plain object stands in for the element. */
@@ -231,4 +234,137 @@ test('an unreadable participant count is null, never zero', () => {
   } finally {
     restore();
   }
+});
+
+/** A toolbar toggle as Meet renders it. */
+const toggle = (attrs) => new FakeEl({ tag: 'button', attrs });
+
+test('the mic and camera toggles are found by jsname and read from data-is-muted', () => {
+  const restore = installDom([
+    toggle({ jsname: 'hw0c9', 'data-is-muted': 'true', 'aria-label': 'Whatever Meet calls it' }),
+    toggle({ jsname: 'psRWwc', 'data-is-muted': 'false', 'aria-label': 'Whatever Meet calls it' }),
+  ]);
+  try {
+    const mic = findCallControl('mic');
+    assert.equal(mic.muted, true);
+    assert.equal(mic.via, 'jsname:hw0c9');
+    const camera = findCallControl('camera');
+    assert.equal(camera.muted, false);
+    assert.equal(camera.disabled, false);
+  } finally {
+    restore();
+  }
+});
+
+test('with rotated jsnames the toggles are told apart by their localized labels', () => {
+  const restore = installDom([
+    toggle({ 'aria-label': 'Leave call' }),
+    toggle({ jsname: 'zzz1', 'data-is-muted': 'false', 'aria-label': 'Kamera ausschalten' }),
+    toggle({ jsname: 'zzz2', 'data-is-muted': 'true', 'aria-label': 'Mikrofon einschalten' }),
+  ]);
+  try {
+    const mic = findCallControl('mic');
+    assert.equal(mic.via, 'aria-label');
+    assert.equal(mic.muted, true);
+    assert.equal(findCallControl('camera').muted, false);
+  } finally {
+    restore();
+  }
+});
+
+test('in an unlisted locale the keyboard-shortcut hint still tells mic from camera', () => {
+  const restore = installDom([
+    toggle({ 'data-is-muted': 'false', 'aria-label': 'Wyłącz kamerę', 'data-tooltip': 'Wyłącz kamerę (⌘ + e)' }),
+    toggle({ 'data-is-muted': 'false', 'aria-label': 'Wycisz', 'data-tooltip': 'Wycisz (⌘ + d)' }),
+  ]);
+  try {
+    const mic = findCallControl('mic');
+    assert.equal(mic.via, 'shortcut');
+    assert.equal(mic.element.getAttribute('aria-label'), 'Wycisz');
+    assert.equal(findCallControl('camera').element.getAttribute('aria-label'), 'Wyłącz kamerę');
+  } finally {
+    restore();
+  }
+});
+
+test('a mic button without a readable state is unknown, and a labelled non-toggle is not the mic', () => {
+  const restore = installDom([
+    // A device picker named after the microphone, but not a mute toggle.
+    toggle({ 'aria-label': 'Microphone: MacBook Pro Microphone' }),
+    toggle({ 'data-is-muted': 'maybe', 'aria-label': 'Turn off microphone', 'aria-disabled': 'true' }),
+  ]);
+  try {
+    const mic = findCallControl('mic');
+    assert.equal(mic.muted, null);
+    assert.equal(mic.disabled, true);
+    assert.equal(findCallControl('camera'), null);
+    assert.equal(findCallControl('speaker'), null);
+  } finally {
+    restore();
+  }
+});
+
+/** A speaker turn as Meet renders it: a name element and a body of speech. */
+const turn = (name, speech) =>
+  new FakeEl({ children: [new FakeEl({ innerText: name }), new FakeEl({ innerText: speech })] });
+
+test('turns directly under the caption root are read one block per speaker', () => {
+  const root = new FakeEl({
+    children: [turn('Ana García', 'we should ship it'), turn('Ben Ortiz', 'agreed, today')],
+  });
+  const { blocks, depth } = findTurnBlocks(root);
+  assert.equal(depth, 0);
+  assert.deepEqual(
+    blocks.map(({ speaker, text }) => ({ speaker, text })),
+    [
+      { speaker: 'Ana García', text: 'we should ship it' },
+      { speaker: 'Ben Ortiz', text: 'agreed, today' },
+    ]
+  );
+});
+
+test('turns inside a scroll wrapper are not collapsed into one block under the first speaker', () => {
+  // The regression: read one level too high, the wrapper parses as a single "turn" whose speaker
+  // is the oldest name in the buffer and whose text swallows every later speaker's name.
+  const turns = [
+    turn('Juan Carlos Sánchez', 'vamos con el reporte semanal'),
+    turn('Sergio Murillo', 'sí se ve, creo que sí'),
+    turn('Víctor Ayala', 'una observación'),
+  ];
+  const root = new FakeEl({ children: [new FakeEl({ children: turns })] });
+
+  const blocks = readCaptionBlocks(root);
+  assert.deepEqual(
+    blocks.map((block) => block.speaker),
+    ['Juan Carlos Sánchez', 'Sergio Murillo', 'Víctor Ayala']
+  );
+  assert.equal(blocks[1].text, 'sí se ve, creo que sí');
+  // The stabilizer keys its state on the element, so it must be the turn, not the wrapper.
+  assert.equal(blocks[2].element, turns[2]);
+  assert.equal(findTurnBlocks(root).depth, 1);
+});
+
+test('a wrapper holding a single turn still reads as that turn, and a lone turn is not split', () => {
+  const only = turn('Ana García', 'we should ship it');
+  const wrapped = new FakeEl({ children: [new FakeEl({ children: [new FakeEl({ children: [only] })] })] });
+  const found = findTurnBlocks(wrapped);
+  assert.equal(found.depth, 2);
+  assert.equal(found.blocks.length, 1);
+  assert.equal(found.blocks[0].element, only);
+  assert.equal(found.blocks[0].speaker, 'Ana García');
+
+  // Directly under the root: its own children (a name, a body) are not turns.
+  const direct = findTurnBlocks(new FakeEl({ children: [only] }));
+  assert.equal(direct.depth, 0);
+  assert.equal(direct.blocks[0].element, only);
+});
+
+test('a non-turn control beside the turns does not stop the wrapper from being opened', () => {
+  const turns = [turn('Ana García', 'we should ship it'), turn('Ben Ortiz', 'agreed, today')];
+  const wrapper = new FakeEl({ children: [...turns, new FakeEl({ innerText: 'Jump to bottom' })] });
+  const blocks = readCaptionBlocks(new FakeEl({ children: [wrapper] }));
+  assert.deepEqual(
+    blocks.filter((block) => block.speaker).map((block) => block.speaker),
+    ['Ana García', 'Ben Ortiz']
+  );
 });

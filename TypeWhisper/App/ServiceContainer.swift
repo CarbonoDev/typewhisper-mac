@@ -68,6 +68,7 @@ final class ServiceContainer: ObservableObject {
     let gmailContextService: GmailContextService
     let meetingCaptureService: MeetingCaptureService
     let meetingPresenceService: MeetingPresenceService
+    let meetCallControlService: MeetCallControlService
     // [Track C] Capture-context rules (addendum AD7) in an isolated `meeting-rules.store`.
     let meetingContextRuleService: MeetingContextRuleService
     let meetingStartNotificationService: MeetingStartNotificationService
@@ -497,11 +498,13 @@ final class ServiceContainer: ObservableObject {
         )
 
 
+        meetCallControlService = MeetCallControlService()
         meetingPresenceService = MeetingPresenceService(
             meetingService: meetingService,
             captureService: meetingCaptureService,
             audioRecorderService: audioRecorderService,
-            calendarService: calendarService
+            calendarService: calendarService,
+            callControl: meetCallControlService
         )
 
         // HTTP API

@@ -1,8 +1,20 @@
-import { getSettings, setSettings } from './config.js';
+import { getSettings, setSettings, isOlderVersion } from './config.js';
 
 const STORAGE_KEY = 'tw_sessions';
 
+/** Which build this is, and whether the app ships a different one (see `hello` in background.js). */
+async function renderVersion() {
+  const mine = chrome.runtime.getManifest().version;
+  const stored = await chrome.storage.local.get('tw_app_status');
+  const expected = stored.tw_app_status?.expectedVersion;
+  document.getElementById('version').textContent =
+    expected && isOlderVersion(mine, expected)
+      ? `Meet Bridge v${mine} — the app ships v${expected}; reload this extension.`
+      : `Meet Bridge v${mine}`;
+}
+
 async function render() {
+  renderVersion();
   const settings = await getSettings();
   document.getElementById('enabled').checked = settings.enabled;
 

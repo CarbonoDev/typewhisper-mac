@@ -17,6 +17,7 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
+    @ObservedObject private var meetCallControl = ServiceContainer.shared.meetCallControlService
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
@@ -42,6 +43,7 @@ struct AdvancedSettingsView: View {
     // Track A owns the key + launch wiring (D2); Track D renders this toggle in the Application
     // group. Registered default is ON (`AppDelegate.registerDefaultUserDefaults`).
     @AppStorage(UserDefaultsKeys.showMainWindowAtLaunch) private var showMainWindowAtLaunch: Bool = true
+    @AppStorage(MeetCallControlPanelController.enabledDefaultsKey) private var meetCallControlFloatingEnabled: Bool = true
 
     var body: some View {
         Form {
@@ -489,6 +491,15 @@ struct AdvancedSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    MeetBridgeStatusLabel(status: meetCallControl.bridgeStatus)
+                }
+
+                Toggle(isOn: $meetCallControlFloatingEnabled) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Floating call controls for Google Meet"),
+                        info: String(localized: "While the Meet Bridge extension is in a call, a small floating button shows whether your microphone is muted and toggles it from any app. Hover over it for the camera and a shortcut back to the call; drag it wherever you like.")
+                    )
                 }
 
                 if viewModel.isEnabled {

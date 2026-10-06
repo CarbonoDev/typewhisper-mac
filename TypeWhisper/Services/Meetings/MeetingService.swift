@@ -1501,8 +1501,12 @@ final class MeetingService: ObservableObject {
         // Both `.live` (never reached stop) and `.processing` (crashed during stop()'s finalize
         // window — state is set to `.processing` before several awaits, incl. a potentially long
         // final transcription) are stuck states with no other exit on relaunch. Recover both; the
-        // persisted live segments remain visible either way.
-        let interrupted = meetings.filter { $0.state == .live || $0.state == .processing }
+        // persisted live segments remain visible either way. A `.live` caption session is not ours
+        // to interrupt: the bridge in the browser is what captures it, and it outlives an app
+        // relaunch — its own end message (or the next call under the same code) closes it.
+        let interrupted = meetings.filter {
+            ($0.state == .live && $0.externalSessionKey == nil) || $0.state == .processing
+        }
         guard !interrupted.isEmpty else { return [] }
         for meeting in interrupted {
             meeting.state = .interrupted

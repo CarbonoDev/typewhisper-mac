@@ -78,6 +78,8 @@ No meeting: `{"schema": 1, "in_meeting": false, "calendar_event_now": false}`.
 | `recurring` | when scheduled | The event belongs to a series. |
 | `speaking` | `detected_by: capture` only | New: microphone level above a threshold, with a short hangover. See §4. |
 | `seconds_since_spoke` | `detected_by: capture` only | New, from the same tracker. Omitted until the user has spoken once. |
+| `mic_muted` | Meet call with the bridge attached | Added 2026-10-06 (additive, `schema` stays `1`): the user's own microphone as the Chrome bridge reads it off Meet's toolbar (`MeetCallControlService`). Omitted when the bridge is not in the call, has call control switched off, or has not been heard from for 45 s. |
+| `camera_off` | same, when readable | Added 2026-10-06, same source. Omitted when the camera toggle cannot be read. |
 | `calendar_event_now` | always | A timed calendar event with a join link is running right now. A weak hint, independent of `in_meeting`: it says a meeting is *scheduled*, not that the user joined it. |
 
 ### `GET /v1/meetings/sessions?since=<ISO 8601>[&until=<ISO 8601>][&limit=<n>]`

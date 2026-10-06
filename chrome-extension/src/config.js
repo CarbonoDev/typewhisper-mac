@@ -23,6 +23,11 @@ export const DEFAULT_SETTINGS = {
    * would break `innerText`-based parsing (see the comment in content.js).
    */
   hideCaptionOverlay: true,
+  /**
+   * Report the user's own mic/camera state to the app and click those two toggles when the app's
+   * floating call controls ask. Off means no state leaves the page and no command is honored.
+   */
+  allowCallControl: true,
 };
 
 // NOTE: content.js is a classic (non-module) content script and cannot import this file; it reads
@@ -48,4 +53,21 @@ export function isLoopbackUrl(value) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Numeric comparison of dotted versions ("0.10.0" is newer than "0.9.1"). Used to tell "this
+ * extension is behind the app" (reload it) from "the app is behind this extension" (nothing to do
+ * here).
+ */
+export function isOlderVersion(version, other) {
+  const parts = (value) => String(value || '').split('.').map((part) => parseInt(part, 10) || 0);
+  const a = parts(version);
+  const b = parts(other);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const left = a[i] || 0;
+    const right = b[i] || 0;
+    if (left !== right) return left < right;
+  }
+  return false;
 }

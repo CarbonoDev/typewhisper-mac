@@ -16,10 +16,20 @@
 import { getSettings, isLoopbackUrl } from './config.js';
 
 const STORAGE_KEY = 'tw_sessions';
+/** What the app last said about itself (the bridge version it ships with), for the popup. */
+const APP_STATUS_KEY = 'tw_app_status';
+/** This build of the bridge. Chrome runs whatever folder it was loaded from, so it says so. */
+const BRIDGE_VERSION = chrome.runtime.getManifest?.().version || 'dev';
 const FLUSH_INTERVAL_MS = 4000;
 const FLUSH_AT_COUNT = 20;
 const MAX_BUFFER = 2000;
 const MAX_BACKOFF_MS = 60_000;
+// How long the app may hold a command poll open. Chrome kills a worker whose fetch takes 30 s to
+// answer, so this stays well under that.
+const COMMAND_POLL_WAIT_S = 20;
+// How long a command waits for the page's port to come back (it is recycled every few minutes).
+const COMMAND_DELIVERY_RETRIES = 10;
+const COMMAND_DELIVERY_RETRY_MS = 300;
 
 /**
  * @typedef {object} Session
@@ -32,6 +42,8 @@ const MAX_BACKOFF_MS = 60_000;
  * @property {number} nextAttemptAt    epoch ms before which the alarm skips this session
  * @property {boolean} flushing        per-worker lock; deliberately never persisted
  * @property {{endedAt: string}|null} pendingEnd  hang-up recorded but `/end` not yet accepted
+ * @property {{micMuted: boolean, cameraOff: boolean|null}|null} [controls]  the user's mic/camera
+ *   state as last read by the page; in memory only — the page re-announces it on every connect
  */
 /** @type {Map<string, Session>} */
 let sessions = new Map();
@@ -271,6 +283,145 @@ async function heartbeat(sessionKey, participants) {
   }
 }
 
+/**
+ * Tell the app which build of the bridge this is, and remember which one the app ships with — so
+ * the app's Settings and this extension's popup can both say when the loaded code is stale.
+ * Fire-and-forget: an app build that predates the route answers 404 and nothing depends on it.
+ */
+async function hello() {
+  try {
+    const result = await apiFetch('/v1/bridge/hello', { version: BRIDGE_VERSION });
+    await chrome.storage.local.set({
+      [APP_STATUS_KEY]: { expectedVersion: result?.expected_version || null, checkedAt: Date.now() },
+    });
+  } catch {
+    // Unreachable or too old to answer; the flush path reports real connection trouble.
+  }
+}
+
+/** The wire shape of the mic/camera state, shared by the report and the poll. */
+function controlsBody(controls) {
+  if (!controls) return {};
+  const body = { mic_muted: controls.micMuted };
+  if (typeof controls.cameraOff === 'boolean') body.camera_off = controls.cameraOff;
+  return body;
+}
+
+/**
+ * Tell the app the user's mic/camera state (`controls`), or that this call can no longer be
+ * controlled (`null`). Fire-and-forget like the heartbeat: the command poll re-asserts the current
+ * state every few seconds anyway, so a lost report heals itself.
+ */
+async function reportControls(sessionKey, controls) {
+  await loadSessions();
+  const session = sessions.get(sessionKey);
+  if (!session) return;
+  session.controls = controls || null;
+  if (!session.meetingId || session.pendingEnd) return;
+  if (session.nextAttemptAt && Date.now() < session.nextAttemptAt) return;
+  try {
+    await apiFetch(`/v1/meetings/live/${session.meetingId}/controls`, controlsBody(session.controls));
+  } catch (error) {
+    console.warn('[tw] controls report failed:', error.message);
+  }
+}
+
+/**
+ * Ask the app for the next command from its floating call controls. The app holds the request open
+ * until there is one (or the wait runs out), which is what makes a click there feel instant without
+ * the app being able to push to an extension. Returns the commands, or `null` when this session
+ * has nothing to poll for (not linked to a meeting yet, already hung up, or call control is off).
+ * Throws when the app cannot be reached — the caller backs off.
+ */
+async function pollCommands(sessionKey) {
+  await loadSessions();
+  const session = sessions.get(sessionKey);
+  if (!session?.meetingId || session.pendingEnd || !session.controls) return null;
+  const result = await apiFetch(`/v1/meetings/live/${session.meetingId}/commands/poll`, {
+    wait_seconds: COMMAND_POLL_WAIT_S,
+    ...controlsBody(session.controls),
+  });
+  return Array.isArray(result?.commands) ? result.commands : [];
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The page's current port per call — where commands are delivered. Per-worker, never persisted. */
+const livePorts = new Map();
+/** Calls with a command loop running in this worker. */
+const commandLoops = new Set();
+
+/** Bring the call's tab and window to the front. Needs no `tabs` permission: the port names its own tab. */
+async function focusCallTab(port) {
+  const tab = port.sender?.tab;
+  if (!tab?.id) return;
+  try {
+    await chrome.tabs.update(tab.id, { active: true });
+    if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
+  } catch (error) {
+    console.warn('[tw] could not focus the call tab:', error.message);
+  }
+}
+
+async function deliverCommand(sessionKey, command) {
+  for (let attempt = 0; attempt < COMMAND_DELIVERY_RETRIES; attempt += 1) {
+    const port = livePorts.get(sessionKey);
+    if (port) {
+      if (command.action === 'focus') {
+        await focusCallTab(port);
+        return;
+      }
+      try {
+        port.postMessage({ type: 'command', command });
+        return;
+      } catch {
+        // The port died between the lookup and the send; wait for its replacement.
+      }
+    }
+    await sleep(COMMAND_DELIVERY_RETRY_MS);
+  }
+  console.warn(`[tw] dropped "${command.action}": the call's page is not connected`);
+}
+
+/**
+ * One loop per call, for as long as its page is connected and reporting mic/camera state. It is
+ * tied to the call rather than to a port so the page's periodic port recycle never strands a
+ * command that came back on the old port's request.
+ */
+async function runCommandLoop(sessionKey) {
+  if (commandLoops.has(sessionKey)) return;
+  commandLoops.add(sessionKey);
+  let failures = 0;
+  try {
+    for (;;) {
+      if (!livePorts.has(sessionKey)) {
+        // Either the periodic recycle (a new port follows at once) or the tab is gone.
+        await sleep(COMMAND_DELIVERY_RETRIES * COMMAND_DELIVERY_RETRY_MS);
+        if (!livePorts.has(sessionKey)) return;
+      }
+      try {
+        const commands = await pollCommands(sessionKey);
+        if (commands === null) {
+          // Hung up, or call control switched off: stop (a new `controls` report restarts us).
+          // Otherwise the meeting is just not linked yet — the session start is still in flight.
+          const session = sessions.get(sessionKey);
+          if (!session || session.pendingEnd || !session.controls) return;
+          await sleep(1000);
+          continue;
+        }
+        failures = 0;
+        for (const command of commands) await deliverCommand(sessionKey, command);
+      } catch (error) {
+        // The app is closed, or too old to know this route: retry ever more slowly, never spin.
+        failures += 1;
+        await sleep(Math.min(2 ** failures * 1000, MAX_BACKOFF_MS));
+      }
+    }
+  } finally {
+    commandLoops.delete(sessionKey);
+  }
+}
+
 async function setBadge(state) {
   const map = {
     ok: { text: '●', color: '#2e7d32' },
@@ -319,6 +470,8 @@ chrome.runtime.onConnect.addListener((port) => {
       switch (message.type) {
         case 'session-start':
           sessionKey = message.sessionKey;
+          // Every (re)connect, so the app's "which bridge is connected" stays current.
+          hello();
           await loadSessions();
           getSession(sessionKey);
           await enqueue(sessionKey, [], {
@@ -344,6 +497,20 @@ chrome.runtime.onConnect.addListener((port) => {
           sessionKey = message.sessionKey || sessionKey;
           if (sessionKey) await heartbeat(sessionKey, message.participants);
           break;
+        case 'controls':
+          sessionKey = message.sessionKey || sessionKey;
+          if (!sessionKey) break;
+          livePorts.set(sessionKey, port);
+          await reportControls(sessionKey, {
+            micMuted: message.micMuted === true,
+            cameraOff: typeof message.cameraOff === 'boolean' ? message.cameraOff : null,
+          });
+          runCommandLoop(sessionKey);
+          break;
+        case 'controls-off':
+          sessionKey = message.sessionKey || sessionKey;
+          if (sessionKey) await reportControls(sessionKey, null);
+          break;
         case 'session-end':
           // Take the key from the message like `segments` does: a `session-end` that had to wait in
           // the content script's outbox arrives over a *fresh* port, which has no key of its own —
@@ -363,6 +530,7 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => {
     clearInterval(flushTimer);
     flushTimer = null;
+    if (sessionKey && livePorts.get(sessionKey) === port) livePorts.delete(sessionKey);
     // Do not end the session here: a disconnect is usually just the periodic reconnect or a worker
     // recycle, not the user leaving the call. `session-end` is explicit.
     if (sessionKey) flush(sessionKey);
@@ -372,4 +540,17 @@ chrome.runtime.onConnect.addListener((port) => {
 // Exported for `node --test` only — in the browser this file is driven entirely by the listeners
 // above. The queueing rules (what is persisted, when the backoff applies, when a meeting is ended)
 // are the parts worth regression-testing, and they need no DOM.
-export { sessions, loadSessions, persistSessions, getSession, enqueue, flush, heartbeat, endSession, tryEnd };
+export {
+  sessions,
+  loadSessions,
+  persistSessions,
+  getSession,
+  enqueue,
+  flush,
+  heartbeat,
+  endSession,
+  tryEnd,
+  reportControls,
+  pollCommands,
+  hello,
+};
