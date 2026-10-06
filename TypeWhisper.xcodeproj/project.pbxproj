@@ -316,6 +316,7 @@
 		MWB0000000000000000007 /* MeetingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000007 /* MeetingsListView.swift */; };
 		PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */; };
 		PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000016 /* MeetingRowModel.swift */; };
+		PF1B00000000000000000031 /* MeetingListPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000030 /* MeetingListPipeline.swift */; };
 		PF1B00000000000000000021 /* MeetingRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000020 /* MeetingRowView.swift */; };
 		PF1B00000000000000000023 /* MeetingSelectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000022 /* MeetingSelectionModel.swift */; };
 		MWB0000000000000000008 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000008 /* HomeFeedView.swift */; };
@@ -333,6 +334,7 @@
 		PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */; };
 		PF1B00000000000000000015 /* MeetingDuplicateIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */; };
 		PF1B00000000000000000019 /* MeetingRowModelStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */; };
+		PF1B00000000000000000033 /* MeetingListPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000032 /* MeetingListPipelineTests.swift */; };
 		PF1B00000000000000000025 /* MeetingSelectionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000024 /* MeetingSelectionModelTests.swift */; };
 		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
 		MLE0000000000000000001 /* MeetingLinkEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MLE0000000000000000002 /* MeetingLinkEventView.swift */; };
@@ -1112,6 +1114,7 @@
 		MWF0000000000000000007 /* MeetingsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsListView.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDuplicateIndex.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000016 /* MeetingRowModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowModel.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000030 /* MeetingListPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListPipeline.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000020 /* MeetingRowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowView.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000022 /* MeetingSelectionModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSelectionModel.swift; sourceTree = "<group>"; };
 		MWF0000000000000000008 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
@@ -1129,6 +1132,7 @@
 		PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowSearchDebounceTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingDuplicateIndexTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRowModelStoreTests.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000032 /* MeetingListPipelineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingListPipelineTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000024 /* MeetingSelectionModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingSelectionModelTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
 		MLE0000000000000000002 /* MeetingLinkEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkEventView.swift; sourceTree = "<group>"; };
@@ -2422,6 +2426,7 @@
 				MWF0000000000000000007 /* MeetingsListView.swift */,
 				PF1B00000000000000000012 /* MeetingDuplicateIndex.swift */,
 				PF1B00000000000000000016 /* MeetingRowModel.swift */,
+				PF1B00000000000000000030 /* MeetingListPipeline.swift */,
 				PF1B00000000000000000020 /* MeetingRowView.swift */,
 				PF1B00000000000000000022 /* MeetingSelectionModel.swift */,
 				MWF0000000000000000008 /* HomeFeedView.swift */,
@@ -3277,6 +3282,7 @@
 				PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */,
 				PF1B00000000000000000014 /* MeetingDuplicateIndexTests.swift */,
 				PF1B00000000000000000018 /* MeetingRowModelStoreTests.swift */,
+				PF1B00000000000000000032 /* MeetingListPipelineTests.swift */,
 				PF1B00000000000000000024 /* MeetingSelectionModelTests.swift */,
 				MWF0000000000000000017 /* MeetingDocumentTests.swift */,
 				TCF0000000000000000007 /* HomeFeedTests.swift */,
@@ -4895,6 +4901,7 @@
 				PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */,
 				PF1B00000000000000000015 /* MeetingDuplicateIndexTests.swift in Sources */,
 				PF1B00000000000000000019 /* MeetingRowModelStoreTests.swift in Sources */,
+				PF1B00000000000000000033 /* MeetingListPipelineTests.swift in Sources */,
 				PF1B00000000000000000025 /* MeetingSelectionModelTests.swift in Sources */,
 				MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */,
 				TCB0000000000000000007 /* HomeFeedTests.swift in Sources */,
@@ -5114,6 +5121,7 @@
 				MWB0000000000000000007 /* MeetingsListView.swift in Sources */,
 				PF1B00000000000000000013 /* MeetingDuplicateIndex.swift in Sources */,
 				PF1B00000000000000000017 /* MeetingRowModel.swift in Sources */,
+				PF1B00000000000000000031 /* MeetingListPipeline.swift in Sources */,
 				PF1B00000000000000000021 /* MeetingRowView.swift in Sources */,
 				PF1B00000000000000000023 /* MeetingSelectionModel.swift in Sources */,
 				MWB0000000000000000008 /* HomeFeedView.swift in Sources */,

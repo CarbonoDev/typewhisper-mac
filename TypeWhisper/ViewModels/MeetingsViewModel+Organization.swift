@@ -254,7 +254,16 @@ extension MeetingsViewModel {
         now: Date,
         calendar: Calendar = .current
     ) -> Bool {
-        let effective = meeting.startDate ?? meeting.createdAt
+        withinDateRange(date: meeting.startDate ?? meeting.createdAt, range: range, now: now, calendar: calendar)
+    }
+
+    /// `withinDateRange` over an already-resolved effective day (shared with `MeetingListPipeline`).
+    static func withinDateRange(
+        date effective: Date,
+        range: MeetingDateRange,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
         switch range {
         case .all:
             return true
