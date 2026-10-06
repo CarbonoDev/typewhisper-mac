@@ -40,6 +40,27 @@ final class HomeFeedActionFactsTests: XCTestCase {
         XCTAssertEqual(hfvm.actionFacts(for: meeting)?.totalCount, 1)
     }
 
+    /// Meetings with neither a summary nor an extended output are answered from the denormalised
+    /// output kinds, without walking `outputs`.
+    func testActionFactsAskTheOutputKindsColumnFirst() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = MeetingService(appSupportDirectory: directory)
+        let hfvm = HomeFeedViewModel()
+        let meeting = service.createMeeting(title: "Brief only", source: .adHoc)
+        service.addOutput(to: meeting, kind: .summary, content: twoActions)
+
+        // A column that claims only a brief is believed (it claims content), so the summary row
+        // is never read — proof the column is consulted before the relationship.
+        meeting.factOutputKindsRaw = "brief"
+        XCTAssertNil(hfvm.actionFacts(for: meeting))
+
+        // With the column back in step (and a fresh updatedAt), the summary is parsed as before.
+        service.recomputeFacts(for: meeting)
+        meeting.updatedAt = Date().addingTimeInterval(1)
+        XCTAssertEqual(hfvm.actionFacts(for: meeting)?.totalCount, 2)
+    }
+
     func testCachedHeaderMatchesAFreshFormatter() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))

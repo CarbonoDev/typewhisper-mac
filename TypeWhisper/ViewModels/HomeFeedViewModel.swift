@@ -143,6 +143,12 @@ final class HomeFeedViewModel: ObservableObject {
         let cached = actionItemCache[meeting.id]
         if let cached, cached.updatedAt == meeting.updatedAt { return cached.items }
 
+        // Most meetings have neither kind: answer that from the denormalised output kinds (perf plan
+        // Phase 2) instead of faulting `outputs`. Only a meeting that has one reads the content.
+        guard !meeting.outputKinds.isDisjoint(with: [.summary, .extended]) else {
+            actionItemCache[meeting.id] = (meeting.updatedAt, [], nil)
+            return nil
+        }
         let sources = [MeetingOutputKind.summary, .extended].compactMap { kind in
             meeting.outputs
                 .filter { !$0.isDeletedFromStore && $0.kind == kind }
