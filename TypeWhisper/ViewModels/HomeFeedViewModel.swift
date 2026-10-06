@@ -109,7 +109,15 @@ final class HomeFeedViewModel: ObservableObject {
     /// Memoized parses of each meeting's newest prose outputs, keyed by those outputs' `createdAt`
     /// stamps so a regeneration invalidates the entry. Parsing is cheap (a few KB string scan) but
     /// Home renders often — without this, every scroll frame would re-parse every visible meeting.
-    private var actionItemCache: [UUID: (outputDates: [Date], items: [MeetingOutputParser.ActionItem])] = [:]
+    ///
+    /// [Perf 1C] Also keyed by the meeting's `updatedAt` (bumped by every `MeetingService` output
+    /// add/delete; outputs are otherwise immutable): while it matches, the entry is served without
+    /// touching `meeting.outputs` at all, so a render no longer faults every output row per meeting.
+    /// `items == nil` records "no summary/extended output". On an `updatedAt` change the
+    /// output-date check below still decides whether the parse itself must rerun.
+    private var actionItemCache: [UUID: (
+        updatedAt: Date, outputDates: [Date], items: [MeetingOutputParser.ActionItem]?
+    )] = [:]
 
     /// Open/total action-item counts for a meeting, or nil when it has no summary/extended output.
     /// Items are the UNION of the newest summary's and the newest extended's parses (deduped by
@@ -121,17 +129,34 @@ final class HomeFeedViewModel: ObservableObject {
         // Same deletion window as the badges (see `isDeletedFromStore`): the row outlives its
         // meeting by one render, and every output this reads is already gone from the store.
         guard !meeting.isDeletedFromStore else { return nil }
+        guard let items = actionItems(for: meeting) else { return nil }
+        guard !items.isEmpty else { return MeetingActionFacts(openCount: 0, totalCount: 0) }
+        let done = MeetingChecklistStore.shared.doneCount(
+            meetingID: meeting.id, itemIDs: items.map(\.stableID)
+        )
+        return MeetingActionFacts(openCount: items.count - done, totalCount: items.count)
+    }
+
+    /// The union of action items across the newest summary + extended outputs, or nil when there
+    /// is neither. Memoized in `actionItemCache` (see there for the keys).
+    private func actionItems(for meeting: Meeting) -> [MeetingOutputParser.ActionItem]? {
+        let cached = actionItemCache[meeting.id]
+        if let cached, cached.updatedAt == meeting.updatedAt { return cached.items }
+
         let sources = [MeetingOutputKind.summary, .extended].compactMap { kind in
             meeting.outputs
                 .filter { !$0.isDeletedFromStore && $0.kind == kind }
                 .max { $0.createdAt < $1.createdAt }
         }
-        guard !sources.isEmpty else { return nil }
+        guard !sources.isEmpty else {
+            actionItemCache[meeting.id] = (meeting.updatedAt, [], nil)
+            return nil
+        }
         let dates = sources.map(\.createdAt).sorted()
 
         let items: [MeetingOutputParser.ActionItem]
-        if let cached = actionItemCache[meeting.id], cached.outputDates == dates {
-            items = cached.items
+        if let cached, cached.outputDates == dates, let cachedItems = cached.items {
+            items = cachedItems
         } else {
             var union: [MeetingOutputParser.ActionItem] = []
             var seen = Set<String>()
@@ -143,13 +168,9 @@ final class HomeFeedViewModel: ObservableObject {
                 }
             }
             items = union
-            actionItemCache[meeting.id] = (dates, items)
         }
-        guard !items.isEmpty else { return MeetingActionFacts(openCount: 0, totalCount: 0) }
-        let done = MeetingChecklistStore.shared.doneCount(
-            meetingID: meeting.id, itemIDs: items.map(\.stableID)
-        )
-        return MeetingActionFacts(openCount: items.count - done, totalCount: items.count)
+        actionItemCache[meeting.id] = (meeting.updatedAt, dates, items)
+        return items
     }
 
     // MARK: - Transcript-indicator fact
@@ -215,19 +236,33 @@ final class HomeFeedViewModel: ObservableObject {
 
     /// Weekday name (e.g. "Monday") in the injected calendar/time zone.
     private func weekdayTitle(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate("EEEE")
-        return formatter.string(from: date)
+        formatter(template: "EEEE").string(from: date)
     }
 
     /// Localized month/day/year in the injected calendar/time zone.
     private func dateTitle(for date: Date) -> String {
+        formatter(template: "yMMMd").string(from: date)
+    }
+
+    /// [Perf 1C] Header formatters, built once per template instead of per day group per render
+    /// (`setLocalizedDateFormatFromTemplate` was ~5 % of Home samples). The cache is dropped when
+    /// the user's locale or the calendar's time zone changes, since the resolved format depends on
+    /// both — a header never renders in a stale locale.
+    private var headerFormatters: [String: DateFormatter] = [:]
+    private var headerFormattersKey: String?
+
+    private func formatter(template: String) -> DateFormatter {
+        let key = Locale.current.identifier + "|" + calendar.timeZone.identifier
+        if key != headerFormattersKey {
+            headerFormatters.removeAll()
+            headerFormattersKey = key
+        }
+        if let cached = headerFormatters[template] { return cached }
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
-        return formatter.string(from: date)
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        headerFormatters[template] = formatter
+        return formatter
     }
 }

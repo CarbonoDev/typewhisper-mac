@@ -300,6 +300,7 @@
 		TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000005 /* MeetingsViewModel+Home.swift */; };
 		TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000006 /* CalendarColorProviding.swift */; };
 		TCB0000000000000000007 /* HomeFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000007 /* HomeFeedTests.swift */; };
+		PF1B00000000000000000005 /* HomeFeedActionFactsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */; };
 		MWB0000000000000000009 /* MeetingDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000009 /* MeetingDocumentView.swift */; };
 		MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000010 /* MainWindowScaffoldTests.swift */; };
 		MWB0000000000000000011 /* MeetingDocumentHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000011 /* MeetingDocumentHeader.swift */; };
@@ -1058,6 +1059,7 @@
 		TCF0000000000000000005 /* MeetingsViewModel+Home.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Home.swift"; sourceTree = "<group>"; };
 		TCF0000000000000000006 /* CalendarColorProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColorProviding.swift; sourceTree = "<group>"; };
 		TCF0000000000000000007 /* HomeFeedTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFeedTests.swift; sourceTree = "<group>"; };
+		PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFeedActionFactsTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000009 /* MeetingDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentView.swift; sourceTree = "<group>"; };
 		MWF0000000000000000010 /* MainWindowScaffoldTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainWindowScaffoldTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000011 /* MeetingDocumentHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDocumentHeader.swift; sourceTree = "<group>"; };
@@ -3165,6 +3167,7 @@
 				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
 				MWF0000000000000000017 /* MeetingDocumentTests.swift */,
 				TCF0000000000000000007 /* HomeFeedTests.swift */,
+				PF1B00000000000000000004 /* HomeFeedActionFactsTests.swift */,
 				SRGF000000000000000001 /* SettingsRegroupTests.swift */,
 				MEF0000000000000010001 /* CalendarVisibilityTests.swift */,
 				MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */,
@@ -4771,6 +4774,7 @@
 				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
 				MWB0000000000000000017 /* MeetingDocumentTests.swift in Sources */,
 				TCB0000000000000000007 /* HomeFeedTests.swift in Sources */,
+				PF1B00000000000000000005 /* HomeFeedActionFactsTests.swift in Sources */,
 				SRGB000000000000000001 /* SettingsRegroupTests.swift in Sources */,
 				MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */,
 				MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */,
