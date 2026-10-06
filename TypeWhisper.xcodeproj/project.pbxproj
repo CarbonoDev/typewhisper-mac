@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		PF1A0000000000000000B009 /* MeetingFactsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F009 /* MeetingFactsTests.swift */; };
+		PF1A0000000000000000B008 /* Meeting+Facts.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F008 /* Meeting+Facts.swift */; };
+		PF1A0000000000000000B007 /* MeetingService+Facts.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F007 /* MeetingService+Facts.swift */; };
 		PF1A0000000000000000B006 /* MeetingsSchemaV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F006 /* MeetingsSchemaV1.swift */; };
 		PF1A0000000000000000B005 /* MeetingsStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */; };
 		PF1A0000000000000000B004 /* MeetingService+Publishing.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F004 /* MeetingService+Publishing.swift */; };
@@ -875,6 +878,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		PF1A0000000000000000F009 /* MeetingFactsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFactsTests.swift; sourceTree = "<group>"; };
+		PF1A0000000000000000F008 /* Meeting+Facts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Meeting+Facts.swift"; sourceTree = "<group>"; };
+		PF1A0000000000000000F007 /* MeetingService+Facts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+Facts.swift"; sourceTree = "<group>"; };
 		PF1A0000000000000000F006 /* MeetingsSchemaV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSchemaV1.swift; sourceTree = "<group>"; };
 		PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsStoreMigrationTests.swift; sourceTree = "<group>"; };
 		PF1A0000000000000000F004 /* MeetingService+Publishing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+Publishing.swift"; sourceTree = "<group>"; };
@@ -2158,6 +2164,7 @@
 				BB00000000000000000382 /* Attendee.swift */,
 				P2F0000000000000000001 /* Person.swift */,
 				BB00000000000000000375 /* Meeting.swift */,
+				PF1A0000000000000000F008 /* Meeting+Facts.swift */,
 				CCB000000000000000000002 /* FinalRetranscriptionPolicy.swift */,
 				CCB000000000000000000001 /* MeetingContextRule.swift */,
 				BB00000000000000000376 /* MeetingSegment.swift */,
@@ -2461,6 +2468,7 @@
 				MCF000000000000000000007 /* MeetCallControlLayout.swift */,
 				MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */,
 				PF1A0000000000000000F004 /* MeetingService+Publishing.swift */,
+				PF1A0000000000000000F007 /* MeetingService+Facts.swift */,
 				PF1A0000000000000000F003 /* MeetingService+RelatedNotes.swift */,
 				PF1A0000000000000000F002 /* MeetingService+Organization.swift */,
 				MCF000000000000000000002 /* MeetCallControlService.swift */,
@@ -3245,6 +3253,7 @@
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
 				MEF0000000000000000001 /* MeetingServiceTests.swift */,
 				PF1A0000000000000000F001 /* MeetingServicePublishingTests.swift */,
+				PF1A0000000000000000F009 /* MeetingFactsTests.swift */,
 				PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
@@ -4862,6 +4871,7 @@
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
 				PF1A0000000000000000B001 /* MeetingServicePublishingTests.swift in Sources */,
+				PF1A0000000000000000B009 /* MeetingFactsTests.swift in Sources */,
 				PF1A0000000000000000B005 /* MeetingsStoreMigrationTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
@@ -5130,6 +5140,7 @@
 				AA00000000000000000381 /* MeetingEnums.swift in Sources */,
 				AA00000000000000000382 /* Attendee.swift in Sources */,
 				AA00000000000000000375 /* Meeting.swift in Sources */,
+				PF1A0000000000000000B008 /* Meeting+Facts.swift in Sources */,
 				AA00000000000000000376 /* MeetingSegment.swift in Sources */,
 				AA00000000000000000377 /* MeetingNote.swift in Sources */,
 				AA00000000000000000378 /* MeetingOutput.swift in Sources */,
@@ -5153,6 +5164,7 @@
 				MCB000000000000000000007 /* MeetCallControlLayout.swift in Sources */,
 				MCB000000000000000000006 /* MeetingService+CaptionSessions.swift in Sources */,
 				PF1A0000000000000000B004 /* MeetingService+Publishing.swift in Sources */,
+				PF1A0000000000000000B007 /* MeetingService+Facts.swift in Sources */,
 				PF1A0000000000000000B003 /* MeetingService+RelatedNotes.swift in Sources */,
 				PF1A0000000000000000B002 /* MeetingService+Organization.swift in Sources */,
 				MCB000000000000000000002 /* MeetCallControlService.swift in Sources */,

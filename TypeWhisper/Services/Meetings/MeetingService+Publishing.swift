@@ -32,6 +32,9 @@ final class MeetingListPublishingState {
     /// choke points in `MeetingService+Publishing.swift` (all segment writes go through
     /// `MeetingService`, the single writer of the store).
     var nextSegmentOrder: [UUID: Int] = [:]
+    /// Meetings whose denormalised facts must be recomputed from their relationships after the
+    /// next save (see `MeetingService+Facts.swift`).
+    var staleFacts: [UUID: Meeting] = [:]
 }
 
 extension MeetingService {
@@ -40,6 +43,7 @@ extension MeetingService {
     /// is skipped (in-place writes) or coalesced (inside `performBatch`).
     func commitWrite(_ change: MeetingListChange) {
         save()
+        refreshStaleFacts()
         let refetched: Bool
         switch change {
         case .list:
@@ -122,32 +126,41 @@ extension MeetingService {
         listPublishing.nextSegmentOrder[meeting.id] = nil
     }
 
-    /// Drop the cached next order of every meeting `segments` belong to (`renumber` calls this, so
-    /// any path that rewrites `order` invalidates the cache without remembering to).
-    func forgetSegmentOrders(of segments: [MeetingSegment]) {
-        for meetingID in Set(segments.compactMap { $0.meeting?.id }) {
-            listPublishing.nextSegmentOrder[meetingID] = nil
+    /// `childrenChanged(of:)` for every meeting `segments` belong to (`renumber` calls this, so any
+    /// path that rewrites `order` invalidates without remembering to).
+    func childrenChanged(of segments: [MeetingSegment]) {
+        var seen = Set<UUID>()
+        for meeting in segments.compactMap(\.meeting) where seen.insert(meeting.id).inserted {
+            childrenChanged(of: meeting)
         }
     }
 
-    // MARK: - Segment row choke points
-    //
-    // Invariant for the order cache: `appendStableSegments` is the only writer that inserts a
-    // segment without going through `insertSegment`; every segment delete goes through
-    // `deleteSegment`; every rewrite of `order` goes through `renumber`; every meeting delete (the
-    // cascade) calls `forgetSegmentOrder`. Each of those drops the affected meeting's cache entry.
+    /// A write rewrote `meeting`'s segments or outputs other than by the live append: drop its
+    /// cached next order and recompute its denormalised facts after the next save.
+    func childrenChanged(of meeting: Meeting) {
+        forgetSegmentOrder(for: meeting)
+        markFactsStale(meeting)
+    }
 
-    /// Insert a segment row written with its own `order` (replace, merge-import, backup restore)
-    /// and invalidate the meeting's cached next order.
+    // MARK: - Child row choke points
+    //
+    // Invariant for the order cache and the denormalised facts: `appendStableSegments` and
+    // `addOutput` are the only writers that insert a child without going through these (they keep
+    // both incrementally); every segment insert/delete goes through `insertSegment`/`deleteSegment`;
+    // every rewrite of `order` (including re-parenting in a merge) goes through `renumber`; every
+    // other in-place edit of segment `end`/`speakerLabel` or output insert/delete calls
+    // `childrenChanged(of:)`; every meeting delete (the cascade) calls `forgetSegmentOrder`.
+
+    /// Insert a segment row written with its own `order` (replace, merge-import, backup restore).
     func insertSegment(_ segment: MeetingSegment, into meeting: Meeting) {
         segment.meeting = meeting
         modelContext.insert(segment)
-        forgetSegmentOrder(for: meeting)
+        childrenChanged(of: meeting)
     }
 
-    /// Delete a segment row and invalidate its meeting's cached next order.
+    /// Delete a segment row.
     func deleteSegment(_ segment: MeetingSegment) {
-        if let meeting = segment.meeting { forgetSegmentOrder(for: meeting) }
+        if let meeting = segment.meeting { childrenChanged(of: meeting) }
         modelContext.delete(segment)
     }
 }

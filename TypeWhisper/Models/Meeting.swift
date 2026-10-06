@@ -82,6 +82,19 @@ final class Meeting {
     var createdAt: Date
     var updatedAt: Date
 
+    // Denormalised row facts (perf plan Phase 2). Maintained by `MeetingService` at its segment and
+    // output choke points so row/header readers never fault `segments`/`outputs`. Additive/optional:
+    // `nil` = not computed yet (every row written before these existed); readers then fall back to
+    // the relationships. Read them through `Meeting+Facts.swift`, never directly.
+    /// Number of transcript segments.
+    var factSegmentCount: Int?
+    /// Largest segment `end` in seconds (`0` with no transcript).
+    var factTranscriptEnd: Double?
+    /// Distinct trimmed, non-blank speaker labels, sorted and newline-joined (`""` for none).
+    var factSpeakerLabelsRaw: String?
+    /// Distinct output `kindRaw` values, sorted and comma-joined (`""` for none).
+    var factOutputKindsRaw: String?
+
     @Relationship(deleteRule: .cascade, inverse: \MeetingSegment.meeting)
     var segments: [MeetingSegment]
 
@@ -156,6 +169,11 @@ final class Meeting {
         self.notes = []
         self.outputs = []
         self.qaTurns = []
+        // A new meeting has no children yet, so its facts start computed (and empty).
+        self.factSegmentCount = 0
+        self.factTranscriptEnd = 0
+        self.factSpeakerLabelsRaw = ""
+        self.factOutputKindsRaw = ""
     }
 
     // MARK: - Enum accessors

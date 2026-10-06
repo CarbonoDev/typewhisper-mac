@@ -373,6 +373,7 @@ final class MeetingService: ObservableObject {
         if let speakerMap {
             meeting.speakerMap = speakerMap
         }
+        childrenChanged(of: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
     }
@@ -392,6 +393,7 @@ final class MeetingService: ObservableObject {
             segment.speakerConfidence = nil
         }
         meeting.speakerMap = [:]
+        childrenChanged(of: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
     }
@@ -433,6 +435,7 @@ final class MeetingService: ObservableObject {
             }
         }
         guard didChange else { return }
+        childrenChanged(of: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
     }
@@ -463,6 +466,7 @@ final class MeetingService: ObservableObject {
         // Cached per meeting (Perf 1C): scanning `segments` for the max order faulted every
         // segment on each ~4 s live flush.
         var nextOrder = reserveSegmentOrders(segments.count, for: meeting)
+        var inserted: [MeetingSegment] = []
         for segment in segments {
             let modelSegment = MeetingSegmentMapper.makeSegment(
                 from: segment,
@@ -472,8 +476,11 @@ final class MeetingService: ObservableObject {
             )
             modelSegment.meeting = meeting
             modelContext.insert(modelSegment)
+            inserted.append(modelSegment)
             nextOrder += 1
         }
+        // Denormalised facts kept incrementally, in the same save (perf plan Phase 2).
+        factsDidAppend(inserted, to: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
     }
@@ -643,6 +650,8 @@ final class MeetingService: ObservableObject {
                 modelContext.insert(turn)
             }
 
+            // Outputs above are inserted directly; recompute the restored meeting's facts.
+            childrenChanged(of: meeting)
             imported += 1
         }
         if imported > 0 {
@@ -859,6 +868,8 @@ final class MeetingService: ObservableObject {
         // (Swift's sort is not stable — the `replaceSegments` idiom).
         for (index, segment) in provisional.enumerated() { segment.order = index }
         renumber(provisional)
+        // Outputs re-parent too, and `provisional` may be empty: recompute the survivor either way.
+        childrenChanged(of: primary)
 
         // Commit the re-parenting before deleting the absorbed rows, so their cascade delete rules
         // cannot take the just-moved children with them.
@@ -894,7 +905,7 @@ final class MeetingService: ObservableObject {
         for (index, segment) in ordered.enumerated() {
             segment.order = index
         }
-        forgetSegmentOrders(of: segments)
+        childrenChanged(of: segments)
     }
 
     // MARK: - Child CRUD
@@ -926,6 +937,7 @@ final class MeetingService: ObservableObject {
             meeting: meeting
         )
         modelContext.insert(output)
+        factsDidAddOutput(kind, to: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
 
@@ -956,6 +968,7 @@ final class MeetingService: ObservableObject {
     /// retained — regeneration inserts a new row rather than mutating an existing one (plan D15).
     func deleteOutput(_ output: MeetingOutput) {
         let meeting = output.meeting
+        if let meeting { childrenChanged(of: meeting) }
         modelContext.delete(output)
         meeting?.updatedAt = Date()
         commitWrite(.inPlace)
