@@ -131,25 +131,49 @@ pinned to `772f3535`.
 
 ### Results, 2026-10-06
 
-These "after" numbers predate main's list pipeline, row models and fact columns; `listSearch` and
-the Home rows were re-measured on the current tree after that and need a fresh before/after run.
-
-`772f3535` vs main at `3a449793`, 3 interleaved runs per side, Debug build, Apple silicon. Median of per-run medians; spread is the min–max of the per-run medians.
+`772f3535` vs main at `d6f0692a` (list pipeline, row models, fact columns, Home readers on the
+columns, one save per write), 3 interleaved runs per side, Debug build, Apple silicon. Median of
+per-run medians; spread is the min–max of the per-run medians.
 
 | Benchmark | Before ms (spread) | After ms (spread) | After/Before | Before extra | After extra |
 |---|---|---|---|---|---|
-| liveAppend.perAppend | 263.708 (263.565–263.849) | 21.546 (21.429–21.615) | 0.08× | listPublishes/append=1.00 objectWillChange/append=1.00 maxMainStall=269.0ms | listPublishes/append=0.00 objectWillChange/append=0.00 maxMainStall=31.1ms |
-| importedTitles.firstRender | 101.116 (100.759–102.528) | 9.963 (9.911–10.205) | 0.10× | rows=300 | rows=300 |
-| importedTitles.repeatRender | 98.276 (97.670–98.361) | 0.395 (0.392–0.413) | 0.00× | rows=300 | rows=300 |
-| homeRows.firstPaint | 538.627 (535.277–545.562) | 409.120 (407.468–412.993) | 0.76× | rows=300 | rows=300 |
-| homeRows.repeat | 127.323 (126.690–127.697) | 9.195 (9.138–9.383) | 0.07× |  |  |
-| homeRows.afterWrite | 147.248 (146.574–148.680) | 10.117 (10.010–10.254) | 0.07× |  |  |
-| listSearch.perKeystroke | 32.593 (32.410–32.640) | 32.233 (32.065–32.502) | 0.99× | rows=300 passes/keystroke=7 | rows=300 passes/keystroke=7 |
-| markdown.firstRender | 5.209 (5.205–5.280) | 5.244 (5.242–5.315) | 1.01× | chars=3934 | chars=3934 |
-| markdown.repeatRender | 3.699 (3.671–3.723) | 0.004 (0.004–0.004) | 0.00× |  |  |
-| vault.retrieve.first | 597.621 (581.677–640.703) | 599.674 (589.107–620.013) | 1.00× | hits=3 maxMainStall=583.3ms | hits=3 maxMainStall=0.6ms |
-| vault.retrieve.repeat | 575.706 (571.862–624.536) | 469.897 (465.581–471.984) | 0.82× | maxMainStall=602.8ms | maxMainStall=0.0ms |
-| space.init | 290.453 (286.543–291.758) | 0.362 (0.361–0.481) | 0.00× |  |  |
-| space.refresh | 284.736 (284.661–284.885) | 131.530 (130.914–135.089) | 0.46× | entries=2000 maxMainStall=286.7ms | entries=2000 maxMainStall=0.5ms |
-| space.visitAllFolders | 247.175 (246.663–247.631) | 0.063 (0.062–0.065) | 0.00× | folders=26 | folders=26 |
-| calendar.refreshUnchanged | 0.272 (0.261–0.280) | 0.556 (0.536–0.568) | 2.04× | publishes/refresh=2.00 maxMainStall=0.3ms | publishes/refresh=0.00 maxMainStall=0.4ms |
+| liveAppend.perAppend | 279.358 (278.791–279.852) | 23.119 (23.064–23.284) | 0.08× | listPublishes/append=1.00 objectWillChange/append=1.00 maxMainStall=291.0ms | listPublishes/append=0.00 objectWillChange/append=0.00 maxMainStall=23.6ms |
+| importedTitles.firstRender | 104.949 (104.475–105.056) | 10.178 (10.112–10.587) | 0.10× | rows=300 | rows=300 |
+| importedTitles.repeatRender | 100.746 (100.552–100.855) | 0.408 (0.394–0.420) | 0.00× | rows=300 | rows=300 |
+| homeRows.firstPaint | 566.655 (561.631–566.853) | 225.538 (224.568–228.246) | 0.40× | rows=300 | rows=300 |
+| homeRows.firstPaint.scalar | 130.902 (130.537–131.304) | 8.676 (8.326–9.657) | 0.07× | groups+headers+titles | groups+headers+titles |
+| homeRows.firstPaint.outputs | 213.996 (213.172–214.328) | 214.584 (212.295–216.892) | 1.00× | badges+actionFacts relationshipReads=300 | badges+actionFacts relationshipReads=300 |
+| homeRows.firstPaint.segments | 221.023 (216.733–223.143) | 2.628 (2.616–2.679) | 0.01× | hasTranscript relationshipReads=300 | hasTranscript relationshipReads=300 |
+| homeRows.repeat | 133.966 (133.766–135.055) | 12.601 (12.076–12.641) | 0.09× |  |  |
+| homeRows.afterWrite | 159.044 (158.442–159.997) | 12.103 (11.963–12.448) | 0.08× |  |  |
+| listSearch.changedKeystroke | 63.830 (63.804–64.160) | 2.770 (2.738–3.019) | 0.04× | rows=300 | rows=300 |
+| listSearch.unchangedRerender | 63.967 (63.902–64.017) | 0.381 (0.380–0.385) | 0.01× | rows=300 | rows=300 |
+| markdown.firstRender | 5.477 (5.337–5.539) | 5.640 (5.484–6.230) | 1.03× | chars=3934 | chars=3934 |
+| markdown.repeatRender | 3.858 (3.837–3.905) | 0.004 (0.004–0.004) | 0.00× |  |  |
+| vault.retrieve.first | 614.621 (611.852–640.247) | 624.900 (621.609–625.559) | 1.02× | hits=3 maxMainStall=613.5ms | hits=3 maxMainStall=0.5ms |
+| vault.retrieve.repeat | 602.188 (601.719–606.061) | 486.708 (482.697–511.429) | 0.81× | maxMainStall=636.0ms | maxMainStall=0.1ms |
+| space.init | 308.375 (301.518–314.512) | 0.391 (0.370–0.503) | 0.00× |  |  |
+| space.refresh | 307.747 (307.058–310.863) | 136.782 (136.339–136.909) | 0.44× | entries=2000 maxMainStall=310.1ms | entries=2000 maxMainStall=0.5ms |
+| space.visitAllFolders | 266.482 (262.325–267.399) | 0.063 (0.062–0.064) | 0.00× | folders=26 | folders=26 |
+| calendar.refreshUnchanged | 0.303 (0.300–0.304) | 0.390 (0.337–0.412) | 1.29× | publishes/refresh=2.00 maxMainStall=0.3ms | publishes/refresh=0.00 maxMainStall=0.3ms |
+| archiveRows.window20.firstPaint | 60.102 (59.479–60.216) | 18.931 (18.316–19.269) | 0.31× | rows=20 | rows=20 |
+| archiveRows.window20.repeat | 5.511 (5.508–5.526) | 0.275 (0.274–0.275) | 0.05× | rows=20 | rows=20 |
+| archiveRows.wholeList.firstPaint | 532.221 (531.407–539.165) | 227.367 (226.643–227.645) | 0.43× | rows=300 | rows=300 |
+| archiveRows.wholeList.repeat | 89.103 (88.888–89.128) | 4.463 (4.387–4.559) | 0.05× | rows=300 | rows=300 |
+
+Live-append breakdown on the same tree (`PerfLiveAppendBreakdownTests`, one run of 20 appends of 3
+segments; median ms). The replay repeats the service's SwiftData steps on a second context:
+
+| Step | 1,726-segment meeting | 150-segment meeting |
+|---|---|---|
+| `appendStableSegments`, whole | 22.97 | — |
+| replay, sum of steps | 22.70 | 3.99 |
+| `ModelContext.save()` | 12.37 | 2.64 |
+| `segment.meeting = meeting` (relationship assignment) | 8.75 | 1.03 |
+| `context.insert` | 1.49 | 0.19 |
+| segment mapping | 0.06 | 0.04 |
+| `updatedAt` bump | 0.003 | 0.002 |
+| `isInFetchOrder` over 300 meetings | 0.64 | — |
+
+Save and relationship assignment both grow with the meeting's existing segment count (about 5 µs
+per existing segment each, per append); mapping and the order scan are noise.
