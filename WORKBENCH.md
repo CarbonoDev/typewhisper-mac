@@ -197,14 +197,16 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
   Impact low-med / risk low-med. ~1.7 ms per summary in a Debug build, paid once per realized row per launch. Outputs are immutable after write.
 - [ ] Perf: live append cost grows with meeting length (save 12.4 ms + `segment.meeting = meeting` 8.8 ms on a 1,726-segment meeting, Debug)
   Impact low / risk unknown. 23 ms every ~4 s; both are SwiftData internals.
+- [ ] Fix: `plannedSpeakerSource(for:)` writes diarization status during `SpeakerSection`'s body (pre-existing; found by the VM split)
 - [ ] Fix: tray recording label keeps the old title after renaming the active meeting (pre-existing)
 - [ ] Fix: related emails are not refetched when a meeting's participants change or an event is linked (pre-existing)
 - [ ] Fix: `MeetingRelatedEmailsSection` reads `hasGoogleAccounts` without observing the account store (pre-existing)
 - [ ] Verify in a dev build: everything merged on 2026-10-06 (see each worker section's "not verified" notes) — live caption session, list rows + context-menu dialogs, calendar clock at event start/end, first-launch facts backfill and history prune on the real store, launch log (`category == "Launch"`)
 
 ## Backlog — Perf refactor Phase 2 (structural)
-- [ ] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
+- [x] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
   Impact high / risk high (15–20 test files). Slices: Capture, Calendar, Library/Organization, Outputs, Vault/Export, Import, Related. Views take the slice they use; mirrors become computed forwards (or `@Observable`, macOS 14 floor). Removes the documented "authoritative vs mirrored" staleness workarounds.
+  > 2026-10-06 diamond: done by vm-split (garnet), merged to main as d36dc97c (inventory, docs/specs/2026-10-06-meetings-vm-split.md), 579762af (MeetingsCaptureModel), 244d3177 (MeetingsCalendarModel), 54c5dead (MeetingsOutputsModel), b903ebe0 (stop note). Old property names forwarded as computed properties; every reader re-pointed at its slice (tables in the commit messages, cross-checked by grep at each merge). Library (`meetings`) deliberately not split — reasoning in the spec. Worker: 43 classes / 392 tests green; not verified in the app (the running dev build predates it).
 - [ ] Refactor: `MeetingService` into repositories under one writer (meetings / outputs / templates)
   Impact medium / risk medium. 1,661 lines, six entity families; shrinks the republish blast radius. Mechanical split, own commit, no behaviour change.
 
