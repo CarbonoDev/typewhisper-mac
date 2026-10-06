@@ -64,6 +64,21 @@ final class MeetingOrganizationIndex: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var lastMeetings: [Meeting] = []
 
+    /// Rebuild whenever the configured-folder source changes. Renaming or deleting a configured
+    /// folder that holds no meetings, or clearing a folder's last config, writes no meeting and so
+    /// never reaches `meetingsListPublisher`; the tree kept the old node until an unrelated list
+    /// write. The hop is load-bearing: `@Published` emits in willSet, and the rebuild re-reads the
+    /// source through `configuredFolderPathsProvider`.
+    func rebuild<Changes: Publisher>(on changes: Changes) where Changes.Failure == Never {
+        changes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.rebuild(from: self.lastMeetings)
+            }
+            .store(in: &cancellables)
+    }
+
     init(meetingService: MeetingService) {
         rebuild(from: meetingService.meetings)
         meetingService.meetingsListPublisher

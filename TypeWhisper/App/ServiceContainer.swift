@@ -280,6 +280,7 @@ final class ServiceContainer: ObservableObject {
         meetingOrganizationIndex.configuredFolderPathsProvider = { [weak meetingFolderMetadataStore] in
             meetingFolderMetadataStore?.configuredFolderPaths() ?? []
         }
+        meetingOrganizationIndex.rebuild(on: meetingFolderMetadataStore.$configs.dropFirst())
         // [Track J] Central background-job queue (plan J1). Depends on nothing; constructed early so
         // the view model can enqueue through it and leaf views can `@ObservedObject` the singleton.
         meetingJobQueue = JobQueueService(clock: SystemJobClock())

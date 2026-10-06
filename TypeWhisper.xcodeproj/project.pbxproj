@@ -77,6 +77,7 @@
 		PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F42 /* PublisherMirrorTests.swift */; };
 		PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */; };
 		PF2C00000000000000000B51 /* CalendarClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F51 /* CalendarClockTests.swift */; };
+		PF2C00000000000000000B52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */; };
 		PF2C00000000000000000B13 /* RelatedDocumentsMemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */; };
 		5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */; };
 		PF1B00000000000000000003 /* ImportedMeetingTitleMemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */; };
@@ -932,6 +933,7 @@
 		PF2C00000000000000000F42 /* PublisherMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublisherMirrorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModelMirrorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F51 /* CalendarClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarClockTests.swift; sourceTree = "<group>"; };
+		PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndexConfiguredFoldersTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelatedDocumentsMemoTests.swift; sourceTree = "<group>"; };
 		5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitleTests.swift; sourceTree = "<group>"; };
 		PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImportedMeetingTitleMemoTests.swift; sourceTree = "<group>"; };
@@ -3276,6 +3278,7 @@
 				PF2C00000000000000000F42 /* PublisherMirrorTests.swift */,
 				PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */,
 				PF2C00000000000000000F51 /* CalendarClockTests.swift */,
+				PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */,
 				PF2C00000000000000000F13 /* RelatedDocumentsMemoTests.swift */,
 				5B10000000000000000B0007 /* ImportedMeetingTitleTests.swift */,
 				PF1B00000000000000000002 /* ImportedMeetingTitleMemoTests.swift */,
@@ -5081,6 +5084,7 @@
 				PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */,
 				PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */,
 				PF2C00000000000000000B51 /* CalendarClockTests.swift in Sources */,
+				PF2C00000000000000000B52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift in Sources */,
 				PF2C00000000000000000B13 /* RelatedDocumentsMemoTests.swift in Sources */,
 				5B10000000000000000A0007 /* ImportedMeetingTitleTests.swift in Sources */,
 				PF1B00000000000000000003 /* ImportedMeetingTitleMemoTests.swift in Sources */,
