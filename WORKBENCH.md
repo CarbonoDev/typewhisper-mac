@@ -157,9 +157,12 @@
 - [x] Perf: prune SwiftData persistent history; defer non-critical startup past the first frame @vault-offmain
   Impact low-med / risk low-med. `ACHANGE` has 74k rows and nothing prunes it; launch logged a 2.8 s slow-HID response with ~10 store opens, a vault scan and plugin loading all synchronous before the first frame.
   > 2026-10-06 diamond: reviewed + merged to main as 2f8b63e0 (LaunchMetrics: milestones + per-store open time, log category "Launch"), c4d01b98 (Google sync start + participant backfill after first frame), bf8222a7 (prune persistent history >24 h, off main, macOS 15+). Worker: 12 classes / 203 tests green. NOT measured: no launch timed, prune not run against the real store. Worker's finding: most launch cost is ~10 store opens + ~70 services built synchronously in ServiceContainer (upstream structure) — parked until the dev build's per-store timings exist. Parked follow-ups: lazy store opens, usage-statistics backfill + history retention purge after first frame, VACUUM, PromptActionService opens its store outside the factory.
-- [~] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes @vault-offmain
+- [x] Perf: Google calendar/Drive decode + mapping off main; debounced ledger writes @vault-offmain
   Impact medium / risk low-med. `GoogleCalendarSyncEngine.swift:296-335`, `GoogleDriveTranscriptImporter.swift:183-215`, `GoogleDriveImportLedger.swift:396-412`. Wait for Google Phase 2 to land first.
-  > 2026-10-06 diamond: dispatched to vault-offmain after its second merge.
+  > 2026-10-06 diamond: reviewed + merged to main (Google calendar page decode + mapping off main, equality-gated lastSyncError; Drive export decode + summary-gate parse off main; ledger writes coalesced to one per 2 s with flush on backfill end / cycle end / terminate, first watermark seed and forget written through). Worker: 13 classes / 195 tests green. Trade accepted: a crash inside the 2 s window re-discovers the file and re-imports it as a deduped merge into the meeting it already created — same exposure the write-through ledger had, wider window.
+- [~] Perf: Drive import parses the export once, off main (segments handed to MeetingImportService) @vault-offmain
+- [~] Perf: before/after benchmark suite over a synthetic store, run at 772f3535 and at main @vault-offmain
+  > 2026-10-06 diamond: dispatched to vault-offmain after its third merge. This is the measurement we can get without replacing the installed dev app.
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
