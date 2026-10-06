@@ -934,12 +934,12 @@ final class MeetingsViewModel: ObservableObject {
     /// progress (nothing is created) or start failed (the just-created meeting is removed).
     @discardableResult
     func createAndStartAdHocCapture(title: String? = nil) async -> Meeting? {
-        // Authoritative *synchronous* flag on the capture service, not the Combine-mirrored
-        // `self.isCapturing` (a main-queue hop behind). A second click arriving during the first
-        // `start()`'s suspension is rejected here before it can create a second meeting.
-        // Also refuse while a previous session is finalizing (its recorder/buffer are being torn
-        // down), matching `start()`'s guard (finding 2).
-        guard !captureService.isCapturing, !captureService.isFinalizing else { return nil }
+        // The synchronous capture mirrors (`MeetingsViewModelMirrorTests`): `start()` claims
+        // `isCapturing` before its first await, so a second click arriving during that suspension is
+        // rejected here before it can create a second meeting. Also refuse while a previous session
+        // is finalizing (its recorder/buffer are being torn down), matching `start()`'s guard
+        // (finding 2).
+        guard !isCapturing, !isFinalizing else { return nil }
         let meeting = createAdHocMeeting(title: title)
         do {
             try await captureService.start(meeting: meeting)
@@ -960,10 +960,9 @@ final class MeetingsViewModel: ObservableObject {
     /// can focus that instead of silently doing nothing.
     @discardableResult
     func startMeetingRecordingFromMenu() async -> Meeting? {
-        // Authoritative synchronous flags on the capture service (not the Combine-mirrored copies).
-        guard !captureService.isCapturing, !captureService.isFinalizing else {
+        guard !isCapturing, !isFinalizing else {
             captureErrorMessage = String(localized: "meetings.recording.alreadyActive")
-            return captureService.activeMeeting
+            return activeMeeting
         }
         return await createAndStartAdHocCapture()
     }
@@ -980,12 +979,12 @@ final class MeetingsViewModel: ObservableObject {
         await captureService.stop()
     }
 
-    /// Owner request 2: evaluate the end-of-meeting stop reminder against the *authoritative* capture
-    /// service state (not the Combine-mirrored copies, which lag a main-queue hop). Fires at most one
-    /// local notification per meeting when a calendar-linked meeting's scheduled end has passed and it
-    /// is still recording; the service excludes ad-hoc meetings and dedupes per session.
+    /// Owner request 2: evaluate the end-of-meeting stop reminder against the (synchronous) capture
+    /// mirrors. Fires at most one local notification per meeting when a calendar-linked meeting's
+    /// scheduled end has passed and it is still recording; the service excludes ad-hoc meetings and
+    /// dedupes per session.
     private func evaluateMeetingEndReminder() {
-        guard captureService.isCapturing, let meeting = captureService.activeMeeting else { return }
+        guard isCapturing, let meeting = activeMeeting else { return }
         endReminderService.evaluate(
             meetingTitle: meeting.title,
             calendarEventID: meeting.calendarEventID,

@@ -70,4 +70,29 @@ final class MeetingsViewModelMirrorTests: XCTestCase {
         XCTAssertEqual(vm.isFinalizing, capture.isFinalizing)
         XCTAssertTrue(vm.activeMeeting === capture.activeMeeting)
     }
+
+    // MARK: - Guards that read the mirrors (formerly read the service to dodge the hop)
+
+    func testSecondStartDuringTheFirstStartsSuspensionIsRejected() async throws {
+        let vm = harness.viewModel
+        var nested: Meeting?? = .none
+        harness.duringRecorderStart = { [weak self] in
+            self?.harness.duringRecorderStart = nil
+            nested = .some(await vm.createAndStartAdHocCapture())
+        }
+        let first = await vm.createAndStartAdHocCapture()
+        XCTAssertNotNil(first)
+        XCTAssertEqual(nested, .some(nil), "the nested start ran and was refused")
+        XCTAssertEqual(harness.meetingService.meetings.count, 1, "no stray second meeting")
+    }
+
+    func testMenuStartWhileCapturingReturnsTheActiveMeeting() async throws {
+        let vm = harness.viewModel
+        let started = await vm.createAndStartAdHocCapture()
+        let first = try XCTUnwrap(started)
+        let again = await vm.startMeetingRecordingFromMenu()
+        XCTAssertTrue(again === first)
+        XCTAssertEqual(vm.captureErrorMessage, String(localized: "meetings.recording.alreadyActive"))
+        XCTAssertEqual(harness.meetingService.meetings.count, 1)
+    }
 }
