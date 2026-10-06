@@ -418,6 +418,9 @@ struct MeetingDocumentHeader: View {
 /// a Clear action. Setting a language from the list records it as `.manual`.
 private struct MeetingLanguagePickerPopover: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // The Detect spinner reads the job queue (`isDetectingLanguage`); a failed detection writes no
+    // meeting field, so nothing else would end the spinner.
+    @ObservedObject private var jobQueue = JobQueueService.shared
     let meeting: Meeting
     @Binding var isPresented: Bool
 
