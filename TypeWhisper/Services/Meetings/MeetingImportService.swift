@@ -143,10 +143,18 @@ final class MeetingImportService: ObservableObject {
     /// land on their real dates. `nil` (every pre-existing call site) keeps today's behavior.
     @discardableResult
     func importTranscriptText(_ text: String, title: String? = nil, startDate: Date? = nil) throws -> Meeting {
-        let segments = TranscriptFileParser.parse(text)
+        try importTranscriptSegments(TranscriptFileParser.parse(text), title: title, startDate: startDate)
+    }
+
+    /// `importTranscriptText` over segments the caller already parsed (the Drive importer parses
+    /// once, off the main actor). Same title resolution, same empty-transcript error.
+    @discardableResult
+    func importTranscriptSegments(
+        _ segments: [TranscriptionSegment], title: String? = nil, startDate: Date? = nil
+    ) throws -> Meeting {
         guard !segments.isEmpty else { throw ImportError.emptyTranscript }
         return meetingService.createFromImport(
-            title: resolvedTitle(title, fallbackText: text),
+            title: resolvedTitle(title),
             source: .importedTranscript,
             segments: segments,
             segmentSource: .importedTranscript,
@@ -221,7 +229,12 @@ final class MeetingImportService: ObservableObject {
     /// count returned. Throws `.emptyTranscript` when nothing parseable is found.
     @discardableResult
     func mergeTranscriptText(_ text: String, into meeting: Meeting) throws -> Int {
-        let segments = TranscriptFileParser.parse(text)
+        try mergeTranscriptSegments(TranscriptFileParser.parse(text), into: meeting)
+    }
+
+    /// `mergeTranscriptText` over already-parsed segments.
+    @discardableResult
+    func mergeTranscriptSegments(_ segments: [TranscriptionSegment], into meeting: Meeting) throws -> Int {
         guard !segments.isEmpty else { throw ImportError.emptyTranscript }
         let dropped = meetingService.mergeImport(into: meeting, segments: segments, source: .importedTranscript)
         if dropped > 0 {
@@ -296,14 +309,20 @@ final class MeetingImportService: ObservableObject {
     /// replace path — so the caller's log line means the same thing either way.
     @discardableResult
     func mergeOrSupersedeTranscriptText(_ text: String, into meeting: Meeting) throws -> Int {
-        let segments = TranscriptFileParser.parse(text)
+        try mergeOrSupersedeTranscriptSegments(TranscriptFileParser.parse(text), into: meeting)
+    }
+
+    /// `mergeOrSupersedeTranscriptText` over already-parsed segments — the Drive importer's write
+    /// step, so the export is parsed exactly once (off the main actor, by the importer).
+    @discardableResult
+    func mergeOrSupersedeTranscriptSegments(_ segments: [TranscriptionSegment], into meeting: Meeting) throws -> Int {
         guard !segments.isEmpty else { throw ImportError.emptyTranscript }
 
         let existing = meeting.segments.map {
             ExistingSegmentShape(start: $0.start, end: $0.end, source: $0.source)
         }
         guard Self.supersedesUntimedImport(existing: existing, imported: segments) else {
-            return try mergeTranscriptText(text, into: meeting)
+            return try mergeTranscriptSegments(segments, into: meeting)
         }
 
         let superseded = existing.count
@@ -357,7 +376,7 @@ final class MeetingImportService: ObservableObject {
 
     /// Derive the title for a raw-text import from the explicit argument, else the localized default
     /// (raw text has no file name to fall back to).
-    private func resolvedTitle(_ title: String?, fallbackText: String) -> String {
+    private func resolvedTitle(_ title: String?) -> String {
         if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             return title
         }

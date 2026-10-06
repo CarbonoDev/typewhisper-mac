@@ -169,8 +169,10 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         //     Gemini often appends the transcript to the same doc minutes after the call, and that
         //     edit must still be allowed to import. Importing the summary instead is what filled
         //     meetings with untimed "Resumen"/"Decisiones" rows.
-        //     The parse runs off the main actor; like the export, it finishes before the snapshot.
-        if await Self.isSummaryOnlyExport(text, isMarkdownExport: isMarkdownExport) {
+        //     The export is parsed exactly once, off the main actor, before the snapshot; the write
+        //     step below consumes those segments instead of re-parsing the text on the main actor.
+        let parsed = await Self.parseExport(text, isMarkdownExport: isMarkdownExport)
+        if parsed.isSummaryOnly {
             if ownsPendingEntry {
                 ledger.clearPending(fileID: fileID)
             }
@@ -195,7 +197,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 return .touched
             }
             do {
-                let dropped = try importService.mergeOrSupersedeTranscriptText(text, into: meeting)
+                let dropped = try importService.mergeOrSupersedeTranscriptSegments(parsed.segments, into: meeting)
                 ledger.recordImported(
                     fileID: fileID, docModifiedTime: docModified,
                     meetingID: meetingID, disposition: .merged, now: now()
@@ -231,7 +233,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 return .failed(message: "matched meeting disappeared before merge")
             }
             do {
-                let dropped = try importService.mergeOrSupersedeTranscriptText(text, into: meeting)
+                let dropped = try importService.mergeOrSupersedeTranscriptSegments(parsed.segments, into: meeting)
                 ledger.recordImported(
                     fileID: fileID, docModifiedTime: docModified,
                     meetingID: meetingID, disposition: .merged, now: now()
@@ -248,7 +250,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             do {
                 // One list republish for the create + append + auto-link writes (Perf 1C).
                 meeting = try meetingService.performBatch {
-                    let meeting = try importService.importTranscriptText(text, title: title, startDate: startDate)
+                    let meeting = try importService.importTranscriptSegments(parsed.segments, title: title, startDate: startDate)
                     // Best-effort calendar auto-link (D-D4 disposition 2) — still before the ledger
                     // record, still synchronous. Historical backfill dates usually fall outside the
                     // snapshot window, so old meetings simply stay unlinked.
@@ -293,10 +295,23 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
     /// something but carries no recoverable timing is Gemini's summary, not the transcript. The
     /// `text/plain` fallback drops the timing markup by design, so it never trips the gate.
     nonisolated static func isSummaryOnlyExport(_ text: String, isMarkdownExport: Bool) async -> Bool {
-        guard isMarkdownExport else { return false }
-        return await Task.detached(priority: .utility) {
-            let parsed = TranscriptFileParser.parse(text)
-            return !parsed.isEmpty && !MeetingImportService.carriesRecoverableTiming(parsed)
+        await parseExport(text, isMarkdownExport: isMarkdownExport).isSummaryOnly
+    }
+
+    /// An export parsed once: its segments (what the write step imports) and the gate's verdict.
+    struct ParsedExport: Sendable {
+        let segments: [TranscriptionSegment]
+        let isSummaryOnly: Bool
+    }
+
+    /// Parse an export off the main actor and apply the summary gate to the same parse.
+    nonisolated static func parseExport(_ text: String, isMarkdownExport: Bool) async -> ParsedExport {
+        await Task.detached(priority: .utility) {
+            let segments = TranscriptFileParser.parse(text)
+            let isSummaryOnly = isMarkdownExport
+                && !segments.isEmpty
+                && !MeetingImportService.carriesRecoverableTiming(segments)
+            return ParsedExport(segments: segments, isSummaryOnly: isSummaryOnly)
         }.value
     }
 
