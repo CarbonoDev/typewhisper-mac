@@ -83,9 +83,8 @@ struct MeetingTimelineList: View {
 
                     LazyVStack(spacing: 6) {
                         ForEach(group.meetings, id: \.id) { meeting in
-                            if let model = MeetingRowModelStore.shared.row(for: meeting, context: rowContext) {
-                                row(meeting, model: model, orderedIDs: orderedIDs)
-                            }
+                            // The model is built when the lazy stack realizes this row (`MeetingRowCell`).
+                            row(meeting, context: rowContext, orderedIDs: orderedIDs)
                         }
                     }
                 }
@@ -110,11 +109,17 @@ struct MeetingTimelineList: View {
     }
 
     @ViewBuilder
-    private func row(_ meeting: Meeting, model: MeetingRowModel, orderedIDs: [UUID]) -> some View {
+    private func row(
+        _ meeting: Meeting,
+        context: MeetingRowModelStore.Context,
+        orderedIDs: [UUID]
+    ) -> some View {
         let isLive = viewModel.isCapturing && viewModel.activeMeeting?.id == meeting.id
         let isSelected = selection?.wrappedValue.contains(meeting.id) ?? false
-        let content = MeetingRowView(model: model, style: .timeline, isLive: isLive, isSelected: isSelected)
-            .equatable()
+        let content = MeetingRowCell(meeting: meeting, context: context) { model in
+            MeetingRowView(model: model, style: .timeline, isLive: isLive, isSelected: isSelected)
+                .equatable()
+        }
         if let selection {
             content
                 .contentShape(Rectangle())

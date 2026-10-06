@@ -97,9 +97,9 @@ struct MeetingsListView: View {
 
     private func list(_ displayedMeetings: [Meeting]) -> some View {
         let duplicates = MeetingDuplicateIndex.duplicateIDs(in: displayedMeetings)
-        let rows = MeetingRowModelStore.shared.rows(
-            for: displayedMeetings,
-            context: .init(actionFacts: HomeFeedViewModel.shared.actionFacts(for:), duplicateIDs: duplicates)
+        // Row models are built per realized row (`MeetingRowCell`), not for every displayed meeting.
+        let rowContext = MeetingRowModelStore.Context(
+            actionFacts: HomeFeedViewModel.shared.actionFacts(for:), duplicateIDs: duplicates
         )
         let liveID = viewModel.isCapturing ? viewModel.activeMeeting?.id : nil
         return List(selection: $selection.ids) {
@@ -121,18 +121,21 @@ struct MeetingsListView: View {
                         .listRowSeparator(.hidden)
                 }
             } else {
-                ForEach(rows) { row in
+                ForEach(displayedMeetings, id: \.id) { meeting in
+                    let id = meeting.id
                     // Non-Button row (HistoryView's idiom) so the List's NSTableView-backed selection
                     // receives ⌘/⇧-click and ⌘-A natively; a plain tap opens the meeting. A full-width
                     // Button here swallowed modified clicks and broke multi-select (LX-1 finding #1).
-                    MeetingRowView(
-                        model: row,
-                        style: .archive,
-                        isLive: row.id == liveID,
-                        isSelected: selection.ids.contains(row.id)
-                    )
+                    MeetingRowCell(meeting: meeting, context: rowContext) { row in
+                        MeetingRowView(
+                            model: row,
+                            style: .archive,
+                            isLive: id == liveID,
+                            isSelected: selection.ids.contains(id)
+                        )
                         .equatable()
-                        .tag(row.id)
+                    }
+                        .tag(id)
                         .listRowSeparator(.hidden)
                         // The row draws its own card fill + selection tint (from the bound selection
                         // set) — suppress the native table highlight so the two don't stack.
@@ -144,11 +147,11 @@ struct MeetingsListView: View {
                         // modifier is held so only an unmodified click opens the meeting.
                         .onTapGesture {
                             guard NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty else { return }
-                            coordinator.openMeeting(id: row.id)
+                            coordinator.openMeeting(id: id)
                         }
                         // Shared row right-click menu (plan LX-2, D4): single-vs-multi branch on the
                         // native `List(selection:)` set, identical to the folder-detail rows.
-                        .meetingRowContextMenu(for: row.id, actions: rowActions)
+                        .meetingRowContextMenu(for: id, actions: rowActions)
                 }
             }
         }

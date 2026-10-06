@@ -59,8 +59,8 @@ final class MeetingRowModelStoreTests: XCTestCase {
     func testStoredFactsAreDerivedOncePerUpdatedAt() throws {
         let store = MeetingRowModelStore()
         let meeting = Meeting(title: "Standup", updatedAt: Date(timeIntervalSince1970: 1))
-        _ = store.rows(for: [meeting], context: context())
-        _ = store.rows(for: [meeting], context: context())
+        _ = store.row(for: meeting, context: context())
+        _ = store.row(for: meeting, context: context())
         XCTAssertEqual(store.derivationCount, 1)
 
         // What every `MeetingService` write does: change the row, bump `updatedAt`.
@@ -132,6 +132,21 @@ final class MeetingRowModelStoreTests: XCTestCase {
         let doomed = service.createMeeting(title: "Doomed", source: .adHoc)
         service.deleteMeeting(doomed)
 
-        XCTAssertEqual(store.rows(for: [kept, doomed], context: context()).map(\.id), [kept.id])
+        XCTAssertNotNil(store.row(for: kept, context: context()))
+        XCTAssertNil(store.row(for: doomed, context: context()))
+    }
+
+    /// Rows are built per realized row (`MeetingRowCell`): a visible window of k rows over an archive
+    /// of N derives k stored facts — each one the only place a row faults `segments` / `outputs`.
+    func testAVisibleWindowDerivesOnlyItsRows() {
+        let store = MeetingRowModelStore()
+        let archive = (0..<40).map { Meeting(title: "Meeting \($0)") }
+        let window = archive[10..<25]
+
+        for meeting in window { _ = store.row(for: meeting, context: context()) }
+        XCTAssertEqual(store.derivationCount, window.count)
+
+        for meeting in window { _ = store.row(for: meeting, context: context()) }
+        XCTAssertEqual(store.derivationCount, window.count, "scrolling back over cached rows derives nothing")
     }
 }

@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// [Perf Phase 2] Everything one meeting row draws, as a plain value. Rows render from this instead
 /// of reading a live SwiftData `Meeting` (and observing the singleton view model) on every body
@@ -50,6 +50,10 @@ struct MeetingRowModel: Equatable, Identifiable {
 /// once per `(id, updatedAt)` — the invalidation key every meeting-fact cache already uses
 /// (`MeetingService` bumps `updatedAt` on each write that changes a row). Main-actor because it reads
 /// SwiftData models; not observable, since the lists that call it already observe their inputs.
+///
+/// Rows are built one at a time, by `MeetingRowCell` when the lazy container realizes that row —
+/// never for a whole list in a list body: a row's stored facts fault the `segments` and `outputs`
+/// relationships, which must be paid for the visible rows only.
 @MainActor
 final class MeetingRowModelStore {
     static let shared = MeetingRowModelStore()
@@ -72,6 +76,7 @@ final class MeetingRowModelStore {
 
     private var cache: [UUID: StoredFacts] = [:]
     /// Number of stored-fact derivations (cache misses) — a test probe for the invalidation key.
+    /// Each derivation reads both relationship facts through `MeetingRelationshipFacts`.
     private(set) var derivationCount = 0
 
     /// Volatile inputs the caller supplies (each already memoized or O(1) at its source).
@@ -84,12 +89,8 @@ final class MeetingRowModelStore {
         var duplicateIDs: Set<UUID> = []
     }
 
-    /// Row models for `meetings`, in order. Meetings already deleted from the store are skipped: their
-    /// attributes can no longer be read, and the row is about to disappear anyway.
-    func rows(for meetings: [Meeting], context: Context) -> [MeetingRowModel] {
-        meetings.compactMap { row(for: $0, context: context) }
-    }
-
+    /// The row model for one meeting, or nil for a meeting already deleted from the store (its
+    /// attributes can no longer be read, and the row is about to disappear anyway).
     func row(for meeting: Meeting, context: Context) -> MeetingRowModel? {
         guard !meeting.isDeletedFromStore else { return nil }
         let facts = storedFacts(for: meeting)
@@ -133,11 +134,27 @@ final class MeetingRowModelStore {
             folder: folder?.isEmpty == false ? folder : nil,
             tags: meeting.tags,
             attendeeCount: meeting.attendees.count,
-            hasTranscript: !meeting.segments.isEmpty,
-            hasBrief: MeetingsViewModel.homeBadgeFacts(for: meeting, isRunningLong: false).hasBrief,
+            hasTranscript: MeetingRelationshipFacts.hasTranscript(meeting),
+            hasBrief: MeetingRelationshipFacts.outputKinds(meeting).contains(.brief),
             endDate: meeting.endDate
         )
         cache[meeting.id] = facts
         return facts
+    }
+}
+
+/// [Perf Phase 2] One list row's slot: builds that row's `MeetingRowModel` in its own body, so a lazy
+/// container (`List`, `LazyVStack`) derives models only for the rows it realizes, and an in-place
+/// write to one meeting (tracked through the `updatedAt` read) re-renders only its cell. Always
+/// exactly one view per meeting, which keeps `ForEach` row counts static for the lazy container.
+struct MeetingRowCell<Content: View>: View {
+    let meeting: Meeting
+    let context: MeetingRowModelStore.Context
+    @ViewBuilder let content: (MeetingRowModel) -> Content
+
+    var body: some View {
+        if let model = MeetingRowModelStore.shared.row(for: meeting, context: context) {
+            content(model)
+        }
     }
 }
