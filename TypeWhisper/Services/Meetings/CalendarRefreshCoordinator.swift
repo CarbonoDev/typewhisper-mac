@@ -35,6 +35,10 @@ final class CalendarRefreshCoordinator {
         var runConsumers: @MainActor (_ events: [CalendarEventDTO], _ now: Date) -> Void
         /// Leads before an event's start at which a time-driven display changes (`CalendarClock`).
         var displayLeads: @MainActor () -> [TimeInterval] = { [] }
+        /// Emits when the exclusion set may have changed without a VM call to `loadUpcoming` — a
+        /// meeting deleted or merged away, an auto-brief placeholder engaged by capture start. The
+        /// coordinator re-windows the retained query (no provider hit), started or not.
+        var exclusionsChanged: AnyPublisher<Void, Never> = Empty().eraseToAnyPublisher()
     }
 
     private let calendarService: CalendarService
@@ -46,6 +50,7 @@ final class CalendarRefreshCoordinator {
 
     private var isStarted = false
     private var triggerObservers: [AnyCancellable] = []
+    private var exclusionObserver: AnyCancellable?
     private var wakeTimer: AnyCancellable?
     private var refetchTask: Task<Void, Never>?
     /// A trigger arrived while a query was in flight: run one more when it lands.
@@ -74,6 +79,13 @@ final class CalendarRefreshCoordinator {
         self.notificationCenter = notificationCenter
         self.workspaceNotificationCenter = workspaceNotificationCenter
         self.scheduleWake = scheduleWake
+        exclusionObserver = hooks.exclusionsChanged.sink { [weak self] in self?.exclusionsDidChange() }
+    }
+
+    /// Re-apply the exclusion set to the retained query (`Hooks.exclusionsChanged`). A change in
+    /// the Upcoming list reaches the consumers through the VM sink, which also re-plans.
+    private func exclusionsDidChange() {
+        calendarService.rewindow(now: now(), existingCalendarEventIDs: hooks.existingCalendarEventIDs())
     }
 
     // MARK: - Lifecycle

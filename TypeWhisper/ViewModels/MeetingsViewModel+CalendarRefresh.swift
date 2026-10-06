@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// [Perf Phase 2] Calendar refresh wiring: the event-driven `CalendarRefreshCoordinator` that replaced
@@ -26,7 +27,18 @@ extension MeetingsViewModel {
                 existingCalendarEventIDs: { [weak self] in self?.existingCalendarEventIDs ?? [] },
                 consumerWindows: { [weak self] in self?.calendarConsumerWindows ?? [] },
                 runConsumers: { [weak self] events, now in self?.runCalendarConsumers(events, now: now) },
-                displayLeads: { [MeetingTrayIndicator.trayTitleWindow] }
+                displayLeads: { [MeetingTrayIndicator.trayTitleWindow] },
+                // Both hops are load-bearing: the exclusion set is read from `meetingService.meetings`
+                // and `Meeting.state`, which `@Published`'s willSet emission precedes (the list), or
+                // which capture start writes later in the same turn (`.live`, after `activeMeeting`).
+                exclusionsChanged: Publishers.Merge(
+                    // Membership: a calendar-linked meeting deleted or merged frees its event.
+                    meetingService.meetingsListPublisher.map { _ in () },
+                    // An auto-brief placeholder becomes engaged when its capture starts.
+                    captureService.$activeMeeting.dropFirst().map { _ in () }
+                )
+                .receive(on: DispatchQueue.main)
+                .eraseToAnyPublisher()
             )
         )
     }

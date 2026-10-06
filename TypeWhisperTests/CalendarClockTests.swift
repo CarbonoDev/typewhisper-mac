@@ -4,7 +4,7 @@ import XCTest
 
 /// [Perf · stale-state audit] Time-driven calendar displays re-render from `CalendarClock`, which the
 /// coordinator ticks at its wakes — including wakes that change no list (event start, the tray-title
-/// window opening).
+/// window opening) — and the exclusion set re-applies on the coordinator's `exclusionsChanged`.
 @MainActor
 final class CalendarClockTests: XCTestCase {
     private let start = Date(timeIntervalSince1970: 1_700_000_000)
@@ -36,17 +36,20 @@ final class CalendarClockTests: XCTestCase {
 
     private func makeCoordinator(
         events: [CalendarEventDTO],
-        displayLeads: [TimeInterval] = []
+        displayLeads: [TimeInterval] = [],
+        excluded: @escaping @MainActor () -> Set<String> = { [] },
+        exclusionsChanged: AnyPublisher<Void, Never> = Empty().eraseToAnyPublisher()
     ) -> (CalendarRefreshCoordinator, CalendarService, ManualCalendarWakes) {
         let service = CalendarService(provider: CountingCalendarProvider(events: events), selectionStore: InMemorySelection())
         let wakes = ManualCalendarWakes(clock: start)
         let coordinator = CalendarRefreshCoordinator(
             calendarService: service,
             hooks: .init(
-                existingCalendarEventIDs: { [] },
+                existingCalendarEventIDs: excluded,
                 consumerWindows: { [] },
                 runConsumers: { _, _ in },
-                displayLeads: { displayLeads }
+                displayLeads: { displayLeads },
+                exclusionsChanged: exclusionsChanged
             ),
             now: { wakes.clock },
             notificationCenter: NotificationCenter(),
@@ -104,5 +107,29 @@ final class CalendarClockTests: XCTestCase {
             consumerWindows: [], displayLeads: [lead], refetchAt: nil
         )
         XCTAssertEqual(planned?.date, evt.startDate.addingTimeInterval(-lead))
+    }
+
+    func testExclusionChangeRewindowsWithoutStartOrQuery() async {
+        let evt = event("a", startIn: 3600)
+        final class Box { var excluded: Set<String> = [] }
+        let box = Box()
+        let changes = PassthroughSubject<Void, Never>()
+        let (coordinator, service, _) = makeCoordinator(
+            events: [evt],
+            excluded: { box.excluded },
+            exclusionsChanged: changes.eraseToAnyPublisher()
+        )
+        service.refresh(now: start)
+        XCTAssertEqual(service.upcomingEvents.map(\.id), ["a"])
+
+        // The backing auto-brief placeholder went live: the event is now engaged.
+        box.excluded = ["a"]
+        changes.send()
+        XCTAssertEqual(service.upcomingEvents.map(\.id), [])
+        // And a deleted meeting frees it again.
+        box.excluded = []
+        changes.send()
+        XCTAssertEqual(service.upcomingEvents.map(\.id), ["a"])
+        withExtendedLifetime(coordinator) {}
     }
 }
