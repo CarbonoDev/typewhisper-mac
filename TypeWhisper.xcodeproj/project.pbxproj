@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		PF1A0000000000000000B003 /* MeetingService+RelatedNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F003 /* MeetingService+RelatedNotes.swift */; };
+		PF1A0000000000000000B002 /* MeetingService+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F002 /* MeetingService+Organization.swift */; };
 		1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
 		1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */; };
@@ -861,6 +863,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		PF1A0000000000000000F003 /* MeetingService+RelatedNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+RelatedNotes.swift"; sourceTree = "<group>"; };
+		PF1A0000000000000000F002 /* MeetingService+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+Organization.swift"; sourceTree = "<group>"; };
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
 			3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStoreTests.swift; sourceTree = "<group>"; };
@@ -2428,6 +2432,8 @@
 				PPF0000000000000000001 /* MeetingPresence.swift */,
 				MCF000000000000000000007 /* MeetCallControlLayout.swift */,
 				MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */,
+				PF1A0000000000000000F003 /* MeetingService+RelatedNotes.swift */,
+				PF1A0000000000000000F002 /* MeetingService+Organization.swift */,
 				MCF000000000000000000002 /* MeetCallControlService.swift */,
 				MCF000000000000000000001 /* MeetCallControl.swift */,
 				CA11F00000000000000001 /* CalendarColor.swift */,
@@ -5100,6 +5106,8 @@
 				PPB0000000000000000001 /* MeetingPresence.swift in Sources */,
 				MCB000000000000000000007 /* MeetCallControlLayout.swift in Sources */,
 				MCB000000000000000000006 /* MeetingService+CaptionSessions.swift in Sources */,
+				PF1A0000000000000000B003 /* MeetingService+RelatedNotes.swift in Sources */,
+				PF1A0000000000000000B002 /* MeetingService+Organization.swift in Sources */,
 				MCB000000000000000000002 /* MeetCallControlService.swift in Sources */,
 				MCB000000000000000000001 /* MeetCallControl.swift in Sources */,
 				GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */,
