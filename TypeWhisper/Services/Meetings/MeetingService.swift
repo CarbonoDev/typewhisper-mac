@@ -498,7 +498,7 @@ final class MeetingService: ObservableObject {
         // `meeting.segments` cannot be trusted for renumbering yet.
         let surviving = meeting.segments.filter { $0.source != source || preserved.contains($0.id) }
         for existing in meeting.segments where existing.source == source && !preserved.contains(existing.id) {
-            modelContext.delete(existing)
+            deleteSegment(existing)
         }
         var newSegments: [MeetingSegment] = []
         // Assign sequential provisional orders (not all 0) so that when `renumber` sorts by
@@ -511,12 +511,10 @@ final class MeetingService: ObservableObject {
                 source: source,
                 isStable: true
             )
-            modelSegment.meeting = meeting
-            modelContext.insert(modelSegment)
+            insertSegment(modelSegment, into: meeting)
             newSegments.append(modelSegment)
         }
         renumber(surviving + newSegments)
-        forgetSegmentOrder(for: meeting)
         meeting.updatedAt = Date()
         commitWrite(.inPlace)
     }
@@ -605,7 +603,7 @@ final class MeetingService: ObservableObject {
                     meeting: meeting
                 )
                 segment.sourceRaw = segmentDTO.sourceRaw
-                modelContext.insert(segment)
+                insertSegment(segment, into: meeting)
             }
 
             for noteDTO in dto.notes {
@@ -710,7 +708,7 @@ final class MeetingService: ObservableObject {
         // re-sorts by (start, provisional order); the merger already produced the final order, so
         // provisional order == index preserves it (including all-zero-timestamp stability).
         for existingSegment in meeting.segments {
-            modelContext.delete(existingSegment)
+            deleteSegment(existingSegment)
         }
         var inserted: [MeetingSegment] = []
         inserted.reserveCapacity(merged.count)
@@ -725,8 +723,7 @@ final class MeetingService: ObservableObject {
                 source: segment.source,
                 isStable: true
             )
-            modelSegment.meeting = meeting
-            modelContext.insert(modelSegment)
+            insertSegment(modelSegment, into: meeting)
             inserted.append(modelSegment)
         }
         renumber(inserted)
@@ -862,7 +859,6 @@ final class MeetingService: ObservableObject {
         // (Swift's sort is not stable — the `replaceSegments` idiom).
         for (index, segment) in provisional.enumerated() { segment.order = index }
         renumber(provisional)
-        forgetSegmentOrder(for: primary)
 
         // Commit the re-parenting before deleting the absorbed rows, so their cascade delete rules
         // cannot take the just-moved children with them.
@@ -898,6 +894,7 @@ final class MeetingService: ObservableObject {
         for (index, segment) in ordered.enumerated() {
             segment.order = index
         }
+        forgetSegmentOrders(of: segments)
     }
 
     // MARK: - Child CRUD

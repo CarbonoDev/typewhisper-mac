@@ -28,9 +28,9 @@ final class MeetingListPublishingState {
     /// A refetch happened inside the current batch whose value list subscribers have not seen yet.
     var republishPending = false
     /// Next `MeetingSegment.order` per meeting for the live-append path, so a ~4 s caption flush
-    /// does not fault every segment to find the max. Dropped whenever another path deletes,
-    /// replaces, or renumbers a meeting's segments (all segment writes go through `MeetingService`,
-    /// the single writer of the store).
+    /// does not fault every segment to find the max. Invalidated structurally by the segment row
+    /// choke points in `MeetingService+Publishing.swift` (all segment writes go through
+    /// `MeetingService`, the single writer of the store).
     var nextSegmentOrder: [UUID: Int] = [:]
 }
 
@@ -117,9 +117,37 @@ extension MeetingService {
         return start
     }
 
-    /// Drop the cached next order for `meeting` after a write that deletes, replaces, or renumbers
-    /// its segments, so the next append recomputes it from the store.
+    /// Drop the cached next order for `meeting`, so the next append recomputes it from the store.
     func forgetSegmentOrder(for meeting: Meeting) {
         listPublishing.nextSegmentOrder[meeting.id] = nil
+    }
+
+    /// Drop the cached next order of every meeting `segments` belong to (`renumber` calls this, so
+    /// any path that rewrites `order` invalidates the cache without remembering to).
+    func forgetSegmentOrders(of segments: [MeetingSegment]) {
+        for meetingID in Set(segments.compactMap { $0.meeting?.id }) {
+            listPublishing.nextSegmentOrder[meetingID] = nil
+        }
+    }
+
+    // MARK: - Segment row choke points
+    //
+    // Invariant for the order cache: `appendStableSegments` is the only writer that inserts a
+    // segment without going through `insertSegment`; every segment delete goes through
+    // `deleteSegment`; every rewrite of `order` goes through `renumber`; every meeting delete (the
+    // cascade) calls `forgetSegmentOrder`. Each of those drops the affected meeting's cache entry.
+
+    /// Insert a segment row written with its own `order` (replace, merge-import, backup restore)
+    /// and invalidate the meeting's cached next order.
+    func insertSegment(_ segment: MeetingSegment, into meeting: Meeting) {
+        segment.meeting = meeting
+        modelContext.insert(segment)
+        forgetSegmentOrder(for: meeting)
+    }
+
+    /// Delete a segment row and invalidate its meeting's cached next order.
+    func deleteSegment(_ segment: MeetingSegment) {
+        if let meeting = segment.meeting { forgetSegmentOrder(for: meeting) }
+        modelContext.delete(segment)
     }
 }
