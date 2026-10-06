@@ -124,3 +124,31 @@ before. `isDegradedLiveMode` and `finalRetranscriptionDegraded` have no view rea
 Kept on the VM: the `$elapsedSeconds` sink that drives the end-of-meeting reminder (orchestration,
 writes no state; it reads the forwards). The capture mirrors keep their synchronous
 `mirror(to:)` form and identity gate for `activeMeeting`; none of them was a hop.
+
+## Slice 2 — Calendar (`MeetingsCalendarModel`, `viewModel.calendar`)
+
+Grep used: `\.(calendarAuthorizationStatus|hasAnyCalendarSource|showsSystemCalendarProblem|
+calendarSelectionRevision|twinCalendarPrompts|upcomingEvents|earlierEvents|calendarErrorMessage|
+isCalendarAuthorized)\b` and `$upcomingEvents` across `TypeWhisper/`. The only VM helper derived
+from slice state is `isCalendarAuthorized`.
+
+| Reader (struct) | Reads | Observes now |
+|---|---|---|
+| `CalendarSelectionSection` | `isCalendarAuthorized`, `calendarAuthorizationStatus`, `calendarSelectionRevision` (`onChange`) | calendar only; VM held as a plain computed `.shared` (actions + `calendarSelectionRows()`, which reads the service) |
+| `GoogleAccountsSection` | `twinCalendarPrompts` | calendar only (+ its own Google store observation); VM computed for `resolveTwinPrompt` |
+| `UpcomingMeetingsSection` | `hasAnyCalendarSource`, `calendarAuthorizationStatus`, `calendarErrorMessage`, `upcomingEvents`, `earlierEvents` | VM + calendar (also reads `existingMeeting(for:)` / brief state off the VM) |
+| `ComingUpCard` | `hasAnyCalendarSource`, `calendarErrorMessage`, `showsSystemCalendarProblem`, `upcomingEvents` | VM + calendar (also `existingMeeting(for:)`); its two private row structs read no calendar state |
+| `MeetingLinkEventView` | `hasAnyCalendarSource` | VM + calendar |
+| `MenuBarView` | `upcomingEvents` | VM + capture + calendar |
+| `MeetingTrayIndicator` (Combine) | `$upcomingEvents` | subscribes to `viewModel.calendar.$upcomingEvents` |
+
+Moved with the slice: the `$authorizationStatus` sink (synchronous), the `$accounts` sink (hop,
+still load-bearing: its follow-ups re-read `googleAccountStore.accounts`), the upcoming / earlier /
+error mirrors, source-availability recompute, twin-prompt evaluation and the session dismissal
+flag. Kept on the VM: the Google snapshot notification sink (it drives `calendarRefresh.refetch()`
+and then asks the slice to re-evaluate twin prompts), the hopped `$upcomingEvents` consumer sink
+(`calendarUpcomingDidChange`, load-bearing as before), and every action (selection writes bump the
+slice's revision through `noteSelectionChanged()`; `resolveTwinPrompt` marks the account handled
+on the store, then drops the prompt from the slice). The pure statics
+`hasAnyCalendarSource(authorization:accounts:)` / `showsSystemCalendarProblem(...)` stay on the VM
+(tests call them there); the slice calls them.

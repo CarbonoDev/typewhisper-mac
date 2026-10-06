@@ -8,6 +8,9 @@ import AppKit
 /// bare error label or an empty shell.
 struct HomeNextSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Calendar state (read via the forwards) lives on the calendar slice; observing it
+    // keeps this view re-rendering on calendar changes.
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var homeViewModel = HomeFeedViewModel.shared
     /// Re-renders at event start / end so the hero's status, the Open button and the drop-off of

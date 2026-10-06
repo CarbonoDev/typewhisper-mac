@@ -11,7 +11,10 @@ import SwiftUI
 /// The section always renders its per-source groups — a Google-only user (EventKit denied) still
 /// manages per-account selection here; the needs-access hint is scoped to the macOS group only.
 struct CalendarSelectionSection: View {
-    @ObservedObject private var viewModel = MeetingsViewModel.shared
+    /// [VM split] Reads only calendar state (the forwards) plus actions: observes the calendar
+    /// slice, not the whole view model.
+    private var viewModel: MeetingsViewModel { .shared }
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
     /// Local snapshot of the rows; reloaded from the view model on appear, on authorization
     /// changes, on Google snapshot changes, and after each toggle (selection state is read from
     /// the service, not a `@Published`).

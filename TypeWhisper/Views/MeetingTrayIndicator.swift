@@ -312,7 +312,7 @@ final class MeetingTrayState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.elapsedSeconds = value }
             .store(in: &cancellables)
-        viewModel.$upcomingEvents
+        viewModel.calendar.$upcomingEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] events in self?.recomputeUpcoming(events) }
             .store(in: &cancellables)

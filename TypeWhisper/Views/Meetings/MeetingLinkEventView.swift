@@ -8,6 +8,9 @@ import SwiftUI
 /// matched back to their historical events so prior-meeting briefs can see them.
 struct MeetingLinkEventView: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Calendar state (read via the forwards) lives on the calendar slice; observing it
+    // keeps this view re-rendering on calendar changes.
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
     let meeting: Meeting
     @Binding var isPresented: Bool
 

@@ -79,6 +79,7 @@
 		PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */; };
 		PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F42 /* PublisherMirrorTests.swift */; };
 		PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */; };
+		PF3S00000000000000000007 /* MeetingsCalendarModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF3S00000000000000000008 /* MeetingsCalendarModelTests.swift */; };
 		PF3S00000000000000000003 /* MeetingsCaptureModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF3S00000000000000000004 /* MeetingsCaptureModelTests.swift */; };
 		PF2C00000000000000000B51 /* CalendarClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F51 /* CalendarClockTests.swift */; };
 		PF2C00000000000000000B52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */; };
@@ -333,6 +334,7 @@
 		TCB0000000000000000003 /* HomeLiveBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000003 /* HomeLiveBanner.swift */; };
 		TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000004 /* HomeFeedViewModel.swift */; };
 		CC1000000000000000000001 /* CaptureClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1000000000000000000002 /* CaptureClock.swift */; };
+		PF3S00000000000000000005 /* MeetingsCalendarModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF3S00000000000000000006 /* MeetingsCalendarModel.swift */; };
 		PF3S00000000000000000001 /* MeetingsCaptureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF3S00000000000000000002 /* MeetingsCaptureModel.swift */; };
 		TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000005 /* MeetingsViewModel+Home.swift */; };
 		TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = TCF0000000000000000006 /* CalendarColorProviding.swift */; };
@@ -941,6 +943,7 @@
 		PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConsumerWindowTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F42 /* PublisherMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublisherMirrorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModelMirrorTests.swift; sourceTree = "<group>"; };
+		PF3S00000000000000000008 /* MeetingsCalendarModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsCalendarModelTests.swift; sourceTree = "<group>"; };
 		PF3S00000000000000000004 /* MeetingsCaptureModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsCaptureModelTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F51 /* CalendarClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarClockTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingOrganizationIndexConfiguredFoldersTests.swift; sourceTree = "<group>"; };
@@ -1145,6 +1148,7 @@
 		TCF0000000000000000003 /* HomeLiveBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLiveBanner.swift; sourceTree = "<group>"; };
 		TCF0000000000000000004 /* HomeFeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedViewModel.swift; sourceTree = "<group>"; };
 		CC1000000000000000000002 /* CaptureClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureClock.swift; sourceTree = "<group>"; };
+		PF3S00000000000000000006 /* MeetingsCalendarModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsCalendarModel.swift; sourceTree = "<group>"; };
 		PF3S00000000000000000002 /* MeetingsCaptureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsCaptureModel.swift; sourceTree = "<group>"; };
 		TCF0000000000000000005 /* MeetingsViewModel+Home.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsViewModel+Home.swift"; sourceTree = "<group>"; };
 		TCF0000000000000000006 /* CalendarColorProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarColorProviding.swift; sourceTree = "<group>"; };
@@ -2356,6 +2360,7 @@
 				DDF0000000000000000002 /* MeetingsViewModel+AutoBrief.swift */,
 				TCF0000000000000000004 /* HomeFeedViewModel.swift */,
 				CC1000000000000000000002 /* CaptureClock.swift */,
+				PF3S00000000000000000006 /* MeetingsCalendarModel.swift */,
 				PF3S00000000000000000002 /* MeetingsCaptureModel.swift */,
 				TCF0000000000000000005 /* MeetingsViewModel+Home.swift */,
 				CCB000000000000000000501 /* MeetingsViewModel+Language.swift */,
@@ -3291,6 +3296,7 @@
 				PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */,
 				PF2C00000000000000000F42 /* PublisherMirrorTests.swift */,
 				PF2C00000000000000000F43 /* MeetingsViewModelMirrorTests.swift */,
+				PF3S00000000000000000008 /* MeetingsCalendarModelTests.swift */,
 				PF3S00000000000000000004 /* MeetingsCaptureModelTests.swift */,
 				PF2C00000000000000000F51 /* CalendarClockTests.swift */,
 				PF2C00000000000000000F52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift */,
@@ -5104,6 +5110,7 @@
 				PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */,
 				PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */,
 				PF2C00000000000000000B43 /* MeetingsViewModelMirrorTests.swift in Sources */,
+				PF3S00000000000000000007 /* MeetingsCalendarModelTests.swift in Sources */,
 				PF3S00000000000000000003 /* MeetingsCaptureModelTests.swift in Sources */,
 				PF2C00000000000000000B51 /* CalendarClockTests.swift in Sources */,
 				PF2C00000000000000000B52 /* MeetingOrganizationIndexConfiguredFoldersTests.swift in Sources */,
@@ -5184,6 +5191,7 @@
 				GGB0000000000000000051 /* GoogleReauthNudge.swift in Sources */,
 				TCB0000000000000000004 /* HomeFeedViewModel.swift in Sources */,
 				CC1000000000000000000001 /* CaptureClock.swift in Sources */,
+				PF3S00000000000000000005 /* MeetingsCalendarModel.swift in Sources */,
 				PF3S00000000000000000001 /* MeetingsCaptureModel.swift in Sources */,
 				TCB0000000000000000005 /* MeetingsViewModel+Home.swift in Sources */,
 				TCB0000000000000000006 /* CalendarColorProviding.swift in Sources */,

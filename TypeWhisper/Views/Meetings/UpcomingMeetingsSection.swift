@@ -5,6 +5,9 @@ import SwiftUI
 /// when access is not yet granted, and a clear message when it has been denied.
 struct UpcomingMeetingsSection: View {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
+    // [VM split] Calendar state (read via the forwards) lives on the calendar slice; observing it
+    // keeps this view re-rendering on calendar changes.
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
     // [Track J] Observe the queue directly so the auto-brief status line (derived from a running
     // background `.brief` job) updates reactively — the VM no longer mirrors a scheduler status
     // (plan J2 §CC7).

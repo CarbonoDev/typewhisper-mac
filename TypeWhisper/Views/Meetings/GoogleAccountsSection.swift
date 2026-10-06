@@ -31,7 +31,9 @@ struct GoogleAccountsSection: View {
     /// evaluation (it observes the snapshot-change notification app-wide, so detection is not
     /// tied to this section being visible) and routes both resolutions through the calendar
     /// selection choke point / the account store's handled-mark.
-    @ObservedObject private var meetingsViewModel = MeetingsViewModel.shared
+    /// [VM split] The prompts live on the calendar slice; the section observes only that.
+    private var meetingsViewModel: MeetingsViewModel { .shared }
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
 
     /// Local drafts of the client credentials, seeded from the store on appear and written
     /// through on change (`GoogleAccountStore` stays the single writer of the persisted values —

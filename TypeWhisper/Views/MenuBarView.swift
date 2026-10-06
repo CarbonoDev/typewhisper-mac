@@ -259,6 +259,9 @@ struct MenuBarView: View {
     // [VM split] Capture state (read via the forwards or VM helpers derived from it) lives on the
     // capture slice; observing it keeps this view re-rendering on capture changes.
     @ObservedObject private var capture = MeetingsViewModel.shared.capture
+    // [VM split] Calendar state (read via the forwards) lives on the calendar slice; observing it
+    // keeps this view re-rendering on calendar changes.
+    @ObservedObject private var calendar = MeetingsViewModel.shared.calendar
     /// `menuTarget` is time-dependent (the tray window opening, start, end).
     @ObservedObject private var calendarClock = MeetingsViewModel.shared.calendarClock
 
