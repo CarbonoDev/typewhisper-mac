@@ -273,4 +273,19 @@ final class MeetingFactsTests: XCTestCase {
         XCTAssertFalse(MeetingsViewModel.documentHasContent(meeting))
         XCTAssertFalse(MeetingDocumentModel.DocumentFacts(meeting: meeting).hasContent)
     }
+
+    func testHomeHasTranscriptReadsTheColumnsAndSurvivesDeletion() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let home = HomeFeedViewModel()
+        let meeting = service.createMeeting(title: "Row", state: .completed)
+        XCTAssertFalse(home.hasTranscript(for: meeting))
+
+        service.appendStableSegments([segment("a", 0)], to: meeting)
+        XCTAssertTrue(home.hasTranscript(for: meeting), "no stale memo survives the first append")
+        clearFacts(meeting)
+        XCTAssertTrue(home.hasTranscript(for: meeting), "an unfilled row falls back to the relationship")
+
+        service.deleteMeeting(meeting)
+        XCTAssertFalse(home.hasTranscript(for: meeting))
+    }
 }
