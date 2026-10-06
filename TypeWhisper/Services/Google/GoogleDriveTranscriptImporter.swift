@@ -246,33 +246,37 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         case .create(let title, let startDate):
             let meeting: Meeting
             do {
-                meeting = try importService.importTranscriptText(text, title: title, startDate: startDate)
+                // One list republish for the create + append + auto-link writes (Perf 1C).
+                meeting = try meetingService.performBatch {
+                    let meeting = try importService.importTranscriptText(text, title: title, startDate: startDate)
+                    // Best-effort calendar auto-link (D-D4 disposition 2) — still before the ledger
+                    // record, still synchronous. Historical backfill dates usually fall outside the
+                    // snapshot window, so old meetings simply stay unlinked.
+                    if let autoLink, let date = startDate,
+                       let candidate = autoLink.bestAutoLinkCandidate(
+                           title: title,
+                           date: date,
+                           window: CalendarService.defaultAutoLinkWindow,
+                           minimumConfidence: CalendarService.defaultAutoLinkConfidence
+                       ) {
+                        let projection = CalendarService.meetingProjection(for: candidate.event)
+                        meetingService.linkToCalendarEvent(
+                            calendarEventID: projection.calendarEventID,
+                            seriesID: projection.seriesID,
+                            title: projection.title,
+                            startDate: projection.startDate,
+                            endDate: projection.endDate,
+                            attendees: projection.attendees,
+                            calendarNotes: projection.calendarNotes,
+                            conferencingURL: projection.conferencingURL,
+                            for: meeting
+                        )
+                    }
+                    return meeting
+                }
             } catch {
                 record(error, fileID: fileID, docModifiedTime: docModified)
                 return .failed(message: error.localizedDescription)
-            }
-            // Best-effort calendar auto-link (D-D4 disposition 2) — still before the ledger
-            // record, still synchronous. Historical backfill dates usually fall outside the
-            // snapshot window, so old meetings simply stay unlinked.
-            if let autoLink, let date = startDate,
-               let candidate = autoLink.bestAutoLinkCandidate(
-                   title: title,
-                   date: date,
-                   window: CalendarService.defaultAutoLinkWindow,
-                   minimumConfidence: CalendarService.defaultAutoLinkConfidence
-               ) {
-                let projection = CalendarService.meetingProjection(for: candidate.event)
-                meetingService.linkToCalendarEvent(
-                    calendarEventID: projection.calendarEventID,
-                    seriesID: projection.seriesID,
-                    title: projection.title,
-                    startDate: projection.startDate,
-                    endDate: projection.endDate,
-                    attendees: projection.attendees,
-                    calendarNotes: projection.calendarNotes,
-                    conferencingURL: projection.conferencingURL,
-                    for: meeting
-                )
             }
             ledger.recordImported(
                 fileID: fileID, docModifiedTime: docModified,

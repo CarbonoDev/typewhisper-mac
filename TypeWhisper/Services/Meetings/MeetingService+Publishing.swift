@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// How a `MeetingService` write affects the published `meetings` array (Perf 1C).
 ///
@@ -22,6 +23,10 @@ enum MeetingListChange {
 /// in this extension (the main file is over the size limit).
 @MainActor
 final class MeetingListPublishingState {
+    /// `performBatch` nesting depth.
+    var batchDepth = 0
+    /// A refetch happened inside the current batch whose value list subscribers have not seen yet.
+    var republishPending = false
     /// Next `MeetingSegment.order` per meeting for the live-append path, so a ~4 s caption flush
     /// does not fault every segment to find the max. Dropped whenever another path deletes,
     /// replaces, or renumbers a meeting's segments (all segment writes go through `MeetingService`,
@@ -32,15 +37,52 @@ final class MeetingListPublishingState {
 extension MeetingService {
     /// Persist the pending changes, then bring the published list up to date for `change`. Every
     /// write is still saved immediately — the transcript is never lost; only the refetch/republish
-    /// is skipped for in-place writes.
+    /// is skipped (in-place writes) or coalesced (inside `performBatch`).
     func commitWrite(_ change: MeetingListChange) {
         save()
+        let refetched: Bool
         switch change {
         case .list:
             fetchMeetings()
+            refetched = true
         case .inPlace:
-            if !Self.isInFetchOrder(meetings) { fetchMeetings() }
+            refetched = !Self.isInFetchOrder(meetings)
+            if refetched { fetchMeetings() }
         }
+        if refetched, listPublishing.batchDepth > 0 {
+            listPublishing.republishPending = true
+        }
+    }
+
+    /// Run `body` so that however many writes it makes, `meetingsListPublisher` subscribers (the
+    /// `MeetingsViewModel` mirror and `MeetingOrganizationIndex`) see one republish, when the
+    /// outermost batch ends. For bulk writers: Drive transcript import, merges, backup import.
+    ///
+    /// Inside the batch `meetings` itself stays exact — membership changes are still refetched
+    /// per write — because bulk writers dedupe against it mid-loop (the Drive matcher snapshot,
+    /// the brief scheduler's `calendarEventID` lookup). Synchronous on purpose: a batch spanning an
+    /// `await` would also hold back the republish of unrelated writes made meanwhile (a meeting
+    /// the user creates while a backfill is paused on the network).
+    @discardableResult
+    func performBatch<T>(_ body: () throws -> T) rethrows -> T {
+        listPublishing.batchDepth += 1
+        defer {
+            listPublishing.batchDepth -= 1
+            if listPublishing.batchDepth == 0, listPublishing.republishPending {
+                listPublishing.republishPending = false
+                republishMeetings()
+            }
+        }
+        return try body()
+    }
+
+    /// `$meetings` without the values produced mid-`performBatch`. For subscribers that derive state
+    /// from the whole list; a plain read of `meetings` is always current.
+    var meetingsListPublisher: AnyPublisher<[Meeting], Never> {
+        $meetings
+            // `$meetings` only ever emits from the MainActor writer.
+            .filter { [listPublishing] _ in MainActor.assumeIsolated { listPublishing.batchDepth == 0 } }
+            .eraseToAnyPublisher()
     }
 
     /// Whether `meetings` is still ordered as `fetchMeetings()` would return it: `startDate`

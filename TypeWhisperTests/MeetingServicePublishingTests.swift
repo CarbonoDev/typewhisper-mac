@@ -5,7 +5,8 @@ import SwiftData
 @testable import TypeWhisper
 
 /// Perf 1C: in-place writes save without refetching/republishing the meetings list; list-shaped
-/// writes (insert, delete, sort-key change, folders/tags) still do. Views see in-place writes through SwiftData Observation, which these tests lock.
+/// writes (insert, delete, sort-key change, folders/tags) still do; `performBatch` coalesces the
+/// republish. Views see in-place writes through SwiftData Observation, which these tests lock.
 @MainActor
 final class MeetingServicePublishingTests: XCTestCase {
     private var dir: URL!
@@ -23,10 +24,10 @@ final class MeetingServicePublishingTests: XCTestCase {
 
     private final class Counter { var value = 0 }
 
-    /// Counts `$meetings` emissions after subscription (the initial replay is dropped).
+    /// Counts `meetingsListPublisher` emissions after subscription (the initial replay is dropped).
     private func listEmissions(of service: MeetingService) -> Counter {
         let counter = Counter()
-        service.$meetings.dropFirst().sink { _ in counter.value += 1 }.store(in: &cancellables)
+        service.meetingsListPublisher.dropFirst().sink { _ in counter.value += 1 }.store(in: &cancellables)
         return counter
     }
 
@@ -183,6 +184,52 @@ final class MeetingServicePublishingTests: XCTestCase {
         XCTAssertEqual(index.folderTree.map(\.path), ["Clients"])
         service.setObsidianTags(["hiring"], for: meeting)
         XCTAssertEqual(index.tagCounts.map(\.key), ["hiring"])
+    }
+
+    // MARK: - performBatch
+
+    func testBatchRepublishesOnceAndKeepsMembershipExactInside() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let emissions = listEmissions(of: service)
+
+        service.performBatch {
+            let first = service.createMeeting(title: "One", startDate: Date())
+            // Bulk writers dedupe against `meetings` mid-batch: it must already include `first`.
+            XCTAssertTrue(service.meetings.contains { $0.id == first.id })
+            service.createMeeting(title: "Two", startDate: Date())
+            service.performBatch { service.createMeeting(title: "Three", startDate: Date()) }
+            XCTAssertEqual(emissions.value, 0)
+        }
+
+        XCTAssertEqual(emissions.value, 1)
+        XCTAssertEqual(service.meetings.count, 3)
+    }
+
+    func testBatchWithOnlyInPlaceWritesDoesNotRepublish() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let meeting = service.createMeeting(title: "A", startDate: Date())
+        let emissions = listEmissions(of: service)
+
+        service.performBatch {
+            service.appendStableSegments([segment("a", 0)], to: meeting)
+            service.addNote(to: meeting, text: "n")
+        }
+        XCTAssertEqual(emissions.value, 0)
+    }
+
+    func testCreateFromImportRepublishesOnce() {
+        let service = MeetingService(appSupportDirectory: dir)
+        let emissions = listEmissions(of: service)
+
+        service.createFromImport(
+            title: "Imported",
+            source: .importedTranscript,
+            segments: [segment("a", 0), segment("b", 1)],
+            segmentSource: .importedTranscript,
+            startDate: Date()
+        )
+        XCTAssertEqual(emissions.value, 1)
+        XCTAssertEqual(service.meetings.first?.segments.count, 2)
     }
 
     // MARK: - Fetch-order check

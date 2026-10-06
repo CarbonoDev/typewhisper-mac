@@ -311,7 +311,7 @@ final class MeetingsViewModel: ObservableObject {
 
         // Synchronous (no main-queue hop): both sides are @MainActor, and the hop only added a deferred
         // second render pass. `MeetingOrganizationIndex` mirrors `$meetings` the same way.
-        meetingService.$meetings
+        meetingService.meetingsListPublisher
             .sink { [weak self] meetings in self?.meetings = meetings }
             .store(in: &cancellables)
 

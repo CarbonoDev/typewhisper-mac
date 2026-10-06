@@ -11,6 +11,8 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// blobs keyed by meeting UUID.
 @MainActor
 final class MeetingService: ObservableObject {
+    /// Subscribers that derive state from the whole list use `meetingsListPublisher`, which skips
+    /// the intermediate values of a `performBatch` (see `MeetingService+Publishing.swift`).
     @Published private(set) var meetings: [Meeting] = []
     let listPublishing = MeetingListPublishingState()
 
@@ -535,14 +537,16 @@ final class MeetingService: ObservableObject {
         audioFileURL: URL? = nil,
         state: MeetingState = .completed
     ) -> Meeting {
-        let meeting = createMeeting(title: title, source: source, state: state, startDate: startDate)
-        if !segments.isEmpty {
-            appendStableSegments(segments, source: segmentSource, to: meeting)
+        performBatch {
+            let meeting = createMeeting(title: title, source: source, state: state, startDate: startDate)
+            if !segments.isEmpty {
+                appendStableSegments(segments, source: segmentSource, to: meeting)
+            }
+            if let audioFileURL {
+                adoptAudioFile(audioFileURL, for: meeting)
+            }
+            return meeting
         }
-        if let audioFileURL {
-            adoptAudioFile(audioFileURL, for: meeting)
-        }
-        return meeting
     }
 
     /// Restore meetings from a settings backup (fork adaptation of #932). Additive by `id`: a meeting
@@ -1302,6 +1306,11 @@ final class MeetingService: ObservableObject {
             logger.error("Failed to fetch meetings: \(error.localizedDescription)")
             meetings = []
         }
+    }
+
+    /// Re-emit the current list to `$meetings` subscribers without refetching (end of a batch).
+    func republishMeetings() {
+        meetings = meetings
     }
 
     func save() {

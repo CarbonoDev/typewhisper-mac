@@ -25,7 +25,7 @@ struct MeetingFolderNode: Identifiable, Equatable, Sendable {
 
 /// In-memory **derived** aggregation over the meetings store (plan D6/M3). Owns no persistence: tags
 /// are canonical on `Meeting.obsidianTags` (aliased `tags`), so a second store would create a two-way
-/// sync obligation. Subscribes to `MeetingService.$meetings` and republishes a
+/// sync obligation. Subscribes to `MeetingService.meetingsListPublisher` and republishes a
 /// low-cardinality tag index; every folder/tag mutator commits as a `.list` change (refetch +
 /// republish), so the sidebar counts, chip autocomplete, and filters refresh together with no
 /// manual poke. In-place writes (transcript appends, outputs, …) no longer republish at all.
@@ -66,7 +66,7 @@ final class MeetingOrganizationIndex: ObservableObject {
 
     init(meetingService: MeetingService) {
         rebuild(from: meetingService.meetings)
-        meetingService.$meetings
+        meetingService.meetingsListPublisher
             .sink { [weak self] meetings in
                 self?.rebuild(from: meetings)
             }
