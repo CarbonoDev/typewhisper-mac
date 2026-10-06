@@ -43,9 +43,19 @@ Decision IDs are `D-D1`…`D-D8`; code comments cite them the same way the codeb
 - **No Meet REST API** (`conferenceRecords.transcripts`): it needs its own scopes and only covers
   Meet's raw transcription artifacts, not Gemini notes docs. Drive is the one source of truth here.
 - **No Drive `changes.list` / push notifications / watch channels** (rejected in D-D3).
-- **No Meet "… - Transcript" doc format**: v1 discovers Gemini notes names only
-  (`ImportedMeetingTitle.notesSuffixes`, `Services/Meetings/ImportedMeetingTitle.swift:20-24`).
-  The parser would handle more; the *query* stays narrow. Future widening is a follow-up.
+- ~~**No Meet "… - Transcript" doc format**: v1 discovers Gemini notes names only
+  (`ImportedMeetingTitle.notesSuffixes`). The parser would handle more; the *query* stays narrow.
+  Future widening is a follow-up.~~ **Reversed (2026-09-18) — this non-goal was the bug.** It rested
+  on a single sample export (`Seguimiento Fase 2 IA - … - Notas de Gemini.md`) whose *notes* doc
+  happened to contain the transcript. Meet in fact publishes two docs per call: `… - Notas de Gemini`
+  (a summary — "📝 Las notas", "Resumen", "Decisiones", no timestamps) and `… - Transcripción` /
+  `… - Transcript` (the timed, speaker-attributed turns). Discovering notes docs meant every import
+  stored Gemini's summary *as* the transcript: `parseGeminiNotes` correctly declined them, and the
+  cascade fell through to the plain-paragraph rung. Discovery now filters on
+  `ImportedMeetingTitle.transcriptSuffixes` and skips the notes doc entirely. A timed transcript
+  landing on a meeting left untimed by the old behavior **replaces** those rows rather than merging
+  alongside them (`MeetingImportService.supersedesUntimedImport`), because `ImportOverlapPlan` never
+  drops `.importedTranscript` rows — so re-running backfill repairs an affected archive in place.
 - **No SwiftData schema changes of any kind** — import identity lives in a side ledger (D-D5),
   matching the additive-only store discipline by not touching stores at all.
 - **No review inbox for near-miss matches**: below the auto-merge threshold a new meeting is

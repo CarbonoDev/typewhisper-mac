@@ -153,12 +153,31 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
 
         // 1. Export FIRST (D-D4 atomicity): every await happens before the snapshot below.
         let text: String
+        let isMarkdownExport: Bool
         do {
-            text = try await exportText(rawFileID: file.id, sub: sub)
+            (text, isMarkdownExport) = try await exportText(rawFileID: file.id, sub: sub)
         } catch {
             logger.warning("Drive export failed for \(file.id, privacy: .private): \(error.localizedDescription)")
             record(error, fileID: fileID, docModifiedTime: docModified)
             return .failed(message: error.localizedDescription)
+        }
+
+        // 1b. Content gate: a Gemini export named "… - Notas de Gemini" may be the meeting transcript
+        //     *or* just Gemini's summary, and only the parsed content tells them apart (see
+        //     `MeetingImportService.carriesRecoverableTiming`). A summary is skipped without a
+        //     ledger entry and without a failure, so the doc is simply re-examined on a later pass:
+        //     Gemini often appends the transcript to the same doc minutes after the call, and that
+        //     edit must still be allowed to import. Importing the summary instead is what filled
+        //     meetings with untimed "Resumen"/"Decisiones" rows.
+        let parsed = TranscriptFileParser.parse(text)
+        if isMarkdownExport, !parsed.isEmpty, !MeetingImportService.carriesRecoverableTiming(parsed) {
+            if ownsPendingEntry {
+                ledger.clearPending(fileID: fileID)
+            }
+            logger.info(
+                "Skipped Drive doc \(file.id, privacy: .private): no recoverable timing — notes/summary, not a transcript"
+            )
+            return .skipped
         }
 
         // 2. One synchronous main-actor stretch from here to the ledger record: no awaits.
@@ -176,7 +195,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 return .touched
             }
             do {
-                let dropped = try importService.mergeTranscriptText(text, into: meeting)
+                let dropped = try importService.mergeOrSupersedeTranscriptText(text, into: meeting)
                 ledger.recordImported(
                     fileID: fileID, docModifiedTime: docModified,
                     meetingID: meetingID, disposition: .merged, now: now()
@@ -212,7 +231,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
                 return .failed(message: "matched meeting disappeared before merge")
             }
             do {
-                let dropped = try importService.mergeTranscriptText(text, into: meeting)
+                let dropped = try importService.mergeOrSupersedeTranscriptText(text, into: meeting)
                 ledger.recordImported(
                     fileID: fileID, docModifiedTime: docModified,
                     meetingID: meetingID, disposition: .merged, now: now()
@@ -419,13 +438,24 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
     /// keys on); on an unsupported-MIME rejection (HTTP 400/403) retry once with `text/plain` —
     /// degraded timing/speakers, but content lands (fallback rung 2). A zero-segment parse falls
     /// through the parser cascade's generic rungs on its own (rung 1).
-    private func exportText(rawFileID: String, sub: String) async throws -> String {
+    /// The exported text plus whether it came from the **markdown** converter. The flag matters to the
+    /// summary gate: markdown preserves the `### **HH:MM:SS**` headers a transcript's timing is
+    /// recovered from, so missing timing there is real evidence the doc is a summary. The
+    /// `text/plain` fallback drops that markup by design ("degraded timing/speakers, but content
+    /// lands"), so absent timing proves nothing and the gate must not fire.
+    private func exportText(rawFileID: String, sub: String) async throws -> (text: String, isMarkdown: Bool) {
         let token = try await tokenProvider.accessToken(for: sub)
         do {
-            return try await export(rawFileID: rawFileID, mimeType: GoogleDriveAPI.markdownExportMIME, token: token)
+            let text = try await export(
+                rawFileID: rawFileID, mimeType: GoogleDriveAPI.markdownExportMIME, token: token
+            )
+            return (text, true)
         } catch let error as GoogleDriveAPI.RequestFailed where error.statusCode == 400 || error.statusCode == 403 {
             logger.warning("Markdown export rejected (HTTP \(error.statusCode)) — retrying as text/plain")
-            return try await export(rawFileID: rawFileID, mimeType: GoogleDriveAPI.plainTextExportMIME, token: token)
+            let text = try await export(
+                rawFileID: rawFileID, mimeType: GoogleDriveAPI.plainTextExportMIME, token: token
+            )
+            return (text, false)
         }
     }
 

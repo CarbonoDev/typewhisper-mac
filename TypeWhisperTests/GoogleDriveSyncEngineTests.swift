@@ -285,7 +285,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         let modified = fixedNow.addingTimeInterval(-600)
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([
-                Self.fileJSON(id: "f1", name: "Weekly sync - Notas de Gemini", modified: modified)
+                Self.fileJSON(id: "f1", name: "Weekly sync - Transcripción", modified: modified)
             ])),
         ])
         let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
@@ -317,9 +317,9 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         let edited = fixedNow.addingTimeInterval(-600)
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([
-                Self.fileJSON(id: "edited", name: "Edited doc - Notas de Gemini", modified: edited),
-                Self.fileJSON(id: "unchanged", name: "Unchanged doc - Notas de Gemini", modified: old),
-                Self.fileJSON(id: "failing", name: "Failing doc - Notas de Gemini", modified: old),
+                Self.fileJSON(id: "edited", name: "Edited doc - Transcripción", modified: edited),
+                Self.fileJSON(id: "unchanged", name: "Unchanged doc - Transcripción", modified: old),
+                Self.fileJSON(id: "failing", name: "Failing doc - Transcripción", modified: old),
             ])),
         ])
         let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
@@ -349,7 +349,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         defer { TestSupport.remove(dir) }
         let modified = fixedNow.addingTimeInterval(-600)
         let manyFiles = (0..<30).map {
-            Self.fileJSON(id: "f\($0)", name: "Doc \($0) - Notas de Gemini", modified: modified)
+            Self.fileJSON(id: "f\($0)", name: "Doc \($0) - Transcripción", modified: modified)
         }
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody(manyFiles)),
@@ -401,7 +401,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 500, body: "{}"),
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([
-                Self.fileJSON(id: "fb", name: "Doc B - Notas de Gemini", modified: modified)
+                Self.fileJSON(id: "fb", name: "Doc B - Transcripción", modified: modified)
             ])),
         ])
         let h = try makeHarness(
@@ -521,18 +521,22 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         XCTAssertNil(h.engine.lastSyncError, "truncation is not an error — the walk just continues next cycle")
     }
 
-    /// Discovery filters names client-side now (Drive's `contains` only prefix-matches `name`, so
-    /// a trailing "- Notas de Gemini" can never be a query term): the mimeType/time-window pass
-    /// carries no text predicate, and only real notes exports are enqueued.
-    func testDiscoveryFiltersNonNotesDocsClientSide() async throws {
+    /// Discovery filters names client-side (Drive's `contains` only prefix-matches `name`, so a
+    /// trailing marker can never be a query term): the mimeType/time-window pass carries no text
+    /// predicate, and **both** Gemini export shapes are enqueued — a "- Notas de Gemini" doc may hold
+    /// the transcript or only the summary, and only its content can tell. Unrelated docs stay out.
+    func testDiscoveryFiltersNonExportDocsClientSide() async throws {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
         defer { TestSupport.remove(dir) }
         let modified = fixedNow.addingTimeInterval(-600)
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([
+                Self.fileJSON(id: "transcript", name: "Weekly sync - Transcripción", modified: modified),
+                // The notes doc Meet publishes for the same call: enqueued too, because it may be
+                // the one carrying the transcript. The content gate rejects it if it is only a summary.
                 Self.fileJSON(id: "notes", name: "Weekly sync - Notas de Gemini", modified: modified),
                 Self.fileJSON(id: "unrelated", name: "Q3 budget", modified: modified),
-                Self.fileJSON(id: "mentions", name: "Notas de Gemini para el equipo", modified: modified),
+                Self.fileJSON(id: "mentions", name: "Transcripción de la reunión del equipo", modified: modified),
             ])),
         ])
         let h = try makeHarness(transport: transport, ledgerDirectory: dir, accountIDs: ["sub-1"], enabled: ["sub-1"])
@@ -543,8 +547,8 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
 
         let q = try XCTUnwrap(queryValue("q", of: try XCTUnwrap(transport.requests.first)))
         XCTAssertFalse(q.contains("name contains"), "prefix-only operator; got: \(q)")
-        XCTAssertEqual(h.processor.processed.map(\.fileID), ["notes"],
-                       "only a trailing marker counts as a Gemini notes export")
+        XCTAssertEqual(h.processor.processed.map(\.fileID), ["transcript", "notes"],
+                       "both export shapes are enqueued; only a trailing marker counts as an export")
     }
 
     /// A `.driveImport` job that settles without running its closure — the queued-cancel path,
@@ -556,7 +560,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
         defer { TestSupport.remove(dir) }
         let modified = fixedNow.addingTimeInterval(-600)
-        let fileJSON = Self.fileJSON(id: "f1", name: "Lost doc - Notas de Gemini", modified: modified)
+        let fileJSON = Self.fileJSON(id: "f1", name: "Lost doc - Transcripción", modified: modified)
         let transport = FakeDriveTransport(stubs: [
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([fileJSON])),
             .init(urlContains: Self.listMarker, statusCode: 200, body: Self.filesBody([fileJSON])),
@@ -591,7 +595,7 @@ final class GoogleDriveSyncEngineTests: XCTestCase {
         let dir = try TestSupport.makeTemporaryDirectory(prefix: "DriveEngine")
         defer { TestSupport.remove(dir) }
         let modified = fixedNow.addingTimeInterval(-600)
-        let fileJSON = Self.fileJSON(id: "f1", name: "Lost doc - Notas de Gemini", modified: modified)
+        let fileJSON = Self.fileJSON(id: "f1", name: "Lost doc - Transcripción", modified: modified)
 
         // Launch 1: discover + enqueue; the job's effects never land (crash before ledgering).
         let transport1 = FakeDriveTransport(stubs: [

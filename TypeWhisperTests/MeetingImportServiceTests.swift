@@ -4,6 +4,94 @@ import XCTest
 @MainActor
 final class MeetingImportServiceTests: XCTestCase {
 
+    // MARK: - Telling a transcript from Gemini's summary (Drive content gate)
+
+    /// A real Meet/Gemini transcript recovers timing from its `### **HH:MM:SS**` headers.
+    func testTimedContentReadsAsATranscript() {
+        XCTAssertTrue(MeetingImportService.carriesRecoverableTiming([
+            TranscriptionSegment(text: "Hola, ¿cómo estás?", start: 70, end: 74),
+            TranscriptionSegment(text: "Bien, gracias.", start: 74, end: 77),
+        ]))
+        // One timed row is enough — a doc whose opening turn sits at 0 still qualifies.
+        XCTAssertTrue(MeetingImportService.carriesRecoverableTiming([
+            TranscriptionSegment(text: "Opening turn", start: 0, end: 0),
+            TranscriptionSegment(text: "Later turn", start: 12, end: 15),
+        ]))
+    }
+
+    /// Gemini's notes doc: no timestamps anywhere, so the parse falls to the plain-paragraph rung and
+    /// every row is untimed. This is the shape that silently became "the transcript".
+    func testSummaryContentIsRejected() {
+        XCTAssertFalse(MeetingImportService.carriesRecoverableTiming([
+            TranscriptionSegment(text: "# **📝 Las notas**", start: 0, end: 0),
+            TranscriptionSegment(text: "### **Resumen**", start: 0, end: 0),
+            TranscriptionSegment(text: "Tablero GDA y migración incremental", start: 0, end: 0),
+        ]))
+        XCTAssertFalse(MeetingImportService.carriesRecoverableTiming([]))
+    }
+
+    // MARK: - Superseding a summary-shaped import (Drive repair)
+
+    private func shape(_ start: Double, _ end: Double, _ source: MeetingSegmentSource)
+        -> MeetingImportService.ExistingSegmentShape {
+        MeetingImportService.ExistingSegmentShape(start: start, end: end, source: source)
+    }
+
+    /// The repair case: a meeting whose "transcript" is really Gemini's summary (untimed
+    /// `.importedTranscript` rows) is replaced by the real, timed transcript rather than interleaved
+    /// with it — `ImportOverlapPlan` never drops imported rows, so merging would keep both.
+    func testTimedTranscriptSupersedesUntimedSummaryImport() {
+        let existing = [
+            shape(0, 0, .importedTranscript),
+            shape(0, 0, .importedTranscript),
+        ]
+        let imported = [
+            TranscriptionSegment(text: "Hola, ¿cómo estás?", start: 70, end: 74),
+            TranscriptionSegment(text: "Bien, gracias.", start: 74, end: 77),
+        ]
+        XCTAssertTrue(MeetingImportService.supersedesUntimedImport(existing: existing, imported: imported))
+    }
+
+    /// Never replace live-captured content: that is `ImportOverlapPlan`'s job, and it keeps rows the
+    /// import has nothing to put in place of.
+    func testLiveSegmentsAreNeverSuperseded() {
+        let withCaptions = [shape(0, 0, .importedTranscript), shape(0, 0, .liveCaptions)]
+        let imported = [TranscriptionSegment(text: "Turn", start: 10, end: 12)]
+        XCTAssertFalse(
+            MeetingImportService.supersedesUntimedImport(existing: withCaptions, imported: imported)
+        )
+        XCTAssertFalse(
+            MeetingImportService.supersedesUntimedImport(
+                existing: [shape(0, 0, .liveCapture)], imported: imported
+            )
+        )
+    }
+
+    /// A correctly imported transcript already carries timing, so a re-import of it must merge under
+    /// the normal overlap policy — not blow the existing rows away.
+    func testTimedExistingImportIsNotSuperseded() {
+        let existing = [shape(0, 4, .importedTranscript), shape(4, 9, .importedTranscript)]
+        let imported = [TranscriptionSegment(text: "Turn", start: 10, end: 12)]
+        XCTAssertFalse(MeetingImportService.supersedesUntimedImport(existing: existing, imported: imported))
+    }
+
+    /// Nothing better to put in its place: an untimed import landing on an untimed import merges,
+    /// because replacing would be a coin flip between two equally timing-less transcripts.
+    func testUntimedImportDoesNotSupersede() {
+        let existing = [shape(0, 0, .importedTranscript)]
+        let imported = [TranscriptionSegment(text: "Some summary line", start: 0, end: 0)]
+        XCTAssertFalse(MeetingImportService.supersedesUntimedImport(existing: existing, imported: imported))
+    }
+
+    /// An empty meeting has nothing to supersede — the ordinary merge path handles it.
+    func testEmptyMeetingIsNotSuperseded() {
+        XCTAssertFalse(
+            MeetingImportService.supersedesUntimedImport(
+                existing: [], imported: [TranscriptionSegment(text: "Turn", start: 1, end: 2)]
+            )
+        )
+    }
+
     // MARK: - Stub transcriber (the `MeetingAudioTranscribing` seam)
 
     private final class StubTranscriber: MeetingAudioTranscribing {

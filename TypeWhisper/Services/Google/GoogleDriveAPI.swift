@@ -67,7 +67,7 @@ enum GoogleDriveAPI {
     /// is always a **trailing** suffix ("Llamada semanal - 2026_07_07 11_00 CST - Notas de
     /// Gemini"), so the query matched nothing and the whole feature imported zero transcripts.
     ///
-    /// The name predicate is therefore gone; `ImportedMeetingTitle.hasNotesSuffix` filters names
+    /// The name predicate is therefore gone; `ImportedMeetingTitle.isDiscoverableExportName` filters names
     /// **client-side** on each fetched page (the one authoritative marker rule), and the query
     /// narrows only in the way Drive can actually serve:
     enum Narrowing {
@@ -94,7 +94,7 @@ enum GoogleDriveAPI {
     ) -> URLRequest {
         var q = "mimeType='application/vnd.google-apps.document' and trashed = false"
         if case .fullTextMarkers = narrowing {
-            let terms = ImportedMeetingTitle.notesSuffixes
+            let terms = ImportedMeetingTitle.exportSuffixes
                 .map { "fullText contains '\(escapedQueryLiteral("\"\($0)\""))'" }
                 .joined(separator: " or ")
             q += " and (\(terms))"

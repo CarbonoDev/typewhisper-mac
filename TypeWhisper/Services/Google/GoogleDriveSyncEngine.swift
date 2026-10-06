@@ -368,7 +368,10 @@ final class GoogleDriveSyncEngine: ObservableObject {
                    modified > (listing.lastSeenModifiedTime ?? .distantPast) {
                     listing.lastSeenModifiedTime = modified
                 }
-                if ImportedMeetingTitle.hasNotesSuffix(file.name) {
+                // Both export shapes — a summary is rejected on its *content* at import time, not
+                // on its name, because Meet uses the same "… - Notas de Gemini" name for a
+                // notes-only doc and for one that carries the full transcript.
+                if ImportedMeetingTitle.isDiscoverableExportName(file.name) {
                     listing.files.append(file)
                 }
             }

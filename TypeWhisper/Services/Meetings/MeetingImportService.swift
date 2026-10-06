@@ -230,6 +230,90 @@ final class MeetingImportService: ObservableObject {
         return dropped
     }
 
+    // MARK: - Superseding a summary-shaped import (Drive repair)
+
+    /// Value shape of one existing segment for the supersede decision — plain values so the rule is
+    /// unit-testable without SwiftData (the `SpeakerSourcePlan` / `ImportOverlapPlan` pattern).
+    struct ExistingSegmentShape: Equatable, Sendable {
+        var start: Double
+        var end: Double
+        var source: MeetingSegmentSource
+
+        init(start: Double, end: Double, source: MeetingSegmentSource) {
+            self.start = start
+            self.end = end
+            self.source = source
+        }
+    }
+
+    /// Whether exported Drive content is a *transcript* rather than Gemini's meeting-notes summary.
+    ///
+    /// This is the discriminator the Drive importer needs and the filename cannot give it: Meet names
+    /// the doc `… - Notas de Gemini` whether or not Gemini appended the transcript, so the only
+    /// reliable signal is what the parse actually recovered. A real Meet/Gemini transcript carries
+    /// `### **HH:MM:SS**` section headers, which `TranscriptFileParser.parseGeminiNotes` turns into
+    /// non-zero start times; a summary ("📝 Las notas", "Resumen", "Decisiones") has no timestamps
+    /// anywhere, so it falls through to the plain-paragraph rung and lands as all-zero segments.
+    ///
+    /// Requiring timing is deliberately stricter than "parsed to something": importing a summary as a
+    /// transcript is silent corruption that reads plausibly, which is far worse than importing
+    /// nothing and leaving the doc for a later pass.
+    static func carriesRecoverableTiming(_ segments: [TranscriptionSegment]) -> Bool {
+        segments.contains { $0.start > 0 || $0.end > 0 }
+    }
+
+    /// Whether a freshly parsed transcript should **replace** a meeting's existing transcript rows
+    /// instead of merging alongside them.
+    ///
+    /// This exists for one specific, self-healing repair. Drive discovery used to import Meet's
+    /// `… - Notas de Gemini` doc — a *summary* — as if it were the transcript; those imports land as
+    /// `.importedTranscript` rows with no timing at all, because the summary has no timestamps to
+    /// recover. `ImportOverlapPlan` deliberately never drops `.importedTranscript` rows ("they were
+    /// reconciled by their own earlier merge"), so importing the real transcript into one of those
+    /// meetings would interleave the summary bullets through the real turns rather than fix anything.
+    ///
+    /// The rule is deliberately narrow, because replacing content is destructive:
+    ///   • every existing row is `.importedTranscript` — never touch live-captured or audio-imported
+    ///     content, which the overlap plan already reconciles correctly;
+    ///   • every existing row is untimed (`start == end == 0`) — a real transcript import always
+    ///     carries timing, so this shape is only ever produced by the summary bug;
+    ///   • the incoming transcript *does* carry timing — otherwise there is nothing better to put in
+    ///     its place, and merging is still the safer move.
+    /// Anything outside that shape merges exactly as before.
+    static func supersedesUntimedImport(
+        existing: [ExistingSegmentShape],
+        imported: [TranscriptionSegment]
+    ) -> Bool {
+        guard !existing.isEmpty else { return false }
+        guard existing.allSatisfy({ $0.source == .importedTranscript && $0.start == 0 && $0.end == 0 })
+        else { return false }
+        return imported.contains { $0.start > 0 || $0.end > 0 }
+    }
+
+    /// The Drive importer's write step: `mergeTranscriptText`, except that a timed transcript landing
+    /// on a summary-shaped import (see `supersedesUntimedImport`) replaces it. Returns the number of
+    /// existing rows dropped — overlapped live rows on the merge path, superseded summary rows on the
+    /// replace path — so the caller's log line means the same thing either way.
+    @discardableResult
+    func mergeOrSupersedeTranscriptText(_ text: String, into meeting: Meeting) throws -> Int {
+        let segments = TranscriptFileParser.parse(text)
+        guard !segments.isEmpty else { throw ImportError.emptyTranscript }
+
+        let existing = meeting.segments.map {
+            ExistingSegmentShape(start: $0.start, end: $0.end, source: $0.source)
+        }
+        guard Self.supersedesUntimedImport(existing: existing, imported: segments) else {
+            return try mergeTranscriptText(text, into: meeting)
+        }
+
+        let superseded = existing.count
+        meetingService.replaceSegments(of: meeting, source: .importedTranscript, with: segments)
+        logger.info(
+            "Superseded \(superseded) untimed imported segment(s) in meeting \(meeting.id) with a timed transcript"
+        )
+        return superseded
+    }
+
     // MARK: - Helpers
 
     private func parseTranscriptFile(at url: URL) throws -> [TranscriptionSegment] {

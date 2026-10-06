@@ -64,7 +64,7 @@ final class GoogleDriveAPITests: XCTestCase {
             of: GoogleDriveAPI.filesListRequest(token: "t", narrowing: .fullTextMarkers)
         )["q"] ?? ""
 
-        for phrase in ImportedMeetingTitle.notesSuffixes {
+        for phrase in ImportedMeetingTitle.exportSuffixes {
             XCTAssertTrue(
                 q.contains("fullText contains '\"\(phrase)\"'"),
                 "missing term for canonical marker '\(phrase)'; got: \(q)"
@@ -72,11 +72,46 @@ final class GoogleDriveAPITests: XCTestCase {
         }
         // Exactly the canonical list — no extra hard-coded markers.
         let termCount = q.components(separatedBy: "fullText contains").count - 1
-        XCTAssertEqual(termCount, ImportedMeetingTitle.notesSuffixes.count)
-        // And the list itself still carries the three Gemini phrases the query relies on.
+        XCTAssertEqual(termCount, ImportedMeetingTitle.exportSuffixes.count)
+        // Both marker families: a "… - Notas de Gemini" doc may hold the transcript or only the
+        // summary, so discovery keeps both and the content gate decides at import time.
+        XCTAssertEqual(
+            Set(ImportedMeetingTitle.transcriptSuffixes),
+            ["transcripción", "transcripcion", "transcript"]
+        )
         XCTAssertEqual(
             Set(ImportedMeetingTitle.notesSuffixes),
             ["notas de gemini", "notes by gemini", "gemini notes"]
+        )
+    }
+
+    /// Discovery takes **either** export shape. Filename cannot tell a transcript from a summary —
+    /// Meet uses "… - Notas de Gemini" for both — so the name filter stays wide and the content gate
+    /// (`MeetingImportService.carriesRecoverableTiming`) rejects summaries at import time.
+    func testDiscoveryFilterTakesBothExportShapes() {
+        XCTAssertTrue(ImportedMeetingTitle.isDiscoverableExportName(
+            "Seguimiento BD - 2026/09/17 09:01 CST - Transcripción"
+        ))
+        XCTAssertTrue(ImportedMeetingTitle.isDiscoverableExportName(
+            "Llamada semanal Dirección-TI - 2026/09/22 10:59 CST - Notas de Gemini"
+        ))
+        XCTAssertTrue(ImportedMeetingTitle.isDiscoverableExportName("Weekly sync - Transcript"))
+        XCTAssertTrue(ImportedMeetingTitle.isDiscoverableExportName("Standup — Transcripcion (2)"))
+        // Still end-anchored after a dash: a title that merely mentions the word is not an export.
+        XCTAssertFalse(ImportedMeetingTitle.isDiscoverableExportName("Transcript review - Q3 budget"))
+        XCTAssertFalse(ImportedMeetingTitle.isDiscoverableExportName("Notas de Gemini para el equipo"))
+        XCTAssertFalse(ImportedMeetingTitle.isDiscoverableExportName("Q3 budget"))
+    }
+
+    /// `transcript` is a prefix of `transcripción`, so the end-anchored patterns must not let the
+    /// English rule swallow a Spanish name (it would still match, but via the wrong term — this
+    /// pins the behavior either way).
+    func testSpanishTranscriptNameIsRecognized() {
+        let parsed = ImportedMeetingTitle.parse("Seguimiento BD - 2026/09/17 09:01 CST - Transcripción")
+        XCTAssertTrue(parsed.isImported)
+        XCTAssertEqual(
+            parsed.cleanTitle, "Seguimiento BD - 2026/09/17 09:01 CST",
+            "the clean title must match the notes-created meeting's title so the matcher can merge onto it"
         )
     }
 

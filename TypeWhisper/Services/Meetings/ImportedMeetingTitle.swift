@@ -30,6 +30,30 @@ enum ImportedMeetingTitle {
         "gemini notes",
     ]
 
+    /// Known trailing **transcript** markers — the docs Meet publishes alongside the notes doc,
+    /// and the ones Drive discovery actually wants.
+    ///
+    /// Phase 2 shipped discovering notes docs only (spec §Non-goals: *"No Meet '… - Transcript' doc
+    /// format: v1 discovers Gemini notes names only"*), on the evidence of a single real export whose
+    /// notes doc happened to contain the transcript. In practice Meet publishes **two** docs per
+    /// call — `… - Notas de Gemini` (a summary: "📝 Las notas", "Resumen", "Decisiones") and
+    /// `… - Transcripción` (the timed, speaker-attributed turns) — so discovery was importing the
+    /// summary as if it were the transcript. `parseGeminiNotes` correctly declined those summaries
+    /// (no timestamp headers, no transcript title heading) and the cascade fell through to the
+    /// plain-paragraph rung, which turned summary bullets into untimed "segments".
+    ///
+    /// Both spellings of the Spanish word are listed because the accent is not guaranteed to survive
+    /// every export path; the patterns are end-anchored after a dash, so `transcript` never matches a
+    /// name ending in `Transcripción`.
+    static let transcriptSuffixes = [
+        "transcripción",
+        "transcripcion",
+        "transcript",
+    ]
+
+    /// Every recognized export marker: what `parse` strips and what `containsExportMarker` counts.
+    static var exportSuffixes: [String] { notesSuffixes + transcriptSuffixes }
+
     static func parse(_ raw: String) -> Parsed {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -103,8 +127,36 @@ enum ImportedMeetingTitle {
         return range
     }
 
+    /// The authoritative client-side discovery filter for Drive (`GoogleDriveSyncEngine`): **either**
+    /// export shape.
+    ///
+    /// Filename alone cannot tell a transcript from a summary. Meet names the doc
+    /// `… - Notas de Gemini` whether Gemini wrote only meeting notes *or* notes plus the full
+    /// transcript, and separately publishes `… - Transcripción` in some configurations. Narrowing
+    /// discovery to transcript-suffixed names (the first attempt at this fix) therefore matched
+    /// nothing at all for accounts whose transcripts live inside the notes doc. So discovery stays
+    /// wide and `MeetingImportService.carriesRecoverableTiming` decides from the exported *content*,
+    /// which is the only reliable signal.
+    static func isDiscoverableExportName(_ raw: String) -> Bool {
+        hasNotesSuffix(raw) || hasTranscriptSuffix(raw)
+    }
+
+    /// `hasNotesSuffix`'s transcript twin — the `… - Transcripción` / `… - Transcript` docs Meet
+    /// publishes alongside (or instead of) the notes doc.
+    static func hasTranscriptSuffix(_ raw: String) -> Bool {
+        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = copyCounterRange(in: working) {
+            working = String(working[..<range.lowerBound])
+        }
+        return suffixRange(in: working, suffixes: transcriptSuffixes) != nil
+    }
+
     private static func notesSuffixRange(in text: String) -> Range<String.Index>? {
-        for suffix in notesSuffixes {
+        suffixRange(in: text, suffixes: exportSuffixes)
+    }
+
+    private static func suffixRange(in text: String, suffixes: [String]) -> Range<String.Index>? {
+        for suffix in suffixes {
             let pattern = #"\s*[-–—]\s*"# + NSRegularExpression.escapedPattern(for: suffix) + #"\s*$"#
             if let range = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
                 return range
@@ -116,6 +168,7 @@ enum ImportedMeetingTitle {
     private static func containsExportMarker(_ text: String) -> Bool {
         let lowered = text.lowercased()
         if lowered.contains("gemini") { return true }
+        if transcriptSuffixes.contains(where: { lowered.contains($0) }) { return true }
         return text.range(of: #"\d{4}_\d{2}_\d{2}"#, options: .regularExpression) != nil
     }
 
