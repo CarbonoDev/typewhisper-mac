@@ -29,8 +29,7 @@ extension MeetingService {
             didChange = true
         }
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Bulk-delete a tag from every meeting that carries it, in a single save (plan D6). Case-folded.
@@ -47,8 +46,7 @@ extension MeetingService {
             didChange = true
         }
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Trim blanks and drop exact-string duplicates while preserving order (the canonical tag policy
@@ -94,8 +92,7 @@ extension MeetingService {
         guard meeting.obsidianFolder != normalized else { return }
         meeting.obsidianFolder = normalized
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Bulk-rename a folder across every meeting at or under it, in a **single** `save()` (plan D7).
@@ -127,8 +124,7 @@ extension MeetingService {
         }
         onFolderDeleted?(comps.joined(separator: "/"))
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Rewrite the folder prefix `old` → `new` (component-wise, so `Acme` never matches `Acme2`) on
@@ -153,8 +149,7 @@ extension MeetingService {
         }
         onFolderPathRewrite?(oldPath, newPath)
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     // MARK: - Bulk mutators (plan LX-2, D5 — single-save, mirrors `renameTag`/`deleteTag`)
@@ -172,8 +167,7 @@ extension MeetingService {
             didChange = true
         }
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Add `tag` to every meeting in `meetings` in one save (plan LX-2 D5). Case-folded: a meeting
@@ -191,8 +185,7 @@ extension MeetingService {
             didChange = true
         }
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Remove `tag` (case-folded) from every meeting in `meetings` in one save (plan LX-2 D5). A
@@ -209,7 +202,6 @@ extension MeetingService {
             didChange = true
         }
         guard didChange else { return }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 }

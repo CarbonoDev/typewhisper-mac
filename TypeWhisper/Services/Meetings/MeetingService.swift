@@ -12,6 +12,7 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 @MainActor
 final class MeetingService: ObservableObject {
     @Published private(set) var meetings: [Meeting] = []
+    let listPublishing = MeetingListPublishingState()
 
     private let modelContainer: ModelContainer
     let modelContext: ModelContext
@@ -124,25 +125,23 @@ final class MeetingService: ObservableObject {
             meeting.attendees = attendees
         }
         modelContext.insert(meeting)
-        save()
-        fetchMeetings()
+        commitWrite(.list)
         if !attendees.isEmpty { onAttendeesIngested?(attendees) }
         return meeting
     }
 
     func deleteMeeting(_ meeting: Meeting) {
         deleteAudioFile(for: meeting)
+        forgetSegmentOrder(for: meeting)
         modelContext.delete(meeting)
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Persist any pending changes made to a fetched meeting (e.g. state transitions,
     /// attendee/speaker-map edits) and refresh the published list.
     func update(_ meeting: Meeting) {
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     // MARK: - Title / date / calendar linking (meeting-identity milestone)
@@ -157,8 +156,7 @@ final class MeetingService: ObservableObject {
         guard !trimmed.isEmpty, meeting.title != trimmed else { return }
         meeting.title = trimmed
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Set (or clear) a meeting's date — the single `startDate` column that the timeline
@@ -170,8 +168,7 @@ final class MeetingService: ObservableObject {
         guard meeting.startDate != date else { return }
         meeting.startDate = date
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Bind a meeting to an external live-capture session (currently the Google Meet call code
@@ -182,8 +179,7 @@ final class MeetingService: ObservableObject {
         guard meeting.externalSessionKey != key else { return }
         meeting.externalSessionKey = key
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Link a meeting to a (typically historical) calendar event: adopt its `calendarEventID`,
@@ -218,8 +214,7 @@ final class MeetingService: ObservableObject {
             meeting.title = trimmedEventTitle
         }
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         if !attendees.isEmpty { onAttendeesIngested?(attendees) }
     }
 
@@ -242,8 +237,7 @@ final class MeetingService: ObservableObject {
         roster.append(cleaned)
         meeting.attendees = roster
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         onAttendeesIngested?([cleaned])
         return true
     }
@@ -297,8 +291,7 @@ final class MeetingService: ObservableObject {
         guard !ingested.isEmpty else { return false }
         meeting.attendees = roster
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         onAttendeesIngested?(ingested)
         return true
     }
@@ -314,8 +307,7 @@ final class MeetingService: ObservableObject {
         guard filtered.count != roster.count else { return false }
         meeting.attendees = filtered
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         return true
     }
 
@@ -341,8 +333,7 @@ final class MeetingService: ObservableObject {
         meeting.calendarNotes = nil
         meeting.conferencingURL = nil
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Whether a title is empty or one of the app's generated default titles (ad-hoc / untitled
@@ -381,8 +372,7 @@ final class MeetingService: ObservableObject {
             meeting.speakerMap = speakerMap
         }
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Clear every segment's speaker label/confidence **and** the meeting's speaker map in one
@@ -401,8 +391,7 @@ final class MeetingService: ObservableObject {
         }
         meeting.speakerMap = [:]
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Set the additive two-person-call override (speaker-recognition amendment, D-A4). Surfaced only
@@ -412,8 +401,7 @@ final class MeetingService: ObservableObject {
         guard meeting.twoPersonCall != enabled else { return }
         meeting.twoPersonCall = enabled
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Mark whether the meeting's per-segment timestamps have been refined by a genuine final
@@ -422,8 +410,7 @@ final class MeetingService: ObservableObject {
         guard meeting.timestampsRefined != refined else { return }
         meeting.timestampsRefined = refined
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Apply refined per-segment start/end times from the keep-live timing re-pass (speaker-recognition
@@ -445,8 +432,7 @@ final class MeetingService: ObservableObject {
         }
         guard didChange else { return }
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Persist the `SPEAKER_xx → attendee name` map edited in the speaker-mapping editor (plan M9).
@@ -459,8 +445,7 @@ final class MeetingService: ObservableObject {
         guard meeting.speakerMap != cleaned else { return }
         meeting.speakerMap = cleaned
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     // MARK: - Segment writes
@@ -473,7 +458,9 @@ final class MeetingService: ObservableObject {
         to meeting: Meeting
     ) {
         guard !segments.isEmpty else { return }
-        var nextOrder = (meeting.segments.map(\.order).max() ?? -1) + 1
+        // Cached per meeting (Perf 1C): scanning `segments` for the max order faulted every
+        // segment on each ~4 s live flush.
+        var nextOrder = reserveSegmentOrders(segments.count, for: meeting)
         for segment in segments {
             let modelSegment = MeetingSegmentMapper.makeSegment(
                 from: segment,
@@ -486,8 +473,7 @@ final class MeetingService: ObservableObject {
             nextOrder += 1
         }
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Replace all segments of a meeting that carry the given source with a fresh set (e.g. the
@@ -528,9 +514,9 @@ final class MeetingService: ObservableObject {
             newSegments.append(modelSegment)
         }
         renumber(surviving + newSegments)
+        forgetSegmentOrder(for: meeting)
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     // MARK: - Import (M8)
@@ -658,8 +644,7 @@ final class MeetingService: ObservableObject {
             imported += 1
         }
         if imported > 0 {
-            save()
-            fetchMeetings()
+            commitWrite(.list)
         }
         return imported
     }
@@ -742,8 +727,7 @@ final class MeetingService: ObservableObject {
         }
         renumber(inserted)
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         return outcome.droppedOverlappedCount
     }
 
@@ -874,6 +858,7 @@ final class MeetingService: ObservableObject {
         // (Swift's sort is not stable — the `replaceSegments` idiom).
         for (index, segment) in provisional.enumerated() { segment.order = index }
         renumber(provisional)
+        forgetSegmentOrder(for: primary)
 
         // Commit the re-parenting before deleting the absorbed rows, so their cascade delete rules
         // cannot take the just-moved children with them.
@@ -892,12 +877,12 @@ final class MeetingService: ObservableObject {
         // 6) Delete the absorbed meetings through the normal path (row + remaining audio versions).
         for meeting in absorbed {
             deleteAudioFile(for: meeting)
+            forgetSegmentOrder(for: meeting)
             modelContext.delete(meeting)
         }
 
         primary.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.list)
         return primary
     }
 
@@ -918,8 +903,7 @@ final class MeetingService: ObservableObject {
         let note = MeetingNote(text: text, timestampOffset: timestampOffset, meeting: meeting)
         modelContext.insert(note)
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         return note
     }
 
@@ -942,8 +926,7 @@ final class MeetingService: ObservableObject {
         )
         modelContext.insert(output)
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
 
         // AD4 emission point 5/5: an output was generated/persisted (summary/extended/brief).
         // Single choke point → covers MeetingLLMService, MeetingBriefService, and auto-briefs.
@@ -964,8 +947,7 @@ final class MeetingService: ObservableObject {
         let turn = MeetingQATurn(question: question, answer: answer, meeting: meeting)
         modelContext.insert(turn)
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         return turn
     }
 
@@ -975,8 +957,7 @@ final class MeetingService: ObservableObject {
         let meeting = output.meeting
         modelContext.delete(output)
         meeting?.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// The newest output of a given kind for a meeting (what the UI surfaces; older rows are kept).
@@ -992,8 +973,7 @@ final class MeetingService: ObservableObject {
         guard meeting.notesIncludedInOutputs != included else { return }
         meeting.notesIncludedInOutputs = included
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     // MARK: - Per-meeting language (plan D1 — provenance ladder manual > rule > detected)
@@ -1021,8 +1001,7 @@ final class MeetingService: ObservableObject {
         meeting.languageCode = normalized
         meeting.languageProvenance = .manual
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Clear a meeting's language (both columns to `nil`) — returns it to the `.auto` /
@@ -1032,8 +1011,7 @@ final class MeetingService: ObservableObject {
         meeting.languageCode = nil
         meeting.languageProvenanceRaw = nil
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Seed the language from a matched capture-context rule at capture start (plan D1/D2). A rule is
@@ -1054,8 +1032,7 @@ final class MeetingService: ObservableObject {
         meeting.languageCode = normalized
         meeting.languageProvenance = .rule
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Persist an auto-detected language (plan D1/D5, M2). Writes `.detected` **only when the meeting
@@ -1069,8 +1046,7 @@ final class MeetingService: ObservableObject {
         meeting.languageCode = normalized
         meeting.languageProvenance = .detected
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     // MARK: - Obsidian export metadata (M7)
@@ -1083,8 +1059,7 @@ final class MeetingService: ObservableObject {
         guard meeting.obsidianFolder != value else { return }
         meeting.obsidianFolder = value
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Record that `meeting` was just successfully exported to the connected vault. This timestamp
@@ -1093,8 +1068,7 @@ final class MeetingService: ObservableObject {
     func recordObsidianExport(for meeting: Meeting, at date: Date = Date()) {
         meeting.lastObsidianExportAt = date
         meeting.updatedAt = date
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Persist the per-meeting Obsidian frontmatter tags, trimming blanks and de-duplicating while
@@ -1104,8 +1078,7 @@ final class MeetingService: ObservableObject {
         guard meeting.obsidianTags != cleaned else { return }
         meeting.obsidianTags = cleaned
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     /// Delete every meeting in `meetings` — each audio blob removed, each row deleted — in a single
@@ -1114,10 +1087,10 @@ final class MeetingService: ObservableObject {
         guard !meetings.isEmpty else { return }
         for meeting in meetings {
             deleteAudioFile(for: meeting)
+            forgetSegmentOrder(for: meeting)
             modelContext.delete(meeting)
         }
-        save()
-        fetchMeetings()
+        commitWrite(.list)
     }
 
     // MARK: - Templates (plan AD6 — unified into `promptActions.store`)
@@ -1256,8 +1229,7 @@ final class MeetingService: ObservableObject {
             meeting.state = .interrupted
             meeting.updatedAt = Date()
         }
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
         return interrupted
     }
 
@@ -1278,8 +1250,7 @@ final class MeetingService: ObservableObject {
             try FileManager.default.moveItem(at: sourceURL, to: destination)
             meeting.audioFileName = destination.lastPathComponent
             meeting.updatedAt = Date()
-            save()
-            fetchMeetings()
+            commitWrite(.inPlace)
         } catch {
             logger.error("Failed to adopt audio file for meeting: \(error.localizedDescription)")
         }

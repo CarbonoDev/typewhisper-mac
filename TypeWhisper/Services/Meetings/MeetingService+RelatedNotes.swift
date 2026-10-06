@@ -34,8 +34,7 @@ extension MeetingService {
         meeting.relatedNotePaths = manual + discovered
         meeting.relatedDiscoveryAt = Date()
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Append a `manual` related note (dedup by path) and **clear any prior exclusion** of that path —
@@ -58,8 +57,7 @@ extension MeetingService {
         meeting.excludedNotePaths = excluded
         meeting.relatedNotePaths = related
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 
     /// Remove a related note (the UI's ✕): **record an exclusion** for the path and drop it from
@@ -82,7 +80,6 @@ extension MeetingService {
         meeting.relatedNotePaths = related
         meeting.excludedNotePaths = excluded
         meeting.updatedAt = Date()
-        save()
-        fetchMeetings()
+        commitWrite(.inPlace)
     }
 }

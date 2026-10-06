@@ -25,9 +25,10 @@ struct MeetingFolderNode: Identifiable, Equatable, Sendable {
 
 /// In-memory **derived** aggregation over the meetings store (plan D6/M3). Owns no persistence: tags
 /// are canonical on `Meeting.obsidianTags` (aliased `tags`), so a second store would create a two-way
-/// sync obligation. Subscribes to `MeetingService.$meetings` and republishes a low-cardinality tag
-/// index; because every `MeetingService` mutator ends with `save()` + `fetchMeetings()` → `$meetings`
-/// fires, the sidebar counts, chip autocomplete, and filters refresh together with no manual poke.
+/// sync obligation. Subscribes to `MeetingService.$meetings` and republishes a
+/// low-cardinality tag index; every folder/tag mutator commits as a `.list` change (refetch +
+/// republish), so the sidebar counts, chip autocomplete, and filters refresh together with no
+/// manual poke. In-place writes (transcript appends, outputs, …) no longer republish at all.
 ///
 /// `_shared` + ServiceContainer-wired so SwiftUI observes it directly, and the pure derivation is a
 /// `static` function so it is unit-testable without any Combine wiring.
