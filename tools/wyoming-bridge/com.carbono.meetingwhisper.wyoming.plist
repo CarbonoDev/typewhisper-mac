@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template: edit the script path and the engine/model flags, then
+
+    cp com.carbono.meetingwhisper.wyoming.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.carbono.meetingwhisper.wyoming.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.carbono.meetingwhisper.wyoming</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/CHANGEME/Projects/personal/typewhisper-mac/tools/wyoming-bridge/wyoming_bridge.py</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>10300</string>
+        <string>--engine</string>
+        <string>qwen3</string>
+        <string>--model</string>
+        <string>qwen3-asr-1.7b-6bit</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- The bridge survives the app being down, so just keep it alive. -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/CHANGEME/Library/Logs/meetingwhisper-wyoming.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/CHANGEME/Library/Logs/meetingwhisper-wyoming.log</string>
+</dict>
+</plist>
