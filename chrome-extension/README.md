@@ -27,7 +27,9 @@ diarization is skipped entirely. No change to the ladder was needed.
    Copy the **extension ID** Chrome shows under the loaded extension.
 3. Back in Settings → Advanced → API Server → **Allowed Browser Extensions**: paste that ID, then
    press **Copy API Token**.
-4. Open the extension's options, set the API URL, paste the token, and hit **Test connection**.
+4. Open the extension's options (they show this copy's ID), set the API URL, paste the token, and
+   hit **Test connection** — it posts as the extension does, so it reports a missing allowlist
+   entry or a wrong token rather than a false "connected".
 5. Join a Meet call. Captions are required for capture; by default the extension **turns them on
    for you** at call start (see Options below).
 
@@ -86,9 +88,11 @@ While you are in a call that the app counts as a meeting (someone else is there 
 its presence API), the app shows a small floating button on your Mac — red when your
 microphone is muted, green when it is live — above every app and every Space, not just inside the
 browser. Click it to toggle the microphone; hover for the camera toggle and a "return to call"
-button that brings the Meet tab back to the front; drag it anywhere (the position is remembered).
-Turn it off in the app under Settings → Advanced → API Server → **Floating call controls for Google
-Meet**, or here with the option above.
+button that brings the Meet tab back to the front; drag it anywhere (the position is remembered,
+relative to the screen). Under Settings → Advanced → API Server the app also offers a **size**
+(automatic makes it larger on an iPad used as a Sidecar display) and **follow the active screen**,
+which keeps it on whichever display you are working on. Turn it off there with **Floating call
+controls for Google Meet**, or here with the option above.
 
 Meet has no API for this, so the extension reads the state from Meet's own mic/camera buttons
 (their `data-is-muted` attribute) and clicks those same buttons. The app cannot push to an

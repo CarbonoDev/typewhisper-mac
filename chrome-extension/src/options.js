@@ -1,4 +1,10 @@
-import { getSettings, setSettings, isLoopbackUrl, isOlderVersion } from './config.js';
+import {
+  getSettings,
+  setSettings,
+  isLoopbackUrl,
+  isOlderVersion,
+  describeHelloFailure,
+} from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const status = $('status');
@@ -11,7 +17,8 @@ function report(message, ok) {
 const BRIDGE_VERSION = chrome.runtime.getManifest().version;
 
 async function load() {
-  $('version').textContent = `Version ${BRIDGE_VERSION}.`;
+  // The ID is what the app's allowlist needs; an unpacked copy gets a new one per folder.
+  $('version').textContent = `Version ${BRIDGE_VERSION} · ID ${chrome.runtime.id}`;
   const settings = await getSettings();
   $('enabled').checked = settings.enabled;
   $('autoEnableCaptions').checked = settings.autoEnableCaptions;
@@ -53,8 +60,9 @@ $('test').addEventListener('click', async () => {
       report(`TypeWhisper answered ${response.status}.`, false);
       return;
     }
-    // Say which build this is, and learn which one the app ships with. An app too old for the
-    // route answers 404, which is itself worth saying.
+    // Say which build this is, and learn which one the app ships with. This POST is also the
+    // real test: the GET above carries no `Origin`, so it passes even when the app would refuse
+    // this extension's captions (see `describeHelloFailure`).
     const hello = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/v1/bridge/hello`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
@@ -62,7 +70,8 @@ $('test').addEventListener('click', async () => {
     });
     const expected = hello.ok ? (await hello.json()).expected_version : null;
     if (!hello.ok) {
-      report(`Connected, but the app is older than this extension (v${BRIDGE_VERSION}).`, true);
+      const failure = describeHelloFailure(hello.status, BRIDGE_VERSION, chrome.runtime.id);
+      report(failure.message, failure.ok);
     } else if (expected && isOlderVersion(BRIDGE_VERSION, expected)) {
       report(`Connected — this is v${BRIDGE_VERSION}, the app ships v${expected}. Reload the extension.`, false);
     } else {

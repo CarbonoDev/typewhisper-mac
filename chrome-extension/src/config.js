@@ -71,3 +71,35 @@ export function isOlderVersion(version, other) {
   }
   return false;
 }
+
+/**
+ * What a failed `POST /v1/bridge/hello` means, in the user's terms. The POST is the honest
+ * connection test: Chrome sends no `Origin` on an extension's GET, so `GET /v1/status` succeeds
+ * even when the app would refuse every caption this extension posts.
+ *
+ * Returns `{ message, ok }` — `ok` is whether captions can still flow despite the failure.
+ */
+export function describeHelloFailure(status, version, extensionId) {
+  switch (status) {
+    case 403:
+      return {
+        message:
+          `TypeWhisper refuses this extension. Add its ID — ${extensionId} — under ` +
+          'Settings › Advanced › API Server › Allowed Browser Extensions.',
+        ok: false,
+      };
+    case 401:
+      return {
+        message:
+          'TypeWhisper rejected the API token. Copy it again from Settings › Advanced › API Server.',
+        ok: false,
+      };
+    case 404:
+      return {
+        message: `Connected, but the app is older than this extension (v${version}) and does not know its version check.`,
+        ok: true,
+      };
+    default:
+      return { message: `TypeWhisper answered ${status} to the version check.`, ok: false };
+  }
+}

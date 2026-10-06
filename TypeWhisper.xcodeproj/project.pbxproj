@@ -244,6 +244,9 @@
 		PPB0000000000000000003 /* APIHandlers+MeetingPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000003 /* APIHandlers+MeetingPresence.swift */; };
 		PPB0000000000000000002 /* MeetingPresenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000002 /* MeetingPresenceService.swift */; };
 		PPB0000000000000000001 /* MeetingPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPF0000000000000000001 /* MeetingPresence.swift */; };
+		MCB000000000000000000009 /* MeetCallControlLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000009 /* MeetCallControlLayoutTests.swift */; };
+		MCB000000000000000000008 /* MeetCallControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000008 /* MeetCallControlView.swift */; };
+		MCB000000000000000000007 /* MeetCallControlLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000007 /* MeetCallControlLayout.swift */; };
 		MCB000000000000000000006 /* MeetingService+CaptionSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */; };
 		MCB000000000000000000005 /* MeetCallControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000005 /* MeetCallControlTests.swift */; };
 		MCB000000000000000000004 /* MeetCallControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCF000000000000000000004 /* MeetCallControlPanel.swift */; };
@@ -990,6 +993,9 @@
 		PPF0000000000000000003 /* APIHandlers+MeetingPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIHandlers+MeetingPresence.swift"; sourceTree = "<group>"; };
 		PPF0000000000000000002 /* MeetingPresenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingPresenceService.swift"; sourceTree = "<group>"; };
 		PPF0000000000000000001 /* MeetingPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingPresence.swift"; sourceTree = "<group>"; };
+		MCF000000000000000000009 /* MeetCallControlLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetCallControlLayoutTests.swift"; sourceTree = "<group>"; };
+		MCF000000000000000000008 /* MeetCallControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetCallControlView.swift"; sourceTree = "<group>"; };
+		MCF000000000000000000007 /* MeetCallControlLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetCallControlLayout.swift"; sourceTree = "<group>"; };
 		MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+CaptionSessions.swift"; sourceTree = "<group>"; };
 		MCF000000000000000000005 /* MeetCallControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetCallControlTests.swift"; sourceTree = "<group>"; };
 		MCF000000000000000000004 /* MeetCallControlPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetCallControlPanel.swift"; sourceTree = "<group>"; };
@@ -2356,6 +2362,7 @@
 				GGF0000000000000000008 /* ConferenceURLDetector.swift */,
 				PPF0000000000000000002 /* MeetingPresenceService.swift */,
 				PPF0000000000000000001 /* MeetingPresence.swift */,
+				MCF000000000000000000007 /* MeetCallControlLayout.swift */,
 				MCF000000000000000000006 /* MeetingService+CaptionSessions.swift */,
 				MCF000000000000000000002 /* MeetCallControlService.swift */,
 				MCF000000000000000000001 /* MeetCallControl.swift */,
@@ -2437,6 +2444,7 @@
 				BB00000000000000000404 /* MeetingBriefView.swift */,
 				5B10000000000000000B0001 /* MeetingTheme.swift */,
 				5B10000000000000000B0002 /* MeetingDocumentComponents.swift */,
+				MCF000000000000000000008 /* MeetCallControlView.swift */,
 				MCF000000000000000000004 /* MeetCallControlPanel.swift */,
 				M7F0000000000000000002 /* MeetingFolderDetailView.swift */,
 				M7F0000000000000000003 /* VaultContextPickerView.swift */,
@@ -3168,6 +3176,7 @@
 				GGF0000000000000000009 /* ConferenceURLDetectorTests.swift */,
 				PPF0000000000000000005 /* APIRouterRequiredTokenTests.swift */,
 				PPF0000000000000000004 /* MeetingPresenceTests.swift */,
+				MCF000000000000000000009 /* MeetCallControlLayoutTests.swift */,
 				MCF000000000000000000005 /* MeetCallControlTests.swift */,
 				GGF0000000000000000010 /* CalendarProjectionRichDetailTests.swift */,
 				GGF0000000000000000026 /* CalendarServiceFanInTests.swift */,
@@ -4772,6 +4781,7 @@
 				GGB0000000000000000009 /* ConferenceURLDetectorTests.swift in Sources */,
 				PPB0000000000000000005 /* APIRouterRequiredTokenTests.swift in Sources */,
 				PPB0000000000000000004 /* MeetingPresenceTests.swift in Sources */,
+				MCB000000000000000000009 /* MeetCallControlLayoutTests.swift in Sources */,
 				MCB000000000000000000005 /* MeetCallControlTests.swift in Sources */,
 				GGB0000000000000000010 /* CalendarProjectionRichDetailTests.swift in Sources */,
 				GGB0000000000000000026 /* CalendarServiceFanInTests.swift in Sources */,
@@ -4984,6 +4994,7 @@
 				MCB000000000000000000003 /* APIHandlers+MeetCallControl.swift in Sources */,
 				PPB0000000000000000002 /* MeetingPresenceService.swift in Sources */,
 				PPB0000000000000000001 /* MeetingPresence.swift in Sources */,
+				MCB000000000000000000007 /* MeetCallControlLayout.swift in Sources */,
 				MCB000000000000000000006 /* MeetingService+CaptionSessions.swift in Sources */,
 				MCB000000000000000000002 /* MeetCallControlService.swift in Sources */,
 				MCB000000000000000000001 /* MeetCallControl.swift in Sources */,
@@ -5063,6 +5074,7 @@
 				AA00000000000000000404 /* MeetingBriefView.swift in Sources */,
 				5B10000000000000000A0001 /* MeetingTheme.swift in Sources */,
 				5B10000000000000000A0002 /* MeetingDocumentComponents.swift in Sources */,
+				MCB000000000000000000008 /* MeetCallControlView.swift in Sources */,
 				MCB000000000000000000004 /* MeetCallControlPanel.swift in Sources */,
 				5B10000000000000000A0003 /* MeetingOutputParser.swift in Sources */,
 				5B10000000000000000A0004 /* MeetingChecklistStore.swift in Sources */,

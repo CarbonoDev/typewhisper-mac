@@ -2488,6 +2488,16 @@
         }
       }
     },
+    "Automatic (larger on an iPad display)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (größer auf einem iPad-Display)"
+          }
+        }
+      }
+    },
     "Automatic Correction Learning": {
       "localizations": {
         "de": {
@@ -2990,6 +3000,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kaufen oder Lizenzschlüssel eingeben"
+          }
+        }
+      }
+    },
+    "Call controls follow the active screen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anrufsteuerung folgt dem aktiven Bildschirm"
+          }
+        }
+      }
+    },
+    "Call controls size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Größe der Anrufsteuerung"
           }
         }
       }
@@ -6688,6 +6718,16 @@
         }
       }
     },
+    "Extra large": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sehr groß"
+          }
+        }
+      }
+    },
     "Extract": {
       "localizations": {
         "ja": {
@@ -8605,12 +8645,32 @@
         }
       }
     },
+    "Keeps the floating button on the screen you are working on, at the same spot relative to its edges. When off, it stays on the screen you dragged it to.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hält die schwebende Schaltfläche auf dem Bildschirm, an dem du gerade arbeitest – an derselben Stelle relativ zu dessen Rändern. Wenn deaktiviert, bleibt sie auf dem Bildschirm, auf den du sie gezogen hast."
+          }
+        }
+      }
+    },
     "Key Points": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "要点"
+          }
+        }
+      }
+    },
+    "Large": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groß"
           }
         }
       }
@@ -14075,6 +14135,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "選択内容から再生成"
+          }
+        }
+      }
+    },
+    "Regular": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
           }
         }
       }

@@ -263,3 +263,22 @@ test('version comparison is numeric, so only an extension that is behind the app
   // The app being behind this extension is not this extension's problem.
   assert.ok(!isOlderVersion('0.4.0', '0.3.0'));
 });
+
+test('a refused version check names the real cause instead of blaming an old app', async () => {
+  const { describeHelloFailure } = await import('../src/config.js');
+  // Not on the allowlist: the message carries the ID to paste, and captions cannot flow.
+  const refused = describeHelloFailure(403, '0.4.1', 'abcdefghijklmnopabcdefghijklmnop');
+  assert.equal(refused.ok, false);
+  assert.match(refused.message, /abcdefghijklmnopabcdefghijklmnop/);
+  assert.match(refused.message, /Allowed Browser Extensions/);
+
+  assert.equal(describeHelloFailure(401, '0.4.1', 'id').ok, false);
+  assert.match(describeHelloFailure(401, '0.4.1', 'id').message, /token/i);
+
+  // Only a missing route means an older app — and captions still work against one.
+  const older = describeHelloFailure(404, '0.4.1', 'id');
+  assert.equal(older.ok, true);
+  assert.match(older.message, /older than this extension/);
+
+  assert.match(describeHelloFailure(500, '0.4.1', 'id').message, /500/);
+});

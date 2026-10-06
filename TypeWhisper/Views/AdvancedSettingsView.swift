@@ -502,6 +502,10 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
+                if meetCallControlFloatingEnabled {
+                    MeetCallControlPlacementSettings()
+                }
+
                 if viewModel.isEnabled {
                     HStack {
                         Image(systemName: "circle.fill")
