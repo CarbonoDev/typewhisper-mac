@@ -532,4 +532,87 @@ final class GoogleCalendarSyncEngineTests: XCTestCase {
         XCTAssertTrue(engine.snapshot.isEmpty, "disconnected account's slice leaves the snapshot")
         XCTAssertEqual(snapshotChangeCount, 2, "pruning is a snapshot change")
     }
+
+    // MARK: - Off-main decode + map (perf plan Phase 2)
+
+    /// The off-main page mapper yields exactly what decode + `GoogleCalendarMapper` give inline.
+    func testOffMainEventsPageMappingMatchesTheInlineMapper() async throws {
+        let body = Self.eventsBody(
+            events: [
+                Self.event("e1", start: "2026-08-10T10:00:00Z", end: "2026-08-10T11:00:00Z"),
+                Self.event("e2", start: "2026-08-10T12:00:00Z", end: "2026-08-10T13:00:00Z"),
+            ],
+            nextPageToken: "p2"
+        )
+        let data = Data(body.utf8)
+        let entry = try JSONDecoder().decode(
+            GoogleCalendarAPI.GCalCalendarListEntry.self,
+            from: Data(#"{"id": "cal1", "summary": "Cal cal1"}"#.utf8)
+        )
+        let info = GoogleCalendarMapper.calendarInfo(from: entry, sub: "sub-1", accountEmail: "sub-1@example.com")
+
+        let mapped = try await GoogleCalendarSyncEngine.mapEventsPageOffMain(
+            data, calendar: info, sub: "sub-1", accountEmail: "sub-1@example.com"
+        )
+
+        let page = try JSONDecoder().decode(GoogleCalendarAPI.GCalEventsPage.self, from: data)
+        let inline = (page.items ?? []).compactMap {
+            GoogleCalendarMapper.eventDTO(from: $0, calendar: info, sub: "sub-1", accountEmail: "sub-1@example.com")
+        }
+        XCTAssertEqual(mapped.events, inline)
+        XCTAssertEqual(mapped.events.count, 2)
+        XCTAssertEqual(mapped.nextPageToken, "p2")
+    }
+
+    /// A malformed events page (decoded off main now) is a per-calendar failure like any other: the
+    /// calendar keeps its last good events — stale, never empty — and nothing escapes `syncNow`.
+    func testMalformedEventsPageKeepsTheCalendarsLastGoodEvents() async throws {
+        let transport = FakeCalendarTransport(stubs: [
+            .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["cal1"])),
+            .init(urlContains: "/calendars/cal1/events", statusCode: 200, body: Self.eventsBody(
+                events: [Self.event("e1", start: "2026-08-10T10:00:00Z", end: "2026-08-10T11:00:00Z")]
+            )),
+        ])
+        let (engine, _) = try makeEngine(transport: transport, tokenProvider: FakeTokenProvider(), accountIDs: ["sub-1"])
+        await engine.syncNow()
+        let good = engine.snapshot.flatMap(\.events).map(\.id)
+        XCTAssertEqual(good.count, 1)
+
+        transport.setStubs([
+            .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: ["cal1"])),
+            .init(urlContains: "/calendars/cal1/events", statusCode: 200, body: "{not json"),
+        ])
+        await engine.syncNow()
+
+        XCTAssertEqual(engine.snapshot.flatMap(\.events).map(\.id), good, "stale, never empty")
+        XCTAssertNotNil(engine.lastSyncError)
+        XCTAssertEqual(snapshotChangeCount, 1, "an unchanged (stale) snapshot does not re-notify")
+    }
+
+    /// `lastSyncError` republishes only when its value changes: a repeated identical failure (or a
+    /// steady clean state) does not wake its observers every cycle.
+    func testLastSyncErrorPublishesOnlyOnChange() async throws {
+        let tokens = FakeTokenProvider()
+        tokens.results["sub-1"] = .failure(GoogleAuthError.needsReauth)
+        let transport = FakeCalendarTransport(stubs: [])
+        let (engine, _) = try makeEngine(transport: transport, tokenProvider: tokens, accountIDs: ["sub-1"])
+        var emissions: [String?] = []
+        let sink = engine.$lastSyncError.dropFirst().sink { emissions.append($0) }
+        defer { sink.cancel() }
+
+        await engine.syncNow()
+        await engine.syncNow()
+        XCTAssertEqual(emissions.count, 1, "the same error twice publishes once")
+        XCTAssertNotNil(emissions.last ?? nil)
+
+        tokens.results["sub-1"] = .success("token-sub-1")
+        for _ in 0..<2 {
+            transport.setStubs([
+                .init(urlContains: "calendarList", statusCode: 200, body: Self.calendarListBody(ids: [])),
+            ])
+            await engine.syncNow()
+        }
+        XCTAssertEqual(emissions.count, 2, "recovery publishes nil once, a steady clean state never again")
+        XCTAssertNil(emissions.last ?? "not nil")
+    }
 }

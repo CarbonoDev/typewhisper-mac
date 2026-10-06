@@ -221,7 +221,10 @@ final class GoogleCalendarSyncEngine: ObservableObject {
             snapshot = flattened
             NotificationCenter.default.post(name: .googleCalendarSnapshotDidChange, object: nil)
         }
-        lastSyncError = firstError
+        // Equality-gated: an unchanged error (or a steady `nil`) does not republish to observers.
+        if lastSyncError != firstError {
+            lastSyncError = firstError
+        }
         // M3 review finding 3 (documented, accepted): `lastSyncAt` deliberately reads "last time
         // a sync had something to try", so it does not bump when no account is `.connected` —
         // in the all-needsReauth state "Refresh now" appears inert, which matches reality (there
@@ -283,9 +286,8 @@ final class GoogleCalendarSyncEngine: ObservableObject {
         var entries: [GoogleCalendarAPI.GCalCalendarListEntry] = []
         var pageToken: String?
         for _ in 0..<maxPages {
-            let page: GoogleCalendarAPI.GCalCalendarListPage = try await send(
-                GoogleCalendarAPI.calendarListRequest(token: token, pageToken: pageToken)
-            )
+            let data = try await send(GoogleCalendarAPI.calendarListRequest(token: token, pageToken: pageToken))
+            let page = try await Self.decodeOffMain(GoogleCalendarAPI.GCalCalendarListPage.self, from: data)
             entries.append(contentsOf: page.items ?? [])
             guard let next = page.nextPageToken else { return entries }
             pageToken = next
@@ -303,7 +305,7 @@ final class GoogleCalendarSyncEngine: ObservableObject {
         var events: [CalendarEventDTO] = []
         var pageToken: String?
         for _ in 0..<maxPages {
-            let page: GoogleCalendarAPI.GCalEventsPage = try await send(
+            let data = try await send(
                 GoogleCalendarAPI.eventsRequest(
                     calendarID: calendarRawID,
                     token: token,
@@ -312,26 +314,60 @@ final class GoogleCalendarSyncEngine: ObservableObject {
                     pageToken: pageToken
                 )
             )
-            events.append(contentsOf: (page.items ?? []).compactMap { event in
-                GoogleCalendarMapper.eventDTO(
-                    from: event,
-                    calendar: info,
-                    sub: account.id,
-                    accountEmail: account.email
-                )
-            })
+            let page = try await Self.mapEventsPageOffMain(
+                data, calendar: info, sub: account.id, accountEmail: account.email
+            )
+            events.append(contentsOf: page.events)
             guard let next = page.nextPageToken else { return events }
             pageToken = next
         }
         return events
     }
 
-    private func send<Page: Decodable>(_ request: URLRequest) async throws -> Page {
+    /// The raw body of a successful (200) response; anything else throws `RequestFailed`.
+    private func send(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await transport.send(request)
         guard response.statusCode == 200 else {
             throw GoogleCalendarAPI.RequestFailed(statusCode: response.statusCode)
         }
-        return try JSONDecoder().decode(Page.self, from: data)
+        return data
+    }
+
+    // MARK: - Decode + map (pure, off the main actor — perf plan Phase 2, finding 13)
+
+    /// Decode a response page on a background executor; only the result returns to the main actor.
+    nonisolated static func decodeOffMain<Page: Decodable & Sendable>(
+        _ type: Page.Type, from data: Data
+    ) async throws -> Page {
+        try await Task.detached(priority: .utility) {
+            try JSONDecoder().decode(Page.self, from: data)
+        }.value
+    }
+
+    /// Decode one `events.list` page and map it to DTOs in one background pass (the mapper is pure).
+    nonisolated static func mapEventsPageOffMain(
+        _ data: Data,
+        calendar: CalendarInfo,
+        sub: String,
+        accountEmail: String
+    ) async throws -> (events: [CalendarEventDTO], nextPageToken: String?) {
+        try await Task.detached(priority: .utility) {
+            try mapEventsPage(data, calendar: calendar, sub: sub, accountEmail: accountEmail)
+        }.value
+    }
+
+    /// The synchronous core of `mapEventsPageOffMain`, exposed for tests.
+    nonisolated static func mapEventsPage(
+        _ data: Data,
+        calendar: CalendarInfo,
+        sub: String,
+        accountEmail: String
+    ) throws -> (events: [CalendarEventDTO], nextPageToken: String?) {
+        let page = try JSONDecoder().decode(GoogleCalendarAPI.GCalEventsPage.self, from: data)
+        let events = (page.items ?? []).compactMap { event in
+            GoogleCalendarMapper.eventDTO(from: event, calendar: calendar, sub: sub, accountEmail: accountEmail)
+        }
+        return (events, page.nextPageToken)
     }
 
     // MARK: - Window math (pure, D-G7)
