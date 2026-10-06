@@ -248,6 +248,49 @@ final class MeetingListPipelineTests: XCTestCase {
         XCTAssertTrue(pipeline.meetings([today], query: query, now: tomorrow, calendar: calendar).isEmpty)
     }
 
+    // MARK: - Fact columns (written without bumping `updatedAt`)
+
+    /// A column that drifted (claims fewer kinds than the store has) is trusted until
+    /// `reconcileFacts` heals it in place; the cache must follow the heal although `updatedAt` stays.
+    func testAHealedOutputKindsColumnInvalidatesTheCache() {
+        let pipeline = MeetingListPipeline()
+        let target = meeting("Drifted", outputs: [.summary, .brief])
+        target.storeOutputKinds([.summary])
+        let query = MeetingListQuery(stateFacets: [.hasBrief])
+        XCTAssertTrue(pipeline.meetings([target], query: query, now: now, calendar: calendar).isEmpty)
+
+        target.storeOutputKinds([.summary, .brief])
+        XCTAssertEqual(pipeline.meetings([target], query: query, now: now, calendar: calendar).map(\.id), [target.id])
+    }
+
+    func testAHealedTranscriptColumnInvalidatesTheCache() {
+        let pipeline = MeetingListPipeline()
+        let target = meeting("Drifted")
+        target.storeTranscriptFacts(MeetingTranscriptFacts(segmentCount: 3, transcriptEnd: 9, speakerLabels: []))
+        let query = MeetingListQuery(stateFacets: [.hasTranscript])
+        XCTAssertEqual(pipeline.meetings([target], query: query, now: now, calendar: calendar).count, 1)
+
+        target.storeTranscriptFacts(.empty)
+        XCTAssertTrue(pipeline.meetings([target], query: query, now: now, calendar: calendar).isEmpty)
+    }
+
+    /// The common case: a backfill that agrees with the relationship changes no answer.
+    func testABackfillThatAgreesWithTheRelationshipChangesNothing() {
+        let pipeline = MeetingListPipeline()
+        let archive = fixtures
+        let query = MeetingListQuery(stateFacets: [.hasTranscript, .hasSummary])
+        let before = pipeline.meetings(archive, query: query, now: now, calendar: calendar).map(\.id)
+        for m in archive {
+            m.storeTranscriptFacts(m.computedTranscriptFacts())
+            m.storeOutputKinds(m.computedOutputKinds())
+        }
+        XCTAssertEqual(pipeline.meetings(archive, query: query, now: now, calendar: calendar).map(\.id), before)
+        XCTAssertEqual(before, reference(archive, query))
+        XCTAssertEqual(
+            pipeline.meetings(archive, query: MeetingListQuery(), now: now, calendar: calendar).count, archive.count
+        )
+    }
+
     private func meeting(_ title: String, updatedAtSeconds: TimeInterval) -> Meeting {
         Meeting(title: title, updatedAt: Date(timeIntervalSince1970: updatedAtSeconds))
     }

@@ -67,8 +67,9 @@ final class MeetingListPipeline {
     static let shared = MeetingListPipeline()
 
     private var facts: [UUID: MeetingFilterFacts] = [:]
-    private var transcriptFacts: [UUID: (updatedAt: Date, value: Bool)] = [:]
-    private var outputKindFacts: [UUID: (updatedAt: Date, value: Set<MeetingOutputKind>)] = [:]
+    private typealias Stamp = MeetingRelationshipFacts.ColumnStamp
+    private var transcriptFacts: [UUID: (updatedAt: Date, columns: Stamp, value: Bool)] = [:]
+    private var outputKindFacts: [UUID: (updatedAt: Date, columns: Stamp, value: Set<MeetingOutputKind>)] = [:]
 
     /// Derivation counts (cache misses) by kind — test probes for the invalidation key and for
     /// laziness: an unfiltered or search-only query must not derive any relationship fact.
@@ -94,15 +95,22 @@ final class MeetingListPipeline {
         var key: MemoKey
         var inputs: [Meeting]
         var updatedAts: [Date]
+        /// The inputs' fact-column stamps, recorded only when a state facet is active (the only
+        /// time the result depends on transcript / output facts, whose columns change without an
+        /// `updatedAt` bump).
+        var columnStamps: [Stamp]?
         var result: [Meeting]
 
-        func matches(_ meetings: [Meeting], key other: MemoKey) -> Bool {
+        @MainActor func matches(_ meetings: [Meeting], key other: MemoKey) -> Bool {
             guard key == other, inputs.count == meetings.count else { return false }
             for index in meetings.indices {
                 let meeting = meetings[index]
                 // Reading `updatedAt` of every input on a hit is also what keeps the calling view
                 // observing each meeting (see the type comment).
                 guard meeting === inputs[index], meeting.updatedAt == updatedAts[index] else { return false }
+                if let columnStamps, MeetingRelationshipFacts.columnStamp(meeting) != columnStamps[index] {
+                    return false
+                }
             }
             return true
         }
@@ -132,7 +140,13 @@ final class MeetingListPipeline {
         let result = apply(
             meetings.map { ($0, filterFacts(for: $0)) }, query: query, now: now, calendar: calendar
         )
-        memo.append(MemoEntry(key: key, inputs: meetings, updatedAts: meetings.map(\.updatedAt), result: result))
+        memo.append(MemoEntry(
+            key: key,
+            inputs: meetings,
+            updatedAts: meetings.map(\.updatedAt),
+            columnStamps: query.stateFacets.isEmpty ? nil : meetings.map(MeetingRelationshipFacts.columnStamp),
+            result: result
+        ))
         if memo.count > memoLimit { memo.removeFirst() }
         return result
     }
@@ -145,21 +159,27 @@ final class MeetingListPipeline {
         return derived
     }
 
-    /// Lazily derived, cached per `(id, updatedAt)`; reads `segments` through the seam.
+    /// Lazily derived through the seam, cached per `(id, updatedAt)` + the fact-column stamp.
     private func hasTranscript(_ meeting: Meeting) -> Bool {
-        if let cached = transcriptFacts[meeting.id], cached.updatedAt == meeting.updatedAt { return cached.value }
+        let columns = MeetingRelationshipFacts.columnStamp(meeting)
+        if let cached = transcriptFacts[meeting.id], cached.updatedAt == meeting.updatedAt, cached.columns == columns {
+            return cached.value
+        }
         derivations.transcript += 1
         let value = MeetingRelationshipFacts.hasTranscript(meeting)
-        transcriptFacts[meeting.id] = (meeting.updatedAt, value)
+        transcriptFacts[meeting.id] = (meeting.updatedAt, columns, value)
         return value
     }
 
-    /// Lazily derived, cached per `(id, updatedAt)`; reads `outputs` through the seam.
+    /// Lazily derived through the seam, cached per `(id, updatedAt)` + the fact-column stamp.
     private func outputKinds(_ meeting: Meeting) -> Set<MeetingOutputKind> {
-        if let cached = outputKindFacts[meeting.id], cached.updatedAt == meeting.updatedAt { return cached.value }
+        let columns = MeetingRelationshipFacts.columnStamp(meeting)
+        if let cached = outputKindFacts[meeting.id], cached.updatedAt == meeting.updatedAt, cached.columns == columns {
+            return cached.value
+        }
         derivations.outputKinds += 1
         let value = MeetingRelationshipFacts.outputKinds(meeting)
-        outputKindFacts[meeting.id] = (meeting.updatedAt, value)
+        outputKindFacts[meeting.id] = (meeting.updatedAt, columns, value)
         return value
     }
 

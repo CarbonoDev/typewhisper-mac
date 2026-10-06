@@ -61,6 +61,9 @@ final class MeetingRowModelStore {
     /// The `updatedAt`-keyed half of a row.
     struct StoredFacts: Equatable {
         var updatedAt: Date
+        /// The fact columns `hasTranscript` / `hasBrief` were read under (fact writes do not bump
+        /// `updatedAt`; see `MeetingRelationshipFacts.ColumnStamp`).
+        var columns: MeetingRelationshipFacts.ColumnStamp
         var title: String
         var startDate: Date?
         var effectiveDate: Date
@@ -118,7 +121,10 @@ final class MeetingRowModelStore {
     }
 
     func storedFacts(for meeting: Meeting) -> StoredFacts {
-        if let cached = cache[meeting.id], cached.updatedAt == meeting.updatedAt { return cached }
+        let columns = MeetingRelationshipFacts.columnStamp(meeting)
+        if let cached = cache[meeting.id], cached.updatedAt == meeting.updatedAt, cached.columns == columns {
+            return cached
+        }
         derivationCount += 1
         let parsed = ImportedMeetingTitle.parse(meeting.title)
         let source = meeting.source
@@ -126,6 +132,7 @@ final class MeetingRowModelStore {
         let startDate = meeting.startDate ?? parsed.date
         let facts = StoredFacts(
             updatedAt: meeting.updatedAt,
+            columns: columns,
             title: parsed.cleanTitle,
             startDate: startDate,
             effectiveDate: startDate ?? meeting.createdAt,

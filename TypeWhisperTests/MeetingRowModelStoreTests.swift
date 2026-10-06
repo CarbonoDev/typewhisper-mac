@@ -136,6 +136,26 @@ final class MeetingRowModelStoreTests: XCTestCase {
         XCTAssertNil(store.row(for: doomed, context: context()))
     }
 
+    /// Fact columns are healed in place without an `updatedAt` bump; the row must follow the heal.
+    func testAHealedFactColumnRebuildsTheRow() throws {
+        let store = MeetingRowModelStore()
+        let meeting = Meeting(title: "Drifted")
+        meeting.outputs = [MeetingOutput(kind: .brief, content: "b")]
+        meeting.storeOutputKinds([.summary])
+        meeting.storeTranscriptFacts(MeetingTranscriptFacts(segmentCount: 2, transcriptEnd: 4, speakerLabels: []))
+
+        let drifted = try XCTUnwrap(store.row(for: meeting, context: context()))
+        XCTAssertFalse(drifted.hasBrief)
+        XCTAssertTrue(drifted.hasTranscript)
+
+        meeting.storeOutputKinds([.brief])
+        meeting.storeTranscriptFacts(.empty)
+        let healed = try XCTUnwrap(store.row(for: meeting, context: context()))
+        XCTAssertTrue(healed.hasBrief)
+        XCTAssertFalse(healed.hasTranscript)
+        XCTAssertEqual(store.derivationCount, 2)
+    }
+
     /// Rows are built per realized row (`MeetingRowCell`): a visible window of k rows over an archive
     /// of N derives k stored facts — each one the only place a row faults `segments` / `outputs`.
     func testAVisibleWindowDerivesOnlyItsRows() {
