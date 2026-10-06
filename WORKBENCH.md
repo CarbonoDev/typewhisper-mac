@@ -115,10 +115,14 @@
   [edit] state os:marco in_progress ⧗2026-10-02T12:20:29-06:00 #aba9060e
 
 ## live-writes (jade)
-- [~] Perf 1C: stop refetching all meetings on live append (`appendStableSegments`) @live-writes
+- [x] Perf 1C: stop refetching all meetings on live append (`appendStableSegments`) @live-writes
   Impact high / risk low-med. Keep `nextOrder` per live meeting instead of `segments.map(\.order).max()`; `save()` without `fetchMeetings()`; refetch only on insert / delete / sort-key change; `performBatch` deferral for Drive import and calendar sync.
   > 2026-10-06 diamond: dispatched, isolated worktree forked from main 772f3535 (Google Phase 2 edits now committed, so no longer blocked).
   > 2026-10-06 diamond: worker done on its branch (f4e80c91 move tags/folders + related notes into extensions, 952ac5e2 in-place writes save without refetch + nextOrder cache, 43907520 performBatch; 586 + 194 tests green). NOT merged — review found `mergeImport` renumbers segments without invalidating the nextOrder cache (append → Drive merge → append yields duplicate orders). Sent back for a structural fix + regression tests.
+  > 2026-10-06 diamond: fix reviewed, merged to main as 622219d4 (move), 5500f687 (in-place writes save without refetch/republish; nextOrder cache), eb4cc058 (performBatch; Drive create path uses it), ca0b4748 (order cache invalidated structurally in insertSegment/deleteSegment/renumber; 4 sequence tests). Worker: 49 classes / 588 tests green. Not verified live: that every view still updates on in-place writes now that the list no longer republishes (relies on SwiftData observation) — the first thing to check in a dev build during a live caption session.
+- [~] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive) @live-writes
+  Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
+  > 2026-10-06 diamond: dispatched to live-writes after its first merge.
 
 ## titles-home (amber)
 - [x] Perf 1C: precompiled regexes + per-title memo in `ImportedMeetingTitle` @titles-home
@@ -167,8 +171,6 @@ Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refac
   > 2026-10-02 diamond: landed on main as 355a177f. Not yet verified visually (lazy timeline look, row virtualization) nor re-profiled — needs a dev rebuild after the current live meeting ends. Follow-ups seen: `renderedOutputBody` re-parses markdown per body (Phase 2 RenderedOutput task), `duplicateMeetingIDs` parses every title per body, `relatedDocuments(for:)` still stats disk per note.
 
 ## Backlog — Perf refactor Phase 2 (structural)
-- [ ] Perf: denormalise `segmentCount`, `lastSegmentEnd`, output kinds onto `Meeting` (optional columns, additive)
-  Impact high / risk medium (schema, but additive-only). Maintained by `MeetingService` on append/replace/merge/import; replaces the per-fact caches (`transcriptFactCache`, `homeBadgeFacts`, `actionFacts`) and the `segments.isEmpty` probes that fault whole relationships.
 - [ ] Refactor: split `MeetingsViewModel` by feature slice and drop the Combine mirrors
   Impact high / risk high (15–20 test files). Slices: Capture, Calendar, Library/Organization, Outputs, Vault/Export, Import, Related. Views take the slice they use; mirrors become computed forwards (or `@Observable`, macOS 14 floor). Removes the documented "authoritative vs mirrored" staleness workarounds.
 - [ ] Refactor: `MeetingService` into repositories under one writer (meetings / outputs / templates)
