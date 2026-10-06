@@ -10,7 +10,7 @@ private let factsLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Typ
 /// - the live append and `addOutput` update the columns incrementally, in the write's own save;
 /// - every other child write goes through a choke point (`insertSegment`, `deleteSegment`,
 ///   `renumber`, `childrenChanged(of:)`) that marks the meeting stale, and `commitWrite` recomputes
-///   stale meetings from their relationships right after it saves;
+///   stale meetings from their relationships just before its save (one transaction per write);
 /// - `reconcileFacts()` (`MeetingService+FactsBackfill.swift`) backfills rows written before the
 ///   columns existed and heals any drift against the store, once per launch after the first frame,
 ///   in turns budgeted by rows read; it is idempotent and safe to interrupt.
@@ -37,18 +37,17 @@ extension MeetingService {
         listPublishing.staleFacts[meeting.id] = meeting
     }
 
-    /// Recompute every meeting marked stale since the last save (called by `commitWrite`, after
-    /// its save, so deleted children have left the relationships). Saves again only if a column
-    /// actually changed.
+    /// Recompute every meeting marked stale since the last commit. Called by `commitWrite` *before*
+    /// its save, so the new values ride in the write's own transaction; children deleted in this
+    /// write are still in the relationships but `isDeleted`, which `computedTranscriptFacts` and
+    /// `computedOutputKinds` skip. Does not save.
     func refreshStaleFacts() {
         guard !listPublishing.staleFacts.isEmpty else { return }
         let stale = listPublishing.staleFacts.values
         listPublishing.staleFacts.removeAll()
-        var changed = false
         for meeting in stale where meeting.modelContext != nil && !meeting.isDeleted {
-            changed = recomputeFacts(for: meeting) || changed
+            recomputeFacts(for: meeting)
         }
-        if changed { save() }
     }
 
     /// Recompute `meeting`'s columns from its relationships. Returns whether anything changed.

@@ -42,8 +42,11 @@ extension MeetingService {
     /// write is still saved immediately — the transcript is never lost; only the refetch/republish
     /// is skipped (in-place writes) or coalesced (inside `performBatch`).
     func commitWrite(_ change: MeetingListChange) {
-        save()
+        // Stale facts are recomputed into the same transaction (one save per write): pending
+        // deletes are still in the relationships but flagged `isDeleted`, which the computed facts
+        // skip, so the recompute is already correct before the save.
         refreshStaleFacts()
+        save()
         let refetched: Bool
         switch change {
         case .list:

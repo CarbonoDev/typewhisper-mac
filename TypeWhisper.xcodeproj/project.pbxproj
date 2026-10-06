@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		PF1A0000000000000000B00D /* MeetingServiceTransactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00D /* MeetingServiceTransactionTests.swift */; };
 		PF1A0000000000000000B00C /* MeetingFactsBackfillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */; };
 		PF1A0000000000000000B00B /* MeetingService+FactsBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00B /* MeetingService+FactsBackfill.swift */; };
 		PF1A0000000000000000B00A /* MeetingService+Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF1A0000000000000000F00A /* MeetingService+Language.swift */; };
@@ -895,6 +896,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		PF1A0000000000000000F00D /* MeetingServiceTransactionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingServiceTransactionTests.swift; sourceTree = "<group>"; };
 		PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingFactsBackfillTests.swift; sourceTree = "<group>"; };
 		PF1A0000000000000000F00B /* MeetingService+FactsBackfill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+FactsBackfill.swift"; sourceTree = "<group>"; };
 		PF1A0000000000000000F00A /* MeetingService+Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+Language.swift"; sourceTree = "<group>"; };
@@ -3299,6 +3301,7 @@
 				MEF0000000000000000001 /* MeetingServiceTests.swift */,
 				PF1A0000000000000000F001 /* MeetingServicePublishingTests.swift */,
 				PF1A0000000000000000F009 /* MeetingFactsTests.swift */,
+				PF1A0000000000000000F00D /* MeetingServiceTransactionTests.swift */,
 				PF1A0000000000000000F00C /* MeetingFactsBackfillTests.swift */,
 				PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
@@ -4923,6 +4926,7 @@
 				MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */,
 				PF1A0000000000000000B001 /* MeetingServicePublishingTests.swift in Sources */,
 				PF1A0000000000000000B009 /* MeetingFactsTests.swift in Sources */,
+				PF1A0000000000000000B00D /* MeetingServiceTransactionTests.swift in Sources */,
 				PF1A0000000000000000B00C /* MeetingFactsBackfillTests.swift in Sources */,
 				PF1A0000000000000000B005 /* MeetingsStoreMigrationTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
