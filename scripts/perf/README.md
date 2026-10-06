@@ -60,7 +60,7 @@ summary outputs, attendees on every meeting) and a synthetic 2,000-note vault in
 | `importedTitles.firstRender` / `.repeatRender` | 9 | `ImportedMeetingTitle.parse` + `displayTitle` over all 300 titles |
 | `homeRows.firstPaint` / `.repeat` / `.afterWrite` | 3–5 | Home timeline pass: day groups, group titles, badges, action facts, transcript fact, display title per row; `afterWrite` follows a live append |
 | `homeRows.firstPaint.scalar` / `.outputs` / `.segments` | 3–5 | the first paint split by phase: grouping + headers + titles, then the reads that fault each row's `outputs` (badges, action facts), then its `segments` (transcript fact). SwiftData has no cheap fault counter, so the phases are timed |
-| `listSearch.changedKeystroke` / `.unchangedRerender` | 5 | one archive body's filter + sort when the query changed, and when the list re-renders with the same query (before: 7 × `filteredMeetings` + sort per body; after: one memoized `MeetingListPipeline` call) |
+| `listSearch.changedKeystroke` / `.unchangedRerender` | 5 | one archive body's filter + sort when the query changed, and when the list re-renders with the same query (before: `filteredMeetings` + the effective-date sort once per body, unmemoized; after: one memoized `MeetingListPipeline` call) |
 | `archiveRows.window20.*` / `.wholeList.*` | 4–5 | the archive's per-row body work for the first 20 rows vs all 300, first paint (fresh context and caches) and repeat (before: what `ArchiveRow` read from the live `Meeting`; after: `MeetingRowModelStore`) |
 | `markdown.firstRender` / `.repeatRender` | 6 | one body pass of a ~4 KB summary: outcome extraction, block split, inline attributes |
 | `vault.retrieve.first` / `.repeat` | 10 | one `retrieve` over the 2,000-note vault |

@@ -26,17 +26,15 @@ enum PerfShim {
     /// Nothing to prepare: the fact columns did not exist.
     static func prepareStore(_ service: MeetingService) async {}
 
-    /// The archive body evaluated `filteredMeetings` + the effective-date sort about 7 times per
-    /// pass (finding 5), with no memo.
+    /// The archive body evaluated `filteredMeetings` + the effective-date sort once per body pass
+    /// (772f3535 already threaded one `displayedMeetings` through the body; the plan's "7x" predates
+    /// that), with no memo: every re-render repeated it, and the sort parsed both titles per
+    /// comparison (`MeetingsListView.effectiveDate`).
     static func makeListFilter() -> PerfListFilter {
         PerfListFilter { meetings, searchText in
-            var count = 0
-            for _ in 0..<7 {
-                count = MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil, searchText: searchText)
-                    .sorted { MeetingsListView.effectiveDate($0) > MeetingsListView.effectiveDate($1) }
-                    .count
-            }
-            return count
+            MeetingsViewModel.filteredMeetings(meetings, folder: nil, tag: nil, searchText: searchText)
+                .sorted { MeetingsListView.effectiveDate($0) > MeetingsListView.effectiveDate($1) }
+                .count
         }
     }
 
