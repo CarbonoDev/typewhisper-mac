@@ -14,19 +14,8 @@ final class MeetingsViewModel: ObservableObject {
 
     @Published private(set) var meetings: [Meeting] = []
 
-    /// Multi-select on the Meetings list + folder detail surfaces (plan LX-1, D3; the `HistoryViewModel`
-    /// `selectedRecordIDs` analog). Held on the list's data-source VM — not the navigation coordinator
-    /// (frozen API) and not an extension file (extension-file discipline forbids stored state). The
-    /// views bind this into `List(selection:)` (Meetings list) or the hand-rolled `SelectionGesture`
-    /// (timeline) and normalize it to the visible set on filter change. LX-1 adds no action over it.
-    @Published var selectedMeetingIDs: Set<UUID> = []
-
-    /// The selection intersected with a supplied visible-id list (the `HistoryViewModel`
-    /// `visibleSelectedRecordIDs` analog). A convenience for surfaces that want the effective, on-screen
-    /// selection without mutating `selectedMeetingIDs`.
-    func visibleSelection(in visibleIDs: [UUID]) -> Set<UUID> {
-        selectedMeetingIDs.intersection(visibleIDs)
-    }
+    // Multi-select (plan LX-1, D3) lives on `MeetingSelectionModel` [Perf Phase 2]: held here, every
+    // ⌘/⇧-click republished this view model to all of its observers.
 
     // Outputs / templates (M4; unified into PromptAction meeting rows — plan AD6)
     @Published private(set) var templates: [PromptAction] = []
@@ -760,14 +749,9 @@ final class MeetingsViewModel: ObservableObject {
 
     // MARK: - Bulk / context-menu actions (plan LX-2, D4/D5/D6)
 
-    /// The multi-selected meetings — `selectedMeetingIDs` intersected with the list, in list order.
-    /// The bulk context-menu actions operate over this set.
-    func selectedMeetings() -> [Meeting] {
-        meetings.filter { selectedMeetingIDs.contains($0.id) }
-    }
-
-    /// Delete a single meeting (context-menu "Delete"), removing its audio blob, its action-item
-    /// checklist state, and dropping it from the selection. Callers gate on a confirmation dialog.
+    /// Delete a single meeting (context-menu "Delete"), removing its audio blob and its action-item
+    /// checklist state (the lists drop it from `MeetingSelectionModel` when they normalize to their
+    /// visible set). Callers gate on a confirmation dialog.
     ///
     /// Parity fix (review finding, mirrors the merge crash fixes): `meetingService.deleteMeeting`
     /// deletes the row synchronously, so `id` is captured *before* that call — reading `.id` off the
@@ -780,11 +764,9 @@ final class MeetingsViewModel: ObservableObject {
         jobQueue.cancelAll(for: id)
         meetingService.deleteMeeting(meeting)
         MeetingChecklistStore.shared.removeAll(meetingID: id)
-        selectedMeetingIDs.remove(id)
     }
 
-    /// Delete a set of meetings in one save (bulk "Delete N meetings"), dropping them from the
-    /// selection. Callers gate on a count-aware confirmation dialog. No-op on an empty set. Same
+    /// Delete a set of meetings in one save (bulk "Delete N meetings"). Callers gate on a count-aware confirmation dialog. No-op on an empty set. Same
     /// parity fix as `deleteMeeting`: ids captured up front, jobs cancelled before the rows go away.
     func deleteMeetings(_ meetings: [Meeting]) {
         guard !meetings.isEmpty else { return }
@@ -794,7 +776,6 @@ final class MeetingsViewModel: ObservableObject {
         for id in ids {
             MeetingChecklistStore.shared.removeAll(meetingID: id)
         }
-        selectedMeetingIDs.subtract(ids)
     }
 
     /// Orchestrates the bulk "Merge N meetings…" action. Constructed over the meetings store's
@@ -803,8 +784,9 @@ final class MeetingsViewModel: ObservableObject {
     private lazy var mergeService = MeetingMergeService(meetingService: meetingService)
 
     /// Merge the given meetings into one (bulk context-menu "Merge N meetings…"). The deterministic
-    /// planner assembles the best data; absorbed meetings are deleted, their checklist state
-    /// dropped (like `deleteMeetings`), and the selection collapses to the surviving meeting.
+    /// planner assembles the best data; absorbed meetings are deleted and their checklist state
+    /// dropped (like `deleteMeetings`); the lists' selection normalization then collapses the merged
+    /// selection to the surviving meeting (`MeetingSelectionModel`).
     /// Callers gate on a confirmation dialog and `MeetingMergeService.canMerge`.
     ///
     /// Crash/leak traps this guards against (review findings):
@@ -852,7 +834,6 @@ final class MeetingsViewModel: ObservableObject {
             for id in targetIDs where id != merged.id {
                 MeetingChecklistStore.shared.removeAll(meetingID: id)
             }
-            self.selectedMeetingIDs = [merged.id]
         }
     }
 

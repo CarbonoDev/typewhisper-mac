@@ -16,6 +16,7 @@ struct MeetingsListView: View {
     // Observed at list level (not per row) so checking items off in a document updates the rows'
     // open-action counts live.
     @ObservedObject private var checklistStore = MeetingChecklistStore.shared
+    @ObservedObject private var selection = MeetingSelectionModel.shared
     @State private var isPresentingImport = false
     @State private var customStart = Calendar.current.startOfDay(for: Date())
     // Day-aligned (start of today) so the Custom range's end bound is not pinned to the current
@@ -105,7 +106,7 @@ struct MeetingsListView: View {
         )
         let meetingsByID = Dictionary(displayedMeetings.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let liveID = viewModel.isCapturing ? viewModel.activeMeeting?.id : nil
-        return List(selection: $viewModel.selectedMeetingIDs) {
+        return List(selection: $selection.ids) {
             if let error = viewModel.captureErrorMessage {
                 Text(error)
                     .font(.caption)
@@ -132,7 +133,7 @@ struct MeetingsListView: View {
                         model: row,
                         style: .archive,
                         isLive: row.id == liveID,
-                        isSelected: viewModel.selectedMeetingIDs.contains(row.id)
+                        isSelected: selection.ids.contains(row.id)
                     )
                         .equatable()
                         .tag(row.id)
@@ -160,10 +161,10 @@ struct MeetingsListView: View {
         // Normalize the selection to the still-visible set whenever the filtered list changes (plan
         // LX-1 D3: keep visible picks, drop hidden ones — History's "normalize, don't nuke").
         .onChange(of: displayedMeetings.map(\.id)) { _, ids in
-            viewModel.selectedMeetingIDs = MeetingsViewModel.normalizedSelection(
-                viewModel.selectedMeetingIDs, toVisibleIDs: ids
-            )
+            selection.normalize(toVisibleIDs: ids)
         }
+        // Meetings deleted while another surface was showing leave the shared selection here.
+        .onAppear { selection.normalize(toVisibleIDs: displayedMeetings.map(\.id)) }
     }
 
     /// [Sprint 3] Same-day meetings whose normalized titles collide — everything but the newest in
@@ -198,8 +199,8 @@ struct MeetingsListView: View {
     private func filterBar(_ displayed: [Meeting]) -> some View {
         // The on-screen selection (selection ∩ displayed), and the selected rows in list order — what
         // the "Merge N meetings…" button (and its confirmation) targets.
-        let visibleSelectionCount = viewModel.visibleSelection(in: displayed.map(\.id)).count
-        let selectedVisibleMeetings = displayed.filter { viewModel.selectedMeetingIDs.contains($0.id) }
+        let visibleSelectionCount = selection.visibleSelection(in: displayed.map(\.id)).count
+        let selectedVisibleMeetings = selection.selectedMeetings(in: displayed)
         return HStack(spacing: MeetingTheme.s2) {
             HStack(spacing: MeetingTheme.s1) {
                 Image(systemName: "magnifyingglass")

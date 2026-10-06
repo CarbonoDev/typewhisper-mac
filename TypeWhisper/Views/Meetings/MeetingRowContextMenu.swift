@@ -18,6 +18,7 @@ struct MeetingRowContextMenu: ViewModifier {
     @ObservedObject private var viewModel = MeetingsViewModel.shared
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
     @ObservedObject private var organizationIndex = MeetingOrganizationIndex.shared
+    @ObservedObject private var selection = MeetingSelectionModel.shared
 
     @State private var isRenaming = false
     @State private var renameText = ""
@@ -28,13 +29,13 @@ struct MeetingRowContextMenu: ViewModifier {
     @State private var isPresentingLinkEvent = false
 
     private var mode: MeetingsViewModel.RowContextMenuMode {
-        MeetingsViewModel.contextMenuMode(rightClicked: meeting.id, selection: viewModel.selectedMeetingIDs)
+        MeetingsViewModel.contextMenuMode(rightClicked: meeting.id, selection: selection.ids)
     }
 
     /// The meetings a menu action targets: the whole selection in bulk mode, else the right-clicked
     /// row. Using the `[Meeting]` service overloads for both keeps single + bulk one code path.
     private var targets: [Meeting] {
-        if case .bulk = mode { return viewModel.selectedMeetings() }
+        if case .bulk = mode { return selection.selectedMeetings(in: viewModel.meetings) }
         return [meeting]
     }
 

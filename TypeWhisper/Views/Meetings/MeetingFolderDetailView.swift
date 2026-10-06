@@ -15,6 +15,7 @@ struct MeetingFolderDetailView: View {
     /// Observe the metadata store directly so the description + Context caption react to writes
     /// (mirrors how the sidebar observes `MeetingOrganizationIndex.shared`).
     @ObservedObject private var metadataStore = MeetingFolderMetadataStore.shared
+    @ObservedObject private var selection = MeetingSelectionModel.shared
 
     /// The description being edited; committed to the store only at commit points (see
     /// `FolderDescriptionDraft`), never per keystroke.
@@ -202,11 +203,11 @@ struct MeetingFolderDetailView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                if !viewModel.visibleSelection(in: folderMeetings.map(\.id)).isEmpty {
+                if !selection.visibleSelection(in: folderMeetings.map(\.id)).isEmpty {
                     Label(
                         String(
                             format: String(localized: "meetings.selection.count"),
-                            viewModel.visibleSelection(in: folderMeetings.map(\.id)).count
+                            selection.visibleSelection(in: folderMeetings.map(\.id)).count
                         ),
                         systemImage: "checkmark.circle"
                     )
@@ -216,12 +217,12 @@ struct MeetingFolderDetailView: View {
                 // Folder detail is a selectable surface (plan LX-1, D3): pass a binding so the shared
                 // timeline rows become selectable, and normalize the selection to the still-visible set
                 // when the folder+tag filter changes.
-                MeetingTimelineList(meetings: folderMeetings, selection: $viewModel.selectedMeetingIDs)
+                MeetingTimelineList(meetings: folderMeetings, selection: $selection.ids)
                     .onChange(of: folderMeetings.map(\.id)) { _, ids in
-                        viewModel.selectedMeetingIDs = MeetingsViewModel.normalizedSelection(
-                            viewModel.selectedMeetingIDs, toVisibleIDs: ids
-                        )
+                        selection.normalize(toVisibleIDs: ids)
                     }
+                    // Meetings deleted while another surface was showing leave the shared selection.
+                    .onAppear { selection.normalize(toVisibleIDs: folderMeetings.map(\.id)) }
             }
         }
     }
