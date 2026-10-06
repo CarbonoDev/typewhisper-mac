@@ -89,7 +89,7 @@ final class MeetingRelatedDocsService: ObservableObject {
         }
 
         // Stage (b): wider-vault lexical candidates (capped, DB7).
-        let candidates = vaultService.candidateNotes(
+        let candidates = await vaultService.candidateNotes(
             query: query,
             limit: maxCandidates,
             excludingPaths: coveredPaths,

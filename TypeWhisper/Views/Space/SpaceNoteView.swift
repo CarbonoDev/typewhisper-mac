@@ -72,8 +72,8 @@ struct SpaceNoteView: View {
             }
         }
         // Loads on appear and re-loads whenever the routed note path changes (sidebar navigation
-        // reuses this view). Synchronous read into `@State`; never inside `body`.
-        .task(id: path) { load() }
+        // reuses this view). Off-main read into `@State`; never inside `body`.
+        .task(id: path) { await load() }
     }
 
     // MARK: - Connected body
@@ -145,9 +145,11 @@ struct SpaceNoteView: View {
 
     // MARK: - Loading
 
-    private func load() {
+    private func load() async {
         // One disk read yields both the body and the backlink (ME-3 — folds the ME-2 two-read load).
-        let read = viewModel.loadNote(at: path)
+        let read = await viewModel.loadNote(at: path)
+        // The route moved on while the read was in flight: the newer task owns the state.
+        guard !Task.isCancelled else { return }
         rawContent = read?.body
         let stripped = read.map { Self.strippedBody($0.body) }
         renderedBody = stripped.map { RenderedMarkdown(markdown: $0) } ?? .empty

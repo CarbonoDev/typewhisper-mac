@@ -47,10 +47,11 @@ extension MeetingsViewModel {
 
     // MARK: - Read-only vault search (attachment picker)
 
-    /// Search-as-you-type over the connected vault's notes/folders (case-insensitive over path +
-    /// display name), bounded. Empty when no vault is connected.
-    func searchVaultEntries(_ query: String, limit: Int = 50) -> [VaultEntry] {
+    /// One snapshot of the connected vault's notes/folders for the attachment picker, enumerated off
+    /// the main actor. The picker filters it in memory per keystroke (`ObsidianVaultService
+    /// .filterEntries`) instead of re-walking the vault. Empty when no vault is connected.
+    func vaultEntriesSnapshot() async -> [VaultEntry] {
         guard vaultService.isConnected else { return [] }
-        return vaultService.searchEntries(query, limit: limit)
+        return await vaultService.listEntries()
     }
 }

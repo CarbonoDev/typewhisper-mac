@@ -92,13 +92,13 @@ final class ObsidianVaultServiceTests: XCTestCase {
 
     // MARK: - Retrieval & parsing
 
-    func testRetrieveRanksOnTopicNoteFirstAndParsesTags() throws {
+    func testRetrieveRanksOnTopicNoteFirstAndParsesTags() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
 
-        let passages = service.retrieve(query: "acme roadmap budget", limit: 3)
+        let passages = await service.retrieve(query: "acme roadmap budget", limit: 3)
         XCTAssertFalse(passages.isEmpty)
 
         // The roadmap note (multiple query-term hits + title) outranks the 1-1 note; cooking
@@ -109,28 +109,30 @@ final class ObsidianVaultServiceTests: XCTestCase {
         XCTAssertTrue(passages.first?.content.contains("budget") == true)
     }
 
-    func testMultiLineYamlTagsParsed() throws {
+    func testMultiLineYamlTagsParsed() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
 
-        let passages = service.retrieve(query: "sync follow-ups roadmap", limit: 5)
+        let passages = await service.retrieve(query: "sync follow-ups roadmap", limit: 5)
         let oneOnOne = try XCTUnwrap(passages.first { $0.tags.contains("meeting") })
         XCTAssertEqual(oneOnOne.tags, ["meeting", "acme"])
     }
 
-    func testRetrieveReturnsNothingWhenNotConnected() {
+    func testRetrieveReturnsNothingWhenNotConnected() async {
         let service = ObsidianVaultService(defaults: makeDefaults())
-        XCTAssertTrue(service.retrieve(query: "acme").isEmpty)
+        let passages = await service.retrieve(query: "acme")
+        XCTAssertTrue(passages.isEmpty)
     }
 
-    func testRetrieveReturnsNothingForNonMatchingQuery() throws {
+    func testRetrieveReturnsNothingForNonMatchingQuery() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
-        XCTAssertTrue(service.retrieve(query: "quantum astrophysics submarine").isEmpty)
+        let passages = await service.retrieve(query: "quantum astrophysics submarine")
+        XCTAssertTrue(passages.isEmpty)
     }
 
     // MARK: - Single-note read (Track E, ME-2)

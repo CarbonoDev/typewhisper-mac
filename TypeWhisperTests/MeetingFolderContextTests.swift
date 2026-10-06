@@ -210,12 +210,12 @@ final class VaultRetrievalScopeTests: XCTestCase {
 
     // MARK: - Scoped retrieve
 
-    func testRestrictedRetrieveKeepsOnlyAttachedFolder() throws {
+    func testRestrictedRetrieveKeepsOnlyAttachedFolder() async throws {
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: makeDefaults())
         service.connect(to: vault.path)
 
-        let scoped = service.retrieve(
+        let scoped = await service.retrieve(
             query: "acme roadmap",
             limit: 5,
             scope: .restricted(notePaths: [], folderPrefixes: ["Acme"])
@@ -223,42 +223,43 @@ final class VaultRetrievalScopeTests: XCTestCase {
         XCTAssertEqual(scoped.map(\.id), ["Acme/Roadmap.md"], "only the attached folder's note; Acme2 excluded")
 
         // Whole vault (default) still ranks across every folder — regression guard.
-        let whole = service.retrieve(query: "acme roadmap", limit: 5)
+        let whole = await service.retrieve(query: "acme roadmap", limit: 5)
         XCTAssertTrue(whole.count > 1)
         XCTAssertTrue(whole.contains { $0.id == "Acme2/Other.md" })
     }
 
-    func testNoneScopeReturnsNothing() throws {
+    func testNoneScopeReturnsNothing() async throws {
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: makeDefaults())
         service.connect(to: vault.path)
-        XCTAssertTrue(service.retrieve(query: "acme roadmap", limit: 5, scope: .none).isEmpty)
+        let passages = await service.retrieve(query: "acme roadmap", limit: 5, scope: .none)
+        XCTAssertTrue(passages.isEmpty)
     }
 
     /// A note added under an attached folder appears on the next retrieve — the scope filters over a
     /// fresh enumeration on every call (no snapshot).
-    func testLiveFolderAttachmentPicksUpNewNote() throws {
+    func testLiveFolderAttachmentPicksUpNewNote() async throws {
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: makeDefaults())
         service.connect(to: vault.path)
         let scope = VaultRetrievalScope.restricted(notePaths: [], folderPrefixes: ["Acme"])
 
-        let before = service.retrieve(query: "acme roadmap", limit: 5, scope: scope)
+        let before = await service.retrieve(query: "acme roadmap", limit: 5, scope: scope)
         XCTAssertEqual(before.map(\.id), ["Acme/Roadmap.md"])
 
         try writeNote("Acme/Extra.md", contents: "# Extra\nacme roadmap extra note", in: vault)
-        let after = service.retrieve(query: "acme roadmap", limit: 5, scope: scope)
+        let after = await service.retrieve(query: "acme roadmap", limit: 5, scope: scope)
         XCTAssertEqual(Set(after.map(\.id)), ["Acme/Roadmap.md", "Acme/Extra.md"], "new note picked up live")
     }
 
     // MARK: - Read-only listing (DA8 — the picker's search model)
 
-    func testListEntriesReturnsNotesAndFoldersNoBodyParse() throws {
+    func testListEntriesReturnsNotesAndFoldersNoBodyParse() async throws {
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: makeDefaults())
         service.connect(to: vault.path)
 
-        let entries = service.listEntries()
+        let entries = await service.listEntries()
         // Directories present.
         XCTAssertTrue(entries.contains { $0.isDirectory && $0.relativePath == "Acme" })
         XCTAssertTrue(entries.contains { $0.isDirectory && $0.relativePath == "Personal" })
@@ -272,28 +273,31 @@ final class VaultRetrievalScopeTests: XCTestCase {
         XCTAssertLessThan(lastDirIndex, firstNoteIndex)
     }
 
-    func testSearchEntriesFiltersCaseInsensitiveOverPathAndName() throws {
+    func testSearchEntriesFiltersCaseInsensitiveOverPathAndName() async throws {
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: makeDefaults())
         service.connect(to: vault.path)
 
-        let acme = service.searchEntries("acme")
+        let acme = await service.searchEntries("acme")
         XCTAssertTrue(acme.allSatisfy { $0.relativePath.localizedCaseInsensitiveContains("acme") })
         XCTAssertTrue(acme.contains { $0.relativePath == "Acme/Roadmap.md" })
         XCTAssertFalse(acme.contains { $0.relativePath == "Personal/Diary.md" })
 
         // Matches display name too ("diary" is only in the filename, not the path segment casing).
-        let diary = service.searchEntries("diary")
+        let diary = await service.searchEntries("diary")
         XCTAssertEqual(diary.map(\.relativePath), ["Personal/Diary.md"])
 
         // Bounded.
-        XCTAssertLessThanOrEqual(service.searchEntries("", limit: 2).count, 2)
+        let bounded = await service.searchEntries("", limit: 2)
+        XCTAssertLessThanOrEqual(bounded.count, 2)
     }
 
-    func testListEntriesEmptyWhenNotConnected() {
+    func testListEntriesEmptyWhenNotConnected() async {
         let service = ObsidianVaultService(defaults: makeDefaults())
-        XCTAssertTrue(service.listEntries().isEmpty)
-        XCTAssertTrue(service.searchEntries("x").isEmpty)
+        let entries = await service.listEntries()
+        let searched = await service.searchEntries("x")
+        XCTAssertTrue(entries.isEmpty)
+        XCTAssertTrue(searched.isEmpty)
     }
 }
 

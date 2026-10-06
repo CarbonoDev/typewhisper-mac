@@ -237,7 +237,7 @@ final class MeetingLLMService: ObservableObject {
         // to the whole-vault default — those are deferred to model-requested escalation below. `.none`
         // (nothing curated / `noVaultContext`) yields no passages.
         let curatedPassages = vaultService.isConnected
-            ? vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: curatedScope(for: meeting))
+            ? await vaultService.retrieve(query: trimmedQuestion, limit: 3, scope: curatedScope(for: meeting))
             : []
 
         let pass1Text = MeetingQAComposer.compose(
@@ -304,7 +304,7 @@ final class MeetingLLMService: ObservableObject {
         if let vaultTerms {
             searchingVaultMeetingIDs.insert(meeting.id)
             let searchTerms = vaultTerms.isEmpty ? trimmedQuestion : vaultTerms
-            retrievedPassages = vaultService.retrieve(
+            retrievedPassages = await vaultService.retrieve(
                 query: searchTerms, limit: 3, scope: retrievalScope(for: meeting)
             )
         }

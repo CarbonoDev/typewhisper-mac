@@ -82,7 +82,7 @@ final class MeetingBriefService: ObservableObject {
         defer { isGenerating = false }
 
         let priorBlock = priorMeetingsBlock(for: meeting)
-        let kbBlock = knowledgeBaseBlock(for: meeting)
+        let kbBlock = await knowledgeBaseBlock(for: meeting)
         // D-M3 sole-grounding restriction (normative): email context may SOLELY satisfy the guard
         // only when the meeting's Gmail query carried a non-empty attendee clause — title-term-only
         // matches augment a brief but never solely ground a persisted one. The signal comes from the
@@ -201,7 +201,7 @@ final class MeetingBriefService: ObservableObject {
 
     /// Relevant vault passages rendered as labeled excerpts. Empty when no vault is connected or
     /// nothing matches.
-    private func knowledgeBaseBlock(for meeting: Meeting) -> String {
+    private func knowledgeBaseBlock(for meeting: Meeting) async -> String {
         guard vaultService.isConnected else { return "" }
         // Amendment 1 (DA5) + Amendment 2 (DB5): the meeting's curated related notes ∪ its folder
         // config scope vault retrieval. `.none` (the folder's "No vault context" toggle, absolute) ⇒
@@ -211,7 +211,7 @@ final class MeetingBriefService: ObservableObject {
         if case .none = scope { return "" }
         let query = retrievalQuery(for: meeting)
         guard !query.isEmpty else { return "" }
-        let passages = vaultService.retrieve(query: query, limit: 3, scope: scope)
+        let passages = await vaultService.retrieve(query: query, limit: 3, scope: scope)
         guard !passages.isEmpty else { return "" }
         return passages
             .map { passage in

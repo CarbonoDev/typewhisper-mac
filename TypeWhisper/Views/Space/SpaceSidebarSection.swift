@@ -14,7 +14,7 @@ struct SpaceSidebarSection: View {
     @ObservedObject private var coordinator = MainWindowCoordinator.shared
 
     var body: some View {
-        Section(String(localized: "mainwindow.space.section")) {
+        Section {
             if viewModel.isConnected {
                 ForEach(viewModel.tree) { node in
                     spaceRow(node)
@@ -22,6 +22,12 @@ struct SpaceSidebarSection: View {
             } else {
                 connectRow
             }
+        } header: {
+            Text(String(localized: "mainwindow.space.section"))
+                // The first vault enumeration happens here, off the main actor, once the sidebar is on
+                // screen — not in `SpaceViewModel.init` on the launch path. On the header because it
+                // renders even while the tree is still empty (rows would never appear to trigger it).
+                .task { await viewModel.loadIfNeeded() }
         }
     }
 

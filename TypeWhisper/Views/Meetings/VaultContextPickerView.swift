@@ -19,11 +19,15 @@ struct VaultContextPickerView: View {
 
     @State private var query = ""
     @State private var selectedIDs: Set<String> = []
+    /// One vault listing taken when the picker opens (enumerated off the main actor). Every keystroke
+    /// filters this in memory; `body` never walks the vault.
+    @State private var snapshot: [VaultEntry] = []
+    @State private var didLoadSnapshot = false
 
-    /// Live search results; a blank query lists the leading entries. Folders are dropped in
-    /// `notesOnly` mode so an explicit selection can never be silently discarded downstream.
+    /// Live search results over the snapshot; a blank query lists the leading entries. Folders are
+    /// dropped in `notesOnly` mode so an explicit selection can never be silently discarded downstream.
     private var results: [VaultEntry] {
-        let entries = viewModel.searchVaultEntries(query)
+        let entries = ObsidianVaultService.filterEntries(snapshot, query: query)
         return notesOnly ? entries.filter { !$0.isDirectory } : entries
     }
 
@@ -38,6 +42,10 @@ struct VaultContextPickerView: View {
             footer
         }
         .frame(minWidth: 420, minHeight: 480)
+        .task {
+            snapshot = await viewModel.vaultEntriesSnapshot()
+            didLoadSnapshot = true
+        }
     }
 
     private var header: some View {
@@ -63,7 +71,10 @@ struct VaultContextPickerView: View {
     @ViewBuilder
     private var content: some View {
         let entries = results
-        if entries.isEmpty {
+        if !didLoadSnapshot {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if entries.isEmpty {
             ContentUnavailableView {
                 Label(
                     String(localized: query.isEmpty
@@ -133,6 +144,6 @@ struct VaultContextPickerView: View {
     /// Resolve the selected ids back to `VaultEntry` values across the full (unfiltered) vault listing
     /// so a selection survives the user narrowing/clearing the query between picks.
     private func selectedEntries() -> [VaultEntry] {
-        viewModel.searchVaultEntries("", limit: Int.max).filter { selectedIDs.contains($0.id) }
+        snapshot.filter { selectedIDs.contains($0.id) }
     }
 }

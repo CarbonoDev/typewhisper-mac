@@ -101,8 +101,12 @@ final class ObsidianVaultService: ObservableObject {
     private let maxFileBytes = 512 * 1024
     private let passageCharBudget = 2_000
 
+    /// The off-main enumerate / parse / rank engine, holding the mtime-keyed parse cache.
+    private let indexer: VaultIndexer
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        self.indexer = VaultIndexer(maxFilesScanned: maxFilesScanned, maxFileBytes: maxFileBytes)
         let stored = defaults.string(forKey: UserDefaultsKeys.meetingsObsidianVaultPath)
         if let stored, fileManager.fileExists(atPath: stored) {
             self.vaultPath = stored
@@ -179,47 +183,20 @@ final class ObsidianVaultService: ObservableObject {
 
     /// Rank the vault's markdown notes against `query`, returning at most `limit` bounded passages,
     /// most-relevant first. Empty when no vault is connected or nothing matches. Pure lexical
-    /// ranking (offline, deterministic — plan D7).
-    func retrieve(query: String, limit: Int = 3, scope: VaultRetrievalScope = .wholeVault) -> [VaultPassage] {
+    /// ranking (offline, deterministic — plan D7). The walk, parse and rank run off the main actor in
+    /// `VaultIndexer`; a folder attachment still resolves live, because every call re-enumerates
+    /// (Amendment 1, DA5) — only unchanged notes' parses are reused.
+    func retrieve(query: String, limit: Int = 3, scope: VaultRetrievalScope = .wholeVault) async -> [VaultPassage] {
         guard let vaultPath else { return [] }
         if case .none = scope { return [] }
-        // Filter the fresh enumeration by scope *before* ranking (Amendment 1, DA5): a folder
-        // attachment resolves to "all `.md` under it, live at retrieval time" precisely because this
-        // filters over a fresh enumeration on every call (no snapshot).
-        let notes = enumerateNotes(in: vaultPath).filter { scope.includes($0.id) }
-        guard !notes.isEmpty else { return [] }
-
-        let documents = notes.map { note in
-            // Title and tags are weighted only by inclusion in the searchable text (kept simple).
-            LexicalRetriever.Document(
-                id: note.id,
-                text: ([note.title] + note.tags + [note.body]).joined(separator: " ")
-            )
-        }
-        let ranked = LexicalRetriever.rank(query: query, documents: documents, limit: limit)
-        let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
-        return ranked.compactMap { result in
-            guard let note = byID[result.id] else { return nil }
-            return VaultPassage(
-                id: note.id,
-                title: note.title,
-                tags: note.tags,
-                content: TranscriptContextBuilder.truncateWords(note.body, to: passageCharBudget)
-            )
-        }
+        return await indexer.passages(
+            in: vaultPath, query: query, limit: limit, scope: scope, passageCharBudget: passageCharBudget
+        )
     }
 
     // MARK: - Related-docs candidate generation (Amendment 2, DB2)
 
-    /// A wider-vault lexical candidate for the relevance judge (Amendment 2, DB2): a ranked note with a
-    /// bounded excerpt. Cheaper to feed the judge than a full `VaultPassage` — the excerpt is capped by
-    /// the caller's budget (DB7).
-    struct VaultCandidate: Sendable, Equatable {
-        let path: String
-        let title: String
-        let folderPath: String
-        let excerpt: String
-    }
+    typealias VaultCandidate = VaultNoteCandidate
 
     /// Rank the wider vault against `query` and return the top `limit` candidates, **excluding** every
     /// already-covered path — stage-(a) folder notes + existing manual/excluded paths (`excludingPaths`)
@@ -232,7 +209,7 @@ final class ObsidianVaultService: ObservableObject {
         excludingPaths: Set<String>,
         excludingFolderPrefixes: [String],
         excerptCap: Int
-    ) -> [VaultCandidate] {
+    ) async -> [VaultCandidate] {
         guard let vaultPath else { return [] }
         guard limit > 0 else { return [] }
         // Reuse the tested scope predicate to identify covered paths (a note is covered iff it is an
@@ -241,26 +218,9 @@ final class ObsidianVaultService: ObservableObject {
             notePaths: excludingPaths,
             folderPrefixes: excludingFolderPrefixes
         )
-        let notes = enumerateNotes(in: vaultPath).filter { !covered.includes($0.id) }
-        guard !notes.isEmpty else { return [] }
-
-        let documents = notes.map { note in
-            LexicalRetriever.Document(
-                id: note.id,
-                text: ([note.title] + note.tags + [note.body]).joined(separator: " ")
-            )
-        }
-        let ranked = LexicalRetriever.rank(query: query, documents: documents, limit: limit)
-        let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
-        return ranked.compactMap { result in
-            guard let note = byID[result.id] else { return nil }
-            return VaultCandidate(
-                path: note.id,
-                title: note.title,
-                folderPath: (note.id as NSString).deletingLastPathComponent,
-                excerpt: TranscriptContextBuilder.truncateWords(note.body, to: excerptCap)
-            )
-        }
+        return await indexer.candidates(
+            in: vaultPath, query: query, limit: limit, covered: covered, excerptCap: excerptCap
+        )
     }
 
     /// Whether a vault-relative `.md` path resolves to an existing file (Amendment 2, DB4 —
@@ -283,8 +243,13 @@ final class ObsidianVaultService: ObservableObject {
     /// returned string is the raw file (frontmatter included); Space strips it for display.
     func readNote(_ relativePath: String) -> String? {
         guard let url = resolvedNoteURL(for: relativePath) else { return nil }
-        guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-              let size = attrs[.size] as? Int, size <= maxFileBytes else { return nil }
+        return Self.readBoundedFile(at: url, maxBytes: maxFileBytes)
+    }
+
+    /// The size-bounded UTF-8 read behind `readNote`, free of actor state so it can run off main.
+    nonisolated private static func readBoundedFile(at url: URL, maxBytes: Int) -> String? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int, size <= maxBytes else { return nil }
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
@@ -304,7 +269,21 @@ final class ObsidianVaultService: ObservableObject {
     /// the `meetingID` stays tolerant (absent/malformed/non-UUID ⇒ `nil` without failing the read).
     func readNoteWithBacklink(_ relativePath: String) -> VaultNoteRead? {
         guard let raw = readNote(relativePath) else { return nil }
-        let meetingID = Self.frontmatterField("typewhisper-meeting", in: raw).flatMap { UUID(uuidString: $0) }
+        return Self.noteRead(from: raw)
+    }
+
+    /// `readNoteWithBacklink` with the file read and frontmatter scan off the main actor (the Space
+    /// note reader's load). Same path resolution and the same `nil` conditions.
+    func loadNoteWithBacklink(_ relativePath: String) async -> VaultNoteRead? {
+        guard let url = resolvedNoteURL(for: relativePath) else { return nil }
+        let maxBytes = maxFileBytes
+        return await Task.detached(priority: .userInitiated) {
+            Self.readBoundedFile(at: url, maxBytes: maxBytes).map(Self.noteRead(from:))
+        }.value
+    }
+
+    nonisolated private static func noteRead(from raw: String) -> VaultNoteRead {
+        let meetingID = frontmatterField("typewhisper-meeting", in: raw).flatMap { UUID(uuidString: $0) }
         return VaultNoteRead(body: raw, meetingID: meetingID)
     }
 
@@ -329,7 +308,7 @@ final class ObsidianVaultService: ObservableObject {
     /// then finds the first `key:`-prefixed line inside (case-insensitive key match). The value is
     /// trimmed and, when wrapped in double quotes, unquoted to mirror the exporter's `yamlScalar`
     /// quoting. Empty values yield `nil`.
-    private static func frontmatterField(_ key: String, in raw: String) -> String? {
+    nonisolated private static func frontmatterField(_ key: String, in raw: String) -> String? {
         let lines = raw.components(separatedBy: "\n")
         guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return nil }
         var closingIndex: Int?
@@ -352,7 +331,7 @@ final class ObsidianVaultService: ObservableObject {
 
     /// Reverse `MeetingObsidianExporter.yamlScalar`'s quoting: strip surrounding double quotes and
     /// unescape `\"`/`\\`. A plain (unquoted) scalar is returned unchanged.
-    private static func unquoteYAMLScalar(_ value: String) -> String {
+    nonisolated private static func unquoteYAMLScalar(_ value: String) -> String {
         guard value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") else { return value }
         let inner = String(value.dropFirst().dropLast())
         return inner
@@ -363,180 +342,26 @@ final class ObsidianVaultService: ObservableObject {
     // MARK: - Read-only listing (Amendment 1, DA8 — shared vault-enumeration primitive)
 
     /// Every note and folder in the vault as lightweight `VaultEntry` values — no body parse (cheaper
-    /// than `retrieve`/`enumerateNotes`). Deterministic (folders first, then notes, each sorted by
-    /// path) and bounded. Empty when no vault is connected. This is the single vault-enumeration
-    /// primitive the attachment picker uses (and Track E's Space browser will reuse — plan §4).
-    func listEntries() -> [VaultEntry] {
+    /// than `retrieve`). Deterministic (folders first, then notes, each sorted by path) and bounded.
+    /// Empty when no vault is connected. The single vault-enumeration primitive the attachment picker
+    /// and Space consume (plan §4); the walk runs off the main actor, and callers cache the snapshot.
+    func listEntries() async -> [VaultEntry] {
         guard let vaultPath else { return [] }
-        return enumerateEntries(in: vaultPath)
+        let maxEntries = maxFilesScanned
+        return await Task.detached(priority: .userInitiated) {
+            VaultIndexer.enumerateEntries(in: vaultPath, maxEntries: maxEntries)
+        }.value
     }
 
-    /// Case-insensitive search over note/folder path + display name, bounded to `limit`. Powers the
-    /// search-as-you-type context picker (DA8). A blank query returns the leading `limit` entries.
-    func searchEntries(_ query: String, limit: Int = 50) -> [VaultEntry] {
-        let entries = listEntries()
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let filtered: [VaultEntry]
-        if trimmed.isEmpty {
-            filtered = entries
-        } else {
-            filtered = entries.filter {
-                $0.relativePath.localizedCaseInsensitiveContains(trimmed)
-                    || $0.displayName.localizedCaseInsensitiveContains(trimmed)
-            }
-        }
-        return Array(filtered.prefix(limit))
+    /// Case-insensitive search over note/folder path + display name, bounded to `limit`. A blank query
+    /// returns the leading `limit` entries. Re-enumerates; a per-keystroke caller should take one
+    /// `listEntries()` snapshot and filter it with `filterEntries` instead.
+    func searchEntries(_ query: String, limit: Int = 50) async -> [VaultEntry] {
+        Self.filterEntries(await listEntries(), query: query, limit: limit)
     }
 
-    private func enumerateEntries(in vaultPath: String) -> [VaultEntry] {
-        let root = URL(fileURLWithPath: vaultPath, isDirectory: true)
-        guard let enumerator = fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return [] }
-
-        var entries: [VaultEntry] = []
-        for case let url as URL in enumerator {
-            guard entries.count < maxFilesScanned else { break }
-            let rel = relativePath(of: url, under: root)
-            guard !rel.isEmpty else { continue }
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDirectory {
-                entries.append(VaultEntry(relativePath: rel, displayName: url.lastPathComponent, isDirectory: true))
-            } else if url.pathExtension.lowercased() == "md" {
-                entries.append(VaultEntry(
-                    relativePath: rel,
-                    displayName: url.deletingPathExtension().lastPathComponent,
-                    isDirectory: false
-                ))
-            }
-        }
-        // Deterministic: folders before notes, each sorted case-insensitively by relative path.
-        return entries.sorted { lhs, rhs in
-            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-            return lhs.relativePath.localizedCaseInsensitiveCompare(rhs.relativePath) == .orderedAscending
-        }
-    }
-
-    // MARK: - Note parsing
-
-    private struct ParsedNote {
-        let id: String
-        let title: String
-        let tags: [String]
-        let body: String
-    }
-
-    private func enumerateNotes(in vaultPath: String) -> [ParsedNote] {
-        let root = URL(fileURLWithPath: vaultPath, isDirectory: true)
-        guard let enumerator = fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return [] }
-
-        var notes: [ParsedNote] = []
-        for case let url as URL in enumerator {
-            guard notes.count < maxFilesScanned else { break }
-            guard url.pathExtension.lowercased() == "md" else { continue }
-            guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-                  let size = attrs[.size] as? Int, size <= maxFileBytes else { continue }
-            guard let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            notes.append(parseNote(raw, id: relativePath(of: url, under: root)))
-        }
-        // Deterministic scan order regardless of filesystem enumeration order.
-        return notes.sorted { $0.id < $1.id }
-    }
-
-    private func relativePath(of url: URL, under root: URL) -> String {
-        let full = url.standardizedFileURL.path
-        let base = root.standardizedFileURL.path
-        if full.hasPrefix(base) {
-            return String(full.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-        return url.lastPathComponent
-    }
-
-    /// Split an optional leading `---` YAML frontmatter block from the body, extracting `tags`.
-    /// The title is the first markdown `# ` heading, else the filename stem.
-    private func parseNote(_ raw: String, id: String) -> ParsedNote {
-        var tags: [String] = []
-        var body = raw
-
-        let lines = raw.components(separatedBy: "\n")
-        if lines.first?.trimmingCharacters(in: .whitespaces) == "---" {
-            var frontmatterLines: [String] = []
-            var closingIndex: Int?
-            for index in 1..<lines.count {
-                if lines[index].trimmingCharacters(in: .whitespaces) == "---" {
-                    closingIndex = index
-                    break
-                }
-                frontmatterLines.append(lines[index])
-            }
-            if let closingIndex {
-                tags = parseTags(frontmatterLines)
-                body = lines[(closingIndex + 1)...].joined(separator: "\n")
-            }
-        }
-
-        let title = headingTitle(in: body) ?? (id as NSString).lastPathComponent.replacingOccurrences(of: ".md", with: "")
-        return ParsedNote(
-            id: id,
-            title: title,
-            tags: tags,
-            body: body.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-
-    private func parseTags(_ frontmatterLines: [String]) -> [String] {
-        var tags: [String] = []
-        var index = 0
-        while index < frontmatterLines.count {
-            let line = frontmatterLines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.lowercased().hasPrefix("tags:") {
-                let remainder = trimmed.dropFirst("tags:".count).trimmingCharacters(in: .whitespaces)
-                if remainder.hasPrefix("[") {
-                    // Inline list: tags: [a, b, c]
-                    let inner = remainder.dropFirst().dropLast(remainder.hasSuffix("]") ? 1 : 0)
-                    tags.append(contentsOf: splitTags(String(inner)))
-                } else if !remainder.isEmpty {
-                    // Space/comma-separated on the same line: tags: a b, c
-                    tags.append(contentsOf: splitTags(remainder))
-                } else {
-                    // Multi-line YAML list of `- tag` entries following the key.
-                    var next = index + 1
-                    while next < frontmatterLines.count {
-                        let itemLine = frontmatterLines[next].trimmingCharacters(in: .whitespaces)
-                        guard itemLine.hasPrefix("-") else { break }
-                        let tag = itemLine.dropFirst().trimmingCharacters(in: .whitespaces)
-                        if !tag.isEmpty { tags.append(tag) }
-                        next += 1
-                    }
-                    index = next - 1
-                }
-            }
-            index += 1
-        }
-        return tags
-    }
-
-    private func splitTags(_ text: String) -> [String] {
-        text
-            .components(separatedBy: CharacterSet(charactersIn: ", "))
-            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "#\"' ")) }
-            .filter { !$0.isEmpty }
-    }
-
-    private func headingTitle(in body: String) -> String? {
-        for line in body.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("# ") {
-                return String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
+    /// Pure in-memory filter of an entries snapshot (the picker's search-as-you-type, DA8).
+    nonisolated static func filterEntries(_ entries: [VaultEntry], query: String, limit: Int = 50) -> [VaultEntry] {
+        VaultIndexer.filterEntries(entries, query: query, limit: limit)
     }
 }

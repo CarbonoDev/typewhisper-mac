@@ -33,14 +33,14 @@ final class SpaceViewModelTests: XCTestCase {
         return dir
     }
 
-    func testConnectedSnapshotBuildsTreeRootedAtMeetings() throws {
+    func testConnectedSnapshotBuildsTreeRootedAtMeetings() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
 
         let vm = SpaceViewModel(vaultService: service, defaults: defaults)
-        vm.refresh()
+        await vm.refresh()
 
         XCTAssertTrue(vm.isConnected)
         XCTAssertEqual(vm.rootFolderPath, "Meetings")
@@ -51,13 +51,13 @@ final class SpaceViewModelTests: XCTestCase {
         XCTAssertEqual(acme.children.map(\.name), ["Roadmap"])
     }
 
-    func testChildrenOfFolderPowersTheIndex() throws {
+    func testChildrenOfFolderPowersTheIndex() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
         let vm = SpaceViewModel(vaultService: service, defaults: defaults)
-        vm.refresh()
+        await vm.refresh()
 
         let acmeChildren = vm.children(of: "Meetings/Clients/Acme")
         XCTAssertEqual(acmeChildren.map(\.name), ["Roadmap"])
@@ -67,13 +67,13 @@ final class SpaceViewModelTests: XCTestCase {
         XCTAssertEqual(vm.children(of: "Meetings").map(\.name), ["Clients", "Zeta"])
     }
 
-    func testEmptyRootBrowsesWholeVault() throws {
+    func testEmptyRootBrowsesWholeVault() async throws {
         let defaults = makeDefaults(root: "")
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
         let vm = SpaceViewModel(vaultService: service, defaults: defaults)
-        vm.refresh()
+        await vm.refresh()
 
         XCTAssertEqual(vm.rootFolderPath, "")
         XCTAssertEqual(vm.tree.map(\.name), ["Meetings", "Personal"])
@@ -83,7 +83,7 @@ final class SpaceViewModelTests: XCTestCase {
     /// exported through the real `MeetingObsidianExporter` (root `"Meetings"`) lands on disk at
     /// `Meetings/Clients/Acme/<title>.md`; that exact node then appears in the Space tree — the
     /// first-party folder `Clients/Acme` ↔ Space node `Meetings/Clients/Acme`.
-    func testExportedMeetingAppearsUnderAlignedSpaceNode() throws {
+    func testExportedMeetingAppearsUnderAlignedSpaceNode() async throws {
         // One suite (root "Meetings"), distinct handles per MainActor consumer (Swift 6 region
         // isolation — a single `UserDefaults` value can't be sent into two isolated objects).
         let suite = "SpaceAlignTests-\(UUID().uuidString)"
@@ -114,7 +114,7 @@ final class SpaceViewModelTests: XCTestCase {
 
         // The Space tree, rooted at "Meetings", contains the aligned node chain.
         let vm = SpaceViewModel(vaultService: vault, defaults: UserDefaults(suiteName: suite)!)
-        vm.refresh()
+        await vm.refresh()
         let clients = try XCTUnwrap(vm.tree.first { $0.name == "Clients" })
         let acme = try XCTUnwrap(clients.children.first { $0.name == "Acme" })
         XCTAssertEqual(acme.relativePath, "Meetings/Clients/Acme")
@@ -130,26 +130,28 @@ final class SpaceViewModelTests: XCTestCase {
 
     // MARK: - Quick-note draft commit (Track E, ME-3)
 
-    private func makeConnectedVM(root: String? = "Meetings") throws -> (SpaceViewModel, URL) {
+    private func makeConnectedVM(root: String? = "Meetings") async throws -> (SpaceViewModel, URL) {
         let defaults = makeDefaults(root: root)
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
         let vm = SpaceViewModel(vaultService: service, defaults: defaults)
-        vm.refresh()
+        await vm.refresh()
         return (vm, vault)
     }
 
     /// Commit writes exactly one note under the drafted folder, the returned vault-relative path points
     /// at it, the file exists on disk, and the refreshed snapshot surfaces it in that folder's index.
-    func testCommitDraftCreatesNoteUnderCurrentFolderAndRefreshes() throws {
-        let (vm, vaultURL) = try makeConnectedVM()
+    func testCommitDraftCreatesNoteUnderCurrentFolderAndRefreshes() async throws {
+        let (vm, vaultURL) = try await makeConnectedVM()
         vm.beginDraft(inFolder: "Meetings/Clients/Acme")
         vm.updateDraftText("Kickoff Notes\nfirst item")
 
         let created = try XCTUnwrap(vm.commitDraft())
         XCTAssertEqual(created, "Meetings/Clients/Acme/Kickoff Notes.md")
         XCTAssertNil(vm.draft, "draft cleared after a successful commit")
+        // The commit requests a snapshot refresh (off-main enumeration); wait for it to publish.
+        await vm.refreshTask?.value
 
         let onDisk = vaultURL.appendingPathComponent(created)
         XCTAssertTrue(FileManager.default.fileExists(atPath: onDisk.path))
@@ -162,8 +164,8 @@ final class SpaceViewModelTests: XCTestCase {
 
     /// The filename derives from the first typed line (heading marker stripped), and a second draft with
     /// the same first line never clobbers — it suffixes ` 1`.
-    func testCommitDraftDerivesFilenameAndSuffixesCollisions() throws {
-        let (vm, _) = try makeConnectedVM()
+    func testCommitDraftDerivesFilenameAndSuffixesCollisions() async throws {
+        let (vm, _) = try await makeConnectedVM()
 
         vm.beginDraft(inFolder: "Meetings")
         vm.updateDraftText("# Weekly Sync\nagenda")
@@ -175,8 +177,8 @@ final class SpaceViewModelTests: XCTestCase {
     }
 
     /// An empty (whitespace-only) draft is discarded silently: no file, `nil` return, draft cleared.
-    func testCommitEmptyDraftDiscardsWithoutWriting() throws {
-        let (vm, _) = try makeConnectedVM()
+    func testCommitEmptyDraftDiscardsWithoutWriting() async throws {
+        let (vm, _) = try await makeConnectedVM()
         let before = vm.children(of: "Meetings").count
 
         vm.beginDraft(inFolder: "Meetings")
@@ -187,8 +189,8 @@ final class SpaceViewModelTests: XCTestCase {
     }
 
     /// A draft with no usable first line still commits (non-empty content) under the "Untitled" fallback.
-    func testCommitDraftFallsBackToUntitledFilename() throws {
-        let (vm, _) = try makeConnectedVM()
+    func testCommitDraftFallsBackToUntitledFilename() async throws {
+        let (vm, _) = try await makeConnectedVM()
         vm.beginDraft(inFolder: "Meetings")
         // Only illegal characters on the first line → sanitizes empty → fallback.
         vm.updateDraftText("/:*?\nreal content")
@@ -196,8 +198,8 @@ final class SpaceViewModelTests: XCTestCase {
     }
 
     /// Explicit discard drops the draft without writing anything.
-    func testDiscardDraftDropsItWithoutWriting() throws {
-        let (vm, _) = try makeConnectedVM()
+    func testDiscardDraftDropsItWithoutWriting() async throws {
+        let (vm, _) = try await makeConnectedVM()
         let before = vm.children(of: "Meetings").count
         vm.beginDraft(inFolder: "Meetings")
         vm.updateDraftText("some content")
@@ -206,17 +208,65 @@ final class SpaceViewModelTests: XCTestCase {
         XCTAssertEqual(vm.children(of: "Meetings").count, before)
     }
 
-    func testDisconnectGatesOffTheTree() throws {
+    // MARK: - Lazy, off-main refresh (perf plan Phase 2)
+
+    /// `init` never enumerates the vault (it is on the launch path): the connection mirrors are live,
+    /// but the snapshot and tree stay empty until a Space surface asks for them.
+    func testInitDoesNotScanUntilLoadIfNeeded() async throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+
+        let vm = SpaceViewModel(vaultService: service, defaults: defaults)
+        XCTAssertTrue(vm.isConnected, "connection mirror set synchronously in init")
+        XCTAssertTrue(vm.entries.isEmpty, "no enumeration in init")
+        XCTAssertTrue(vm.tree.isEmpty)
+
+        await vm.loadIfNeeded()
+        XCTAssertEqual(vm.tree.map(\.name), ["Clients", "Zeta"])
+
+        // A second call is a no-op: a note added since is not picked up until an explicit refresh.
+        try writeNote("Meetings/Later.md", in: vault)
+        await vm.loadIfNeeded()
+        XCTAssertFalse(vm.children(of: "Meetings").contains { $0.name == "Later" })
+        await vm.refresh()
+        XCTAssertTrue(vm.children(of: "Meetings").contains { $0.name == "Later" })
+    }
+
+    /// A refresh that started before a newer one never overwrites the newer snapshot: after a
+    /// disconnect mid-flight, the final published state is the disconnected (empty) one, whichever way
+    /// the two enumerations interleave.
+    func testSupersededRefreshDoesNotOverwriteNewerState() async throws {
         let defaults = makeDefaults()
         let vault = try makeVault()
         let service = ObsidianVaultService(defaults: defaults)
         service.connect(to: vault.path)
         let vm = SpaceViewModel(vaultService: service, defaults: defaults)
-        vm.refresh()
+
+        vm.requestRefresh()
+        let first = vm.refreshTask
+        await Task.yield()
+        service.disconnect()
+        await vm.refresh()
+        await first?.value
+
+        XCTAssertFalse(vm.isConnected)
+        XCTAssertTrue(vm.entries.isEmpty)
+        XCTAssertTrue(vm.tree.isEmpty)
+    }
+
+    func testDisconnectGatesOffTheTree() async throws {
+        let defaults = makeDefaults()
+        let vault = try makeVault()
+        let service = ObsidianVaultService(defaults: defaults)
+        service.connect(to: vault.path)
+        let vm = SpaceViewModel(vaultService: service, defaults: defaults)
+        await vm.refresh()
         XCTAssertFalse(vm.tree.isEmpty)
 
         service.disconnect()
-        vm.refresh()
+        await vm.refresh()
 
         XCTAssertFalse(vm.isConnected)
         XCTAssertTrue(vm.entries.isEmpty)

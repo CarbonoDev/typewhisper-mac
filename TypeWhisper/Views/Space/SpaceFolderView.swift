@@ -71,7 +71,7 @@ struct SpaceFolderView: View {
         }
         .navigationTitle(folderName)
         .toolbar { toolbarContent }
-        .onAppear { viewModel.refresh() }
+        .task { await viewModel.refresh() }
     }
 
     // MARK: - Toolbar
@@ -97,7 +97,7 @@ struct SpaceFolderView: View {
         } else {
             ToolbarItem {
                 Button {
-                    viewModel.refresh()
+                    viewModel.requestRefresh()
                 } label: {
                     Label(String(localized: "space.refresh"), systemImage: "arrow.clockwise")
                 }

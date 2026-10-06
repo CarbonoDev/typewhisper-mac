@@ -11,7 +11,8 @@ private let logger = Logger(
 /// `ObsidianVaultService.listEntries()` and rebuilds the vault tree in memory from it — it never
 /// enumerates in a view `body`, never on a timer, and never through the body-parsing
 /// `enumerateNotes`/`retrieve` path (plan D6). The snapshot is refreshed only on appear, on
-/// `$vaultPath` change, and on manual Refresh.
+/// `$vaultPath` change, and on manual Refresh — never in `init` (perf plan Phase 2: the vault scan is
+/// not on the launch path) — and the enumeration runs off the main actor.
 @MainActor
 final class SpaceViewModel: ObservableObject {
     nonisolated(unsafe) static var _shared: SpaceViewModel?
@@ -38,6 +39,15 @@ final class SpaceViewModel: ObservableObject {
     /// review). Pure, cached, safe to read from `body`.
     @Published private(set) var tree: [SpaceNode] = []
 
+    /// The snapshot indexed by folder once per refresh, so `children(of:)` is a lookup.
+    private var index = SpaceTreeIndex.empty
+    /// Bumped by every refresh; a refresh whose enumeration finishes after a newer one started drops
+    /// its (stale) result instead of overwriting the newer snapshot.
+    private var refreshGeneration = 0
+    private var hasLoaded = false
+    /// The most recent fire-and-forget refresh (`requestRefresh()`), awaitable by tests.
+    private(set) var refreshTask: Task<Void, Never>?
+
     /// The active compose-then-create quick-note draft, or `nil` when not composing (Track E, ME-3,
     /// plan D1). The editor exists **before any file does**; committing performs exactly one
     /// never-clobber creation write. `SpaceFolderView` renders the draft editor when the draft targets
@@ -51,16 +61,18 @@ final class SpaceViewModel: ObservableObject {
     init(vaultService: ObsidianVaultService, defaults: UserDefaults = .standard) {
         self.vaultService = vaultService
         self.defaults = defaults
-        refresh()
+        // Connection mirrors only (cheap, no I/O) so the sidebar gates correctly on the first frame.
+        // The vault itself is enumerated lazily, when a Space surface appears (`loadIfNeeded()`).
+        isConnected = vaultService.isConnected
+        vaultName = vaultService.vaultName
         // Re-enumerate whenever the connected vault changes (connect / disconnect / switch), mirroring
         // how `MeetingsViewModel` keeps its `isVaultConnected`/`vaultName` mirrors live. `.dropFirst()`
-        // skips the `@Published` initial-value replay so app launch doesn't scan the vault twice (the
-        // `init` `refresh()` above already captured the initial state) — for a feature the user may
-        // never open.
+        // skips the `@Published` initial-value replay so app launch never scans the vault — for a
+        // feature the user may never open.
         vaultService.$vaultPath
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refresh() }
+            .sink { [weak self] _ in self?.requestRefresh() }
             .store(in: &cancellables)
     }
 
@@ -72,29 +84,54 @@ final class SpaceViewModel: ObservableObject {
     }
 
     /// The immediate children of `folderPath` for the folder index (each carries its own subtree so a
-    /// child folder's item count is `child.children.count`). Pure, in-memory over the cached snapshot.
+    /// child folder's item count is `child.children.count`). A lookup into the per-refresh index.
     func children(of folderPath: String) -> [SpaceNode] {
-        SpaceTreeModel.build(from: entries, root: folderPath)
+        index.children(of: folderPath)
     }
 
     /// Re-read the single cached vault snapshot. The only place Space touches the disk enumerator
-    /// (via the shared `listEntries()` primitive — no second scanner). Also refreshes the connection
-    /// mirrors synchronously so callers (and tests) never depend on the async `$vaultPath` sink.
-    func refresh() {
+    /// (via the shared `listEntries()` primitive — no second scanner); the walk and the tree index run
+    /// off the main actor and the result is published here. Also refreshes the connection mirrors
+    /// synchronously, before the first suspension, so callers never depend on the async `$vaultPath`
+    /// sink.
+    func refresh() async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
         isConnected = vaultService.isConnected
         vaultName = vaultService.vaultName
-        let snapshot = vaultService.listEntries()
+        let snapshot = await vaultService.listEntries()
+        let newIndex = await Task.detached(priority: .userInitiated) {
+            SpaceTreeIndex(entries: snapshot)
+        }.value
+        // A newer refresh (vault switched mid-scan, a second click) owns the published state.
+        guard generation == refreshGeneration else { return }
         entries = snapshot
         didTruncate = snapshot.count >= vaultService.maxEntriesScanned
+        index = newIndex
         // Rebuild the sidebar tree once, here, off the snapshot — never in a view `body`.
-        tree = SpaceTreeModel.build(from: snapshot, root: rootFolderPath)
+        tree = newIndex.children(of: rootFolderPath)
+        hasLoaded = true
+    }
+
+    /// Fire-and-forget `refresh()` for synchronous callers (buttons, the `$vaultPath` sink, commit).
+    func requestRefresh() {
+        refreshTask = Task { await refresh() }
+    }
+
+    /// The first refresh, on demand: a Space surface calls this when it appears, so the vault is never
+    /// enumerated for a user who doesn't open Space.
+    func loadIfNeeded() async {
+        guard !hasLoaded else { return }
+        // Join an in-flight refresh rather than starting a second enumeration.
+        if refreshTask == nil { requestRefresh() }
+        await refreshTask?.value
     }
 
     /// Prompt for and connect a vault (the disconnected affordance). Reuses the single vault picker —
     /// no second picker (plan §6 non-goals).
     func chooseVault() {
         vaultService.chooseVault()
-        refresh()
+        requestRefresh()
     }
 
     // MARK: - Note reading (Track E, ME-2 / ME-3)
@@ -102,9 +139,10 @@ final class SpaceViewModel: ObservableObject {
     /// Read a single vault note **once**, returning its raw text (frontmatter included) and resolved
     /// `typewhisper-meeting` backlink together (Track E, ME-3 — one disk read replaces the ME-2 note
     /// view's two, `readNote` + `meetingID`). `nil` when unreadable / missing / out of the vault; the
-    /// backlink stays tolerant. Callers load it into view `@State` on appear, never in a `body`.
-    func loadNote(at path: String) -> VaultNoteRead? {
-        vaultService.readNoteWithBacklink(path)
+    /// backlink stays tolerant. Callers load it into view `@State` on appear, never in a `body`; the
+    /// file read runs off the main actor.
+    func loadNote(at path: String) async -> VaultNoteRead? {
+        await vaultService.loadNoteWithBacklink(path)
     }
 
     // MARK: - Quick-note draft (Track E, ME-3)
@@ -129,8 +167,8 @@ final class SpaceViewModel: ObservableObject {
     /// Commit the active draft as **one** never-clobber creation write (plan D1/D6). An empty draft is
     /// discarded silently (no file). Otherwise the filename derives from the first typed line
     /// (`SpaceDraft.filename`), the note is written into the draft's folder via `VaultNoteWriter`
-    /// (collisions suffix `<name> 1.md`, never overwrite), the cached snapshot refreshes so the note
-    /// appears immediately, and the new note's **vault-relative path** is returned for the caller to
+    /// (collisions suffix `<name> 1.md`, never overwrite), a snapshot refresh is requested so the note
+    /// appears in the tree, and the new note's **vault-relative path** is returned for the caller to
     /// route to (read mode). Returns `nil` on empty draft, no vault, or a write failure — on failure
     /// the draft is **kept** so the user never loses content.
     @discardableResult
@@ -152,7 +190,7 @@ final class SpaceViewModel: ObservableObject {
             let url = try VaultNoteWriter.write(
                 content: draft.text, toFolder: folderAbsolute, filename: filename)
             self.draft = nil
-            refresh()
+            requestRefresh()
             return vaultRelativePath(of: url, vaultPath: vaultPath)
         } catch {
             // Keep the draft on the page so a write failure never loses the user's content, and log

@@ -118,7 +118,7 @@ final class MeetingRelatedDocsServiceTests: XCTestCase {
 
         // The candidate generation (stage b) excludes every covered path, exactly as the service builds
         // its exclusion sets: folder note ∪ manual ∪ excluded, plus attached folder prefixes.
-        let candidates = vault.candidateNotes(
+        let candidates = await vault.candidateNotes(
             query: "Acme Sync",
             limit: 24,
             excludingPaths: ["Acme/Roadmap.md", "Wider/Deal.md", "Wider/Excluded.md"],
@@ -248,7 +248,7 @@ final class MeetingRelatedDocsServiceTests: XCTestCase {
         let meeting = service.createMeeting(title: "Acme Sync", source: .calendar, state: .scheduled)
 
         // Candidate generation is capped independently of discovery too.
-        let candidates = vault.candidateNotes(
+        let candidates = await vault.candidateNotes(
             query: "acme", limit: 2, excludingPaths: [], excludingFolderPrefixes: [], excerptCap: excerptCap
         )
         XCTAssertLessThanOrEqual(candidates.count, 2, "candidate count clamped to maxCandidates")
