@@ -81,15 +81,31 @@ final class MeetingBriefScheduler: ObservableObject {
     private let isVaultConnected: () -> Bool
 
     /// Calendar-event ids whose backing `Meeting` this scheduler pre-created as an auto-brief
-    /// placeholder (no user action). These must NOT be treated as "already handled" by the
-    /// upcoming-list exclusion, or the event would drop out of the Upcoming section ~lead-minutes
-    /// before it starts — taking the "Brief ready" affordance and the start-notification prompt with
-    /// it (finding 1). Exposed to `MeetingsViewModel.existingCalendarEventIDs`; once the user engages
-    /// the meeting (capture starts → state leaves `.scheduled`) it is excluded like any other.
-    private var autoCreatedEventIDs: Set<String> = []
+    /// placeholder (no user action), mapped to that meeting's id. These must NOT be treated as
+    /// "already handled" by the upcoming-list exclusion, or the event would drop out of the Upcoming
+    /// section ~lead-minutes before it starts — taking the "Brief ready" affordance and the
+    /// start-notification prompt with it (finding 1). Once the user engages the meeting (capture
+    /// starts → state leaves `.scheduled`) it is excluded like any other.
+    ///
+    /// Persisted in `defaults` (`meetingsAutoBriefPlaceholders`): kept only in memory, a relaunch
+    /// forgot every placeholder and an untouched one from an earlier launch hid its event (a
+    /// rescheduled occurrence never reached "Coming up"). Keyed to the meeting id, not just the
+    /// event id, so a placeholder deleted and then re-created by hand from the same event counts as
+    /// engaged.
+    private var placeholderMeetingIDs: [String: UUID] = [:]
 
-    /// Read-only view of the calendar-event ids for scheduler-pre-created placeholder meetings.
-    var placeholderEventIDs: Set<String> { autoCreatedEventIDs }
+    /// How long a placeholder is remembered after its meeting's start before it is pruned — far past
+    /// any calendar window, so an old entry can no longer affect what is listed.
+    static let placeholderRetention: TimeInterval = 14 * 24 * 3600
+
+    /// Read-only view of the calendar-event ids whose backing meeting is still an untouched
+    /// scheduler-pre-created placeholder (exists and is still `.scheduled`).
+    var placeholderEventIDs: Set<String> {
+        guard !placeholderMeetingIDs.isEmpty else { return [] }
+        let wanted = Set(placeholderMeetingIDs.values)
+        let live = Set(store.meetings.lazy.filter { wanted.contains($0.id) && $0.state == .scheduled }.map(\.id))
+        return Set(placeholderMeetingIDs.compactMap { live.contains($0.value) ? $0.key : nil })
+    }
 
     /// Events whose auto-brief generation threw. Suppresses re-enqueue on every subsequent poll tick
     /// within the same lead window (finding 3): without this a persistent failure (no LLM configured,
@@ -111,6 +127,7 @@ final class MeetingBriefScheduler: ObservableObject {
         self.defaults = defaults
         self.relatedDocsService = relatedDocsService
         self.isVaultConnected = isVaultConnected
+        loadPlaceholders()
     }
 
     // MARK: - Config (plan AD9 keys)
@@ -157,6 +174,7 @@ final class MeetingBriefScheduler: ObservableObject {
         let config = loadConfig()
         guard config.enabled else { return }
 
+        prunePlaceholders(now: now)
         let eligible = events.filter { isEligible($0, config: config, now: now) }
         // Forget failures for events that have left the lead window so a later, distinct occurrence
         // can retry (finding 3); keep suppression for events still in-window.
@@ -193,8 +211,7 @@ final class MeetingBriefScheduler: ObservableObject {
             return existing
         }
         let projection = CalendarService.meetingProjection(for: event)
-        autoCreatedEventIDs.insert(event.id)
-        return store.createMeeting(
+        let meeting = store.createMeeting(
             title: projection.title,
             source: .calendar,
             state: .scheduled,
@@ -208,6 +225,71 @@ final class MeetingBriefScheduler: ObservableObject {
             calendarNotes: projection.calendarNotes,
             conferencingURL: projection.conferencingURL
         )
+        placeholderMeetingIDs[event.id] = meeting.id
+        savePlaceholders()
+        return meeting
+    }
+
+    // MARK: - Placeholder persistence
+
+    private func loadPlaceholders() {
+        if let stored = defaults.dictionary(forKey: UserDefaultsKeys.meetingsAutoBriefPlaceholders) {
+            placeholderMeetingIDs = stored.reduce(into: [:]) { result, entry in
+                if let raw = entry.value as? String, let id = UUID(uuidString: raw) { result[entry.key] = id }
+            }
+        } else {
+            // One-time seed for placeholders created before the set was persisted.
+            placeholderMeetingIDs = Self.inferLegacyPlaceholders(in: store.meetings, now: Date())
+        }
+        prunePlaceholders(now: Date(), forceSave: true)
+    }
+
+    private func savePlaceholders() {
+        defaults.set(
+            placeholderMeetingIDs.mapValues(\.uuidString),
+            forKey: UserDefaultsKeys.meetingsAutoBriefPlaceholders
+        )
+    }
+
+    /// Forget placeholders whose meeting was deleted, was engaged (left `.scheduled`), or started
+    /// longer than `placeholderRetention` ago.
+    private func prunePlaceholders(now: Date, forceSave: Bool = false) {
+        var changed = false
+        if !placeholderMeetingIDs.isEmpty {
+            let byID = Dictionary(
+                store.meetings.lazy.map { ($0.id, $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            let cutoff = now.addingTimeInterval(-Self.placeholderRetention)
+            let kept = placeholderMeetingIDs.filter { _, meetingID in
+                guard let meeting = byID[meetingID], meeting.state == .scheduled else { return false }
+                return (meeting.startDate ?? now) >= cutoff
+            }
+            changed = kept.count != placeholderMeetingIDs.count
+            placeholderMeetingIDs = kept
+        }
+        if changed || forceSave { savePlaceholders() }
+    }
+
+    /// Placeholders created before the set was persisted carry no marker, so recognise them by the
+    /// shape `resolveMeeting(for:)` leaves: an untouched (`.scheduled`, no transcript, no notes)
+    /// calendar meeting created inside the maximum lead window (60 min) before its start, within the
+    /// retention period. A meeting the user created by hand from an event in that window is
+    /// indistinguishable; treating it as a placeholder only keeps its event listed in Upcoming.
+    static func inferLegacyPlaceholders(in meetings: [Meeting], now: Date) -> [String: UUID] {
+        let maxLead: TimeInterval = 60 * 60
+        let cutoff = now.addingTimeInterval(-placeholderRetention)
+        var result: [String: UUID] = [:]
+        for meeting in meetings {
+            guard meeting.state == .scheduled, meeting.source == .calendar,
+                  let eventID = meeting.calendarEventID, let start = meeting.startDate, start >= cutoff
+            else { continue }
+            let lead = start.timeIntervalSince(meeting.createdAt)
+            guard lead >= 0, lead <= maxLead + 60 else { continue }
+            guard CalendarMeetingReconciler.isUntouched(meeting) else { continue }
+            if result[eventID] == nil { result[eventID] = meeting.id }
+        }
+        return result
     }
 
     // MARK: - Freshness

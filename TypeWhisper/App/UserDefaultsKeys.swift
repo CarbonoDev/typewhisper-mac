@@ -238,6 +238,9 @@ enum UserDefaultsKeys {
     static let meetingsAutoBriefFreshnessHours = "meetings.brief.auto.freshnessHours"
     /// Minimum attendee count for an event to auto-generate a brief (default 1).
     static let meetingsAutoBriefMinAttendees = "meetings.brief.auto.minAttendees"
+    /// Auto-brief placeholder meetings the scheduler pre-created (`[calendarEventID: meetingUUID]`),
+    /// persisted so the Upcoming-list exclusion rule survives relaunch. Absent = legacy seed pending.
+    static let meetingsAutoBriefPlaceholders = "meetings.brief.auto.placeholders"
 
     // MARK: - Meetings · Speaker labels (speaker-recognition amendment, M9-SPK-A)
     /// Whether provider (cloud) speaker labels are adopted when a speaker-capable engine returns them,

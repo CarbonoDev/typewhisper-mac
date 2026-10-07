@@ -387,6 +387,109 @@ final class MeetingBriefSchedulerTests: XCTestCase {
         XCTAssertTrue(afterEngage.contains(evt.id))
     }
 
+    // MARK: - Placeholder persistence across relaunch
+
+    private func excluded(_ store: MeetingService, _ scheduler: MeetingBriefScheduler) -> Set<String> {
+        MeetingsViewModel.engagedCalendarEventIDs(meetings: store.meetings, autoBriefPlaceholders: scheduler.placeholderEventIDs)
+    }
+
+    /// A placeholder pre-created in one launch must still keep its event listed in the next one.
+    func testPlaceholderSurvivesSchedulerReinit() async throws {
+        let store = try makeStore()
+        let defaults = makeDefaults()
+        let stub = StubBriefGenerator(store: store)
+        let now = Date()
+        let evt = event(startInMinutes: 15, now: now)
+        MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults).tick(events: [evt], now: now)
+        await jobQueue.drain()
+
+        let relaunched = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
+        XCTAssertEqual(relaunched.placeholderEventIDs, [evt.id])
+        XCTAssertFalse(excluded(store, relaunched).contains(evt.id))
+    }
+
+    /// Once engaged (state leaves `.scheduled`) a placeholder is excluded, and pruned from the
+    /// persisted set so a later relaunch does not resurrect it.
+    func testEngagedPlaceholderIsPrunedAndExcluded() async throws {
+        let store = try makeStore()
+        let defaults = makeDefaults()
+        let stub = StubBriefGenerator(store: store)
+        let now = Date()
+        let evt = event(startInMinutes: 15, now: now)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
+        scheduler.tick(events: [evt], now: now)
+        await jobQueue.drain()
+        let meeting = try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id })
+
+        meeting.state = .live
+        store.update(meeting)
+        XCTAssertTrue(excluded(store, scheduler).contains(evt.id))
+        scheduler.tick(events: [], now: now)
+
+        // Back to `.scheduled` (e.g. a capture that never started): no longer a placeholder.
+        meeting.state = .scheduled
+        store.update(meeting)
+        let relaunched = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
+        XCTAssertTrue(relaunched.placeholderEventIDs.isEmpty)
+        XCTAssertTrue(excluded(store, relaunched).contains(evt.id))
+    }
+
+    /// A deleted placeholder is pruned; a meeting re-created by hand from the same event is engaged.
+    func testDeletedPlaceholderIsPrunedAndRecreatedMeetingExcluded() async throws {
+        let store = try makeStore()
+        let defaults = makeDefaults()
+        let stub = StubBriefGenerator(store: store)
+        let now = Date()
+        let evt = event(startInMinutes: 15, now: now)
+        let scheduler = MeetingBriefScheduler(store: store, briefService: stub, jobQueue: jobQueue, defaults: defaults)
+        scheduler.tick(events: [evt], now: now)
+        await jobQueue.drain()
+        store.deleteMeeting(try XCTUnwrap(store.meetings.first { $0.calendarEventID == evt.id }))
+
+        store.createMeeting(title: "Acme Sync", source: .calendar, startDate: evt.startDate, calendarEventID: evt.id)
+        XCTAssertTrue(scheduler.placeholderEventIDs.isEmpty, "keyed on the meeting id, not the event id")
+        XCTAssertTrue(excluded(store, scheduler).contains(evt.id))
+        scheduler.tick(events: [], now: now)
+        let stored = defaults.dictionary(forKey: UserDefaultsKeys.meetingsAutoBriefPlaceholders)
+        XCTAssertEqual(stored?.count, 0)
+    }
+
+    /// Placeholders created before the set was persisted are recognised once by their shape
+    /// (untouched, created inside the lead window before start); others stay engaged.
+    func testLegacyPlaceholdersAreSeededOnce() throws {
+        let store = try makeStore()
+        let defaults = makeDefaults()
+        let now = Date()
+        let placeholder = store.createMeeting(
+            title: "Weekly", source: .calendar, startDate: now.addingTimeInterval(20 * 60), calendarEventID: "legacy"
+        )
+        store.createMeeting(
+            title: "Created early", source: .calendar, startDate: now.addingTimeInterval(3 * 3600), calendarEventID: "early"
+        )
+        let recorded = store.createMeeting(
+            title: "Recorded", source: .calendar, state: .completed,
+            startDate: now.addingTimeInterval(10 * 60), calendarEventID: "recorded"
+        )
+
+        let scheduler = MeetingBriefScheduler(
+            store: store, briefService: StubBriefGenerator(store: store), jobQueue: jobQueue, defaults: defaults
+        )
+        XCTAssertEqual(scheduler.placeholderEventIDs, ["legacy"])
+        XCTAssertEqual(excluded(store, scheduler), ["early", "recorded"])
+        XCTAssertEqual(
+            defaults.dictionary(forKey: UserDefaultsKeys.meetingsAutoBriefPlaceholders) as? [String: String],
+            ["legacy": placeholder.id.uuidString]
+        )
+        _ = recorded
+
+        // The seed runs only while nothing is persisted.
+        defaults.set([String: String](), forKey: UserDefaultsKeys.meetingsAutoBriefPlaceholders)
+        let again = MeetingBriefScheduler(
+            store: store, briefService: StubBriefGenerator(store: store), jobQueue: jobQueue, defaults: defaults
+        )
+        XCTAssertTrue(again.placeholderEventIDs.isEmpty)
+    }
+
     // MARK: - [Track J] Queue routing
 
     /// A resumable barrier so a stub can hold the llm lane deterministically.
