@@ -249,4 +249,72 @@ final class DriveTranscriptMatcherTests: XCTestCase {
         )
         XCTAssertEqual(disposition, .create(title: "Weekly sync", startDate: nil))
     }
+
+    // MARK: - Drive doc names (slash-dated) and legacy raw-titled candidates
+
+    /// 2026-04-02 09:00 CST (fixed UTC−6) — the stamp in the owner's real Drive doc name.
+    private let seguimientoDate: Date = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: -6 * 3600)!
+        return calendar.date(from: DateComponents(year: 2026, month: 4, day: 2, hour: 9, minute: 0))!
+    }()
+
+    func testSlashDatedDriveNameMergesIntoCalendarMeeting() {
+        let calendarMeeting = DriveTranscriptMatcher.Candidate(
+            title: "Seguimiento BD Daniel",
+            startDate: seguimientoDate,
+            calendarEventID: "google:sub-1:evt-1"
+        )
+
+        let disposition = DriveTranscriptMatcher.disposition(
+            fileName: "Seguimiento BD Daniel - 2026/04/02 09:00 CST",
+            createdTime: seguimientoDate.addingTimeInterval(45 * 60),
+            sub: "sub-1",
+            candidates: [calendarMeeting]
+        )
+
+        guard case .merge(let meetingID, let score) = disposition else {
+            return XCTFail("expected merge, got \(disposition)")
+        }
+        XCTAssertEqual(meetingID, calendarMeeting.id)
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
+    func testLegacyRawTitledCandidateMatchesOnItsCleanTitle() {
+        // An earlier import stored the raw Drive name as its title; the calendar-side doc must
+        // still find it instead of duplicating it a second time.
+        let legacy = DriveTranscriptMatcher.Candidate(
+            title: "Seguimiento BD Daniel - 2026/04/02 09:00 CST",
+            startDate: seguimientoDate.addingTimeInterval(30 * 60)
+        )
+
+        let disposition = DriveTranscriptMatcher.disposition(
+            fileName: "Seguimiento BD Daniel - 2026_04_02 09_00 CST - Notas de Gemini",
+            createdTime: nil,
+            sub: "sub-1",
+            candidates: [legacy]
+        )
+
+        guard case .merge(let meetingID, _) = disposition else {
+            return XCTFail("expected merge, got \(disposition)")
+        }
+        XCTAssertEqual(meetingID, legacy.id)
+    }
+
+    func testSlashDatedNearMissStillCreates() {
+        // Different day (inside the window) and a different title: below threshold → create.
+        let otherMeeting = DriveTranscriptMatcher.Candidate(
+            title: "Revisión presupuesto Q2",
+            startDate: seguimientoDate.addingTimeInterval(-20 * 60 * 60)
+        )
+
+        let disposition = DriveTranscriptMatcher.disposition(
+            fileName: "Seguimiento BD Daniel - 2026/04/02 09:00 CST",
+            createdTime: nil,
+            sub: "sub-1",
+            candidates: [otherMeeting]
+        )
+
+        XCTAssertEqual(disposition, .create(title: "Seguimiento BD Daniel", startDate: seguimientoDate))
+    }
 }

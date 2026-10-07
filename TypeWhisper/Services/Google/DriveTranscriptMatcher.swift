@@ -97,8 +97,10 @@ enum DriveTranscriptMatcher {
                 guard let startDate = candidate.startDate,
                       abs(startDate.timeIntervalSince(targetDate)) <= window
                 else { return nil }
+                // Clean titles on both sides: a legacy import stored its raw Drive name, whose date
+                // tokens would dilute the Jaccard against the calendar meeting it belongs to.
                 let score = CalendarService.linkScore(
-                    eventTitle: candidate.title,
+                    eventTitle: ImportedMeetingTitle.parse(candidate.title).cleanTitle,
                     eventDate: startDate,
                     targetTitle: title,
                     targetDate: targetDate,
