@@ -21,7 +21,9 @@ extension MeetingsViewModel {
     var calendarClock: CalendarClock { calendarRefresh.clock }
 
     func makeCalendarRefreshCoordinator() -> CalendarRefreshCoordinator {
-        CalendarRefreshCoordinator(
+        // Owned by the hook closure (no VM stored state in an extension).
+        let linkedMeetingSync = LinkedMeetingCalendarSync(meetingService: meetingService)
+        return CalendarRefreshCoordinator(
             calendarService: calendarService,
             hooks: .init(
                 existingCalendarEventIDs: { [weak self] in self?.existingCalendarEventIDs ?? [] },
@@ -38,9 +40,20 @@ extension MeetingsViewModel {
                     captureService.$activeMeeting.dropFirst().map { _ in () }
                 )
                 .receive(on: DispatchQueue.main)
-                .eraseToAnyPublisher()
+                .eraseToAnyPublisher(),
+                reconcileLinkedMeetings: { linkedMeetingSync.reconcile($0) }
             )
         )
+    }
+
+    /// `createMeeting(from:)` reusing the meeting already linked to `event` (an auto-brief
+    /// placeholder, say): bring an untouched one in line with the event first, so capture started
+    /// from a moved occurrence never records into yesterday's dates.
+    func syncedLinkedMeeting(_ meeting: Meeting, with event: CalendarEventDTO) -> Meeting {
+        meetingService.applyCalendarReconciliation(
+            CalendarMeetingReconciler.changes(meetings: [meeting], events: [event])
+        )
+        return meeting
     }
 
     /// The published Upcoming list changed: run the consumers on it and re-plan the wake.

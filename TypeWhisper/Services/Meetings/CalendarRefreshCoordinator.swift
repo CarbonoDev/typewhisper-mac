@@ -39,6 +39,10 @@ final class CalendarRefreshCoordinator {
         /// meeting deleted or merged away, an auto-brief placeholder engaged by capture start. The
         /// coordinator re-windows the retained query (no provider hit), started or not.
         var exclusionsChanged: AnyPublisher<Void, Never> = Empty().eraseToAnyPublisher()
+        /// Bring stored meetings linked to an event in line with it, after every provider query
+        /// (whether or not a published section changed), over the whole selected source query —
+        /// an event excluded from Upcoming is exactly the one a stale linked meeting may hide.
+        var reconcileLinkedMeetings: @MainActor (_ sourceEvents: [CalendarEventDTO]) -> Void = { _ in }
     }
 
     private let calendarService: CalendarService
@@ -135,6 +139,7 @@ final class CalendarRefreshCoordinator {
                 now: at,
                 existingCalendarEventIDs: self.hooks.existingCalendarEventIDs()
             )
+            self.hooks.reconcileLinkedMeetings(self.calendarService.selectedSourceEvents)
             // A change reaches the consumers through the published-list sink; a wake-driven
             // refetch owes them a run regardless (their windows are time-gated).
             if runsConsumers && !changed {

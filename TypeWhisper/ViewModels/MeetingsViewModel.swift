@@ -530,7 +530,7 @@ final class MeetingsViewModel: ObservableObject {
         // stale copy would let a rapid double-click insert a duplicate and would leave the
         // just-created event in the upcoming list until the next poll.
         if let existing = meetingService.meetings.first(where: { $0.calendarEventID == event.id }) {
-            return existing
+            return syncedLinkedMeeting(existing, with: event)
         }
         let projection = CalendarService.meetingProjection(for: event)
         let meeting = meetingService.createMeeting(

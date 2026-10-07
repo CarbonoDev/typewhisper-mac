@@ -75,6 +75,7 @@
 		PF2C00000000000000000B11 /* RenderedMarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F11 /* RenderedMarkdownTests.swift */; };
 		PF2C00000000000000000B12 /* RenderedOutputCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F12 /* RenderedOutputCacheTests.swift */; };
 		PF2C00000000000000000B31 /* CalendarWakePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */; };
+		PF7A00000000000000000B03 /* CalendarMeetingReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF7A00000000000000000F03 /* CalendarMeetingReconcilerTests.swift */; };
 		PF2C00000000000000000B32 /* CalendarRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */; };
 		PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */; };
 		PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F42 /* PublisherMirrorTests.swift */; };
@@ -209,6 +210,8 @@
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
 		PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F20 /* EventKitEventQuery.swift */; };
 		PF2C00000000000000000B21 /* CalendarWakePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F21 /* CalendarWakePlanner.swift */; };
+		PF7A00000000000000000B02 /* MeetingService+CalendarSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */; };
+		PF7A00000000000000000B01 /* CalendarMeetingReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF7A00000000000000000F01 /* CalendarMeetingReconciler.swift */; };
 		PF2C00000000000000000B22 /* CalendarRefreshCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F22 /* CalendarRefreshCoordinator.swift */; };
 		PF2C00000000000000000B50 /* CalendarClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F50 /* CalendarClock.swift */; };
 		GGB0000000000000000001 /* GoogleOAuthFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = GGF0000000000000000001 /* GoogleOAuthFlow.swift */; };
@@ -943,6 +946,7 @@
 		PF2C00000000000000000F11 /* RenderedMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderedMarkdownTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F12 /* RenderedOutputCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderedOutputCacheTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWakePlannerTests.swift; sourceTree = "<group>"; };
+		PF7A00000000000000000F03 /* CalendarMeetingReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingReconcilerTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRefreshCoordinatorTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConsumerWindowTests.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F42 /* PublisherMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublisherMirrorTests.swift; sourceTree = "<group>"; };
@@ -1027,6 +1031,8 @@
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F20 /* EventKitEventQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitEventQuery.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F21 /* CalendarWakePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWakePlanner.swift; sourceTree = "<group>"; };
+		PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+CalendarSync.swift"; sourceTree = "<group>"; };
+		PF7A00000000000000000F01 /* CalendarMeetingReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingReconciler.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F22 /* CalendarRefreshCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRefreshCoordinator.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F50 /* CalendarClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarClock.swift; sourceTree = "<group>"; };
 		GGF0000000000000000001 /* GoogleOAuthFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleOAuthFlow.swift; sourceTree = "<group>"; };
@@ -2522,6 +2528,8 @@
 				BB00000000000000000388 /* CalendarService.swift */,
 				PF2C00000000000000000F20 /* EventKitEventQuery.swift */,
 				PF2C00000000000000000F21 /* CalendarWakePlanner.swift */,
+				PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */,
+				PF7A00000000000000000F01 /* CalendarMeetingReconciler.swift */,
 				PF2C00000000000000000F22 /* CalendarRefreshCoordinator.swift */,
 				PF2C00000000000000000F50 /* CalendarClock.swift */,
 				GGF0000000000000000008 /* ConferenceURLDetector.swift */,
@@ -3301,6 +3309,7 @@
 				PF2C00000000000000000F11 /* RenderedMarkdownTests.swift */,
 				PF2C00000000000000000F12 /* RenderedOutputCacheTests.swift */,
 				PF2C00000000000000000F31 /* CalendarWakePlannerTests.swift */,
+				PF7A00000000000000000F03 /* CalendarMeetingReconcilerTests.swift */,
 				PF2C00000000000000000F32 /* CalendarRefreshCoordinatorTests.swift */,
 				PF2C00000000000000000F33 /* CalendarConsumerWindowTests.swift */,
 				PF2C00000000000000000F42 /* PublisherMirrorTests.swift */,
@@ -5118,6 +5127,7 @@
 				PF2C00000000000000000B11 /* RenderedMarkdownTests.swift in Sources */,
 				PF2C00000000000000000B12 /* RenderedOutputCacheTests.swift in Sources */,
 				PF2C00000000000000000B31 /* CalendarWakePlannerTests.swift in Sources */,
+				PF7A00000000000000000B03 /* CalendarMeetingReconcilerTests.swift in Sources */,
 				PF2C00000000000000000B32 /* CalendarRefreshCoordinatorTests.swift in Sources */,
 				PF2C00000000000000000B33 /* CalendarConsumerWindowTests.swift in Sources */,
 				PF2C00000000000000000B42 /* PublisherMirrorTests.swift in Sources */,
@@ -5259,6 +5269,8 @@
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
 				PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */,
 				PF2C00000000000000000B21 /* CalendarWakePlanner.swift in Sources */,
+				PF7A00000000000000000B02 /* MeetingService+CalendarSync.swift in Sources */,
+				PF7A00000000000000000B01 /* CalendarMeetingReconciler.swift in Sources */,
 				PF2C00000000000000000B22 /* CalendarRefreshCoordinator.swift in Sources */,
 				PF2C00000000000000000B50 /* CalendarClock.swift in Sources */,
 				GGB0000000000000000008 /* ConferenceURLDetector.swift in Sources */,
