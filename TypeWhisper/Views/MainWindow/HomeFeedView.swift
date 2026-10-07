@@ -55,7 +55,7 @@ struct HomeAttentionSection: View {
 
     @State private var isExpanded = false
 
-    private struct Row: Identifiable {
+    struct Row: Identifiable {
         var id: String
         var dotColor: Color
         var title: String
@@ -68,7 +68,12 @@ struct HomeAttentionSection: View {
     private static let visibleCap = 4
 
     var body: some View {
-        let rows = attentionRows()
+        let rows = Self.attentionRows(
+            meetings: viewModel.meetings,
+            now: Date(),
+            actionFacts: homeViewModel.actionFacts(for:),
+            hasTranscript: homeViewModel.hasTranscript(for:)
+        )
         if !viewModel.meetings.isEmpty {
             VStack(alignment: .leading, spacing: MeetingTheme.s2) {
                 MeetingSectionLabel(String(localized: "home.attention.section"))
@@ -154,12 +159,21 @@ struct HomeAttentionSection: View {
         }
     }
 
-    private func attentionRows(now: Date = Date()) -> [Row] {
+    /// The triage rows over plain inputs (the view passes `HomeFeedViewModel`'s memoized facts), so
+    /// the row derivation is testable without the view. Rows show the clean display title — an
+    /// imported meeting may still store its raw export filename.
+    static func attentionRows(
+        meetings: [Meeting],
+        now: Date,
+        actionFacts: (Meeting) -> MeetingActionFacts?,
+        hasTranscript: (Meeting) -> Bool
+    ) -> [Row] {
         var interrupted: [Row] = []
         var openActions: [(open: Int, row: Row)] = []
         var noSummary: [Row] = []
 
-        for meeting in viewModel.meetings {
+        for meeting in meetings {
+            let detail = ImportedMeetingTitle.displayTitle(for: meeting.title)
             let reference = meeting.startDate ?? meeting.createdAt
             guard now.timeIntervalSince(reference) < Self.attentionWindow else { continue }
 
@@ -168,30 +182,30 @@ struct HomeAttentionSection: View {
                     id: "interrupted-\(meeting.id)",
                     dotColor: .orange,
                     title: String(localized: "home.attention.interrupted"),
-                    detail: meeting.title,
+                    detail: detail,
                     meetingID: meeting.id
                 ))
                 continue
             }
             guard meeting.state == .completed else { continue }
 
-            if let facts = homeViewModel.actionFacts(for: meeting) {
+            if let facts = actionFacts(meeting) {
                 if facts.openCount > 0 {
                     openActions.append((facts.openCount, Row(
                         id: "actions-\(meeting.id)",
                         dotColor: .accentColor,
                         title: String(format: String(localized: "home.attention.openActions"), facts.openCount),
-                        detail: meeting.title,
+                        detail: detail,
                         meetingID: meeting.id
                     )))
                 }
-            } else if homeViewModel.hasTranscript(for: meeting),
+            } else if hasTranscript(meeting),
                       now.timeIntervalSince(reference) < Self.summaryWindow {
                 noSummary.append(Row(
                     id: "nosummary-\(meeting.id)",
                     dotColor: Color.secondary,
                     title: String(localized: "home.attention.noSummary"),
-                    detail: meeting.title,
+                    detail: detail,
                     meetingID: meeting.id
                 ))
             }

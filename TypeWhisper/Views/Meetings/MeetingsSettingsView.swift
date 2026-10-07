@@ -292,7 +292,7 @@ struct MeetingsSettingsView: View {
                 .font(.headline)
             ForEach(viewModel.meetings, id: \.id) { meeting in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(meeting.title)
+                    Text(ImportedMeetingTitle.displayTitle(for: meeting.title))
                         .font(.headline)
                     HStack(spacing: 8) {
                         if let start = meeting.startDate {
