@@ -45,6 +45,23 @@ final class MeetingRowModelStoreTests: XCTestCase {
         XCTAssertFalse(row.hasBrief)
     }
 
+    func testRawDriveNamedTitleShowsCleanTitleAndStampDate() throws {
+        // A legacy Drive import stored its doc's raw name and no start date; nothing rewrites the
+        // title, so every surface must derive the clean title and the date from the parser.
+        let store = MeetingRowModelStore()
+        let raw = "Seguimiento BD Daniel - 2026/04/02 09:00 CST"
+        let meeting = Meeting(title: raw, state: .completed, source: .importedTranscript)
+        let stamp = try XCTUnwrap(ImportedMeetingTitle.parse(raw).date)
+
+        let row = try XCTUnwrap(store.row(for: meeting, context: context()))
+        XCTAssertEqual(row.title, "Seguimiento BD Daniel")
+        XCTAssertEqual(row.startDate, stamp)
+        XCTAssertEqual(row.effectiveDate, stamp)
+        XCTAssertTrue(row.isImported)
+        XCTAssertEqual(meeting.title, raw, "display derivation never rewrites the stored title")
+        XCTAssertEqual(MeetingsListView.effectiveDate(meeting), stamp)
+    }
+
     func testUnfiledAndUndatedFallBack() throws {
         let store = MeetingRowModelStore()
         let created = Date(timeIntervalSince1970: 1_700_000_000)
