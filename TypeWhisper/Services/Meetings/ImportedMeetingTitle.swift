@@ -106,12 +106,16 @@ enum ImportedMeetingTitle {
             matched = true
         }
 
-        // 3. Trailing date segment "… - 2026_07_07 11_00 CST" (time-zone token optional).
+        // 3. Trailing date segment (time-zone token optional), in any of the `DateShape`s:
+        //    "… - 2026_07_07 11_00 CST" (Finder-safe download), "… - 2026/04/02 09:00 CST" (the
+        //    Drive doc's own name), "Meet – 23 Jul 2026 at 14:06" (ad-hoc Meet, English).
         var date: Date?
-        if let range = Patterns.trailingDate.firstRange(in: working) {
-            date = parseDate(from: String(working[range]), fallbackTimeZone: fallbackTimeZone)
+        for shape in DateShape.all {
+            guard let range = shape.trailing.firstRange(in: working) else { continue }
+            date = parseDate(from: String(working[range]), shape: shape, fallbackTimeZone: fallbackTimeZone)
             working = String(working[..<range.lowerBound])
             matched = true
+            break
         }
 
         let clean = working.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -195,18 +199,45 @@ enum ImportedMeetingTitle {
         return Patterns.dateStamp.firstRange(in: text) != nil
     }
 
-    private static func parseDate(from segment: String, fallbackTimeZone: TimeZone) -> Date? {
-        guard let stampRange = Patterns.stamp.firstRange(in: segment) else { return nil }
-        var stamp = String(segment[stampRange])
-        // Normalize the date/time joiner (space or underscore) to a space for the fixed formatter.
-        let joinerIndex = stamp.index(stamp.startIndex, offsetBy: 10)
-        stamp.replaceSubrange(joinerIndex...joinerIndex, with: " ")
+    /// One recognized trailing-date form: the end-anchored segment to strip (dash separator,
+    /// stamp, optional zone token) and the named-group `fields` pattern that reads the stamp.
+    struct DateShape: Sendable {
+        let trailing: CompiledPattern
+        let fields: CompiledPattern
 
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy_MM_dd HH_mm"
-        formatter.timeZone = timeZone(in: segment) ?? fallbackTimeZone
-        return formatter.date(from: stamp)
+        static let all = [
+            DateShape(trailing: Patterns.trailingDate, fields: Patterns.stamp),
+            DateShape(trailing: Patterns.trailingSlashDate, fields: Patterns.slashStamp),
+            DateShape(trailing: Patterns.trailingMeetDate, fields: Patterns.meetStamp),
+        ]
+    }
+
+    private static let monthAbbreviations = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ]
+
+    private static func parseDate(from segment: String, shape: DateShape, fallbackTimeZone: TimeZone) -> Date? {
+        guard let fields = shape.fields.namedCaptures(["year", "month", "day", "hour", "minute"], in: segment),
+              let year = Int(fields["year"] ?? ""),
+              let day = Int(fields["day"] ?? ""),
+              let hour = Int(fields["hour"] ?? ""),
+              let minute = Int(fields["minute"] ?? ""),
+              let monthField = fields["month"]
+        else { return nil }
+        let month = Int(monthField)
+            ?? monthAbbreviations.firstIndex(of: String(monthField.lowercased().prefix(3))).map { $0 + 1 }
+        guard let month, (1...12).contains(month), (1...31).contains(day),
+              (0...23).contains(hour), (0...59).contains(minute)
+        else { return nil }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone(in: segment) ?? fallbackTimeZone
+        let components = DateComponents(year: year, month: month, day: day, hour: hour, minute: minute)
+        // Reject impossible days (Feb 30) rather than letting Calendar roll them into March.
+        guard let date = calendar.date(from: components),
+              calendar.component(.day, from: date) == day
+        else { return nil }
+        return date
     }
 
     /// Fixed offsets for the common export abbreviations. `TimeZone(abbreviation: "CST")` resolves
@@ -218,6 +249,9 @@ enum ImportedMeetingTitle {
         "CST": -6, "CDT": -5,
         "MST": -7, "MDT": -6,
         "PST": -8, "PDT": -7,
+        // Indonesia (WIB/WITA/WIT) — Foundation's abbreviation table lacks them, and WITA stamps
+        // occur in real Drive exports.
+        "WIB": 7, "WITA": 8, "WIT": 9,
     ]
 
     private static func timeZone(in segment: String) -> TimeZone? {
@@ -251,19 +285,60 @@ enum ImportedMeetingTitle {
             else { return nil }
             return Range(match.range, in: text)
         }
+
+        /// The named groups of the first match (a group that did not participate is absent), or
+        /// nil when nothing matches.
+        func namedCaptures(_ names: [String], in text: String) -> [String: String]? {
+            guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))
+            else { return nil }
+            var captures: [String: String] = [:]
+            for name in names {
+                if let range = Range(match.range(withName: name), in: text) {
+                    captures[name] = String(text[range])
+                }
+            }
+            return captures
+        }
     }
 
     enum Patterns {
+        /// English month abbreviations as Meet writes them ("Sept" included for safety).
+        private static let monthName = #"(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)"#
+
+        /// "… - 2026_07_07 11_00 CST": a downloaded export after Finder-safe renaming.
         static let trailingDate = CompiledPattern(#"\s*[-–—]\s*\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}(\s+[A-Za-z]{2,5})?\s*$"#)
-        static let bareStamp = CompiledPattern(#"^\d{4}_\d{2}_\d{2}([ _]\d{2}_\d{2})?(\s+[A-Za-z]{2,5})?$"#)
+        /// "… - 2026/04/02 09:00 CST" (or `2026-04-02`): the Drive doc's own `file.name`.
+        static let trailingSlashDate = CompiledPattern(#"\s*[-–—]\s*\d{4}([/-])\d{2}\1\d{2}[ T]\d{1,2}:\d{2}(\s+[A-Za-z]{2,5})?\s*$"#)
+        /// "Meet – 23 Jul 2026 at 14:06": an ad-hoc Meet call's English doc name.
+        static let trailingMeetDate = CompiledPattern(
+            #"\s*[-–—]\s*\d{1,2}\s+"# + monthName + #"\.?\s+\d{4}\s+at\s+\d{1,2}:\d{2}(\s+[A-Za-z]{2,5})?\s*$"#,
+            caseInsensitive: true
+        )
+        static let bareStamp = CompiledPattern(
+            #"^(\d{4}_\d{2}_\d{2}([ _]\d{2}_\d{2})?|\d{4}([/-])\d{2}\3\d{2}([ T]\d{1,2}:\d{2})?|\d{1,2}\s+"#
+                + monthName + #"\.?\s+\d{4}(\s+at\s+\d{1,2}:\d{2})?)(\s+[A-Za-z]{2,5})?$"#,
+            caseInsensitive: true
+        )
         static let copyCounter = CompiledPattern(#"\s*\(\d+\)\s*$"#)
-        static let dateStamp = CompiledPattern(#"\d{4}_\d{2}_\d{2}"#)
-        static let stamp = CompiledPattern(#"\d{4}_\d{2}_\d{2}[ _]\d{2}_\d{2}"#)
+        /// A date stamp anywhere — gates the copy counter. The slash and Meet forms require the time
+        /// too, so a hand-written "Plan 2026-04-02 (2)" keeps its "(2)".
+        static let dateStamp = CompiledPattern(
+            #"\d{4}_\d{2}_\d{2}|\d{4}([/-])\d{2}\1\d{2}[ T]\d{1,2}:\d{2}|\d{1,2}\s+"#
+                + monthName + #"\.?\s+\d{4}\s+at\s+\d{1,2}:\d{2}"#,
+            caseInsensitive: true
+        )
+        static let stamp = CompiledPattern(#"(?<year>\d{4})_(?<month>\d{2})_(?<day>\d{2})[ _](?<hour>\d{2})_(?<minute>\d{2})"#)
+        static let slashStamp = CompiledPattern(#"(?<year>\d{4})[/-](?<month>\d{2})[/-](?<day>\d{2})[ T](?<hour>\d{1,2}):(?<minute>\d{2})"#)
+        static let meetStamp = CompiledPattern(
+            #"(?<day>\d{1,2})\s+(?<month>"# + monthName + #")\.?\s+(?<year>\d{4})\s+at\s+(?<hour>\d{1,2}):(?<minute>\d{2})"#,
+            caseInsensitive: true
+        )
         static let zoneAbbreviation = CompiledPattern(#"[A-Za-z]{2,5}\s*$"#)
         static let exportSuffixes = ImportedMeetingTitle.exportSuffixes.map(suffixPattern)
         static let transcriptSuffixes = ImportedMeetingTitle.transcriptSuffixes.map(suffixPattern)
         static var all: [CompiledPattern] {
-            [trailingDate, bareStamp, copyCounter, dateStamp, stamp, zoneAbbreviation]
+            [trailingDate, trailingSlashDate, trailingMeetDate, bareStamp, copyCounter, dateStamp,
+             stamp, slashStamp, meetStamp, zoneAbbreviation]
                 + exportSuffixes + transcriptSuffixes
         }
 

@@ -76,6 +76,72 @@ final class ImportedMeetingTitleTests: XCTestCase {
         XCTAssertFalse(parsed.isImported)
     }
 
+    // MARK: - Drive doc names (the Gemini doc's own title, before Finder-safe renaming)
+
+    private func components(_ date: Date, offsetHours: Int) throws -> DateComponents {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: offsetHours * 3600))
+        return calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+    }
+
+    func testDriveSlashDatedNameParsesLikeTheUnderscoreForm() throws {
+        let parsed = ImportedMeetingTitle.parse("Seguimiento BD Daniel - 2026/04/02 09:00 CST")
+        XCTAssertEqual(parsed.cleanTitle, "Seguimiento BD Daniel")
+        XCTAssertTrue(parsed.isImported)
+        let underscore = ImportedMeetingTitle.parse("Seguimiento BD Daniel - 2026_04_02 09_00 CST")
+        XCTAssertEqual(parsed, underscore)
+        let date = try components(XCTUnwrap(parsed.date), offsetHours: -6)
+        XCTAssertEqual([date.year, date.month, date.day, date.hour, date.minute], [2026, 4, 2, 9, 0])
+    }
+
+    func testDriveSlashDatedNameWithWITAResolvesUTCPlus8() throws {
+        let parsed = ImportedMeetingTitle.parse("Seguimiento semanal - 2025/10/08 06:56 WITA")
+        XCTAssertEqual(parsed.cleanTitle, "Seguimiento semanal")
+        XCTAssertTrue(parsed.isImported)
+        let date = try components(XCTUnwrap(parsed.date), offsetHours: 8)
+        XCTAssertEqual([date.year, date.month, date.day, date.hour, date.minute], [2025, 10, 8, 6, 56])
+    }
+
+    func testDriveDashedISODateAndNotesSuffixParse() throws {
+        let parsed = ImportedMeetingTitle.parse("Weekly sync - 2026-04-02 09:00 UTC - Notes by Gemini (1)")
+        XCTAssertEqual(parsed.cleanTitle, "Weekly sync")
+        XCTAssertTrue(parsed.isImported)
+        let date = try components(XCTUnwrap(parsed.date), offsetHours: 0)
+        XCTAssertEqual([date.year, date.month, date.day, date.hour, date.minute], [2026, 4, 2, 9, 0])
+    }
+
+    func testMeetEnglishNameParsesToMeet() throws {
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let parsed = ImportedMeetingTitle.parse("Meet – 23 Jul 2026 at 14:06", fallbackTimeZone: utc)
+        XCTAssertEqual(parsed.cleanTitle, "Meet")
+        XCTAssertTrue(parsed.isImported)
+        let date = try components(XCTUnwrap(parsed.date), offsetHours: 0)
+        XCTAssertEqual([date.year, date.month, date.day, date.hour, date.minute], [2026, 7, 23, 14, 6])
+        // Hyphen and em-dash separators and a notes suffix are the same shape.
+        XCTAssertEqual(ImportedMeetingTitle.parse("Meet - 23 Jul 2026 at 14:06", fallbackTimeZone: utc), parsed)
+        XCTAssertEqual(
+            ImportedMeetingTitle.parse("Meet — 23 Jul 2026 at 14:06 - Notes by Gemini", fallbackTimeZone: utc),
+            parsed
+        )
+    }
+
+    func testBareDriveStampsPassThrough() {
+        for raw in ["2026/04/02 09:00 CST - Notas de Gemini", "23 Jul 2026 at 14:06 - Notes by Gemini"] {
+            let parsed = ImportedMeetingTitle.parse(raw)
+            XCTAssertEqual(parsed.cleanTitle, raw)
+            XCTAssertFalse(parsed.isImported)
+            XCTAssertNil(parsed.date)
+        }
+    }
+
+    func testDateWithoutDashSeparatorOrTimeIsNotStripped() {
+        for raw in ["Plan 2026/04/02 09:00", "Retro - 2026-04-02", "Offsite - 23 Jul 2026"] {
+            let parsed = ImportedMeetingTitle.parse(raw)
+            XCTAssertEqual(parsed.cleanTitle, raw)
+            XCTAssertFalse(parsed.isImported)
+        }
+    }
+
     func testDisplayTitleConvenience() {
         XCTAssertEqual(
             ImportedMeetingTitle.displayTitle(
