@@ -80,14 +80,27 @@ final class CalendarMeetingReconcilerTests: XCTestCase {
         let ended = makeMeeting(in: store, state: .completed)
         XCTAssertTrue(CalendarMeetingReconciler.changes(meetings: [ended], events: [event(start: today)]).isEmpty)
 
-        let withNote = makeMeeting(in: store, eventID: "noted")
-        store.addNote(to: withNote, text: "prep")
-        let movedNoted = CalendarEventDTO(id: "noted", title: "Weekly", startDate: today, endDate: today.addingTimeInterval(3600))
-        XCTAssertTrue(CalendarMeetingReconciler.changes(meetings: [withNote], events: [movedNoted]).isEmpty)
+        let recorded = makeMeeting(in: store, eventID: "recorded")
+        store.insertSegment(MeetingSegment(order: 0, start: 0, end: 1, text: "hi"), into: recorded)
+        store.update(recorded)
+        let movedRecorded = CalendarEventDTO(id: "recorded", title: "Weekly", startDate: today, endDate: today.addingTimeInterval(3600))
+        XCTAssertTrue(CalendarMeetingReconciler.changes(meetings: [recorded], events: [movedRecorded]).isEmpty)
 
-        reconcile(store, [event(start: today), movedNoted])
+        reconcile(store, [event(start: today), movedRecorded])
         XCTAssertEqual(ended.startDate, yesterday)
-        XCTAssertEqual(withNote.startDate, yesterday)
+        XCTAssertEqual(recorded.startDate, yesterday)
+    }
+
+    /// Pre-meeting notes are preparation, not engagement: the placeholder still follows its event.
+    func testPlaceholderWithNotesFollowsMovedEvent() throws {
+        let store = try makeStore()
+        let meeting = makeMeeting(in: store)
+        store.addNote(to: meeting, text: "prep")
+
+        reconcile(store, [event(start: today)])
+
+        XCTAssertEqual(meeting.startDate, today)
+        XCTAssertEqual(meeting.notes.count, 1)
     }
 
     func testRenamedMeetingKeepsItsTitle() throws {

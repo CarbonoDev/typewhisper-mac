@@ -272,7 +272,7 @@ final class MeetingBriefScheduler: ObservableObject {
     }
 
     /// Placeholders created before the set was persisted carry no marker, so recognise them by the
-    /// shape `resolveMeeting(for:)` leaves: an untouched (`.scheduled`, no transcript, no notes)
+    /// shape `resolveMeeting(for:)` leaves: an untouched (`.scheduled`, no transcript)
     /// calendar meeting created inside the maximum lead window (60 min) before its start, within the
     /// retention period. A meeting the user created by hand from an event in that window is
     /// indistinguishable; treating it as a placeholder only keeps its event listed in Upcoming.

@@ -9,7 +9,7 @@ import Foundation
 /// keep the old dates forever, and the now-card / capture path would treat it as yesterday's.
 ///
 /// Pure planning lives here (`changes`); `MeetingService.applyCalendarReconciliation` writes the
-/// result. Engaged meetings — left `.scheduled`, or holding transcript or notes — are never touched:
+/// result. Engaged meetings — left `.scheduled`, or holding a transcript — are never touched:
 /// a recording that happened is a fact.
 enum CalendarMeetingReconciler {
     /// The fields of one meeting to rewrite from its event. `nil` leaves a field as is.
@@ -22,12 +22,11 @@ enum CalendarMeetingReconciler {
         var conferencingURL: String?
     }
 
-    /// Whether `meeting` has never been engaged: still `.scheduled`, no transcript, no notes.
+    /// Whether `meeting` has never been engaged: still `.scheduled` and no transcript. Pre-meeting
+    /// notes typed into a placeholder are preparation, not engagement — it still follows its event.
     @MainActor
     static func isUntouched(_ meeting: Meeting) -> Bool {
-        guard meeting.state == .scheduled else { return false }
-        if (meeting.factSegmentCount ?? meeting.segments.count) > 0 { return false }
-        return meeting.notes.isEmpty
+        meeting.state == .scheduled && !meeting.hasTranscript
     }
 
     /// The writes that bring each untouched `.scheduled` meeting in line with the event it links to.
@@ -79,7 +78,7 @@ enum CalendarMeetingReconciler {
                 change.conferencingURL = url
                 differs = true
             }
-            // Relationship faults only for the (rare) meeting that actually differs.
+            // The transcript check only for the (rare) meeting that actually differs.
             guard differs, isUntouched(meeting) else { continue }
             result.append(change)
         }
