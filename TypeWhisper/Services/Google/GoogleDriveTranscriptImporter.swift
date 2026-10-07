@@ -88,6 +88,9 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
     private weak var autoLink: (any MeetingAutoLinking)?
     private let ledger: GoogleDriveImportLedger
     private let now: () -> Date
+    /// Doc names already logged as an unrecognized shape — each is logged once per session, not
+    /// on every poll that re-reads it.
+    private var loggedUnrecognizedNames: Set<String> = []
 
     init(
         tokenProvider: GoogleAccessTokenProviding,
@@ -214,6 +217,7 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
         // Live/processing meetings are excluded from the snapshot entirely (see the 0b guard):
         // they are never a legal merge target, and the guard above already deferred the docs that
         // would have matched one, so this cannot silently create a duplicate instead.
+        noteUnrecognizedNameShape(file.name)
         let candidates = Self.candidateSnapshot(of: meetingService.meetings)
         let disposition = DriveTranscriptMatcher.disposition(
             fileName: file.name,
@@ -287,6 +291,26 @@ final class GoogleDriveTranscriptImporter: GoogleDriveFileProcessing {
             logger.info("Created meeting \(meeting.id) from Drive doc")
             return .created(meetingID: meeting.id)
         }
+    }
+
+    // MARK: - Unrecognized name shapes
+
+    /// True when `ImportedMeetingTitle` recognizes no date stamp in a Drive doc name — the matcher
+    /// then scores the whole raw name and windows on `createdTime`, which is how a new export
+    /// naming shape silently turns merges into duplicates.
+    nonisolated static func isUnrecognizedNameShape(_ name: String) -> Bool {
+        ImportedMeetingTitle.parse(name).date == nil
+    }
+
+    /// Logs a doc name with an unrecognized shape once (at `.info`, name private) so the next
+    /// unknown export format is diagnosable from the unified log. Returns whether it logged.
+    @discardableResult
+    func noteUnrecognizedNameShape(_ name: String) -> Bool {
+        guard Self.isUnrecognizedNameShape(name),
+              loggedUnrecognizedNames.insert(name).inserted
+        else { return false }
+        logger.info("Drive doc name has no recognized date shape: \(name, privacy: .private)")
+        return true
     }
 
     // MARK: - Content gate (1b)
