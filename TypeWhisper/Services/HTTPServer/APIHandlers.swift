@@ -1873,14 +1873,15 @@ final class APIHandlers: @unchecked Sendable {
                 )
             }
 
-            // Calendar matching mirrors the import path: for calendar-created calls the tab title
-            // *is* the event's name, so a confident title+date match links the live meeting to the
-            // event and adopts its roster. `bestAutoLinkCandidate`'s confidence floor keeps an
-            // ad-hoc call from linking to whatever else happens to be on the calendar right now.
+            // Live calendar matching: the event's Meet code first, then the tab title — but only
+            // against events happening around now (`LiveSessionEventMatcher`), never the import
+            // path's ±24 h, which linked a call to tomorrow's occurrence of a recurring meeting.
             var matched: MatchedEventResponse?
             var projection: CalendarService.MeetingProjection?
-            if let realTitle, let calendarService,
-               let candidate = calendarService.bestAutoLinkCandidate(title: realTitle, date: start) {
+            if let calendarService,
+               let candidate = calendarService.bestLiveSessionCandidate(
+                   sessionKey: sessionKey, title: realTitle, sessionStart: start
+               ) {
                 let eventProjection = CalendarService.meetingProjection(for: candidate.event)
                 projection = eventProjection
                 matched = MatchedEventResponse(

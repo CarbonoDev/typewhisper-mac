@@ -208,6 +208,7 @@
 		AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000386 /* MeetingsSettingsView.swift */; };
 		AA00000000000000000387 /* CalendarEventProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000387 /* CalendarEventProviding.swift */; };
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
+		QZ00000000000000000001 /* LiveSessionEventMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = QZ00000000000000000002 /* LiveSessionEventMatcher.swift */; };
 		PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F20 /* EventKitEventQuery.swift */; };
 		PF2C00000000000000000B21 /* CalendarWakePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF2C00000000000000000F21 /* CalendarWakePlanner.swift */; };
 		PF7A00000000000000000B02 /* MeetingService+CalendarSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */; };
@@ -508,6 +509,7 @@
 		MEB0000000000000000001 /* MeetingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000001 /* MeetingServiceTests.swift */; };
 		MEB0000000000000000002 /* MeetingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000002 /* MeetingModelTests.swift */; };
 		MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000003 /* CalendarServiceTests.swift */; };
+		QZ00000000000000000003 /* LiveSessionEventMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = QZ00000000000000000004 /* LiveSessionEventMatcherTests.swift */; };
 		MEB0000000000000010001 /* CalendarVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010001 /* CalendarVisibilityTests.swift */; };
 		MEB0000000000000010002 /* MeetingAdHocMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
@@ -1029,6 +1031,7 @@
 		BB00000000000000000386 /* MeetingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000387 /* CalendarEventProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventProviding.swift; sourceTree = "<group>"; };
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		QZ00000000000000000002 /* LiveSessionEventMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionEventMatcher.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F20 /* EventKitEventQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitEventQuery.swift; sourceTree = "<group>"; };
 		PF2C00000000000000000F21 /* CalendarWakePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWakePlanner.swift; sourceTree = "<group>"; };
 		PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingService+CalendarSync.swift"; sourceTree = "<group>"; };
@@ -1328,6 +1331,7 @@
 		MEF0000000000000000001 /* MeetingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingServiceTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000002 /* MeetingModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingModelTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000003 /* CalendarServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarServiceTests.swift; sourceTree = "<group>"; };
+		QZ00000000000000000004 /* LiveSessionEventMatcherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveSessionEventMatcherTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000010001 /* CalendarVisibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarVisibilityTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000010002 /* MeetingAdHocMenuTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAdHocMenuTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
@@ -2526,6 +2530,7 @@
 				BB00000000000000000384 /* MeetingSegmentMapper.swift */,
 				BB00000000000000000387 /* CalendarEventProviding.swift */,
 				BB00000000000000000388 /* CalendarService.swift */,
+				QZ00000000000000000002 /* LiveSessionEventMatcher.swift */,
 				PF2C00000000000000000F20 /* EventKitEventQuery.swift */,
 				PF2C00000000000000000F21 /* CalendarWakePlanner.swift */,
 				PF7A00000000000000000F02 /* MeetingService+CalendarSync.swift */,
@@ -3341,6 +3346,7 @@
 				PF1A0000000000000000F005 /* MeetingsStoreMigrationTests.swift */,
 				MEF0000000000000000002 /* MeetingModelTests.swift */,
 				MEF0000000000000000003 /* CalendarServiceTests.swift */,
+				QZ00000000000000000004 /* LiveSessionEventMatcherTests.swift */,
 				CA11F00000000000000004 /* CalendarSelectionTests.swift */,
 				MWF0000000000000000010 /* MainWindowScaffoldTests.swift */,
 				PF1B00000000000000000006 /* MainWindowSearchDebounceTests.swift */,
@@ -4967,6 +4973,7 @@
 				PF1A0000000000000000B005 /* MeetingsStoreMigrationTests.swift in Sources */,
 				MEB0000000000000000002 /* MeetingModelTests.swift in Sources */,
 				MEB0000000000000000003 /* CalendarServiceTests.swift in Sources */,
+				QZ00000000000000000003 /* LiveSessionEventMatcherTests.swift in Sources */,
 				CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */,
 				MWB0000000000000000010 /* MainWindowScaffoldTests.swift in Sources */,
 				PF1B00000000000000000007 /* MainWindowSearchDebounceTests.swift in Sources */,
@@ -5267,6 +5274,7 @@
 				AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */,
 				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
+				QZ00000000000000000001 /* LiveSessionEventMatcher.swift in Sources */,
 				PF2C00000000000000000B20 /* EventKitEventQuery.swift in Sources */,
 				PF2C00000000000000000B21 /* CalendarWakePlanner.swift in Sources */,
 				PF7A00000000000000000B02 /* MeetingService+CalendarSync.swift in Sources */,
