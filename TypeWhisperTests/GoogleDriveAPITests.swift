@@ -110,9 +110,11 @@ final class GoogleDriveAPITests: XCTestCase {
         let parsed = ImportedMeetingTitle.parse("Seguimiento BD - 2026/09/17 09:01 CST - Transcripción")
         XCTAssertTrue(parsed.isImported)
         XCTAssertEqual(
-            parsed.cleanTitle, "Seguimiento BD - 2026/09/17 09:01 CST",
-            "the clean title must match the notes-created meeting's title so the matcher can merge onto it"
+            parsed.cleanTitle, "Seguimiento BD",
+            "the Drive slash-dated stamp is stripped like the underscore form; the matcher cleans the "
+                + "notes-created meeting's title too, so the two still merge"
         )
+        XCTAssertNotNil(parsed.date)
     }
 
     /// The one rule that decides what a Gemini notes doc *is*, now that the server cannot: it must
