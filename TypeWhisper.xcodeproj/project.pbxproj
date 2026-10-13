@@ -302,6 +302,9 @@
 		CA11000000000000000003 /* CalendarSelectionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000003 /* CalendarSelectionSection.swift */; };
 		CA11000000000000000004 /* CalendarSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11F00000000000000004 /* CalendarSelectionTests.swift */; };
 		MWB0000000000000000001 /* AppWindowID.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000001 /* AppWindowID.swift */; };
+		RBY0000000000000000003B /* MenuBarMenuActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000003F /* MenuBarMenuActions.swift */; };
+		RBY0000000000000000002B /* MenuBarMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000002F /* MenuBarMenuModel.swift */; };
+		RBY0000000000000000001B /* MenuBarStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000001F /* MenuBarStatusItemController.swift */; };
 		MWB0000000000000000002 /* MainWindowRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000002 /* MainWindowRoute.swift */; };
 		MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000003 /* MainWindowCoordinator.swift */; };
 		MWB0000000000000000004 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MWF0000000000000000004 /* MainWindowView.swift */; };
@@ -490,6 +493,8 @@
 		DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */; };
 		CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */; };
 		CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */; };
+		RBY0000000000000000005B /* MenuBarIconVisibilityBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */; };
+		RBY0000000000000000004B /* MenuBarMenuModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000004F /* MenuBarMenuModelTests.swift */; };
 		MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000011 /* MeetingQAComposerTests.swift */; };
 		MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */; };
 		MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000013 /* TranscriptFileParserTests.swift */; };
@@ -1125,6 +1130,9 @@
 		CA11F00000000000000003 /* CalendarSelectionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSelectionSection.swift; sourceTree = "<group>"; };
 		CA11F00000000000000004 /* CalendarSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarSelectionTests.swift; sourceTree = "<group>"; };
 		MWF0000000000000000001 /* AppWindowID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppWindowID.swift; sourceTree = "<group>"; };
+		RBY0000000000000000003F /* MenuBarMenuActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenuActions.swift; sourceTree = "<group>"; };
+		RBY0000000000000000002F /* MenuBarMenuModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenuModel.swift; sourceTree = "<group>"; };
+		RBY0000000000000000001F /* MenuBarStatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatusItemController.swift; sourceTree = "<group>"; };
 		MWF0000000000000000002 /* MainWindowRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowRoute.swift; sourceTree = "<group>"; };
 		MWF0000000000000000003 /* MainWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowCoordinator.swift; sourceTree = "<group>"; };
 		MWF0000000000000000004 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
@@ -1312,6 +1320,8 @@
 		DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationServiceTests.swift; sourceTree = "<group>"; };
 		CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEndReminderServiceTests.swift; sourceTree = "<group>"; };
 		CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTrayIndicatorTests.swift; sourceTree = "<group>"; };
+		RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconVisibilityBindingTests.swift; sourceTree = "<group>"; };
+		RBY0000000000000000004F /* MenuBarMenuModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenuModelTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000011 /* MeetingQAComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingQAComposerTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingObsidianExporterTests.swift; sourceTree = "<group>"; };
 		MEF0000000000000000013 /* TranscriptFileParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFileParserTests.swift; sourceTree = "<group>"; };
@@ -2194,6 +2204,9 @@
 				BB00000000000000000093 /* main.swift */,
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				MWF0000000000000000001 /* AppWindowID.swift */,
+				RBY0000000000000000003F /* MenuBarMenuActions.swift */,
+				RBY0000000000000000002F /* MenuBarMenuModel.swift */,
+				RBY0000000000000000001F /* MenuBarStatusItemController.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
 				PF2D00000000000000000025 /* PersistentHistoryPruner.swift */,
@@ -3466,6 +3479,8 @@
 				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
 				CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */,
 				CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */,
+				RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */,
+				RBY0000000000000000004F /* MenuBarMenuModelTests.swift */,
 				MEF0000000000000000011 /* MeetingQAComposerTests.swift */,
 				MEF0000000000000000012 /* MeetingObsidianExporterTests.swift */,
 				MEF0000000000000000013 /* TranscriptFileParserTests.swift */,
@@ -5093,6 +5108,8 @@
 				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
 				CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */,
 				CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */,
+				RBY0000000000000000005B /* MenuBarIconVisibilityBindingTests.swift in Sources */,
+				RBY0000000000000000004B /* MenuBarMenuModelTests.swift in Sources */,
 				MEB0000000000000000011 /* MeetingQAComposerTests.swift in Sources */,
 				MEB0000000000000000012 /* MeetingObsidianExporterTests.swift in Sources */,
 				MEB0000000000000000013 /* TranscriptFileParserTests.swift in Sources */,
@@ -5192,6 +5209,9 @@
 			files = (
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				MWB0000000000000000001 /* AppWindowID.swift in Sources */,
+				RBY0000000000000000003B /* MenuBarMenuActions.swift in Sources */,
+				RBY0000000000000000002B /* MenuBarMenuModel.swift in Sources */,
+				RBY0000000000000000001B /* MenuBarStatusItemController.swift in Sources */,
 				MWB0000000000000000002 /* MainWindowRoute.swift in Sources */,
 				MWB0000000000000000003 /* MainWindowCoordinator.swift in Sources */,
 				MWB0000000000000000004 /* MainWindowView.swift in Sources */,

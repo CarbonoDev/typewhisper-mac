@@ -4,7 +4,7 @@ import Combine
 /// Lightweight state tracker for MenuBarView that only re-publishes
 /// on menu-relevant changes, avoiding high-frequency audioLevel updates.
 @MainActor
-private final class MenuBarState: ObservableObject {
+final class MenuBarState: ObservableObject {
     @Published var statusText: String
     @Published var statusImage: String
     @Published var isModelReady: Bool

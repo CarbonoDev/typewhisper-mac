@@ -278,7 +278,7 @@ enum MenuBarIconState {
     }
 }
 
-private struct MenuBarExtraLabel: View {
+struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
@@ -429,7 +429,6 @@ enum MenuBarLogoMarkImage {
 
 struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @State private var startupSheet: StartupSheetRoute?
     @State private var lastPresentedStartupSheet: StartupSheetRoute?
     @State private var ignoreNextStartupSheetDismiss = false
@@ -443,21 +442,8 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     }
 
     var body: some Scene {
-        MenuBarExtra(isInserted: $showMenuBarIcon) {
-            menuBarContent
-        } label: {
-            if AppConstants.isRunningTests {
-                EmptyView()
-            } else {
-                MenuBarExtraLabel()
-            }
-        }
-        .menuBarExtraStyle(.menu)
-        .commands {
-            CommandGroup(after: .appInfo) {
-                ManagedWindowOpenerRegistrar()
-            }
-        }
+        // The menu bar item is owned in AppKit by `MenuBarStatusItemController` (installed from
+        // `AppDelegate`) so menu bar managers can hide/move it; see that type.
 
         // All managed scenes route through `WindowConfiguration` so they share one restoration /
         // launch-suppression policy. The meetings-first `main` window is now a first-class managed
@@ -467,15 +453,11 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         WindowConfiguration.history(content: AnyView(historyContent))
         WindowConfiguration.errorLog(content: AnyView(errorLogContent))
         WindowConfiguration.main(content: AnyView(mainWindowContent))
-    }
-
-    @ViewBuilder
-    private var menuBarContent: some View {
-        if AppConstants.isRunningTests {
-            EmptyView()
-        } else {
-            MenuBarView()
-        }
+            .commands {
+                CommandGroup(after: .appInfo) {
+                    ManagedWindowOpenerRegistrar()
+                }
+            }
     }
 
     @ViewBuilder
@@ -802,6 +784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         UpdateChecker.shared = updateChecker
         applyActivationPolicy()
+        MenuBarStatusItemController.installIfNeeded()
 
         let coordinator = IndicatorCoordinator()
         coordinator.startObserving()
