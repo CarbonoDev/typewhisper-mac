@@ -3,8 +3,16 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data_path="$repo_root/.build/DerivedData-Dev"
-install_dir="$HOME/Applications"
+# Install into /Applications when we can: menu bar managers (Bartender 7, Glow) only
+# manage status items of apps that live there and ignore ~/Applications. Fall back to
+# ~/Applications on a machine where /Applications is not writable.
+if [[ -w /Applications ]]; then
+  install_dir="/Applications"
+else
+  install_dir="$HOME/Applications"
+fi
 installed_app="$install_dir/MeetingWhisper-Dev.app"
+legacy_installed_app="$HOME/Applications/MeetingWhisper-Dev.app"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 log() {
@@ -51,6 +59,9 @@ running_dev_typewhisper_pids() {
     args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
     case "$args" in
       "$installed_app/Contents/MacOS/TypeWhisper"*)
+        printf '%s\n' "$pid"
+        ;;
+      "$legacy_installed_app/Contents/MacOS/TypeWhisper"*)
         printf '%s\n' "$pid"
         ;;
       "$repo_root/.build/"*"/Build/Products/Debug/TypeWhisper.app/Contents/MacOS/TypeWhisper"*)
@@ -149,6 +160,10 @@ fi
 
 mkdir -p "$install_dir"
 trash_if_present "$installed_app"
+if [[ "$legacy_installed_app" != "$installed_app" ]] && [[ -e "$legacy_installed_app" ]]; then
+  trash_if_present "$legacy_installed_app"
+  log "trashed legacy install: $legacy_installed_app"
+fi
 ditto "$app_path" "$installed_app"
 write_build_marker "$installed_app"
 xattr -cr "$installed_app" >/dev/null 2>&1 || true

@@ -136,6 +136,6 @@ The repo has ~68 source files over 800 lines today. The limit is about what you 
 - PRs are squash-merged into `main`; keep one feature/fix per PR and fill out the template (Summary + Test Plan).
 - When a PR fixes or implements a GitHub issue (from AGENTS.md): include the issue context in the PR body, an auto-close reference like `Closes #123`, and a short test plan with the exact verification command(s).
 
-<!-- crystl-cli:begin v2.244.0 -->
+<!-- crystl-cli:begin v2.249.0 -->
 @AGENTS.md
 <!-- crystl-cli:end -->

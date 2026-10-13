@@ -5,7 +5,7 @@ When a pull request fixes or implements a GitHub issue, always:
 - include an auto-close reference such as `Closes #123`
 - include a short test plan with the exact verification command(s)
 
-<!-- crystl-cli:begin v2.244.0 -->
+<!-- crystl-cli:begin v2.249.0 -->
 ## Crystl CLI (agent-callable)
 
 This section is auto-maintained by Crystl — edits between the `crystl-cli` markers are overwritten when it refreshes; the rest of this file belongs to the project. You're running inside Crystl. You can inspect and control sibling gems and shards via the `crystl` CLI. Full command reference (every flag): `crystl docs cli`.
