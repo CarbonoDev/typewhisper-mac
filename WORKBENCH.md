@@ -201,6 +201,11 @@
 - [ ] Chrome extension: morning-long buffering before the 11:08 rebuild
   Three calls (07:30, 10:00, ~11:00) were created in one burst at 11:09, right after the new build came up; the extension had been backing off all morning, so the dev app (or its API server) was unreachable before the rebuild. No crash report for today. Nothing lost (segments + ends landed). Open question for Marco: was MeetingWhisper-Dev running this morning?
 
+## tray (ruby)
+- [~] Bug: menu bar managers (Bartender 7, Glow) cannot hide or move the menu bar item @tray
+  Reported 2026-10-13. Two causes: the dev build lived in ~/Applications (managers only handle /Applications apps — fixed in 71df0f54, build script now installs there), and the item is a SwiftUI `MenuBarExtra(isInserted:)` with no autosave name (`Item-0`) whose visibility SwiftUI re-asserts on every label re-render (every second while a meeting is upcoming/ongoing), undoing the manager's hide. Fix: AppKit-owned `NSStatusItem` with `autosaveName = "MeetingWhisper"`, hosted SwiftUI label, native NSMenu built from MenuBarView's item model, visibility set only from the show-icon preference.
+  > 2026-10-13 diamond: dispatched.
+
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
 - [x] Perf 1A: narrow MeetingsViewModel observation @diamond
