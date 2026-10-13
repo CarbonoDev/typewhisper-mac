@@ -202,9 +202,10 @@
   Three calls (07:30, 10:00, ~11:00) were created in one burst at 11:09, right after the new build came up; the extension had been backing off all morning, so the dev app (or its API server) was unreachable before the rebuild. No crash report for today. Nothing lost (segments + ends landed). Open question for Marco: was MeetingWhisper-Dev running this morning?
 
 ## tray (ruby)
-- [~] Bug: menu bar managers (Bartender 7, Glow) cannot hide or move the menu bar item @tray
+- [x] Bug: menu bar managers (Bartender 7, Glow) cannot hide or move the menu bar item
   Reported 2026-10-13. Two causes: the dev build lived in ~/Applications (managers only handle /Applications apps — fixed in 71df0f54, build script now installs there), and the item is a SwiftUI `MenuBarExtra(isInserted:)` with no autosave name (`Item-0`) whose visibility SwiftUI re-asserts on every label re-render (every second while a meeting is upcoming/ongoing), undoing the manager's hide. Fix: AppKit-owned `NSStatusItem` with `autosaveName = "MeetingWhisper"`, hosted SwiftUI label, native NSMenu built from MenuBarView's item model, visibility set only from the show-icon preference.
   > 2026-10-13 diamond: dispatched.
+  > 2026-10-13 diamond: merged to main as 95bf1f01 (`MenuBarStatusItemController` installed from AppDelegate; `MenuBarIconVisibilityBinding` writes isVisible at creation and on preference change only; `MenuBarExtraLabel` hosted in the status button with click-through; `MenuBarMenuModel`/`MenuBarMenuBuilder`/`MenuBarMenuActions` build a native NSMenu on open via menuNeedsUpdate; `MenuBarExtra` scene removed from TypeWhisperApp, `.commands` kept on the main scene; `MenuBarView` SwiftUI view left in place). Worker: 75 scoped tests green. Not verified live until the build: Glow hide/move, label width as the title changes, menu rows opening Settings/main window through `ManagedAppWindowOpener`.
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
