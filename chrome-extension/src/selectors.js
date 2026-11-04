@@ -589,12 +589,15 @@ function readAccountEmail() {
 /**
  * The Meet call code (`abc-defg-hij`) — our stable session identity.
  *
- * Anything that is not shaped like a call code is `null`, never a best guess: the code is what the
- * app keys a live meeting on, so accepting a stray first path segment (`landing`, `new`, `_meet`)
- * would create a bogus meeting — and `readMeetingTitle()` would then name it after that junk.
+ * Meet serves a call at `/abc-defg-hij` and (newer UI) at `/meet/abc-defg-hij`; both carry the same
+ * code, so a call that moves between the two keeps one session. Anything else is `null`, never a
+ * best guess: the code is what the app keys a live meeting on, so accepting a stray first path
+ * segment (`landing`, `new`, `_meet`) would create a bogus meeting — and `readMeetingTitle()` would
+ * then name it after that junk.
  */
 function readCallCode() {
-  const path = location.pathname.replace(/^\//, '').split('/')[0];
+  const segments = location.pathname.replace(/^\//, '').split('/');
+  const path = segments[0] === 'meet' ? segments[1] || '' : segments[0];
   return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(path) ? path : null;
 }
 

@@ -110,6 +110,11 @@ test('readCallCode accepts a call code and rejects anything else', () => {
   const cases = [
     ['/abc-defg-hij', 'abc-defg-hij'],
     ['/abc-defg-hij/companion', 'abc-defg-hij'],
+    ['/meet/abc-defg-hij', 'abc-defg-hij'],
+    ['/meet/abc-defg-hij/companion', 'abc-defg-hij'],
+    ['/meet', null],
+    ['/meet/', null],
+    ['/meet/landing', null],
     ['/landing', null],
     ['/', null],
     ['/_meet/abc-defg-hij', null],

@@ -164,7 +164,7 @@ export function describeStatus({ status, session, health, now = Date.now() } = {
   }
   if (status.enabled === false) return { headline: 'Capture is off.', lines: [] };
   if (!status.onCallPath) {
-    return { headline: 'Not on a call page.', lines: ['Meet Bridge wakes up on a meet.google.com/abc-defg-hij call page.'] };
+    return { headline: 'Not on a call page.', lines: ['Meet Bridge wakes up on a meet.google.com/abc-defg-hij (or /meet/abc-defg-hij) call page.'] };
   }
 
   let headline;

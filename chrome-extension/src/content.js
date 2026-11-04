@@ -583,7 +583,8 @@
     // The call-code path appears for the lobby ("Ready to join?") as well as the call itself, so
     // this alone must never start capture — the lobby's tiles and menus are what the heuristic
     // used to scrape as "captions". `TWPresence.detectInCall()` supplies the joined signal.
-    return /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i.test(location.pathname);
+    // Meet serves a call at `/abc-defg-hij` and, since late 2026, also at `/meet/abc-defg-hij`.
+    return TWSelectors.readCallCode() !== null;
   }
 
   /** Run the in-call ladder and record what it saw (the popup's "why not" comes from here). */

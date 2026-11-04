@@ -2,7 +2,7 @@
  * Are we in the call, or still in the lobby? — the "in call" ladder.
  *
  * The lobby ("Ready to join?"), the knock screen ("Asking to be let in…") and the call itself all
- * share the `/abc-defg-hij` path, so the URL never decides. Nothing starts a session until one rung
+ * share the `/abc-defg-hij` (or `/meet/abc-defg-hij`) path, so the URL never decides. Nothing starts a session until one rung
  * below matches; any ONE rung is enough, so a Meet redesign has to break all of them at once before
  * the bridge goes silent. Rungs, checked in this order (the matching rung is reported as `via`):
  *

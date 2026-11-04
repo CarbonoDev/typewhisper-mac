@@ -231,6 +231,9 @@ meeting and sending heartbeats and controls — over a fake `chrome.storage`.
 
 ## Known limits
 
+- **The call page is recognised by its URL.** A call lives at `meet.google.com/abc-defg-hij` or,
+  in the newer Meet UI, at `meet.google.com/meet/abc-defg-hij`; both are the same call. Any other
+  path (`/landing`, `/new`, a `/meet/` page without a code) is "Not on a call page".
 - **In-call detection is DOM-reading.** No single signal is load-bearing, but every one of them is
   Meet's markup. If Meet changes all of them at once the bridge does nothing — and the popup says
   so, listing what it looked for. The leave-button and join-button `jsname`s are best-known values,
