@@ -37,6 +37,8 @@ struct MeetingsSettingsView: View {
                         .strokeBorder(Color.primary.opacity(0.08))
                 )
 
+                MeetingAutoJoinSettingsSection()
+
                 Divider()
 
                 // [M11] Per-calendar inclusion: which macOS calendars feed the feature.

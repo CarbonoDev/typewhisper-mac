@@ -25667,6 +25667,86 @@
         }
       }
     },
+    "meetings.autoJoin.footnote": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnet sich im Chrome-Profil des Meeting-Kontos. Passiert nichts, solange du bereits in einem Meeting bist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens in the meeting account's Chrome profile. Does nothing while you are already in a meeting."
+          }
+        }
+      }
+    },
+    "meetings.autoJoin.lead.atStart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zur Startzeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At the start time"
+          }
+        }
+      }
+    },
+    "meetings.autoJoin.lead.label": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "meetings.autoJoin.lead.minutesBefore": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Min. vorher"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min before"
+          }
+        }
+      }
+    },
+    "meetings.autoJoin.toggle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beitrittslink automatisch öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the join link automatically"
+          }
+        }
+      }
+    },
     "meetings.brief.auto.briefReadyBadge": {
       "localizations": {
         "de": {

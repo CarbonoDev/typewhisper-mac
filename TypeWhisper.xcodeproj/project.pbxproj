@@ -206,6 +206,7 @@
 		AA00000000000000000384 /* MeetingSegmentMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000384 /* MeetingSegmentMapper.swift */; };
 		AA00000000000000000385 /* MeetingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000385 /* MeetingsViewModel.swift */; };
 		AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000386 /* MeetingsSettingsView.swift */; };
+		AJ00000000000000000005 /* MeetingsSettingsView+AutoJoin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AJ00000000000000000006 /* MeetingsSettingsView+AutoJoin.swift */; };
 		AA00000000000000000387 /* CalendarEventProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000387 /* CalendarEventProviding.swift */; };
 		AA00000000000000000388 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000388 /* CalendarService.swift */; };
 		QZ00000000000000000001 /* LiveSessionEventMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = QZ00000000000000000002 /* LiveSessionEventMatcher.swift */; };
@@ -1036,6 +1037,7 @@
 		BB00000000000000000384 /* MeetingSegmentMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSegmentMapper.swift; sourceTree = "<group>"; };
 		BB00000000000000000385 /* MeetingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000386 /* MeetingsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsSettingsView.swift; sourceTree = "<group>"; };
+		AJ00000000000000000006 /* MeetingsSettingsView+AutoJoin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MeetingsSettingsView+AutoJoin.swift"; sourceTree = "<group>"; };
 		BB00000000000000000387 /* CalendarEventProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventProviding.swift; sourceTree = "<group>"; };
 		BB00000000000000000388 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		QZ00000000000000000002 /* LiveSessionEventMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionEventMatcher.swift; sourceTree = "<group>"; };
@@ -2627,6 +2629,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000386 /* MeetingsSettingsView.swift */,
+				AJ00000000000000000006 /* MeetingsSettingsView+AutoJoin.swift */,
 				CCB000000000000000000007 /* FinalRetranscriptionSettingsView.swift */,
 				CCB000000000000000000006 /* MeetingContextRuleEditorView.swift */,
 				CCB000000000000000000005 /* MeetingContextRulesView.swift */,
@@ -5299,6 +5302,7 @@
 				AA00000000000000000384 /* MeetingSegmentMapper.swift in Sources */,
 				AA00000000000000000385 /* MeetingsViewModel.swift in Sources */,
 				AA00000000000000000386 /* MeetingsSettingsView.swift in Sources */,
+				AJ00000000000000000005 /* MeetingsSettingsView+AutoJoin.swift in Sources */,
 				AA00000000000000000387 /* CalendarEventProviding.swift in Sources */,
 				AA00000000000000000388 /* CalendarService.swift in Sources */,
 				QZ00000000000000000001 /* LiveSessionEventMatcher.swift in Sources */,
