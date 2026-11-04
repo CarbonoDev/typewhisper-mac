@@ -48,11 +48,41 @@ folder — so reloading after a change made in another checkout or worktree runs
 To make that visible, the bridge carries a version and says it everywhere:
 
 - the popup and the options page show `Meet Bridge v<version>`;
-- the first `[tw-meet]` line in a Meet tab's console names the build running in that tab;
+- the first `[tw-meet]` line in a Meet tab's console names the build running in that tab, and the
+  popup's **Copy diagnostics** text starts with it;
 - the app shows the connected version under Settings → Advanced → API Server, and flags a bridge
   that is older than the one the app was built with (or one so old it does not report a version).
 
 `chrome://extensions` → **Details** shows the folder the extension is loaded from ("Source").
+
+A Meet tab that was already open when the extension was (re)loaded keeps running the *old* content
+script — or none at all. The popup says so ("Nothing from Meet Bridge in this tab … reload the
+tab") instead of staying blank.
+
+## What it is doing — the popup
+
+Click the toolbar icon on a Meet tab. The popup reads the status that tab's content script reports
+(no DevTools needed) and says, in plain words:
+
+- **what is happening** — "Not on a call page", "Waiting in the lobby — not joined yet", "On a Meet
+  call page, but not detected as in the call", "In the call — creating the meeting in the app…",
+  "In the call, but the app has not taken the meeting", or "In the call — meeting linked in the app";
+- **why** — which in-call signal matched (or, when none did, every signal it looked for and what it
+  found: "leave button not found (labels tried: …); no hang-up icon; no caption region; mic toggle
+  not readable"), whether captions are being read and how many segments went out, whether the mic
+  toggle is readable (the floating mute button depends on it), what is queued, and whether the app
+  answered lately (or the last error it gave).
+
+**Copy diagnostics** puts that status, the worker's view of the session and the app, and the last
+100 `[tw]` / `[tw-meet]` log lines on the clipboard — paste it into a bug report. Log lines are
+written on state *transitions* only (entered the call page, in-call signal matched/lost and by which
+rung, session started/ended, meeting created/resumed, app unreachable/back, caption region
+found/lost, mic toggle readable/unreadable), so 100 lines cover a lot of history. Caption text is
+never copied: the per-segment lines stay in the tab's own console. The diagnostics do include the
+call code and the in-page diagnostic dumps, which can name participants.
+
+The status and the log ring buffer live in `chrome.storage.session` — per browser session, never
+synced — so they survive the worker's evictions but not a browser restart.
 
 **Every change to the extension bumps `version` in `manifest.json`**, together with
 `MeetBridgeVersion.shipped` in the app (a unit test fails when the two differ, and
@@ -126,9 +156,29 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   controls: it reports mic/camera state on change and clicks those toggles on command. It does no
   fetching: a content script runs in the page's origin and would be CORS-blocked, and it would also
   expose the API token to the page.
-- **Noise filtering** — the lobby ("Ready to join?") shares the call's URL path, so capture waits for
-  an in-call signal (the leave-call button, or a caption region found by a precise selector rung); a
-  heuristic-found caption root must additionally *mutate* between two ticks before it is trusted.
+- **`presence.js`** — the "are we in the call yet" ladder. The lobby ("Ready to join?") and the knock
+  screen share the call's URL path, so a session — and the app's meeting — starts only on an in-call
+  signal, and **any one** of these is enough:
+  1. the leave button by its localized label ("Leave call", "Leave meeting", "Salir de la llamada",
+     "Abandonar la llamada", "Salir de la reunión", …);
+  2. a caption container found by a precise selector, or 3. a captions *region* found by label;
+  4. the leave button by Meet's `jsname`; 5. a button carrying the `call_end` hang-up icon ligature
+     (locale-free); 6. two or more of the call's side-panel buttons (details / people / chat /
+     activities); 7. the user's own mic toggle with a readable `data-is-muted`.
+
+  Rungs 4–7 are **vetoed while any lobby tell is visible**: a join button by text, label or
+  `jsname` ("Join now", "Ask to join", "Unirse ahora", "Pedir unirse", …) or a lobby/knock/"you left"
+  text ("Ready to join?", "Asking to be let in"). That veto matters because the mic and camera
+  toggles exist in the lobby too — counting them there is how pre-join junk meetings used to be
+  created. The signal must also hold for two ticks before a session starts. The session starts at
+  join **whether or not captions are on**: the meeting, the heartbeat (presence) and the mic/camera
+  report (the floating mute button) all work without captions; captions only add the transcript.
+  A meeting the app could not create at join (app closed) is retried every few seconds, with
+  backoff, while the tab is connected — not only when a caption needs delivering.
+- **`status.js`** — the content script's status object and its transition log; the worker stores
+  each tab's status for the popup (`diagnostics.js`).
+- **Noise filtering** — a heuristic-found caption root must *mutate* between two ticks before it is
+  trusted.
   Block-level filters then drop UI chrome by its locale-independent tells: Material icon ligature
   text (`more_vert`, `frame_person`), keyboard-shortcut parentheticals ("(⌘ + d)"), emails in the
   speaker slot, and tiles that echo a participant's name. Covered by `test/selectors.test.js`.
@@ -172,14 +222,22 @@ re-transcription of your own audio can never delete the caption-derived speaker 
 node --test chrome-extension/test/*.test.js
 ```
 
-Covered: the stabilizer's revision/reset rules, the DOM-discovery ladder (over a small fake
-`document` installed by the test) including the mic/camera toggles, the language matcher, and the
-service worker's queueing rules — buffering, retry backoff, the retried `/end`, and the call-control
-report and poll — over a fake `chrome.storage`.
+Covered: the stabilizer's revision/reset rules, the DOM-discovery ladder and the in-call ladder (over
+a small fake `document`, `test/fake-dom.js`) including the mic/camera toggles and the lobby veto, the
+language matcher, the status tracker's transition log, the popup's plain-words rendering and the
+diagnostics ring buffer, and the service worker's queueing rules — buffering, retry backoff, the
+retried `/end`, the call-control report and poll, and a call joined with captions off creating its
+meeting and sending heartbeats and controls — over a fake `chrome.storage`.
 
 ## Known limits
 
-- **Captions must be on.** Meet resets this per call. Auto-enable (on by default) clicks the CC
+- **In-call detection is DOM-reading.** No single signal is load-bearing, but every one of them is
+  Meet's markup. If Meet changes all of them at once the bridge does nothing — and the popup says
+  so, listing what it looked for. The leave-button and join-button `jsname`s are best-known values,
+  not verified against today's Meet. In a UI locale none of the lobby lists covers, the mic-toggle
+  rung could fire in the lobby; the two-tick hold narrows that, and a join-button `jsname` match
+  vetoes it in any language.
+- **Captions must be on for a transcript** (not for the meeting itself). Meet resets this per call. Auto-enable (on by default) clicks the CC
   button for you, but it depends on the localized `aria-label` ladder finding the button — in an
   unlisted UI locale it logs a notice instead and you turn captions on by hand.
 - **Single language.** Meet locks captions to one selected language; multilingual meetings lose
