@@ -207,6 +207,12 @@
   > 2026-10-13 diamond: dispatched.
   > 2026-10-13 diamond: merged to main as 95bf1f01 (`MenuBarStatusItemController` installed from AppDelegate; `MenuBarIconVisibilityBinding` writes isVisible at creation and on preference change only; `MenuBarExtraLabel` hosted in the status button with click-through; `MenuBarMenuModel`/`MenuBarMenuBuilder`/`MenuBarMenuActions` build a native NSMenu on open via menuNeedsUpdate; `MenuBarExtra` scene removed from TypeWhisperApp, `.commands` kept on the main scene; `MenuBarView` SwiftUI view left in place). Worker: 75 scoped tests green. Not verified live until the build: Glow hide/move, label width as the title changes, menu rows opening Settings/main window through `ManagedAppWindowOpener`.
 
+## bridge (emerald)
+- [~] Bug: the Meet Bridge extension has not registered any call since 2026-10-20, so no captions and no floating mute button
+  Reported 2026-11-03 ("haven't seen the mute button on any of the last calls"). Verified: the installed build (Oct 13) has the control; it only shows for a bridge-linked live meeting. The bridge's storage in all three Chrome profiles shows its last session on Oct 20, yet Meet call pages were open in a bridge-equipped profile on Oct 21, 22 and 28; every transcript since came from the Drive import. `session-start` (which creates the meeting at join, captions or not) only fires when `inActiveCall()` matches a leave-button label, a caption container or a caption region — if today's Meet DOM matches none, the bridge is silent. The extension was reloaded in that profile on Oct 21 11:46, when it stopped. Code intact (56 tests, all files parse), app API reachable, control enabled, id allowlisted. Also: the popup offers no diagnostics. Fix: multi-signal in-call detection (never from the lobby), confirmed meeting registration with captions off, per-tab status + "why not" + copy-diagnostics in the popup, transition logs, version 0.5.0.
+  > 2026-11-03 opal: dispatched. Not verifiable against a live Meet DOM from here (Claude in Chrome not connected); Marco to check the popup on the next Chrome call.
+- [ ] Dev app: add a launch-at-login option (the Mac rebooted Oct 22 and Nov 1; the dev app stayed down until relaunched by hand, so calls in between could not be bridged)
+
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
 - [x] Perf 1A: narrow MeetingsViewModel observation @diamond
