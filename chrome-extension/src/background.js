@@ -14,6 +14,10 @@
  */
 
 import { getSettings, isLoopbackUrl } from './config.js';
+import { appendLog, clearTabStatus, noteApiResult, setTabStatus, workerLog } from './diagnostics.js';
+
+const log = (...args) => workerLog('log', ...args);
+const warn = (...args) => workerLog('warn', ...args);
 
 const STORAGE_KEY = 'tw_sessions';
 /** What the app last said about itself (the bridge version it ships with), for the popup. */
@@ -89,6 +93,8 @@ async function persistSessions() {
       // So does the intent to end: it is what lets a later cycle close a meeting whose final flush
       // failed. See `endSession`/`tryEnd`.
       pendingEnd: session.pendingEnd || null,
+      // For the popup's "last delivered" line only.
+      lastFlushAt: session.lastFlushAt || null,
     };
   }
   await chrome.storage.local.set({ [STORAGE_KEY]: plain });
@@ -123,16 +129,26 @@ async function apiFetch(path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (settings.apiToken) headers.Authorization = `Bearer ${settings.apiToken}`;
 
-  const response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    // The request never got an answer: the app is closed, or its local API is off.
+    noteApiResult({ reachable: false, error: `${error.message} (${settings.baseUrl})` });
+    throw error;
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 200)}`);
+    const message = `${response.status} ${response.statusText}: ${text.slice(0, 200)}`;
+    noteApiResult({ reachable: true, error: `${path} → ${message}` });
+    throw new Error(message);
   }
+  noteApiResult({ reachable: true });
   return response.json();
 }
 
@@ -150,7 +166,7 @@ async function ensureMeeting(sessionKey) {
   });
   session.meetingId = result.id;
   await persistSessions();
-  console.log(`[tw] ${result.created ? 'created' : 'resumed'} meeting ${result.id} for ${sessionKey}`);
+  log(`${result.created ? 'created' : 'resumed'} meeting ${result.id} for ${sessionKey}`);
   return session.meetingId;
 }
 
@@ -169,7 +185,7 @@ async function enqueue(sessionKey, segments, meta = {}) {
     // Something is writing to this session again — a rejoin under the same call code, or a reload
     // right after an end we could not deliver. Cancel the pending end so the retry cycle does not
     // close a meeting that is live again.
-    console.log(`[tw] ${sessionKey} is active again; cancelling its pending end`);
+    log(`${sessionKey} is active again; cancelling its pending end`);
     session.pendingEnd = null;
   }
 
@@ -197,6 +213,7 @@ async function flush(sessionKey) {
     session.buffer.splice(0, batch.length);
     session.failures = 0;
     session.nextAttemptAt = 0;
+    session.lastFlushAt = new Date().toISOString();
     await persistSessions();
     await setBadge('ok');
   } catch (error) {
@@ -207,10 +224,40 @@ async function flush(sessionKey) {
     // Persist the backoff itself, not just the buffer — otherwise the next respawned worker starts
     // over at zero failures and retries immediately.
     await persistSessions();
-    console.warn(`[tw] flush failed (attempt ${session.failures}):`, error.message);
+    warn(`flush failed (attempt ${session.failures}):`, error.message);
     await setBadge('error');
   } finally {
     session.flushing = false;
+  }
+}
+
+/**
+ * Link a call that has no meeting yet, with or without captions. The meeting is normally created on
+ * `session-start`; when that failed (the app was closed at join), a call with captions off would
+ * otherwise never retry — the flush only runs for buffered segments — and the app would never learn
+ * the user is in a meeting (no presence, no floating mute button). Runs on the live port's timer
+ * only, so a session left behind by a crashed tab is never resurrected. Respects the flush backoff.
+ * Returns true when this call created or resumed the meeting.
+ */
+async function ensureLinked(sessionKey) {
+  await loadSessions();
+  const session = sessions.get(sessionKey);
+  if (!session || session.meetingId || session.pendingEnd || session.flushing) return false;
+  if (session.buffer.length > 0) return false; // the flush links it on its way
+  if (session.nextAttemptAt && Date.now() < session.nextAttemptAt) return false;
+  try {
+    await ensureMeeting(sessionKey);
+    session.failures = 0;
+    session.nextAttemptAt = 0;
+    await persistSessions();
+    if (session.controls) await reportControls(sessionKey, session.controls);
+    return true;
+  } catch (error) {
+    session.failures += 1;
+    session.nextAttemptAt = Date.now() + Math.min(2 ** session.failures * 1000, MAX_BACKOFF_MS);
+    await persistSessions();
+    warn(`could not create the meeting for ${sessionKey} (attempt ${session.failures}):`, error.message);
+    return false;
   }
 }
 
@@ -254,7 +301,7 @@ async function tryEnd(sessionKey) {
   } catch (error) {
     // Leave the session (and its marker) in place for the next cycle; the meeting stays `live` in
     // the app until then, which the user can also close manually.
-    console.warn('[tw] end failed; will retry:', error.message);
+    warn('end failed; will retry:', error.message);
   }
 }
 
@@ -279,7 +326,7 @@ async function heartbeat(sessionKey, participants) {
       Number.isInteger(participants) ? { participants } : {}
     );
   } catch (error) {
-    console.warn('[tw] heartbeat failed:', error.message);
+    warn('heartbeat failed:', error.message);
   }
 }
 
@@ -322,7 +369,7 @@ async function reportControls(sessionKey, controls) {
   try {
     await apiFetch(`/v1/meetings/live/${session.meetingId}/controls`, controlsBody(session.controls));
   } catch (error) {
-    console.warn('[tw] controls report failed:', error.message);
+    warn('controls report failed:', error.message);
   }
 }
 
@@ -359,7 +406,7 @@ async function focusCallTab(port) {
     await chrome.tabs.update(tab.id, { active: true });
     if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
   } catch (error) {
-    console.warn('[tw] could not focus the call tab:', error.message);
+    warn('could not focus the call tab:', error.message);
   }
 }
 
@@ -380,7 +427,7 @@ async function deliverCommand(sessionKey, command) {
     }
     await sleep(COMMAND_DELIVERY_RETRY_MS);
   }
-  console.warn(`[tw] dropped "${command.action}": the call's page is not connected`);
+  warn(`dropped "${command.action}": the call's page is not connected`);
 }
 
 /**
@@ -463,7 +510,20 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'tw-meet') return;
   let sessionKey = null;
-  let flushTimer = setInterval(() => sessionKey && flush(sessionKey), FLUSH_INTERVAL_MS);
+  const announceReady = () => {
+    const session = sessionKey && sessions.get(sessionKey);
+    if (!session?.meetingId) return;
+    try {
+      port.postMessage({ type: 'session-ready', meetingId: session.meetingId, startedAt: session.startedAt });
+    } catch {
+      // The port is gone; the next connect re-announces the session and gets its own answer.
+    }
+  };
+  let flushTimer = setInterval(async () => {
+    if (!sessionKey) return;
+    await flush(sessionKey);
+    if (await ensureLinked(sessionKey)) announceReady();
+  }, FLUSH_INTERVAL_MS);
 
   port.onMessage.addListener(async (message) => {
     try {
@@ -479,15 +539,17 @@ chrome.runtime.onConnect.addListener((port) => {
             account: message.account,
             startedAt: message.startedAt,
           });
+          // No caption is needed for this: the meeting exists from the moment the call is joined, so
+          // presence and the floating mute button work on a call with captions off.
           await ensureMeeting(sessionKey);
           // Report the start we actually keyed the meeting to, not the one the page just sent: on a
           // resumed session they differ, and the content script re-bases its caption timestamps on
           // this value so they stay relative to the meeting (see `adoptSessionStart`).
-          port.postMessage({
-            type: 'session-ready',
-            meetingId: sessions.get(sessionKey)?.meetingId,
-            startedAt: sessions.get(sessionKey)?.startedAt,
-          });
+          announceReady();
+          // A `controls` report that raced ahead of the meeting was kept but not sent; send it now.
+          if (sessions.get(sessionKey)?.controls) {
+            await reportControls(sessionKey, sessions.get(sessionKey).controls);
+          }
           break;
         case 'segments':
           sessionKey = message.sessionKey || sessionKey;
@@ -522,7 +584,7 @@ chrome.runtime.onConnect.addListener((port) => {
           break;
       }
     } catch (error) {
-      console.warn('[tw] port message failed:', error.message);
+      warn('port message failed:', error.message);
       port.postMessage({ type: 'error', message: error.message });
     }
   });
@@ -537,6 +599,24 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+/**
+ * Diagnostics from the content scripts — sent with `runtime.sendMessage` rather than over the
+ * call's port, because they matter most exactly when there is no call (and so no port): the popup
+ * must be able to say why nothing started.
+ */
+chrome.runtime.onMessage?.addListener((message, sender) => {
+  if (message?.type === 'tw-status') setTabStatus(sender.tab?.id, message.status);
+  if (message?.type === 'tw-log' && typeof message.line === 'string') appendLog('[tw-meet]', message.line);
+  return false;
+});
+chrome.tabs?.onRemoved?.addListener((tabId) => clearTabStatus(tabId));
+// A tab that loads a new document drops its old status: a Meet page's content script reports again
+// once loaded, and any other site must not keep showing the last call's state. (`status` needs no
+// `tabs` permission; only the URL would.)
+chrome.tabs?.onUpdated?.addListener((tabId, info) => {
+  if (info.status === 'loading') clearTabStatus(tabId);
+});
+
 // Exported for `node --test` only — in the browser this file is driven entirely by the listeners
 // above. The queueing rules (what is persisted, when the backoff applies, when a meeting is ended)
 // are the parts worth regression-testing, and they need no DOM.
@@ -549,6 +629,7 @@ export {
   flush,
   heartbeat,
   endSession,
+  ensureLinked,
   tryEnd,
   reportControls,
   pollCommands,

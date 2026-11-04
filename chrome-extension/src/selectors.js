@@ -11,7 +11,9 @@
  *
  * When every rung fails, `describeCandidates()` dumps a structural report to the console so the
  * ladder can be repaired from one real call instead of guesswork. Keep every Meet-specific string in
- * this file — it is meant to be the single place that needs editing when Meet changes.
+ * this file — it is meant to be the single place that needs editing when Meet changes — except the
+ * "are we in the call yet" ladder (leave button, hang-up icon, side panels, lobby tells), which has
+ * its own file: `presence.js`.
  */
 
 // Rung 1+3: direct selectors for the caption scroll container, best-known first.
@@ -85,20 +87,6 @@ const CAPTION_LANGUAGE_NAMES = {
   en: ['english', 'inglés', 'ingles', 'inglês', 'englisch', 'anglais', 'inglese', 'engels'],
   es: ['spanish', 'español', 'espanol', 'spanisch', 'espagnol', 'espanhol', 'spagnolo', 'spaans'],
 };
-
-/** aria-labels of the leave/end-call button, per locale — present only once actually in the call. */
-const LEAVE_CALL_LABELS = [
-  'leave call', // en
-  'end call',
-  'anruf verlassen', // de
-  'salir de la llamada', // es
-  'abandonar la llamada',
-  'quitter l’appel', // fr
-  "quitter l'appel",
-  'sair da chamada', // pt
-  'abbandona la chiamata', // it
-  'gesprek verlaten', // nl
-];
 
 /**
  * The user's own microphone and camera toggles in Meet's toolbar. Both carry a `data-is-muted`
@@ -233,8 +221,8 @@ function isInteractiveElement(el) {
 }
 
 /**
- * Rung 2, shared by `findCaptionRoot()` and `inActiveCall()`: labelled elements that plausibly *are*
- * the caption region.
+ * Rung 2, shared by `findCaptionRoot()` and the in-call ladder (`presence.js`): labelled elements
+ * that plausibly *are* the caption region.
  *
  * The label test alone is far too loose. CAPTION_REGION_LABELS and CAPTION_TOGGLE_LABELS are the
  * same words ("captions", "untertitel", …) because the toggle is *named after* the region, so the
@@ -247,7 +235,7 @@ function isInteractiveElement(el) {
  * So a candidate must not be a control (nor sit inside one) and must then look like a container:
  * either a caption-shaped role, or a body of text too long to be a control's label. The tradeoff:
  * an *unlabelled-role* caption region that is still empty is rejected until it has text — harmless,
- * since an empty region carries nothing to capture, and `inActiveCall()` still has the leave-call
+ * since an empty region carries nothing to capture, and the in-call ladder still has the leave-call
  * rung. Erring the other way is what produced the pre-join junk meetings.
  */
 function captionRegionsByLabel() {
@@ -578,24 +566,9 @@ function describeCandidates() {
 }
 
 /**
- * Whether we are past the lobby. The green-room shows the same `/abc-defg-hij` path as the call
- * itself, so the URL alone would start capture on the "Ready to join?" screen — where everything
- * the heuristic can find is UI chrome (the source of the pre-join transcript noise). In-call is
- * detected by the leave-call button; a caption region found by a precise rung also counts, so an
- * unlisted locale still works the moment captions are on.
+ * Whether we are past the lobby lives in `presence.js` (`TWPresence.detectInCall()`), which builds
+ * its ladder on `CAPTION_CONTAINER_SELECTORS`, `captionRegionsByLabel()` and `findCallControl()`.
  */
-function inActiveCall() {
-  const buttons = document.querySelectorAll('button[aria-label], [role="button"][aria-label]');
-  for (const button of buttons) {
-    if (matchesAnyLabel(button, LEAVE_CALL_LABELS)) return true;
-  }
-  for (const selector of CAPTION_CONTAINER_SELECTORS) {
-    if (document.querySelector(selector)) return true;
-  }
-  // Only a *region* counts here, never a CC control: the lobby renders the captions toggle too, and
-  // treating it as the joined signal is exactly how pre-join junk meetings got created.
-  return captionRegionsByLabel().length > 0;
-}
 
 /**
  * The Google account this call is joined from, for the app's fallback meeting title. The account
@@ -671,7 +644,7 @@ const TWSelectorsAPI = {
   matchLanguageOption,
   describeLanguageCandidates,
   describeCandidates,
-  inActiveCall,
+  CAPTION_CONTAINER_SELECTORS,
   readAccountEmail,
   readCallCode,
   readMeetingTitle,

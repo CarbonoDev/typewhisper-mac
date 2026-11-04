@@ -6,14 +6,20 @@
     <style>
       body {
         font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0; padding: 14px; width: 260px; color: #1f2328; background: #fff;
+        margin: 0; padding: 14px; width: 320px; color: #1f2328; background: #fff;
       }
       @media (prefers-color-scheme: dark) {
         body { color: #e6edf3; background: #0d1117; }
+        .why { background: #161b22; }
       }
       h1 { font-size: 14px; margin: 0 0 10px; }
       .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
       .muted { color: #656d76; font-size: 12px; }
+      #headline { font-weight: 600; margin: 8px 0 4px; }
+      .why { margin: 0; padding: 6px 8px 6px 22px; background: #f6f8fa; border-radius: 6px; font-size: 12px; }
+      .why:empty { display: none; }
+      .why li { margin: 2px 0; overflow-wrap: anywhere; }
+      button { font: inherit; padding: 3px 10px; }
       a { color: inherit; }
     </style>
   </head>
@@ -23,7 +29,13 @@
       <input type="checkbox" id="enabled" />
       <label for="enabled">Capture captions</label>
     </div>
-    <div id="state" class="muted">…</div>
+    <div id="headline">…</div>
+    <ul id="why" class="why"></ul>
+    <div id="state" class="muted"></div>
+    <div class="row">
+      <button id="copy" type="button">Copy diagnostics</button>
+      <span id="copied" class="muted" role="status"></span>
+    </div>
     <div id="version" class="muted"></div>
     <div class="row"><a href="#" id="options">Settings</a></div>
     <script type="module" src="popup.js"></script>

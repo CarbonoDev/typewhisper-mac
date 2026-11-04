@@ -14,6 +14,8 @@ const STORAGE_KEY = 'tw_sessions';
 /** Fake `chrome.storage.local`, plus a record of every API call the worker made. */
 let storage = {};
 let apiCalls = [];
+/** The worker's `runtime.onConnect` listener, captured so a test can drive a page's port. */
+let connectListener = null;
 /** Swap to make the local API fail (the app being closed is the case that matters). */
 let apiUp = true;
 
@@ -37,12 +39,21 @@ globalThis.chrome = {
     },
   },
   alarms: { create() {}, onAlarm: { addListener() {} } },
-  runtime: { onConnect: { addListener() {} }, getManifest: () => ({ version: '9.9.9' }) },
+  runtime: {
+    onConnect: {
+      addListener(listener) {
+        connectListener = listener;
+      },
+    },
+    getManifest: () => ({ version: '9.9.9' }),
+  },
   action: { async setBadgeText() {}, async setBadgeBackgroundColor() {} },
 };
 
 globalThis.fetch = async (url, init) => {
   apiCalls.push({ url, body: JSON.parse(init.body) });
+  // A real long-poll holds; an instant answer would spin the command loop.
+  if (url.endsWith('/commands/poll')) await new Promise((resolve) => setTimeout(resolve, 20));
   if (!apiUp) {
     return { ok: false, status: 500, statusText: 'Internal Server Error', async text() { return 'down'; } };
   }
@@ -281,4 +292,86 @@ test('a refused version check names the real cause instead of blaming an old app
   assert.match(older.message, /older than this extension/);
 
   assert.match(describeHelloFailure(500, '0.4.1', 'id').message, /500/);
+});
+
+/** A page's port into the worker, as `chrome.runtime.connect` would hand it over. */
+function connectPage() {
+  const onMessage = [];
+  const onDisconnect = [];
+  const port = {
+    name: 'tw-meet',
+    sender: { tab: { id: 7 } },
+    posted: [],
+    onMessage: { addListener: (fn) => onMessage.push(fn) },
+    onDisconnect: { addListener: (fn) => onDisconnect.push(fn) },
+    postMessage(message) {
+      port.posted.push(message);
+    },
+    send: (message) => Promise.all(onMessage.map((fn) => fn(message))),
+    disconnect: () => onDisconnect.forEach((fn) => fn()),
+  };
+  connectListener(port);
+  return port;
+}
+
+const calledPaths = () => apiCalls.map((call) => new URL(call.url).pathname);
+
+test('joining a call creates the meeting with captions off, and heartbeat and controls flow', async () => {
+  const key = 'jjj-kkkk-lll';
+  const port = connectPage();
+  try {
+    await port.send({ type: 'session-start', sessionKey: key, title: 'Weekly sync', startedAt: new Date().toISOString() });
+    assert.ok(calledPaths().includes('/v1/meetings/live'), 'the meeting is created at join, no caption needed');
+    assert.deepEqual(port.posted.find((m) => m.type === 'session-ready')?.meetingId, 'meeting-1');
+
+    await port.send({ type: 'heartbeat', sessionKey: key, participants: 3 });
+    const beat = apiCalls.find((call) => call.url.endsWith('/heartbeat'));
+    assert.deepEqual(beat?.body, { participants: 3 });
+
+    await port.send({ type: 'controls', sessionKey: key, micMuted: true, cameraOff: false });
+    const controls = apiCalls.find((call) => call.url.endsWith('/controls'));
+    assert.deepEqual(controls?.body, { mic_muted: true, camera_off: false });
+    assert.ok(!calledPaths().some((path) => path.endsWith('/segments')), 'no caption was ever sent');
+
+    await port.send({ type: 'session-end', sessionKey: key });
+    assert.ok(calledPaths().includes('/v1/meetings/live/meeting-1/end'));
+  } finally {
+    port.disconnect();
+  }
+});
+
+test('a meeting that could not be created at join is linked later without any caption', async () => {
+  const key = 'mmm-nnnn-ooo';
+  const port = connectPage();
+  try {
+    apiUp = false;
+    await port.send({ type: 'session-start', sessionKey: key, startedAt: new Date().toISOString() });
+    assert.ok(port.posted.some((m) => m.type === 'error'), 'the page hears that the app refused');
+    assert.equal(bg.sessions.get(key).meetingId, null);
+
+    apiUp = true;
+    bg.sessions.get(key).controls = { micMuted: false, cameraOff: null };
+    assert.equal(await bg.ensureLinked(key), true);
+    assert.equal(bg.sessions.get(key).meetingId, 'meeting-1');
+    // The mic state that arrived while unlinked reaches the app once the meeting exists.
+    assert.ok(calledPaths().includes('/v1/meetings/live/meeting-1/controls'));
+    assert.equal(await bg.ensureLinked(key), false, 'already linked: nothing to do');
+  } finally {
+    port.disconnect();
+    bg.sessions.get(key).controls = null;
+    await bg.endSession(key);
+  }
+});
+
+test('a failed link backs off instead of hammering the app', async () => {
+  const key = 'ppp-qqqq-rrr';
+  await bg.enqueue(key, [], { startedAt: new Date().toISOString() });
+  apiUp = false;
+  assert.equal(await bg.ensureLinked(key), false);
+  assert.ok(bg.sessions.get(key).nextAttemptAt > Date.now());
+  const before = apiCalls.length;
+  apiUp = true;
+  assert.equal(await bg.ensureLinked(key), false, 'still inside the backoff window');
+  assert.equal(apiCalls.length, before);
+  await bg.endSession(key);
 });

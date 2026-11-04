@@ -8,7 +8,13 @@
   "content_scripts": [
     {
       "matches": ["https://meet.google.com/*"],
-      "js": ["src/selectors.js", "src/stabilizer.js", "src/content.js"],
+      "js": [
+        "src/selectors.js",
+        "src/presence.js",
+        "src/stabilizer.js",
+        "src/status.js",
+        "src/content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }

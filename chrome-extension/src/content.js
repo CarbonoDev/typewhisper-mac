@@ -9,6 +9,11 @@
  *
  * With `allowCallControl` on it also reports the user's own mic/camera state and clicks those two
  * toggles when the app asks (the floating call controls). Nothing else in the call is ever clicked.
+ *
+ * A session — and with it the app's meeting — starts the moment `TWPresence.detectInCall()` (see
+ * presence.js) says we are in the call, captions or not. What the bridge sees is kept in a status
+ * object (`TWStatus`, status.js) that goes to the worker for the popup, and every state transition
+ * is logged once, to the console and to the worker's diagnostics ring buffer.
  */
 
 (() => {
@@ -41,6 +46,10 @@
   // are the ones worth keeping.
   const MAX_OUTBOX = 200;
 
+  // An in-call signal must hold this many ticks before a session starts: Meet's DOM churns while
+  // the lobby turns into the call, and a one-frame false positive would create a junk meeting.
+  const IN_CALL_CONFIRM_TICKS = 2;
+
   let port = null;
   /** @type {object[]} unsent messages, oldest first. */
   const outbox = [];
@@ -55,6 +64,7 @@
   let sessionKey = null;
   let sessionStartedAt = null;
   let notInCallTicks = 0;
+  let inCallTicks = 0;
   let lastHeartbeatAt = 0;
   let warnedAboutCaptions = false;
   let enabled = true;
@@ -72,9 +82,33 @@
   // gave-up as the terminal failure state. Reset per session (and on a language-setting change).
   let langSteer = { phase: 'idle', entryTicks: 0, dialogTicks: 0 };
 
-  const log = (...args) => console.log('[tw-meet]', ...args);
+  /**
+   * Diagnostics go to the worker with `sendMessage`, not the call's port: they matter most when
+   * there is no call (so no port) and the popup has to say why. Never throws — after an extension
+   * reload this page's runtime is gone, and diagnostics must not break the page.
+   */
+  function toWorker(message) {
+    try {
+      chrome.runtime.sendMessage(message)?.catch?.(() => {});
+    } catch {
+      // Extension context invalidated: nothing to report to.
+    }
+  }
+  /** Console only — for lines that carry caption text, which must not land in copied diagnostics. */
+  const logLocal = (...args) => console.log('[tw-meet]', ...args);
+  /** Console plus the worker's ring buffer (what "Copy diagnostics" in the popup copies). */
+  const log = (...args) => {
+    logLocal(...args);
+    toWorker({ type: 'tw-log', line: TWStatus.formatLogArgs(args) });
+  };
+  const version = chrome.runtime.getManifest().version;
+  const status = TWStatus.createStatusTracker({
+    version,
+    log,
+    forward: (snapshot) => toWorker({ type: 'tw-status', status: snapshot }),
+  });
   // First line in the console: which build is actually running in this tab.
-  log(`Meet Bridge v${chrome.runtime.getManifest().version} loaded`);
+  log(`Meet Bridge v${version} loaded`);
 
   function connect() {
     try {
@@ -85,11 +119,14 @@
     }
     port.onMessage.addListener((message) => {
       if (message.type === 'session-ready') {
-        log('meeting id', message.meetingId);
+        status.update({ meetingId: message.meetingId || null, sessionError: null });
         adoptSessionStart(message.startedAt);
       }
       if (message.type === 'command') runCommand(message.command);
-      if (message.type === 'error') log('worker error:', message.message);
+      if (message.type === 'error') {
+        log('worker error:', message.message);
+        if (sessionKey && !status.state.meetingId) status.update({ sessionError: message.message });
+      }
     });
     port.onDisconnect.addListener(() => {
       port = null;
@@ -210,7 +247,7 @@
     lastControlsKey = null;
     controlMissTicks = 0;
     warnedAboutControls = false;
-    log('session started for call', sessionKey);
+    status.update({ sessionKey, meetingId: null, sessionError: null, segmentsSent: 0, lastSegmentAt: null });
     connect();
     post({
       type: 'session-start',
@@ -228,9 +265,17 @@
       if (remaining.length) post({ type: 'segments', sessionKey, segments: remaining });
     }
     post({ type: 'session-end', sessionKey });
-    log('session ended for call', sessionKey);
     sessionKey = null;
     stabilizer = null;
+    status.update({
+      sessionKey: null,
+      meetingId: null,
+      sessionError: null,
+      captionsFound: false,
+      captionsVia: null,
+      micReadable: null,
+      micVia: null,
+    });
   }
 
   /**
@@ -262,6 +307,8 @@
     const mic = TWSelectors.findCallControl('mic');
     if (!mic || mic.muted === null) {
       controlMissTicks += 1;
+      // A miss of a tick or two is Meet re-rendering the toolbar; only a lasting one is a transition.
+      if (controlMissTicks >= 3) status.update({ micReadable: false, micVia: null });
       if (!warnedAboutControls && controlMissTicks >= CONTROLS_WARN_AFTER_TICKS) {
         warnedAboutControls = true;
         log(
@@ -273,6 +320,7 @@
       return;
     }
     controlMissTicks = 0;
+    status.update({ micReadable: true, micVia: mic.via });
     const camera = TWSelectors.findCallControl('camera');
     const state = { micMuted: mic.muted, cameraOff: camera ? camera.muted : null };
     const key = JSON.stringify(state);
@@ -313,9 +361,13 @@
     const found = TWSelectors.findCaptionRoot();
     if (!found) {
       pendingHeuristic = null;
+      status.update({ captionsFound: false, captionsVia: null });
       return false;
     }
-    if (captionRoot === found.root) return true;
+    if (captionRoot === found.root) {
+      status.update({ captionsFound: true, captionsVia: found.via });
+      return true;
+    }
 
     if (found.via === 'heuristic') {
       // A selector rung *identifies* captions; the heuristic only suspects them, and lobby tiles
@@ -337,6 +389,7 @@
     observer.observe(captionRoot, { childList: true, subtree: true, characterData: true });
     log('attached to caption region via', found.via);
     if (hideCaptionOverlay) hideOverlay(captionRoot);
+    status.update({ captionsFound: true, captionsVia: found.via });
     return true;
   }
 
@@ -383,8 +436,13 @@
     }
     const segments = stabilizer.observe(blocks, Date.now());
     if (segments.length) {
-      log(`+${segments.length} segment(s)`, segments.map((s) => `${s.speaker ?? '?'}: ${s.text}`));
+      // Caption text stays in this console: diagnostics the user copies must not carry the meeting.
+      logLocal(`+${segments.length} segment(s)`, segments.map((s) => `${s.speaker ?? '?'}: ${s.text}`));
       post({ type: 'segments', sessionKey, segments });
+      status.update({
+        segmentsSent: status.state.segmentsSent + segments.length,
+        lastSegmentAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -524,13 +582,31 @@
   function onCallPath() {
     // The call-code path appears for the lobby ("Ready to join?") as well as the call itself, so
     // this alone must never start capture — the lobby's tiles and menus are what the heuristic
-    // used to scrape as "captions". `TWSelectors.inActiveCall()` supplies the joined signal.
+    // used to scrape as "captions". `TWPresence.detectInCall()` supplies the joined signal.
     return /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i.test(location.pathname);
+  }
+
+  /** Run the in-call ladder and record what it saw (the popup's "why not" comes from here). */
+  function observeCallState() {
+    const callPath = onCallPath();
+    const detection = callPath ? TWPresence.detectInCall() : null;
+    const inCall = Boolean(detection && detection.inCall);
+    inCallTicks = inCall ? inCallTicks + 1 : 0;
+    status.update({
+      onCallPath: callPath,
+      callCode: callPath ? TWSelectors.readCallCode() : null,
+      inCall,
+      inCallVia: inCall ? TWPresence.RUNG_NAMES[detection.via] || detection.via : null,
+      lobby: (detection && detection.lobby) || null,
+      whyNot: callPath && !inCall ? TWPresence.explainNotInCall(detection) : '',
+    });
+    return inCall;
   }
 
   function loop() {
     if (!enabled) return;
-    if (onCallPath() && TWSelectors.inActiveCall()) {
+    const inCall = observeCallState();
+    if (inCall && (sessionKey || inCallTicks >= IN_CALL_CONFIRM_TICKS)) {
       notInCallTicks = 0;
       startSession();
       attachObserver();
@@ -539,7 +615,7 @@
       tick();
       reportControls();
       maybeHeartbeat();
-    } else if (sessionKey) {
+    } else if (sessionKey && !inCall) {
       // Leaving must stick for a few ticks before we end the session: the leave-button probe can
       // miss for a frame during Meet's DOM churn, and a spurious end would complete the meeting
       // and fork a fresh one on the next tick. A path change is unambiguous — end immediately.
@@ -549,6 +625,7 @@
         notInCallTicks = 0;
       }
     }
+    status.publish();
   }
 
   // This file is a classic content script (not a module), so it cannot import DEFAULT_SETTINGS
@@ -568,6 +645,8 @@
       hideCaptionOverlay = settings.hideCaptionOverlay !== false;
       allowCallControl = settings.allowCallControl !== false;
       if (!enabled) {
+        status.update({ enabled: false });
+        status.publish();
         log('disabled in options; not observing');
         return;
       }
@@ -587,6 +666,8 @@
     if (changes.enabled) {
       enabled = changes.enabled.newValue !== false;
       if (!enabled) endSession();
+      status.update({ enabled });
+      status.publish();
     }
     if (changes.autoEnableCaptions) {
       autoEnableCaptions = changes.autoEnableCaptions.newValue !== false;
