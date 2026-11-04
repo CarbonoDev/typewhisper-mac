@@ -9,6 +9,8 @@
  *
  * With `allowCallControl` on it also reports the user's own mic/camera state and clicks those two
  * toggles when the app asks (the floating call controls). Nothing else in the call is ever clicked.
+ * Before the call, on the joining screen, `TWLobby` (lobby.js) turns them off once per visit when
+ * `lobbyMuteMic` / `lobbyMuteCamera` are on.
  *
  * A session — and with it the app's meeting — starts the moment `TWPresence.detectInCall()` (see
  * presence.js) says we are in the call, captions or not. What the bridge sees is kept in a status
@@ -72,6 +74,8 @@
   let preferredCaptionLanguage = '';
   let hideCaptionOverlay = true;
   let allowCallControl = true;
+  let lobbyMuteMic = true;
+  let lobbyMuteCamera = true;
   /** The last mic/camera state the worker was told, as a comparable string; `null` = tell it again. */
   let lastControlsKey = null;
   let controlMissTicks = 0;
@@ -106,6 +110,13 @@
     version,
     log,
     forward: (snapshot) => toWorker({ type: 'tw-status', status: snapshot }),
+  });
+  // Join muted: turns the mic/camera off once per lobby visit (lobby.js).
+  const lobbyMuter = TWLobby.createLobbyMuter({
+    findControl: (kind) => TWSelectors.findCallControl(kind),
+    log,
+    settleMs: CONTROL_SETTLE_MS,
+    onChange: (lobbyMuted) => status.update({ lobbyMuted }),
   });
   // First line in the console: which build is actually running in this tab.
   log(`Meet Bridge v${version} loaded`);
@@ -601,6 +612,13 @@
       lobby: (detection && detection.lobby) || null,
       whyNot: callPath && !inCall ? TWPresence.explainNotInCall(detection) : '',
     });
+    lobbyMuter.tick({
+      callCode: status.state.callCode,
+      inLobby: Boolean(detection && detection.lobby),
+      inCall,
+      hasSession: Boolean(sessionKey),
+      settings: { enabled, lobbyMuteMic, lobbyMuteCamera },
+    });
     return inCall;
   }
 
@@ -638,6 +656,8 @@
       preferredCaptionLanguage: '',
       hideCaptionOverlay: true,
       allowCallControl: true,
+      lobbyMuteMic: true,
+      lobbyMuteCamera: true,
     })
     .then((settings) => {
       enabled = settings.enabled !== false;
@@ -645,6 +665,8 @@
       preferredCaptionLanguage = settings.preferredCaptionLanguage || '';
       hideCaptionOverlay = settings.hideCaptionOverlay !== false;
       allowCallControl = settings.allowCallControl !== false;
+      lobbyMuteMic = settings.lobbyMuteMic !== false;
+      lobbyMuteCamera = settings.lobbyMuteCamera !== false;
       if (!enabled) {
         status.update({ enabled: false });
         status.publish();
@@ -687,6 +709,8 @@
       // Turning it off mid-call tells the app at once, so the floating button goes away.
       if (!allowCallControl && sessionKey) sendNow({ type: 'controls-off', sessionKey });
     }
+    if (changes.lobbyMuteMic) lobbyMuteMic = changes.lobbyMuteMic.newValue !== false;
+    if (changes.lobbyMuteCamera) lobbyMuteCamera = changes.lobbyMuteCamera.newValue !== false;
     if (changes.hideCaptionOverlay) {
       hideCaptionOverlay = changes.hideCaptionOverlay.newValue !== false;
       if (captionRoot && document.contains(captionRoot)) {

@@ -24,6 +24,8 @@ async function load() {
   $('autoEnableCaptions').checked = settings.autoEnableCaptions;
   $('hideCaptionOverlay').checked = settings.hideCaptionOverlay;
   $('allowCallControl').checked = settings.allowCallControl;
+  $('lobbyMuteMic').checked = settings.lobbyMuteMic;
+  $('lobbyMuteCamera').checked = settings.lobbyMuteCamera;
   $('preferredCaptionLanguage').value = settings.preferredCaptionLanguage;
   $('baseUrl').value = settings.baseUrl;
   $('apiToken').value = settings.apiToken;
@@ -40,6 +42,8 @@ $('save').addEventListener('click', async () => {
     autoEnableCaptions: $('autoEnableCaptions').checked,
     hideCaptionOverlay: $('hideCaptionOverlay').checked,
     allowCallControl: $('allowCallControl').checked,
+    lobbyMuteMic: $('lobbyMuteMic').checked,
+    lobbyMuteCamera: $('lobbyMuteCamera').checked,
     preferredCaptionLanguage: $('preferredCaptionLanguage').value,
     baseUrl,
     apiToken: $('apiToken').value.trim(),

@@ -149,6 +149,26 @@ const ago = (iso, now) => {
   return `${Math.round(seconds / 3600)} h ago`;
 };
 
+const LOBBY_NAMES = { mic: 'microphone', camera: 'camera' };
+
+/**
+ * What the lobby muter (lobby.js) did, in one popup line — or `null` when there is nothing to say.
+ * `lobbyMuted` is `{ mic, camera }`, each `null` or one of the muter's results.
+ */
+export function describeLobbyMuted(lobbyMuted) {
+  if (!lobbyMuted) return null;
+  const kinds = Object.keys(LOBBY_NAMES);
+  const named = (result) => kinds.filter((kind) => lobbyMuted[kind] === result).map((kind) => LOBBY_NAMES[kind]).join(' and ');
+  const parts = [];
+  const off = named('turned-off');
+  if (off) parts.push(`${off.charAt(0).toUpperCase()}${off.slice(1)} turned off for you.`);
+  const leftOn = named('left-on');
+  if (leftOn) parts.push(`Tried to turn off the ${leftOn}, but Meet still shows it on.`);
+  const unreadable = named('unreadable');
+  if (unreadable) parts.push(`Could not read the ${unreadable} toggle; left it as it is.`);
+  return parts.length ? parts.join(' ') : null;
+}
+
 /**
  * Plain-words status for one tab. `status` is the content script's report (or undefined), `session`
  * the worker's persisted session for its call, `health` the app's last answer. Returns
@@ -170,6 +190,8 @@ export function describeStatus({ status, session, health, now = Date.now() } = {
   let headline;
   if (!status.inCall) {
     headline = status.lobby ? 'Waiting in the lobby — not joined yet.' : 'On a Meet call page, but not detected as in the call.';
+    const lobbyLine = status.lobby ? describeLobbyMuted(status.lobbyMuted) : null;
+    if (lobbyLine) lines.push(lobbyLine);
     if (status.whyNot) lines.push(status.whyNot);
   } else if (!status.meetingId) {
     headline = status.sessionError

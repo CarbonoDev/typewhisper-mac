@@ -59,6 +59,16 @@ test('the lobby reads as the lobby', () => {
   assert.match(headline, /lobby/);
 });
 
+test('the lobby says what was turned off for the user', () => {
+  const lobby = { ...baseStatus, lobby: 'join button "join now"' };
+  const both = d.describeStatus({ status: { ...lobby, lobbyMuted: { mic: 'turned-off', camera: 'turned-off' } } });
+  assert.ok(both.lines.includes('Microphone and camera turned off for you.'));
+  const mixed = d.describeStatus({ status: { ...lobby, lobbyMuted: { mic: 'already-off', camera: 'left-on' } } });
+  assert.ok(mixed.lines.includes('Tried to turn off the camera, but Meet still shows it on.'));
+  assert.equal(d.describeLobbyMuted({ mic: 'already-off', camera: null }), null);
+  assert.equal(d.describeLobbyMuted(null), null);
+});
+
 test('a joined call with captions off still reads as a linked meeting, and says what captions add', () => {
   const now = Date.parse('2026-01-05T10:00:00Z');
   const { headline, lines } = d.describeStatus({

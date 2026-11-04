@@ -23,6 +23,8 @@
     inCallVia: null,
     whyNot: '',
     lobby: null,
+    /** What the lobby muter did this visit: `{ mic, camera }` (see lobby.js), or `null`. */
+    lobbyMuted: null,
     sessionKey: null,
     meetingId: null,
     sessionError: null,

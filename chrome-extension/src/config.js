@@ -28,6 +28,12 @@ export const DEFAULT_SETTINGS = {
    * floating call controls ask. Off means no state leaves the page and no command is honored.
    */
   allowCallControl: true,
+  /**
+   * On Meet's joining screen ("Ready to join?"), turn the microphone / camera off once per lobby
+   * visit so the call is joined muted. Never clicked again in that visit, never inside the call.
+   */
+  lobbyMuteMic: true,
+  lobbyMuteCamera: true,
 };
 
 // NOTE: content.js is a classic (non-module) content script and cannot import this file; it reads
