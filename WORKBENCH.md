@@ -218,9 +218,10 @@
 
 ## autojoin (jade) · lobbymute (cobalt)
 
-- [~] App: open a meeting's join link in Chrome automatically when its start time arrives @autojoin
+- [x] App: open a meeting's join link in Chrome automatically when its start time arrives @autojoin
   Requested 2026-11-04. New time-gated calendar consumer (`MeetingAutoJoinService`, mirrors the start notification) that calls `MeetingJoinLauncher` (account's Chrome profile) once per event inside [start − lead, start + grace]; skips all-day/link-less events and does nothing while a meeting is already live. Settings: toggle (default on) + lead minutes (default 1).
   > 2026-11-04 opal: dispatched to worker `autojoin` (isolated worktree `crystl/jade`).
+  > 2026-11-04 opal: merged to main as a492b5ad (`MeetingAutoJoinService` + `MeetingsSettingsView+AutoJoin.swift`; keys `meetings.autoJoin.enabled` absent=on, `meetings.autoJoin.leadMinutes` 0/1/2/5 absent=1, last 20 opened ids persisted; skips all-day, link-less and self-declined events; opens nothing while `MeetingPresenceService.now().in_meeting`; window registered with the wake planner). `MeetingsViewModel.swift` grew by 2 lines (optional service property) — accepted over a global. Not verified live: a real open at event time and the settings section rendering.
 - [x] Meet Bridge: turn the mic and camera off on Meet's joining screen (lobby) @lobbymute
   Requested 2026-11-04. New `lobby.js` content script: on a call path with a lobby tell and no in-call signal, click each live toggle once per lobby visit (never inside the call, never twice, bounded retries); options `lobbyMuteMic` / `lobbyMuteCamera` (default on); popup line; version 0.6.0.
   > 2026-11-04 opal: dispatched to worker `lobbymute` (isolated worktree `crystl/cobalt`).
