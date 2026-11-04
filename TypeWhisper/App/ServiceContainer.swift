@@ -75,6 +75,8 @@ final class ServiceContainer: ObservableObject {
     /// Posts a one-shot reminder when a calendar meeting's scheduled end passes while capture is still
     /// recording (owner request 2). Mirrors `meetingStartNotificationService`'s registration.
     let meetingEndReminderService: MeetingEndReminderService
+    /// Opens a calendar meeting's join link when it starts, unless the user is already in a meeting.
+    let meetingAutoJoinService: MeetingAutoJoinService
     let meetingLLMService: MeetingLLMService
     let meetingLanguageService: MeetingLanguageService // [M2]
     let meetingModelRouter: MeetingModelRouter // [M4] per-purpose model routing (plan D9)
@@ -513,6 +515,9 @@ final class ServiceContainer: ObservableObject {
             calendarService: calendarService,
             callControl: meetCallControlService
         )
+        meetingAutoJoinService = MeetingAutoJoinService(
+            isInMeeting: { [weak meetingPresenceService] in meetingPresenceService?.now().in_meeting == true }
+        )
 
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
@@ -596,6 +601,8 @@ final class ServiceContainer: ObservableObject {
         // [Track E] Space vault browser (ME-1): caches one `listEntries()` snapshot from the shared
         // vault reader and rebuilds the tree in memory; no second scanner, no second vault picker.
         spaceViewModel = SpaceViewModel(vaultService: obsidianVaultService)
+
+        meetingsViewModel.autoJoinService = meetingAutoJoinService
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

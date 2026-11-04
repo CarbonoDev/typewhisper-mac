@@ -124,6 +124,8 @@ final class MeetingsViewModel: ObservableObject {
     // template in the generate flow (`defaultTemplate(ofKind:for:)`, addendum AD7).
     let captureService: MeetingCaptureService
     let startNotificationService: MeetingStartNotificationService
+    /// Opens a starting meeting's join link (`MeetingAutoJoinService`); set by `ServiceContainer`.
+    var autoJoinService: MeetingAutoJoinService?
     /// Owner request 2: one-shot "meeting time ended, still recording" reminder. Driven off the
     /// capture elapsed tick (which runs only while recording).
     private let endReminderService: MeetingEndReminderService

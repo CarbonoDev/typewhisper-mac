@@ -191,6 +191,14 @@ enum UserDefaultsKeys {
     /// groups default open and only an explicit fold is remembered. Pure UI state (same
     /// `@AppStorage` discipline as the other `meetings.*` view preferences).
     static let meetingsCalendarCollapsedGroups = "meetings.calendar.collapsedGroups"
+    // MARK: - Meetings · Auto-join
+    /// Open a calendar meeting's join link automatically at its start (registered default ON:
+    /// readers treat an absent value as true).
+    static let meetingsAutoJoinEnabled = "meetings.autoJoin.enabled"
+    /// Minutes before the start to open the link: 0, 1, 2 or 5. Absent ⇒ 1.
+    static let meetingsAutoJoinLeadMinutes = "meetings.autoJoin.leadMinutes"
+    /// The most recently auto-opened event ids, so a relaunch inside the window does not reopen.
+    static let meetingsAutoJoinOpenedEventIDs = "meetings.autoJoin.openedEventIDs"
     // MARK: - Meetings · Final re-transcription (addendum AD8, Track C)
     /// Global default final re-transcription mode: "off" | "sameEngine" | "engine".
     static let meetingsFinalPassDefaultMode = "meetings.finalPass.defaultMode"

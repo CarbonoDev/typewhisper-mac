@@ -64,7 +64,9 @@ extension MeetingsViewModel {
 
     /// The consumers' time gates, for the wake planner.
     var calendarConsumerWindows: [CalendarWakePlanner.ConsumerWindow] {
-        [MeetingStartNotificationService.consumerWindow] + [briefScheduler.consumerWindow].compactMap { $0 }
+        [MeetingStartNotificationService.consumerWindow]
+            + [autoJoinService.map { _ in MeetingAutoJoinService.consumerWindow() }, briefScheduler.consumerWindow]
+                .compactMap { $0 }
     }
 
     /// Run the time-gated consumers over the Upcoming list.
@@ -77,6 +79,8 @@ extension MeetingsViewModel {
         let deduplicated = CalendarEventTwinCollapser.collapse(events)
         // Prompt (never silently record) when a scheduled meeting reaches its start (D10).
         startNotificationService.notifyStartingMeetings(deduplicated, now: now)
+        // Open the join link in the account's Chrome profile (skipped while already in a meeting).
+        autoJoinService?.openStartingMeetings(deduplicated, now: now)
         // [Track D] Auto-generate pre-meeting briefs for events entering the lead window (AD9).
         briefScheduler.tick(events: deduplicated, now: now)
     }

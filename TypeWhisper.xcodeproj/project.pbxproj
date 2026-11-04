@@ -381,6 +381,7 @@
 		AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTBUS0000000000000001 /* MeetingEventBus.swift */; };
 		AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */; };
 		AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000391 /* MeetingStartNotificationService.swift */; };
+		AJ00000000000000000001 /* MeetingAutoJoinService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AJ00000000000000000002 /* MeetingAutoJoinService.swift */; };
 		CE10000000000000000001 /* MeetingEndReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE10000000000000000002 /* MeetingEndReminderService.swift */; };
 		CE10000000000000000003 /* MeetingTrayIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE10000000000000000004 /* MeetingTrayIndicator.swift */; };
 		AA00000000000000000394 /* MeetingNotesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000394 /* MeetingNotesPane.swift */; };
@@ -491,6 +492,7 @@
 		MEB0000000000000000010 /* MeetingBriefServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MEF0000000000000000010 /* MeetingBriefServiceTests.swift */; };
 		DDB0000000000000000004 /* MeetingBriefSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */; };
 		DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */; };
+		AJ00000000000000000003 /* MeetingAutoJoinServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AJ00000000000000000004 /* MeetingAutoJoinServiceTests.swift */; };
 		CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */; };
 		CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */; };
 		RBY0000000000000000005B /* MenuBarIconVisibilityBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */; };
@@ -1209,6 +1211,7 @@
 		BBEVTBUS0000000000000001 /* MeetingEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventBus.swift; sourceTree = "<group>"; };
 		BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEventEmitter.swift; sourceTree = "<group>"; };
 		BB00000000000000000391 /* MeetingStartNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationService.swift; sourceTree = "<group>"; };
+		AJ00000000000000000002 /* MeetingAutoJoinService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAutoJoinService.swift; sourceTree = "<group>"; };
 		CE10000000000000000002 /* MeetingEndReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEndReminderService.swift; sourceTree = "<group>"; };
 		BBB0000000000000000B01 /* PromptSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptSurface.swift; sourceTree = "<group>"; };
 		BBB0000000000000000B02 /* MeetingTemplateMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTemplateMigration.swift; sourceTree = "<group>"; };
@@ -1318,6 +1321,7 @@
 		MEF0000000000000000010 /* MeetingBriefServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefServiceTests.swift; sourceTree = "<group>"; };
 		DDF0000000000000000004 /* MeetingBriefSchedulerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingBriefSchedulerTests.swift; sourceTree = "<group>"; };
 		DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingStartNotificationServiceTests.swift; sourceTree = "<group>"; };
+		AJ00000000000000000004 /* MeetingAutoJoinServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAutoJoinServiceTests.swift; sourceTree = "<group>"; };
 		CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingEndReminderServiceTests.swift; sourceTree = "<group>"; };
 		CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingTrayIndicatorTests.swift; sourceTree = "<group>"; };
 		RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconVisibilityBindingTests.swift; sourceTree = "<group>"; };
@@ -2571,6 +2575,7 @@
 				BBEVTBUS0000000000000001 /* MeetingEventBus.swift */,
 				BBEVTEMIT000000000000001 /* MeetingEventEmitter.swift */,
 				BB00000000000000000391 /* MeetingStartNotificationService.swift */,
+				AJ00000000000000000002 /* MeetingAutoJoinService.swift */,
 				CE10000000000000000002 /* MeetingEndReminderService.swift */,
 				BB00000000000000000396 /* TranscriptContextBuilder.swift */,
 				BB00000000000000000397 /* MeetingLLMService.swift */,
@@ -3477,6 +3482,7 @@
 				SPAF000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift */,
 				JQF0000000000000000007 /* MeetingJobPresentationTests.swift */,
 				DDF0000000000000000005 /* MeetingStartNotificationServiceTests.swift */,
+				AJ00000000000000000004 /* MeetingAutoJoinServiceTests.swift */,
 				CE20000000000000000002 /* MeetingEndReminderServiceTests.swift */,
 				CE20000000000000000004 /* MeetingTrayIndicatorTests.swift */,
 				RBY0000000000000000005F /* MenuBarIconVisibilityBindingTests.swift */,
@@ -5106,6 +5112,7 @@
 				SPAB000000000000000005 /* MeetingRelatedDocsFailureBannerTests.swift in Sources */,
 				JQB0000000000000000007 /* MeetingJobPresentationTests.swift in Sources */,
 				DDB0000000000000000005 /* MeetingStartNotificationServiceTests.swift in Sources */,
+				AJ00000000000000000003 /* MeetingAutoJoinServiceTests.swift in Sources */,
 				CE20000000000000000001 /* MeetingEndReminderServiceTests.swift in Sources */,
 				CE20000000000000000003 /* MeetingTrayIndicatorTests.swift in Sources */,
 				RBY0000000000000000005B /* MenuBarIconVisibilityBindingTests.swift in Sources */,
@@ -5358,6 +5365,7 @@
 				AAEVTBUS0000000000000001 /* MeetingEventBus.swift in Sources */,
 				AAEVTEMIT000000000000001 /* MeetingEventEmitter.swift in Sources */,
 				AA00000000000000000391 /* MeetingStartNotificationService.swift in Sources */,
+				AJ00000000000000000001 /* MeetingAutoJoinService.swift in Sources */,
 				CE10000000000000000001 /* MeetingEndReminderService.swift in Sources */,
 				CE10000000000000000003 /* MeetingTrayIndicator.swift in Sources */,
 				AA00000000000000000394 /* MeetingNotesPane.swift in Sources */,
