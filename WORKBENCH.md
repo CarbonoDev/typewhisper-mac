@@ -221,9 +221,10 @@
 - [~] App: open a meeting's join link in Chrome automatically when its start time arrives @autojoin
   Requested 2026-11-04. New time-gated calendar consumer (`MeetingAutoJoinService`, mirrors the start notification) that calls `MeetingJoinLauncher` (account's Chrome profile) once per event inside [start − lead, start + grace]; skips all-day/link-less events and does nothing while a meeting is already live. Settings: toggle (default on) + lead minutes (default 1).
   > 2026-11-04 opal: dispatched to worker `autojoin` (isolated worktree `crystl/jade`).
-- [~] Meet Bridge: turn the mic and camera off on Meet's joining screen (lobby) @lobbymute
+- [x] Meet Bridge: turn the mic and camera off on Meet's joining screen (lobby) @lobbymute
   Requested 2026-11-04. New `lobby.js` content script: on a call path with a lobby tell and no in-call signal, click each live toggle once per lobby visit (never inside the call, never twice, bounded retries); options `lobbyMuteMic` / `lobbyMuteCamera` (default on); popup line; version 0.6.0.
   > 2026-11-04 opal: dispatched to worker `lobbymute` (isolated worktree `crystl/cobalt`).
+  > 2026-11-04 opal: merged to main as 4694c940 (Meet Bridge 0.6.0: `lobby.js` muter, options `lobbyMuteMic`/`lobbyMuteCamera` default on, popup line, README). On main: 99 node tests, `MeetCallControlTests` 18 pass, preflight clean. Not verified live: that a lobby click flips `data-is-muted` pre-join and that 150 ms settle is enough; Spanish lobby wording; rejoin after a long wait on the "you left" screen (10-tick budget may run out).
 
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
