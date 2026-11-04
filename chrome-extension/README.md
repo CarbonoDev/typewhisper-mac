@@ -111,6 +111,10 @@ synced — so they survive the worker's evictions but not a browser restart.
 - **Let TypeWhisper mute and unmute me** (default on) — reports whether your own microphone and
   camera are on and lets the app click those two toggles. Off means no state leaves the page and no
   command is honored; the floating button disappears.
+- **Join with the microphone off** / **Join with the camera off** (both default on) — on Meet's
+  joining screen ("Ready to join?" / "¿Todo listo para unirte?") the extension turns your mic and
+  camera off once, so you walk into the call muted. Turning one back on there is respected: it is
+  never clicked again on that visit, and nothing is touched once you are in the call.
 
 ## Call controls
 
@@ -175,6 +179,14 @@ Meet DOM ──▶ content.js ──port──▶ background.js ──HTTP──
   report (the floating mute button) all work without captions; captions only add the transcript.
   A meeting the app could not create at join (app closed) is retried every few seconds, with
   backoff, while the tab is connected — not only when a caption needs delivering.
+- **`lobby.js`** — join muted. While a lobby tell is visible, the in-call ladder says not joined and
+  no session exists, it reads the user's own mic and camera toggles (`findCallControl`) and clicks
+  each one that reads live **once per lobby visit** — a visit is the call code, re-armed when the
+  code changes or when the lobby shows again after a session ended — then re-reads it after the
+  same 150 ms settle the call controls use. A toggle already off is left alone; one that stays
+  missing, unreadable or disabled for 10 ticks is given up on with one `lobby:` diagnostic line.
+  What it did lands in the status (`lobbyMuted`) and the popup's lobby headline ("Microphone and
+  camera turned off for you."). Covered by `test/lobby.test.js`.
 - **`status.js`** — the content script's status object and its transition log; the worker stores
   each tab's status for the popup (`diagnostics.js`).
 - **Noise filtering** — a heuristic-found caption root must *mutate* between two ticks before it is
@@ -254,6 +266,11 @@ meeting and sending heartbeats and controls — over a fake `chrome.storage`.
   `data-is-muted`. When none of that matches, the floating button simply never appears and the
   console gets a `[tw-meet]` dump of the candidate controls to repair `CALL_CONTROLS` from. With
   two calls open, the button follows the one joined last.
+- **Joining muted depends on recognising the lobby.** The lobby tells (join button, "Ready to
+  join?" text) are DOM-reading, like the rest of the presence ladder. In a UI locale none of the
+  lobby lists covers — and without a join-button `jsname` match — the lobby is not recognised and
+  nothing is clicked: you join with whatever Meet had on. After a call ends, a long wait on the
+  "you left" screen can use up the 10-tick budget before a rejoin, so that rejoin is not muted.
 - **Timestamps are estimates.** Captions trail speech by ~1–2s (`captionLagMs`, default 1200). This
   is fine because downstream speaker transfer is text-anchored, not time-anchored.
 
