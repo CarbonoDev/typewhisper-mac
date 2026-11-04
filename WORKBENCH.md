@@ -216,6 +216,15 @@
 - [x] Dev app: add a launch-at-login option (the Mac rebooted Oct 22 and Nov 1; the dev app stayed down until relaunched by hand, so calls in between could not be bridged)
   > 2026-11-03 opal: the app already has Settings → General → "Launch at Login" (`SMAppService`). Added `/Applications/MeetingWhisper-Dev.app` as a user login item instead (System Settings → General → Login Items; remove it there if unwanted). Survives rebuilds since the path is fixed.
 
+## autojoin (jade) · lobbymute (cobalt)
+
+- [~] App: open a meeting's join link in Chrome automatically when its start time arrives @autojoin
+  Requested 2026-11-04. New time-gated calendar consumer (`MeetingAutoJoinService`, mirrors the start notification) that calls `MeetingJoinLauncher` (account's Chrome profile) once per event inside [start − lead, start + grace]; skips all-day/link-less events and does nothing while a meeting is already live. Settings: toggle (default on) + lead minutes (default 1).
+  > 2026-11-04 opal: dispatched to worker `autojoin` (isolated worktree `crystl/jade`).
+- [~] Meet Bridge: turn the mic and camera off on Meet's joining screen (lobby) @lobbymute
+  Requested 2026-11-04. New `lobby.js` content script: on a call path with a lobby tell and no in-call signal, click each live toggle once per lobby visit (never inside the call, never twice, bounded retries); options `lobbyMuteMic` / `lobbyMuteCamera` (default on); popup line; version 0.6.0.
+  > 2026-11-04 opal: dispatched to worker `lobbymute` (isolated worktree `crystl/cobalt`).
+
 ## Backlog — Perf refactor Phase 1 (stop the bleeding)
 Ordered by impact ÷ implementation risk. Spec: docs/specs/2026-10-02-perf-refactor-plan.md (§3 findings, §5 phases).
 - [x] Perf 1A: narrow MeetingsViewModel observation @diamond
