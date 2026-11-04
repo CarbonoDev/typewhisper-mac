@@ -134,7 +134,7 @@ enum MeetBridgeVersion {
     /// The extension version this app build ships with. Must equal `version` in
     /// `chrome-extension/manifest.json`; `MeetCallControlTests` fails when the two drift, and
     /// `scripts/pr-preflight.sh` fails when the extension changes without a version bump.
-    static let shipped = "0.5.1"
+    static let shipped = "0.6.0"
 
     enum Status: Equatable, Sendable {
         /// Nothing has been heard from any bridge since the app started.

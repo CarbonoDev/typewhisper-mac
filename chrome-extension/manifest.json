@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TypeWhisper Meet Bridge",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Streams speaker-attributed Google Meet captions into the TypeWhisper meetings app and lets it mute your microphone.",
   "permissions": ["storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
@@ -11,6 +11,7 @@
       "js": [
         "src/selectors.js",
         "src/presence.js",
+        "src/lobby.js",
         "src/stabilizer.js",
         "src/status.js",
         "src/content.js"
