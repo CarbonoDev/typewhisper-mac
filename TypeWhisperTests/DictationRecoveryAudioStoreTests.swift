@@ -42,6 +42,29 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertEqual(readUInt32(data, at: 40), 6)
     }
 
+    func testOrphanedActiveTakeIsAdoptedAsRecoveryOnLaunch() throws {
+        let directory = makeTemporaryDirectory()
+        let crashed = DictationRecoveryAudioStore(directory: directory)
+        crashed.startNewRecording()
+        crashed.append([0.1, 0.2, 0.3, 0.4])
+        _ = crashed.recoveryURLs // drain the async writer
+
+        let relaunched = DictationRecoveryAudioStore(directory: directory)
+
+        let url = try XCTUnwrap(relaunched.latestRecoveryURL)
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(readUInt32(data, at: 40), 8)
+    }
+
+    func testPreserveBelowMinimumDropsAccidentalTap() throws {
+        let store = DictationRecoveryAudioStore(directory: makeTemporaryDirectory())
+        store.startNewRecording()
+        store.append([0.1, 0.2])
+
+        XCTAssertNil(store.preserveActiveRecording(minimumSamples: 100))
+        XCTAssertTrue(store.recoveryURLs.isEmpty)
+    }
+
     func testPreserveKeepsMultipleTimestampedRecoveries() throws {
         let directory = makeTemporaryDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

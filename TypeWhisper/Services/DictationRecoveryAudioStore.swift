@@ -35,6 +35,24 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         self.directory = standardizedDirectory
         self.activeFileURL = standardizedDirectory.appendingPathComponent(Constants.activeFileName)
         self.fileManager = fileManager
+        adoptOrphanedActiveRecording()
+    }
+
+    /// An active take left on disk by a crash, force-quit or power loss was never finalized.
+    /// Promote it to a normal recovery file so it shows up instead of being overwritten.
+    private func adoptOrphanedActiveRecording() {
+        queue.sync {
+            guard fileManager.fileExists(atPath: activeFileURL.path) else { return }
+            let size = (try? fileManager.attributesOfItem(atPath: activeFileURL.path)[.size] as? Int) ?? 0
+            let sampleCount = max(0, (size - Constants.wavHeaderByteCount) / Constants.bytesPerSample)
+            guard sampleCount > 0 else {
+                removeItemIfExists(at: activeFileURL)
+                return
+            }
+            activeSampleCount = sampleCount
+            hasActiveRecording = true
+            _ = preserveActiveRecordingLocked()
+        }
     }
 
     var recoveryURLs: [URL] {
@@ -92,12 +110,12 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     }
 
     @discardableResult
-    func preserveActiveRecording() -> URL? {
-        queue.sync { preserveActiveRecordingLocked() }
+    func preserveActiveRecording(minimumSamples: Int = 1) -> URL? {
+        queue.sync { preserveActiveRecordingLocked(minimumSamples: minimumSamples) }
     }
 
     /// Must be called on `queue`.
-    private func preserveActiveRecordingLocked() -> URL? {
+    private func preserveActiveRecordingLocked(minimumSamples: Int = 1) -> URL? {
         guard hasActiveRecording else {
             return storedRecoveryURLs().first
         }
@@ -105,7 +123,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         closeActiveHandle()
         hasActiveRecording = false
 
-        guard activeSampleCount > 0 else {
+        guard activeSampleCount >= max(1, minimumSamples) else {
             activeSampleCount = 0
             removeItemIfExists(at: activeFileURL)
             return storedRecoveryURLs().first

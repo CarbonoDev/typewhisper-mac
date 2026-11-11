@@ -811,7 +811,10 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
     }
 
-    private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = false) {
+    /// Seconds of audio below which a cancelled/aborted take is treated as an accidental tap and dropped.
+    private static let minimumPreservedTakeDuration: TimeInterval = 1.5
+
+    private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = true) {
         clearRecordingStartCueState()
         clearDeferredRecordingContext()
         restoreRecordingSideEffects()
@@ -820,7 +823,9 @@ final class DictationViewModel: ObservableObject {
         Task {
             _ = await audioRecordingService.stopRecording(policy: .immediate)
             if preserveRecoveryAudio {
-                audioRecordingService.preserveActiveRecoveryRecording()
+                audioRecordingService.preserveActiveRecoveryRecording(
+                    minimumDuration: Self.minimumPreservedTakeDuration
+                )
             } else {
                 audioRecordingService.discardActiveRecoveryRecording()
             }
@@ -974,7 +979,9 @@ final class DictationViewModel: ObservableObject {
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
             transcriptionTask?.cancel()
             transcriptionTask = nil
-            audioRecordingService.discardActiveRecoveryRecording()
+            audioRecordingService.preserveActiveRecoveryRecording(
+                minimumDuration: Self.minimumPreservedTakeDuration
+            )
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         default:
             break
@@ -1282,7 +1289,9 @@ final class DictationViewModel: ObservableObject {
             lastStreamingParams = nil
             stopRecordingTimer()
             _ = await audioRecordingService.stopRecording(policy: .immediate)
-            audioRecordingService.discardActiveRecoveryRecording()
+            audioRecordingService.preserveActiveRecoveryRecording(
+                minimumDuration: Self.minimumPreservedTakeDuration
+            )
             if let sessionID {
                 failDictationSession(id: sessionID, error: discardMessage)
             }
@@ -1340,7 +1349,8 @@ final class DictationViewModel: ObservableObject {
             )
             return
         case .discardNoSpeech:
-            audioRecordingService.discardActiveRecoveryRecording()
+            // A long take with no detected speech may be a mic/level problem; keep it.
+            audioRecordingService.preserveActiveRecoveryRecording(minimumDuration: 2)
             logger.info("Peak level too low (\(String(format: "%.4f", peakLevel))) - no speech detected")
             let errorMessage = String(localized: "No speech detected")
             if let sessionID {

@@ -3,6 +3,31 @@ import XCTest
 
 final class HistoryServiceTests: XCTestCase {
     @MainActor
+    func testRecoveryPlaceholdersMirrorRecoveryFolder() throws {
+        let appSupport = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupport) }
+        let service = HistoryService(appSupportDirectory: appSupport)
+        service.clearAll()
+
+        let store = DictationRecoveryAudioStore(directory: appSupport.appendingPathComponent("rec"))
+        store.startNewRecording()
+        store.append(Array(repeating: 0.2, count: 16_000))
+        let url = try XCTUnwrap(store.preserveActiveRecording())
+
+        service.syncRecoveryPlaceholders(for: [url])
+        service.syncRecoveryPlaceholders(for: [url]) // idempotent
+
+        XCTAssertEqual(service.records.count, 1)
+        let record = try XCTUnwrap(service.records.first)
+        XCTAssertEqual(record.engineUsed, HistoryService.untranscribedEngine)
+        XCTAssertEqual(record.durationSeconds, 1, accuracy: 0.01)
+        XCTAssertNotNil(service.audioFileURL(for: record))
+
+        service.syncRecoveryPlaceholders(for: [])
+        XCTAssertTrue(service.records.isEmpty)
+    }
+
+    @MainActor
     func testAddSearchUniqueDomainsAndPurgeHistory() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -103,6 +103,76 @@ final class HistoryService: ObservableObject {
         return true
     }
 
+    // MARK: - Untranscribed recovery takes
+
+    /// `engineUsed` marker for a History entry that stands in for a recording whose
+    /// transcription never completed. It points at the recovery file via a `recovery:` step.
+    static let untranscribedEngine = "untranscribed"
+    private static let recoveryStepPrefix = "recovery:"
+
+    /// Mirrors the dictation-recovery folder into History: every recoverable take gets a
+    /// playable placeholder entry, and entries whose recovery file is gone (re-transcribed or
+    /// discarded) are removed.
+    func syncRecoveryPlaceholders(for recoveryURLs: [URL]) {
+        let present = Set(recoveryURLs.map(\.lastPathComponent))
+        var existing: [String: TranscriptionRecord] = [:]
+        for record in records where record.engineUsed == Self.untranscribedEngine {
+            if let step = record.pipelineStepList.first(where: { $0.hasPrefix(Self.recoveryStepPrefix) }) {
+                existing[String(step.dropFirst(Self.recoveryStepPrefix.count))] = record
+            }
+        }
+
+        var changed = false
+        for (name, record) in existing where !present.contains(name) {
+            deleteAudioFile(for: record)
+            modelContext.delete(record)
+            changed = true
+        }
+
+        for url in recoveryURLs where existing[url.lastPathComponent] == nil {
+            let id = UUID()
+            let fileName = "\(id.uuidString).wav"
+            let destination = audioDirectory.appendingPathComponent(fileName)
+            do {
+                try FileManager.default.copyItem(at: url, to: destination)
+            } catch {
+                logger.error("Failed to copy recovery take into history: \(error.localizedDescription)")
+                continue
+            }
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let size = (attributes?[.size] as? Int) ?? 0
+            let duration = Double(max(0, size - 44)) / 32_000 // 16 kHz mono PCM16
+            let timestamp = (attributes?[.modificationDate] as? Date) ?? Date()
+            let text = localizedAppText(
+                "Recording not transcribed. Open Dictation Recovery to transcribe it.",
+                de: "Aufnahme nicht transkribiert. Öffne Dictation-Recovery, um sie zu transkribieren."
+            )
+            let record = TranscriptionRecord(
+                id: id,
+                timestamp: timestamp,
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                appURL: nil,
+                durationSeconds: duration,
+                language: nil,
+                engineUsed: Self.untranscribedEngine,
+                modelUsed: nil,
+                audioFileName: fileName
+            )
+            record.wordsCount = 0
+            record.pipelineStepList = [Self.recoveryStepPrefix + url.lastPathComponent]
+            modelContext.insert(record)
+            changed = true
+        }
+
+        if changed {
+            save()
+            fetchRecords()
+        }
+    }
+
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
         guard let fileName = record.audioFileName else { return nil }
         let url = audioDirectory.appendingPathComponent(fileName)

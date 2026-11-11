@@ -1281,8 +1281,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     @discardableResult
-    func preserveActiveRecoveryRecording() -> URL? {
-        let url = recoveryAudioStore.preserveActiveRecording()
+    func preserveActiveRecoveryRecording(minimumDuration: TimeInterval = 0) -> URL? {
+        let url = recoveryAudioStore.preserveActiveRecording(
+            minimumSamples: Int(minimumDuration * Self.targetSampleRate)
+        )
         publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
         return url
     }

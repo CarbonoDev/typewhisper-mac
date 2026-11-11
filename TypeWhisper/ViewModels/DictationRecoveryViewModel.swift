@@ -144,6 +144,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
         self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         self.isInitialized = true
+        historyService.syncRecoveryPlaceholders(for: initialRecoveryURLs)
 
         audioRecordingService.$recoverableRecordingURLs
             .receive(on: DispatchQueue.main)
@@ -365,6 +366,7 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     private func updateRecoveryURLs(_ urls: [URL]) {
+        historyService.syncRecoveryPlaceholders(for: urls)
         let previousRecoveries = Dictionary(uniqueKeysWithValues: recoveries.map { ($0.id, $0) })
         let updatedRecoveries = urls.map { url in
             previousRecoveries[url.path] ?? RecoveryItem(url: url)
