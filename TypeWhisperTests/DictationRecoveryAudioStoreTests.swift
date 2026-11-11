@@ -25,6 +25,23 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertEqual(store.recoveryURLs, [url])
     }
 
+    func testStartingNewRecordingPreservesUnfinishedActiveTake() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.1, 0.2, 0.3])
+        // A second start (e.g. a double-fired hotkey) before the first take was
+        // transcribed or discarded must not overwrite the first take.
+        store.startNewRecording()
+        store.append([0.4])
+        store.discardActiveRecording()
+
+        XCTAssertEqual(store.recoveryURLs.count, 1)
+        let data = try Data(contentsOf: try XCTUnwrap(store.latestRecoveryURL))
+        XCTAssertEqual(readUInt32(data, at: 40), 6)
+    }
+
     func testPreserveKeepsMultipleTimestampedRecoveries() throws {
         let directory = makeTemporaryDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

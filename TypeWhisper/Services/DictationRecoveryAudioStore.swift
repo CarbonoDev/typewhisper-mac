@@ -51,6 +51,12 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     func startNewRecording() {
         queue.sync {
+            // A still-active take with audio means the previous dictation never finished
+            // (e.g. a double-fired hotkey started a new recording while it was transcribing).
+            // Keep it as a recovery instead of overwriting it.
+            if hasActiveRecording, activeSampleCount > 0 {
+                _ = preserveActiveRecordingLocked()
+            }
             closeActiveHandle()
             removeItemIfExists(at: activeFileURL)
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -87,32 +93,35 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     @discardableResult
     func preserveActiveRecording() -> URL? {
-        queue.sync {
-            guard hasActiveRecording else {
-                return storedRecoveryURLs().first
-            }
+        queue.sync { preserveActiveRecordingLocked() }
+    }
 
-            closeActiveHandle()
-            hasActiveRecording = false
+    /// Must be called on `queue`.
+    private func preserveActiveRecordingLocked() -> URL? {
+        guard hasActiveRecording else {
+            return storedRecoveryURLs().first
+        }
 
-            guard activeSampleCount > 0 else {
-                activeSampleCount = 0
-                removeItemIfExists(at: activeFileURL)
-                return storedRecoveryURLs().first
-            }
+        closeActiveHandle()
+        hasActiveRecording = false
 
-            finalizeActiveWavHeader(sampleCount: activeSampleCount)
-            let recoveryURL = makeUniqueRecoveryFileURL()
+        guard activeSampleCount > 0 else {
+            activeSampleCount = 0
+            removeItemIfExists(at: activeFileURL)
+            return storedRecoveryURLs().first
+        }
 
-            do {
-                try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
-                activeSampleCount = 0
-                return canonicalFileURL(recoveryURL)
-            } catch {
-                activeSampleCount = 0
-                removeItemIfExists(at: activeFileURL)
-                return storedRecoveryURLs().first
-            }
+        finalizeActiveWavHeader(sampleCount: activeSampleCount)
+        let recoveryURL = makeUniqueRecoveryFileURL()
+
+        do {
+            try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
+            activeSampleCount = 0
+            return canonicalFileURL(recoveryURL)
+        } catch {
+            activeSampleCount = 0
+            removeItemIfExists(at: activeFileURL)
+            return storedRecoveryURLs().first
         }
     }
 
